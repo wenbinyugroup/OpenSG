@@ -38,15 +38,16 @@ data=[[0,20,0],
 # subdomain data
 tdim = mesh.topology().dim()
 subdomains = MeshFunction('size_t', mesh, tdim,1)
-subdomains.array()[:]=[0,1,1,0]
+subdomains.array()[:]=[i for i in range(n_layer)] # Every element act as subdomain
 #print(subdomains.array())
 
 # Orientation DG0 Function
 degree=0
 O=VectorElement("DG", mesh.ufl_cell(), degree,dim=1)
 VO = FunctionSpace(mesh, O)
-vo=Function(VO)
+vo, mat=Function(VO), Function(VO)
 vo.vector()[:]=[20,45,45,20] # can be taken from external data ()
+mat.vector()[:]=[0,1,1,0] # can be taken from external data ()
 
 VO.tabulate_dof_coordinates() # Element numbering starts from bottom to reference(zero)
 
@@ -80,7 +81,7 @@ def eps(v):
     return as_tensor([(E1[0],0.5*E1[5],0.5*E1[4]),(0.5*E1[5],E1[1],0.5*E1[3]),(0.5*E1[4],0.5*E1[3],E1[2])]),E1
 
 def C_new(C,th):
-   # th=np.deg2rad(theta)           # vo[0] act as th
+    th=np.deg2rad(theta)           # vo[0] act as th
     c,s,cs=cos(th),sin(th),cos(th)*sin(th)
     R_sig=np.array([(c**2, s**2, 0,0,0,2*cs),
                    (s**2, c**2, 0,0,0,-2*cs),
@@ -91,7 +92,7 @@ def C_new(C,th):
     return dot(dot(as_tensor(R_sig),C),as_tensor(R_sig.T))
 
 def sigma(v, i,Eps):  
-    E1,E2,E3,G12,G13,G23,v12,v13,v23= material_parameters[i]
+    E1,E2,E3,G12,G13,G23,v12,v13,v23= material_parameters[mat[0]] # mat[0] takes corresponding material id in subdomain, can also use data[i][2]
     S=np.zeros((6,6))
     S[0,0], S[1,1], S[2,2]=1/E1, 1/E2, 1/E3
     S[0,1], S[0,2]= -v12/E1, -v13/E1
@@ -99,7 +100,7 @@ def sigma(v, i,Eps):
     S[2,0], S[2,1]= -v13/E1, -v23/E2
     S[3,3], S[4,4], S[5,5]= 1/G23, 1/G13, 1/G12    
     C=as_tensor(np.linalg.inv(S))
-    C=C_new(C,vo[0]) 
+    C=C_new(C,vo[0]) # vo[0] takes corresponding angle in running subdomain, can use data[i][1]
     s1= dot(C,eps(v)[1]+Eps)      
     return as_tensor([(s1[0],s1[5],s1[4]),(s1[5],s1[1],s1[3]),(s1[4],s1[3],s1[2])]),C,s1         
 
