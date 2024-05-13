@@ -19,7 +19,7 @@ import scipy
 from scipy.sparse import csr_matrix
 import pyvista
 
-mesh, subdomains, boundaries = gmshio.read_from_msh("cylshell_1152elem.msh", MPI.COMM_WORLD,0, gdim=3)
+mesh, subdomains, boundaries = gmshio.read_from_msh("cylshell_6144elem.msh", MPI.COMM_WORLD,0, gdim=3)
 
 pp=mesh.geometry.x
 x_min,x_max=min(pp[:,0]), max(pp[:,0])
