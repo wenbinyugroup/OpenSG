@@ -130,55 +130,6 @@ material_parameters.append([200000000000.0, 200000000000.0, 200000000000.0, 7930
        # if i==o_cell_idx[k]:
          #   print(1+o_cell_idx[k],conn2[k])
 
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
 # In[19]:
 
 
@@ -346,30 +297,6 @@ def ABD(ii,ABD):  # Input: ii is layup number , Output: ABD matrix
     return(D_eff)
 
 
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
 # In[24]:
 
 
@@ -394,16 +321,6 @@ for k,ii in enumerate(o_cell_id):
     EE2.vector[3*k],EE2.vector[3*k+1],EE2.vector[3*k+2]=-b1  # -e2 
     N.vector[3*k], N.vector[3*k+1],N.vector[3*k+2]=-c1        # -e3
     
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
 
 # Interpolate EE1,EE2,N to S2 element
 
@@ -903,7 +820,3 @@ print('  ')
 print('Stiffness Matrix')
 np.set_printoptions(precision=4)
 print(np.around(D_eff))  
-
-
-
-
