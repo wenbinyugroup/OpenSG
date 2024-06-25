@@ -1,6 +1,9 @@
 ###############     OpenSG         ############################
 ########### Euler Bernoulli Model (dolfinx) ###################
 ############ Test For Shell Cylinder  #########################
+###############     OpenSG         ############################
+########### Euler Bernoulli Model (dolfinx) ###################
+############ Test For Shell Cylinder  #########################
 from dolfinx.io import gmshio
 from dolfinx.fem.petsc import LinearProblem, assemble_matrix
 from dolfinx.mesh import locate_entities_boundary, exterior_facet_indices, create_submesh
@@ -8,9 +11,9 @@ from mpi4py import MPI
 import numpy as np
 import meshio
 import dolfinx
-from dolfinx.fem import VectorFunctionSpace, form, petsc, Function, FunctionSpace, locate_dofs_topological, apply_lifting, set_bc
+from dolfinx.fem import form, petsc, Function, functionspace, locate_dofs_topological, apply_lifting, set_bc
 from ufl import Jacobian, as_vector, dot, cross,sqrt, conditional, replace, as_matrix,FacetNormal
-from ufl import lt,SpatialCoordinate, as_tensor, VectorElement, FiniteElement, MixedElement, Measure
+from ufl import lt,SpatialCoordinate, as_tensor,  Measure
 from ufl import TrialFunction, TestFunction, inner, lhs, rhs, dx, dot,eq
 import petsc4py.PETSc
 from contextlib import ExitStack
@@ -18,16 +21,10 @@ from dolfinx.io import gmshio
 from mpi4py import MPI
 from pathlib import Path
 from typing import Dict
-
+import ufl
+import basix
 #domain = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 10,10, mesh.CellType.triangle)
 domain, subdomains, boundaries = gmshio.read_from_msh("2D_SG_1Dshellvalidate_5radius.msh", MPI.COMM_WORLD,0, gdim=3)
-from dolfinx.fem import VectorFunctionSpace, form, petsc, Function
-import ufl
-import numpy as np
-from contextlib import ExitStack
-import petsc4py.PETSc
-#domain = dolfinx.mesh.create_box(MPI.COMM_WORLD, [[0.0, 0.0, 0.0], [1, 1, 1]], [1, 1, 1], dolfinx.mesh.CellType.hexahedron)
-#domain=dolfinx.mesh.create_box(MPI.COMM_WORLD, 1,1,1,dolfinx.cpp.mesh.CellType.quadrilateral)
 
 # GELCOAT-1
 E1,E2,E3=3.4400E+03, 3.4400E+03, 3.4400E+03
@@ -53,17 +50,15 @@ def sigma(v,i,Eps):
         C=ufl.as_tensor(np.linalg.inv(S))
         s1= ufl.dot(C,eps(v)[1]+Eps)
         return ufl.as_tensor([(s1[0],s1[5],s1[4]),(s1[5],s1[1],s1[3]),(s1[4],s1[3],s1[2])]), C
-V = VectorFunctionSpace(domain, ("Lagrange", 1),dim=3)
+V= dolfinx.fem.functionspace(domain, basix.ufl.element(
+    "CG", domain.topology.cell_name(), 1, shape=(3, )))
+
 u = ufl.TrialFunction(V)
 v = ufl.TestFunction(V)
 dx = ufl.Measure('dx')(domain=domain)
 points=domain.geometry.x
 x = ufl.SpatialCoordinate(domain)
 a,b=0,1
-Eps2T=ufl.as_tensor([(1,0,0,0,0,0),
-                (0,0,0,0,x[a],-x[b]),
-                (x[b],0,0,0,0,0),
-                (-x[a],0,0,0,0,0)]) 
 
 Eps2=ufl.as_tensor([(1,0,x[b],-x[a]),
                 (0,0,0,0),
@@ -143,16 +138,22 @@ for p in range(4):
     V0[:,p]= w.vector[:] # V0 matrix formation
     
 D1=np.matmul(V0.T,-Dhe)    
+x = ufl.SpatialCoordinate(domain)
+def Dee(i):
+    C=sigma(u,i,Eps)[1]
+    x2,x3=x[a],x[b]
+    return as_tensor([(C[0,0], C[0,4]*x2-C[0,5]*x3,C[0,0]*x3,-C[0,0]*x2),
+                      (C[4,0]*x2-C[5,0]*x3, x2*(C[4,4]*x2-C[5,4]*x3)-x3*(C[4,5]*x2-C[5,5]*x3),   x3*(C[4,0]*x2-C[5,0]*x3),-x2*(C[4,0]*x2-C[5,0]*x3)),
+                      (C[0,0]*x3,  x3*(C[0,4]*x2-C[0,5]*x3), C[0,0]*x3**2, -C[0,0]*x2*x3),
+                      (-C[0,0]*x2, -x2*(C[0,4]*x2-C[0,5]*x3),  -C[0,0]*x2*x3, C[0,0]*x2**2)])
 for s in range(4):
     for k in range(4): 
-        f=dolfinx.fem.form(sum([ufl.dot(Eps2T,ufl.dot(sigma(u,0,Eps)[1],Eps2))[s,k]*dx]))
+        f=dolfinx.fem.form(Dee(0)[s,k]*dx)
         D_ee[s,k]=dolfinx.fem.assemble_scalar(f)
 
 D_eff= D_ee + D1 
-D_eff=D_eff/omega
 np.set_printoptions(linewidth=np.inf)
 print(np.around(D_eff)) 
-
 
 # Optional
 ## The above dolfinx is verified with OpenSG's legacy-dolfin code.
