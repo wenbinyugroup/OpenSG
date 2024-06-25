@@ -1,9 +1,7 @@
 ###############     OpenSG         ############################
 ########### Euler Bernoulli Model (dolfinx) ###################
 ############ Test For Shell Cylinder  #########################
-###############     OpenSG         ############################
-########### Euler Bernoulli Model (dolfinx) ###################
-############ Test For Shell Cylinder  #########################
+
 from dolfinx.io import gmshio
 from dolfinx.fem.petsc import LinearProblem, assemble_matrix
 from dolfinx.mesh import locate_entities_boundary, exterior_facet_indices, create_submesh
