@@ -1,5 +1,4 @@
-## Timo Shell (Debugging)#############
-
+## Timo Shell (Working Cylinder)###### Matching with Analytical result for transverse shear stiffness
 ### Update for dolfinx latest v0.8
 from dolfinx.io import gmshio
 from dolfinx.fem.petsc import LinearProblem, assemble_matrix
@@ -45,7 +44,7 @@ mesh_l, entity_mapl, vertex_mapl, geom_mapl = create_submesh(mesh, fdim, facets_
 #########################################################################################
 
 
-# In[3]:
+# In[36]:
 
 
 ABD=as_tensor([[ 7.56043956e+08,  2.26813187e+08,  0.00000000e+00, 9.31322575e-10,  9.31322575e-10, 0.00000000e+00],
@@ -54,10 +53,10 @@ ABD=as_tensor([[ 7.56043956e+08,  2.26813187e+08,  0.00000000e+00, 9.31322575e-1
               [-1.39698386e-09, -1.39698386e-09,  0.00000000e+00, 2.52014652e+06,  7.56043956e+05,  0.00000000e+00],
               [-1.39698386e-09, -1.39698386e-09,  0.00000000e+00, 7.56043956e+05,  2.52014652e+06,  0.00000000e+00],
               [ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00, 0.00000000e+00,  0.00000000e+00,  8.82000000e+05]])
-ABD=ABD/1e6
+#ABD=ABD/1e6
 
 
-# In[4]:
+# In[37]:
 
 
 def local_frame_1D(mesh): 
@@ -94,7 +93,7 @@ def ddot(w,d1):
     return (d1[0]*w[0]+d1[1]*w[1]+d1[2]*w[2])
 
 
-# In[5]:
+# In[38]:
 
 
 deg=2
@@ -174,18 +173,9 @@ Eps2= as_tensor([(x11**2, x11*(x[1]*x31-x[2]*x21),  x[2]*x11**2, -x[1]*x11**2),
                         (E51,E52,E53,E54), 
                         (E61,E62,E63,E64)])
 
-
-# In[ ]:
-
-
-
-
-
-# In[6]:
-
-
+# Gamma_h*w
 def eps2(w):
-    
+
         d11=as_vector([-k11*d3[ii]+k13*d2[ii] for ii in range(3)])
         d22=as_vector([-k22*d3[ii]-k23*d1[ii] for ii in range(3)])
         d12=as_vector([-k21*d3[ii]+k23*d2[ii] for ii in range(3)])
@@ -203,29 +193,30 @@ def eps2(w):
         w_12=[local_grad(d12,w[ii]) for ii in range(3)]
         w_21=[local_grad(d21,w[ii]) for ii in range(3)]
 
-        G1=0
+        G1=ddot(w_d1,d1)
         G2=ddot(w_d2,d2)
-        G3=ddot(w_d2,d1)
-        G4=0
-        G5=-k22*G2-ddot(w_d22,d3)
-        G6=-(k22)*0.5*G3
+        G3=ddot(w_d1,d2)+ddot(w_d2,d1)
+        G4=-k11*G1-k12*0.5*G3-ddot(w_d11,d3)+k13*ddot(w_d2,d3)-ddot(w_d11,d3)-ddot(w_11,d3)
+        G5=-k22*G2-k21*0.5*G3-ddot(w_d22,d3)-k23*ddot(w_d1,d3)-ddot(w_d22,d3)-ddot(w_22,d3)
+        G6=-(k11+k22)*0.5*G3-k12*G2-k21*G1+k23*ddot(w_d2,d3)-k13*ddot(w_d1,d3) \
+           -ddot(w_d12,d3)-ddot(w_d21,d3)-ddot(w_12,d3)-ddot(w_21,d3)
 
-        E1= as_vector([G1,G2,G3,G4,G5,G6])
+        E1= as_tensor([G1,G2,G3,G4,G5,G6])
         return E1
-
+    
+# Gamma_l*w'
 def gamma_l(w):
         k11,k12,k21,k22,k13,k23= deri(e)
         dd1,dd2,dd3=as_vector(d1), as_vector(d2), as_vector(d3)
         w_d1=as_vector([local_grad(dd1,w[ii]) for ii in range(3)])
         w_d2= as_vector([local_grad(dd2,w[ii]) for ii in range(3)])
 
-        L1,L2=w[0],0
-        L3=ddot(dd2,w)
-        L4=0
-        L5=0
-        L6=-k22*0.5*ddot(dd2,w)-2*ddot(w_d2,d3)
-                
-        E1=  as_vector([L1,L2,L3,L4,L5,L6])
+        L1,L2=x11*(ddot(d1,w)),x12*(ddot(d2,w))
+        L3=ddot(x11*dd2+x12*dd1,w)
+        L4=-2*x11*ddot(w_d1,d3)+ddot(k11*(y1*dd3-x11*dd1)-0.5*k12*(x12*dd1+x11*dd2),w)
+        L5=-2*x12*ddot(w_d2,d3)+ddot(k22*(y1*dd3-x12*dd2)-0.5*k21*(x12*dd1+x11*dd2),w)
+        L6=-2*ddot(x11*w_d2+x12*w_d1,d3)+ddot(k12*(y1*dd3-x12*dd2)+k21*(y1*dd3-x11*dd1)-0.5*(k11+k22)*(x12*dd1+x11*dd2),w)
+        E1=  as_tensor([L1,L2,L3,L4,L5,L6])
         return E1
 
 O=as_vector((0,0,0,0))
@@ -233,16 +224,6 @@ R=as_vector((-y1,-y3*x[1]+y2*x[2],-x[2]*y1,x[1]*y1))
 Eps2d= as_tensor([O,O,O,x11*x11*R,x12*x12*R,2*x11*x12*R])
 
 
-# In[ ]:
-
-
-
-
-
-# In[7]:
-
-
-Eps=Eps2[:,0]
 F1=sum([dot(dot(ABD,gamma_l(v_)),gamma_l(dv))*dx])
 a1=form(F1)
 Dll=assemble_matrix(a1)
@@ -250,10 +231,9 @@ Dll.assemble()
 ai, aj, av=Dll.getValuesCSR()
 Dll=csr_matrix((av, aj, ai)).toarray()
 for p in range(4):
-    
         Eps=Eps2[:,p] 
         F1=sum([dot(dot(ABD,Eps),gamma_l(v_))*dx])
-        L1 = form(F1)       
+        L1 = form(rhs(F1))   
         Dle[:,p]= petsc.assemble_vector(L1)[:]
     
         Eps=Eps2d[:,p] 
@@ -266,7 +246,7 @@ for p in range(4):
         L1 = rhs(F1)          
         Dld[:,p]= petsc.assemble_vector(form(L1))[:]
     
-F_dhl=sum([dot(dot(ABD,gamma_l(dv)),eps2(v_))*dx]) 
+F_dhl=sum([dot(dot(ABD,eps2(dv)),gamma_l(v_))*dx]) 
 a3=form(F_dhl)
 Dhl=assemble_matrix(a3)
 Dhl.assemble()
@@ -348,14 +328,12 @@ print('Stiffness Matrix')
 np.set_printoptions(precision=4)
 print(np.around(D_eff))  
 
-# In[13]:
-
 
 #DhlTV0
-DhlV0=np.matmul(Dhl,V0)
+DhlV0=np.matmul(Dhl.T,V0)
 
 #DhlTV0Dle
-DhlTV0Dle=np.matmul(Dhl.T,V0)+Dle
+DhlTV0Dle=np.matmul(Dhl,V0)+Dle
 
 #V0DllV0
 V0DllV0=np.matmul(np.matmul(V0.T,Dll),V0)
@@ -425,9 +403,12 @@ Deff_srt[1:3,0]=Y_tim.T[:,0]
 print('Euler-Bernoulli Stiffness Matrix (MPa) \n')
 
 np.set_printoptions(precision=4)
-print(np.around(D_eff),'\n')  
+print(np.around(D_eff/1e6),'\n')  
 
 print('Stiffness Matrix ')
+
+np.set_printoptions(precision=4)
+print(np.around(Deff_srt/1e6))  
 
 np.set_printoptions(precision=4)
 print(np.around(Deff_srt))  
