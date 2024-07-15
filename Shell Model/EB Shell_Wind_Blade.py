@@ -107,7 +107,7 @@ outFile.write('$EndNodes\n$Elements\n')
 
 newNumEls = np.max(elNewLabs)
 outFile.write(str(newNumEls) + '\n')
-
+layupp=[]
 for i, el in enumerate(elements):
     lab = elNewLabs[i]
     if(lab > -1):
@@ -119,6 +119,7 @@ for i, el in enumerate(elements):
         ln.append('2')
         ln.append('2')
         ln.append(str(elLayID[i]))
+        layupp.append(int(elLayID[i]))
         for nd in el:
             if(nd > -1):
                 ln.append(str(ndNewLabs[nd]))
@@ -128,7 +129,18 @@ outFile.write('$EndElements\n')
 outFile.close()
 mesh, subdomains, boundaries = gmshio.read_from_msh("SG_shell.msh", MPI.COMM_WORLD,0, gdim=3)
 
+o_cell_idx =  mesh.topology.original_cell_index
+lnn=[]
+for k in o_cell_idx:
+    lnn.append(layupp[k])
+lnn=np.array(lnn,dtype=np.int32)    
 
+cell_map = mesh.topology.index_map(mesh.topology.dim)
+num_cells_on_process = cell_map.size_local + cell_map.num_ghosts
+cells = np.arange(num_cells_on_process, dtype=np.int32)
+subdomains = dolfinx.mesh.meshtags(mesh, mesh.topology.dim, cells, lnn)
+#for i in subdomains.values:
+ #   print(i)
 # In[2]:
 
 
