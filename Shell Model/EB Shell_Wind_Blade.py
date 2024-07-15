@@ -2,6 +2,15 @@
 #############EB Shell model including orientation and Taper ##################
 
 ### Update for dolfinx latest v0.8
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+#############EB Shell model including orientation and Taper ##################
+
+### Update for dolfinx latest v0.8
 from dolfinx.io import gmshio
 from dolfinx.fem.petsc import LinearProblem, assemble_matrix
 from dolfinx.mesh import locate_entities_boundary, exterior_facet_indices, create_submesh
@@ -120,9 +129,20 @@ outFile.close()
 mesh, subdomains, boundaries = gmshio.read_from_msh("SG_shell.msh", MPI.COMM_WORLD,0, gdim=3)
 
 
-# In[145]:
+# In[2]:
 
 
+# Material_parameters
+material_parameters,eProps=[],[]
+matDic = dict()
+for i, m in enumerate(meshData['materials']):
+    matDic[m['name']] = i
+    el = m['elastic']
+    eProps = el['E']
+    eProps.extend(el['G'])
+    eProps.extend(el['nu'])
+    material_parameters.append(eProps) 
+    
 # Load Layup Data 
 matid, thick,angle,nlay=[],[],[],[]
 for sec in meshData['sections']:
@@ -141,20 +161,7 @@ for sec in meshData['sections']:
             for l in layup:
                 an.append(l[2])
             angle.append(an) 
-            
-# Material_parameters
-material_parameters,eProps=[],[]
-matDic = dict()
-for i, m in enumerate(meshData['materials']):
-    matDic[m['name']] = i
-    el = m['elastic']
-    eProps = el['E']
-    eProps.extend(el['G'])
-    eProps.extend(el['nu'])
-    material_parameters.append(eProps) 
 
-
-# In[146]:
 
 
 # Local Orientation (DG0 function)
@@ -186,25 +193,7 @@ for k,ii in enumerate(o_cell_id):
     N.vector[3*k], N.vector[3*k+1],N.vector[3*k+2]=c1        # e3 normal same as +x3 direction based on ABD.
 
 
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[147]:
+# In[3]:
 
 
 # Geometry Extraction 
@@ -225,16 +214,6 @@ facets_right = dolfinx.mesh.locate_entities_boundary(mesh, dim=fdim,
 
 mesh_r, entity_mapr, vertex_mapr, geom_mapr = create_submesh(mesh, fdim, facets_right)
 mesh_l, entity_mapl, vertex_mapl, geom_mapl = create_submesh(mesh, fdim, facets_left)
-
-
-# In[ ]:
-
-
-
-
-
-# In[148]:
-
 
 # Generate ABD matrix (Plate model)
 
@@ -408,10 +387,7 @@ def ABD_mat(ii):
     D_eff= D_ee + D1 
     return(D_eff)
 
-
-# In[149]:
-
-
+nphases=len(nlay)
 # Store ABD matrices for layup (as list)
 ABD_=[] 
 for i in range(nphases):
@@ -422,19 +398,7 @@ def ABD_matrix(i):
     return(as_tensor(ABD_[i]))
 
 
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[150]:
+# In[4]:
 
 
 # Local frame from OpenSG 
@@ -613,21 +577,7 @@ def Eps2(e,x):
                     (E61,E62,E63,E64)])
 
 
-# In[152]:
-
-
-# Checking curvature or local frame:
-#V = dolfinx.fem.functionspace(mesh_l, basix.ufl.element(
-  #  "S", mesh_l.topology.cell_name(), deg, shape=(1, )))
-
-#ee=Function(V)
-
-#fexpr1=dolfinx.fem.Expression(e1[0],V.element.interpolation_points(), comm=MPI.COMM_WORLD)
-#ee.interpolate(fexpr1) 
-#ee.vector[:]
-
-
-# In[153]:
+# In[5]:
 
 
 # Optional arguments
@@ -784,6 +734,9 @@ AAA=AA_csr.toarray()
 AA=scipy.sparse.csr_matrix(AAA) 
 
 
+# In[6]:
+
+
 ############# Left Nullspace ###################
 dvl = TrialFunction(V_l)
 v_l= TestFunction(V_l)
@@ -866,7 +819,7 @@ mesh_l.topology.create_connectivity(1, 1)
 mesh_r.topology.create_connectivity(1, 1)
 
 
-# In[156]:
+# In[7]:
 
 
 # Assembly
