@@ -41,7 +41,7 @@ from yaml import CLoader as cLd
 ## Updated: Define input parameters
 
 meshYaml = 'bar_urc_shell_mesh.yaml'  ## the name of the yaml file containing the whole blade mesh
-secInd = np.linspace(10,11,1) ## the index of the spanwise section you want
+secInd = np.linspace(1,1,1) ## the index of the spanwise section you want
 mshFile = 'SG_shell.msh'
 
 ## Read the mesh yaml file
