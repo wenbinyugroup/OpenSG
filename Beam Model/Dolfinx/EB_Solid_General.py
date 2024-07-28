@@ -21,7 +21,7 @@ import ufl
 import basix
 from scipy.sparse import csr_matrix
 #domain = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 5,5, dolfinx.mesh.CellType.triangle)
-domain, subdomains, boundaries = gmshio.read_from_msh("solid_cylinder_2D.msh", MPI.COMM_WORLD,0, gdim=3)
+domain, subdomains, boundaries = gmshio.read_from_msh("mh104_cyl.msh", MPI.COMM_WORLD,0, gdim=3)
 
 # GELCOAT-1
 E1,E2,E3=10, 10, 10
