@@ -318,7 +318,7 @@ for s in range(4):
         f=dolfinx.fem.form(sum([dot(dot(Eps2.T,ABD),Eps2d)[s,k]*dx]))
         D_ed[s,k]=dolfinx.fem.assemble_scalar(f)
 
-        f=dolfinx.fem.form(sum([dot(dot(Eps2d.T,ABD),Eps2)[s,k]*dx]))
+        f=dolfinx.fem.form(sum([dot(dot(Eps2d.T,ABD),Eps2d)[s,k]*dx]))
         D_dd[s,k]=dolfinx.fem.assemble_scalar(f) 
     print('Computed',(s+1)*25,'%')
     
