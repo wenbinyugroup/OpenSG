@@ -1,8 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[35]:
-
 
 # -----------------------------OpenSG------------------------------
 # -------------------Timoshenko Beam Model using 2DSG--------------
@@ -31,17 +26,10 @@ fname= "2D_Ankit_cyl"
 import subprocess
 subprocess.check_output('dolfin-convert  '+ fname+ '.msh  '+ fname +'.xml', shell=True)
 mesh = Mesh(fname + ".xml")
-#subdomains = MeshFunction("size_t", mesh, fname + "_physical_region.xml")
+subdomains = MeshFunction("size_t", mesh, fname + "_physical_region.xml")
 #facets = MeshFunction("size_t", mesh, fname + "_facet_region.xml")
 
-
-
-# In[47]:
-
-
 #----------------------------- Material Data Input-----------------------------
-
-# **The sequence of material initialization is corresponding to subdomain (physical_region) sequence**
 
 # Carbon Uni
 E1,E2,E3=3.700000e+10,    9.000000e+09,    9.000000e+09
@@ -69,16 +57,6 @@ for i in range(mesh.num_cells()):
         E1.vector()[3*i+k]=EE1[k]
         E2.vector()[3*i+k]=EE2[k]
         E3.vector()[3*i+k]=EE3[k]
-
-
-# In[ ]:
-
-
-
-
-
-# In[90]:
-
 
 # Direction cosine matrix
 dc_matrix=as_tensor([(E1[0],E2[0],E3[0]),(E1[1],E2[1],E3[1]),(E1[2],E2[2],E3[2])])
@@ -110,10 +88,6 @@ def C(i):
     C=as_tensor(np.linalg.inv(S))
     C1=dot(dot(R_sig,C),R_sig.T) 
     return C1
-
-
-# In[91]:
-
 
 ## -----------------------------Functions-----------------------------
 
@@ -310,34 +284,3 @@ Deff_srt[1:3,0]=Y_tim.T[:,0]
 print('Stiffness Matrix')
 np.set_printoptions(precision=4)
 print(np.around(Deff_srt))  
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
