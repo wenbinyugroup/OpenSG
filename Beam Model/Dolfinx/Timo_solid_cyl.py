@@ -1,11 +1,6 @@
-#!/usr/bin/env python
-# coding: utf-8
 
-# In[12]:
-
-
-########### EB Model General (dolfinx) ###################
-############ Solid Elements  #########################
+########### Timo Model General (dolfinx) ###################
+############ Solid Elements (Cylinder) #########################
 from dolfinx.io import gmshio
 from dolfinx.fem.petsc import LinearProblem, assemble_matrix
 from dolfinx.mesh import locate_entities_boundary, exterior_facet_indices, create_submesh
@@ -29,16 +24,6 @@ from scipy.sparse import csr_matrix
 #domain = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 5,5, dolfinx.mesh.CellType.triangle)
 dom, subdomains, boundaries = gmshio.read_from_msh("2D_Ankit_cyl.msh", MPI.COMM_WORLD,0, gdim=3)
 
-
-# In[ ]:
-
-
-
-
-
-# In[13]:
-
-
 # Put new subdomains using original cell index 
 tdim = dom.topology.dim
 nelem = dom.topology.index_map(tdim).size_local
@@ -53,10 +38,6 @@ num_cells_on_process = cell_map.size_local + cell_map.num_ghosts
 cells_l = np.arange(num_cells_on_process, dtype=np.int32)
 subdomains = dolfinx.mesh.meshtags(dom, dom.topology.dim, cells_l, lnn)
 
-
-# In[14]:
-
-
 import pyvista
 pyvista.start_xvfb()
 u_topology, u_cell_types, u_geometry=dolfinx.plot.vtk_mesh(dom,tdim)
@@ -70,16 +51,8 @@ u_plotter.add_mesh(grid)
 u_plotter.view_xy() 
 u_plotter.show()
 
-
-# In[15]:
-
-
 material_parameters=np.array([ 
 (3.700000e+10,  9.000000e+09, 9.000000e+09, 4.000000e+09,  4.000000e+09, 4.000000e+09,0.28,0.28,0.28)])    
-
-
-# In[16]:
-
 
 data=np.loadtxt('Ankit_Cyl_Orien.txt', delimiter=',', skiprows=0, dtype=str)
 V= dolfinx.fem.functionspace(dom, basix.ufl.element(
@@ -101,10 +74,6 @@ for i,j in enumerate(o_cell_idx):
         E2.vector[3*i+k]=EE2[k]
         E3.vector[3*i+k]=EE3[k]
 
-
-# In[17]:
-
-
 #data=np.loadtxt('orien_Ankit_cyl_vabs.txt', delimiter=',', skiprows=0, dtype=str)
 #V= dolfinx.fem.functionspace(dom, basix.ufl.element(
 #    "DG", dom.topology.cell_name(), 0, shape=(1, )))
@@ -112,17 +81,6 @@ for i,j in enumerate(o_cell_idx):
 #for i,j in enumerate(data):
    #     for k in range(3):
      #       th2.vector[o_cell_idx[i]]=j.split()[2]
- 
-
-
-# In[ ]:
-
-
-
-
-
-# In[34]:
-
 
 #beta_z=as_tensor([(cos(th_l3[0]), -sin(th_l3[0]),0), (sin(th_l3[0]), cos(th_l3[0]),0),(0,0,1)])
 #beta_y=as_tensor([(cos(th2[0]), 0, sin(th2[0])), (0,1,0),(-sin(th2[0]),0,cos(th2[0]))])
@@ -130,10 +88,6 @@ for i,j in enumerate(o_cell_idx):
 #b=beta_x*beta_y*beta_z
 
 #b=beta_x
-
-
-# In[54]:
-
 
 # Direction cosine matrix
 dc_matrix=as_tensor([(E1[0],E2[0],E3[0]),(E1[1],E2[1],E3[1]),(E1[2],E2[2],E3[2])])
@@ -155,10 +109,6 @@ R_sig=as_tensor([(b11*b11, b12*b12, b13*b13, 2*b12*b13, 2*b11*b13,2* b11*b12),
              (b21*b31, b22*b32, b23*b33, b23*b32+b22*b33, b23*b31+b21*b33, b22*b31+b21*b32),
              (b11*b31, b12*b32, b13*b33, b13*b32+b12*b33, b13*b31+b11*b33, b12*b31+b11*b32),
              (b11*b21, b12*b22, b13*b23, b13*b22+b12*b23, b13*b21+b11*b23, b12*b21+b11*b22)])
-
-
-# In[55]:
-
 
 nphases = len(material_parameters)
 
@@ -297,10 +247,6 @@ print('Stiffness Matrix')
 np.set_printoptions(precision=4)
 print(D_eff)
 
-
-# In[57]:
-
-
 def sigma(v, i,Eps):
     s1= dot(C(i),eps2(v)[1]+Eps)
     return as_tensor([(s1[0],s1[5],s1[4]),(s1[5],s1[1],s1[3]),(s1[4],s1[3],s1[2])]),C(i)
@@ -316,10 +262,6 @@ def sigma_gl(v, i, Eps):
 def eps2(v):
     E1=as_vector([0,v[1].dx(0),v[2].dx(1),v[1].dx(1)+v[2].dx(0),v[0].dx(1),v[0].dx(0)])
     return as_tensor([(E1[0],0.5*E1[5],0.5*E1[4]),(0.5*E1[5],E1[1],0.5*E1[3]),(0.5*E1[4],0.5*E1[3],E1[2])]),E1
-
-
-# In[59]:
-
 
 F1=sum([inner(sigma_gl(dv,0,Eps),gamma_l(v_)[0])*dx])
 a1=lhs(F1)
@@ -426,22 +368,5 @@ print('Timoshenko Stiffness Matrix (MPa) \n')
 
 np.set_printoptions(precision=4)
 print(np.around(Deff_srt))  
-
-
-# In[60]:
-
-
-C_tim
-
-
-# In[61]:
-
-
-B_tim
-
-
-# In[ ]:
-
-
 
 
