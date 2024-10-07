@@ -750,7 +750,7 @@ nullspace_l, nullspace_r= nullspace(V_l),nullspace(V_r)
 A_l,A_r=A_mat(e_l,x_l,dx_l,nullspace_l,v_l,dvl),A_mat(e_r,x_r,dx_r,nullspace_r,v_r,dvr)
 
 # dof mapping makes solved unknown value w_l(Function(V_l)) assigned to v2a (Function(V)). 
-# The boundary of wind blade mesh is a 1D curve. The facet/edge number from wind blade (3D shell) mesh is obtained from [locate_dofs_topological(V,1, np.array([xx]))]
+# The boundary of wind blade mesh is a 1D curve. The facet/edge number is obtained from cell to edge connectivity (conn3) showed in subdomain subroutine.
 # The same facet/edge number of extracted mesh_l (submesh) is obtaine din entity_mapl (gloabl mesh number). refer how submesh was generated.
 #Therefore, once identifying the edge number being same for global(mesh)&boundary mesh(mesh_l), we equate the dofs and store w_l to v2a.
 # The dofs can be verified by comparing the coordinates of local and global dofs if required. 
