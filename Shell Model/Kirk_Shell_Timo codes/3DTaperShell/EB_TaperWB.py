@@ -25,10 +25,6 @@ from scipy.sparse import csr_matrix
 import ufl
 import scipy.sparse.linalg
 
-
-# In[2]:
-
-
 import yaml
 from yaml import CLoader as cLd
 
@@ -121,10 +117,6 @@ cells = np.arange(num_cells, dtype=np.int32)
 subdomains = dolfinx.mesh.meshtags(mesh, mesh.topology.dim, cells, np.array(lnn,dtype=np.int32))
 o_cell_idx= mesh.topology.original_cell_index
 
-
-# In[4]:
-
-
 # Material_parameters
 material_parameters,eProps=[],[]
 matDic = dict()
@@ -156,9 +148,6 @@ for sec in meshData['sections']:
             angle.append(an) 
 
 
-# In[5]:
-
-
 # Local Orientation (DG0 function)
 VV = dolfinx.fem.functionspace(mesh, basix.ufl.element(
     "DG", mesh.topology.cell_name(), 0, shape=(3, )))
@@ -181,11 +170,6 @@ for k,ii in enumerate(o_cell_idx):
     N.vector[3*k],N.vector[3*k+1],N.vector[3*k+2]=orien[ii][8],orien[ii][6],orien[ii][7]   #  e3 
     EE1.vector[3*k], EE1.vector[3*k+1],EE1.vector[3*k+2]=orien[ii][2],orien[ii][0],orien[ii][1]  # e1    outward normal 
 frame=[EE1,EE2,N]
-# the above e1, e2, e3 matches with visual inspection 
-
-
-# In[7]:
-
 
 # Geometry Extraction 
 pp=mesh.geometry.x                 # point data
@@ -205,19 +189,16 @@ facets_right = dolfinx.mesh.locate_entities_boundary(mesh, dim=fdim,
 
 mesh_r, entity_mapr, vertex_mapr, geom_mapr = create_submesh(mesh, fdim, facets_right)
 mesh_l, entity_mapl, vertex_mapl, geom_mapl = create_submesh(mesh, fdim, facets_left)
-
-
-# In[8]:
-
-
-mesh.topology.create_connectivity(2,1)
+#
+# generating cell to edge connectivity to map the subdomains (layup data) from quad mesh to boundary.
+mesh.topology.create_connectivity(2,1)  # (quad mesh topology, boundary(1D) mesh topology)
 cell_of_facet_mesh=mesh.topology.connectivity(2,1)
 # Cell to Edge connectivity
 conn3=[]
 for i in range(num_cells):
     c=[]
     for k in range(4):
-        c.append((cell_of_facet_mesh.array[4*i+k]))
+        c.append((cell_of_facet_mesh.array[4*i+k])) # 4 is used as number of edges ina  quad element
     conn3.append(c)
 conn=np.ndarray.flatten(np.array(conn3))
 # Left Boundary
@@ -240,12 +221,10 @@ def subdomains_boun(mesh_l,left,entity_mapl):
     cells_l = np.arange(num_cells_l, dtype=np.int32)
     subdomains_l = dolfinx.mesh.meshtags(mesh_l, mesh_l.topology.dim, cells_l, sub_L)
     return subdomains_l, frame,boundary_facets_left
-    
-subdomains_l, frame_l,boundary_facets_left=subdomains_boun(mesh_l,left,entity_mapl)
+    # Mapping the orinetation data from quad mesh to boundary. The alternative is to use local_frame_1D(mesh_l).
+    # Either of both can be used in local_boun subroutine 
+subdomains_l, frame_l,boundary_facets_left=subdomains_boun(mesh_l,left,entity_mapl) # generating boundary submesh
 subdomains_r, frame_r,boundary_facets_right=subdomains_boun(mesh_r,right,entity_mapr)
-
-
-# In[35]:
 
 
 # Generate ABD matrix (Plate model)
@@ -354,9 +333,6 @@ def ABD_mat(ii):
     return(D_eff)
 
 
-# In[36]:
-
-
 def ksp_solve(A,F,V):
     w = Function(V)
     ksp = petsc4py.PETSc.KSP()
@@ -388,10 +364,6 @@ def nullspace(V):
     dolfinx.la.orthonormalize(nullspace_basis)           # Create vector space basis and orthogonalize
     return petsc4py.PETSc.NullSpace().create(nullspace_basis, comm=MPI.COMM_WORLD)
 
-
-# In[37]:
-
-
 # Store ABD matrices for layup (as list)
 nphases=max(subdomains.values[:])+1
 ABD_=[] 
@@ -401,24 +373,25 @@ print('Computed',nphases,'ABD matrix')
 
 def ABD_matrix(i):
     return(as_tensor(ABD_[i]))
-
-
-# In[38]:
-
-
+########################################## ABD matrix generation ends here ###########################
+##
+####################################Finite Element Implementation ##########################################
 #Local Frame for Boundary (should be same as quad mesh local frame)
-# Local frame from OpenSG 
+# Local frame from OpenSG  (wind blade quad mesh)
 def local_frame(mesh): 
     t = Jacobian(mesh)
-    t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]]) # tangential direction 
-    t2 = as_vector([t[0, 1], t[1, 1], t[2, 1]]) 
+    t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]]) # tangential curvilinear direction -1
+    t2 = as_vector([t[0, 1], t[1, 1], t[2, 1]]) # tangential curvilinear direction -2
     e3 = cross(t1, t2) # normal direction 
     e3 /= sqrt(dot(e3, e3))
     e1=  t2/ sqrt(dot(t2, t2)) # 1- direction
     e2 = cross(e3, e1)
     e2 /= sqrt(dot(e2, e2)) # 2- direction
     return e1, e2, e3
-    
+    # Note: we don't require local_frame when we are using input orientation stored in EE1, EE2,N.
+# On comparison of local_frame(mesh) and given dc matrix (EE1,EE2,N), the difference is former is clockwise about beam axis, while later is ccw about beam axis
+# for circumferential tangent direction. local_frame(mesh)-[e1,e2,e3] can be interpolated to DG (deg 0) with shape 3 to compare both data.
+# manually generated local frame of 1D curved mesh
 def local_frame_1D_manual(mesh_l):
     coord=mesh_l.geometry.x
     V_l = dolfinx.fem.functionspace(mesh_l, basix.ufl.element(
@@ -436,18 +409,19 @@ def local_frame_1D_manual(mesh_l):
     
 def local_frame_1D(mesh): 
     t = Jacobian(mesh)
-    t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]])
+    t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]]) # tangent vector of 1D curved mesh
     e2=  t1/ sqrt(dot(t1, t1))
     e1=  as_vector([1,0,0]) # Right Lay up
     e3= cross(e1,e2)
     e3=  e3/ sqrt(dot(e3, e3)) 
     return e1, e2, e3
-
+# Note grad(e2) will give derivatives of e2 in (x,yz,) global mesh frame. But, to obtain derivatives along local curvoilinear coordinates, 
+# we use directional derivatives.
 def deri(e): # derivatives of local frame (Refer: Prof: Yu thesis)
     #a3,1
     e1,e2,e3=e[0],e[1],e[2]
     a1_1=dot(e1,grad(e1))
-    a1_2=dot(e2,grad(e1))
+    a1_2=dot(e2,grad(e1))   # directional derivative of e2 along e1 direction.
     a2_1=dot(e1,grad(e2))
     a2_2=dot(e2,grad(e2))
     a3_1=dot(e1,grad(e3))
@@ -468,10 +442,11 @@ def local_grad(ee,q):
 def ddot(w,d1):
     return (d1[0]*w[0]+d1[1]*w[1]+d1[2]*w[2])
 
-def sigma(v,i,Eps,e,x):     
-    s1= dot(ABD_matrix(i),eps(e,x,v)+Eps)
-    return s1 
-    
+ ############################################################################
+# We need four matrices for our energy form/weak form 
+# EB requires only (Gamma_h and Gamma_e) matrix
+# Timo needs (Gamma_l and Gamma_d) matrix. Note in paper, Gamma_l mentioend, but that does not contribute to Timoshenko like model.
+# For input, local frame (e), spatial coordinate x and dx is required as Gamma_h for left boun/right boun/main qaud mesh would be different.
 # Gamma_h*w column matrix
 def gamma_h(e,x,w):    
     k11,k12,k21,k22,k13,k23= deri(e) # extracting initial curvatures
@@ -579,11 +554,8 @@ def gamma_d(e,x):
     O=as_vector((0,0,0,0))
     R=as_vector((-y1,-y3*x[1]+y2*x[2],-x[2]*y1,x[1]*y1))
     return as_tensor([O,O,O,x11*x11*R,x12*x12*R,2*x11*x12*R])
-
-
-# In[39]:
-
-
+    
+# Visualization
 import pyvista
 pyvista.start_xvfb()
 u_topology, u_cell_types, u_geometry=dolfinx.plot.vtk_mesh(mesh,mesh.topology.dim)
@@ -596,10 +568,8 @@ u_plotter.show_axes()
 #u_plotter.view_xy() # z is beam axis
 u_plotter.show()
 
-
-# In[43]:
-
-
+# Obtaining preprocessing mesh terms for boundary as well as main wb (quad mesh).
+# not to confuse with l here, it applies for right boundary as well by giving appropriate arguments
 def local_boun(mesh_l,frame_l,subdomains_l):
     V_l = dolfinx.fem.functionspace(mesh_l, basix.ufl.element(
         "S", mesh_l.topology.cell_name(), 2, shape=(3, )))
@@ -625,7 +595,7 @@ def A_mat(e_l,x_l,dx_l,nullspace_l,v_l,dvl):
     A_l.setNullSpace(nullspace_l) 
     return A_l
 
-def solve_boun(mesh_l,frame_l,subdomains_l):
+def solve_boun(mesh_l,frame_l,subdomains_l): # For applying bc, we only require solved fluctuating functions (V0) as input to bc.
     e, V_l, dv, v_, x, dx=local_boun(mesh_l,frame_l,subdomains_l)          
     mesh_l.topology.create_connectivity(1, 1)
     V0,Dle,Dhe,Dhd,Dld,D_ed,D_dd,D_ee,V1s=initialize_array(V_l)
@@ -771,7 +741,7 @@ def timo_boun(mesh_l,subdomains_l,frame_l):
     Deff_srt[1:3,3:6]=Y_tim.T[:,1:4]
     Deff_srt[1:3,0]=Y_tim.T[:,0]
     
-    return np.around(D_eff),np.around(Deff_srt),D1
+    return np.around(D_eff),np.around(Deff_srt)
 
 # Initialize terms
 e_l, V_l, dvl, v_l, x_l, dx_l=local_boun(mesh_l,frame_l ,subdomains_l)
@@ -779,17 +749,11 @@ e_r, V_r, dvr, v_r, x_r, dx_r=local_boun(mesh_r,frame_r ,subdomains_r)
 nullspace_l, nullspace_r= nullspace(V_l),nullspace(V_r)
 A_l,A_r=A_mat(e_l,x_l,dx_l,nullspace_l,v_l,dvl),A_mat(e_r,x_r,dx_r,nullspace_r,v_r,dvr)
 
-
-# In[44]:
-
-
-np.set_printoptions(precision=4)
-print(timo_boun(mesh_l,subdomains_l,frame_l)[1])
-
-
-# In[54]:
-
-
+# dof mapping makes solved unknown value w_l(Function(V_l)) assigned to v2a (Function(V)). 
+# The boundary of wind blade mesh is a 1D curve. The facet/edge number from wind blade (3D shell) mesh is obtained from [locate_dofs_topological(V,1, np.array([xx]))]
+# The same facet/edge number of extracted mesh_l (submesh) is obtaine din entity_mapl (gloabl mesh number). refer how submesh was generated.
+#Therefore, once identifying the edge number being same for global(mesh)&boundary mesh(mesh_l), we equate the dofs and store w_l to v2a.
+# The dofs can be verified by comparing the coordinates of local and global dofs if required. 
 def dof_mapping_quad(v2a,V_l,w_ll,boundary_facets_left,entity_mapl):
     dof_S2L=[]
     for i,xx in enumerate(entity_mapl):
@@ -803,10 +767,7 @@ def dof_mapping_quad(v2a,V_l,w_ll,boundary_facets_left,entity_mapl):
                     v2a.vector[3*dofs[k]+j]=w_ll[3*dofs_left[k]+j] # store boundary solution of fluctuating functions
     return v2a
 V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-
-
-# In[55]:
-
+# The local_frame_l(mesh_l) can be replaced with frame_l, if we want to use mapped orientation from given direction cosine matrix (orien mesh data-yaml)
 
 # Quad mesh
 e,  V, dv,  v_,  x,    dx=local_boun(mesh,frame,subdomains)
@@ -815,10 +776,12 @@ mesh.topology.create_connectivity(1, 2)
 mesh_l.topology.create_connectivity(1, 1)
 mesh_r.topology.create_connectivity(1, 1)
 
+# Obtaining coefficient matrix AA and BB with and without bc applied.
+# Note: bc is applied at boundary dofs. We define v2a containing all dofs of entire wind blade.
 boundary_dofs = locate_dofs_topological(V, fdim, np.concatenate((entity_mapr,entity_mapl), axis=0))
 F2=sum([dot(dot(ABD_matrix(i),gamma_h(e,x,dv)), gamma_h(e,x,v_))*dx(i) for i in range(nphases)])  
-v2a=Function(V)
-bc = dolfinx.fem.dirichletbc(v2a, boundary_dofs)
+v2a=Function(V) # b default, v2a has zero value for all. 
+bc = dolfinx.fem.dirichletbc(v2a, boundary_dofs) # This shows only boundary_dofs are taken for v2a under bc, which are zero (known) as input.
 a= form(F2)
 B=assemble_matrix(a)   # Obtain coefficient matrix without BC applied: BB
 B.assemble()
@@ -835,27 +798,25 @@ avg=np.trace(AA)/len(AA)
 # 
 for i,xx in enumerate(av):
     if xx==1:
-        av[i]=avg      
+        av[i]=avg        # averaging is done so that all terms are of same order. Note after appliying bc at [A=assemble_matrix(a,[bc])], the dofs of 
+                         # coefficientmatrix has only 1 replaced at that dofs. 
 AA_csr=csr_matrix((av, aj, ai))
 AAA=AA_csr.toarray() 
 AA=scipy.sparse.csr_matrix(AAA) 
 
-
-# In[56]:
-
-
 # Assembly
+# Running for 4 different F vector. However, F has bc applied to it where, stored known values of v2a is provided for each loop (from boun solve).
 for p in range(4): # 4 load cases meaning 
     # Boundary 
     v2a=Function(V)
-    v2a=dof_mapping_quad(v2a,V_l,V0_l[:,p],boundary_facets_left,entity_mapl)
+    v2a=dof_mapping_quad(v2a,V_l,V0_l[:,p],boundary_facets_left,entity_mapl) 
     v2a=dof_mapping_quad(v2a,V_r,V0_r[:,p],boundary_facets_right,entity_mapr)  
     
     # quad mesh
     F2=sum([dot(dot(ABD_matrix(i),gamma_e(e,x)[:,p]), gamma_h(e,x,v_))*dx(i) for i in range(nphases)])  
     bc = dolfinx.fem.dirichletbc(v2a, boundary_dofs)
     F = petsc.assemble_vector(form(rhs(F2)))
-    apply_lifting(F, [a], [[bc]]) # apply bc to rhs vector (Dhe) based on known fluc solutions
+    apply_lifting(F, [a], [[bc]]) # apply bc to rhs vector (Dhe)
     set_bc(F, [bc])
     for i in boundary_dofs:
         for k in range(3):
@@ -871,23 +832,16 @@ for s in range(4):
         D_ee[s,k]=dolfinx.fem.assemble_scalar(f)
 L=(x_max-x_min)
 D_eff= D_ee + D1
-D_eff=D_eff/L
+D_eff=D_eff/L  # L is divided because of 3D shell mesh and corresponding beam length need to divided.
 #--------------------------------------Printing Output Data---------------------------------------
 print('  ')  
 print('Stiffness Matrix')
 np.set_printoptions(precision=4)
 print(np.around(D_eff)) 
 
-
-# In[48]:
-
+# We can also obtain the boundary timo 6X6 matrix as below
+np.set_printoptions(precision=4)
+print(timo_boun(mesh_r,subdomains_r,local_frame_1D(mesh_r))[1]) # Left Boundary timo
 
 np.set_printoptions(precision=4)
-print(timo_boun(mesh_r,subdomains_r,local_frame_1D(mesh_r))[0])
-
-
-# In[49]:
-
-
-np.set_printoptions(precision=4)
-print(timo_boun(mesh_l,subdomains_l,local_frame_1D(mesh_l))[0])
+print(timo_boun(mesh_l,subdomains_l,local_frame_1D(mesh_l))[1]) # Right Boundary timo
