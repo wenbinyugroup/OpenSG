@@ -421,7 +421,7 @@ R=as_vector((-y1,-y3*x[1]+y2*x[2],-x[2]*y1,x[1]*y1))
 gamma_d= as_tensor([O,O,O,x11*x11*R,x12*x12*R,2*x11*x12*R])
 
 # Initialize
-Dle=np.zeros((xxx,xxx))
+Dll=np.zeros((xxx,xxx))
 Dle=np.zeros((xxx,4))
 Dhd=np.zeros((xxx,4))
 Dld=np.zeros((xxx,4))
