@@ -127,7 +127,7 @@ for i, m in enumerate(meshData['materials']):
     eProps.extend(el['G'])
     eProps.extend(el['nu'])
     material_parameters.append(eProps) 
-material_parameters[0]=material_parameters[5]    
+ 
 # Load Layup Data 
 matid, thick,angle,nlay=[],[],[],[]
 for sec in meshData['sections']:
@@ -148,7 +148,7 @@ for sec in meshData['sections']:
             angle.append(an) 
 
 
-# Local Orientation (DG0 function)
+# Local Orientation (DG0 function) of quad mesh element (from yaml data)
 VV = dolfinx.fem.functionspace(mesh, basix.ufl.element(
     "DG", mesh.topology.cell_name(), 0, shape=(3, )))
 EE1,EE2,N=Function(VV),Function(VV),Function(VV) 
