@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opensg"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+license.file = "LICENSE"
+authors = [
+  { name = "Ernesto Camarena", email = "ecamare@sandia.gov" },
+]
+# maintainers = [
+#   { name = "TODO", email = "TODO" },
+# ]
+requires-python = ">=3.9,<3.11" # this syntax might not work...
+
+# dependencies = [
+#   "numpy",
+#   "dolfinx",
+#   "meshio",
+#   "petsc4py",
+#   "ufl",
+#   "basix",
+#   "gmsh"
+# ]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.urls]
+Homepage = "TODO"
+Documentation = "TODO"
+"Bug Tracker" = "TODO"
+Discussions = "TODO"
+Changelog = "TODO"
