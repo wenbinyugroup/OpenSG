@@ -13,10 +13,5 @@ User’s Guide
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Interface
+   :caption: Opensg Interface
 
-   blade_definition
-   meshing
-   beam_models
-   shell_models
-   solid_models

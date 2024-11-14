@@ -3,17 +3,17 @@
 Installation 
 ============
 
-Download pyNuMAD
+Download opensg
 ----------------
 
-The OpenSG source code is hosted on the `opensg GitHub repository <https://github.com/sandialabs/pyNuMAD>`_. 
+The OpenSG source code is hosted on the `opensg GitHub repository <https://github.com/wenbinyugroup/opensg>`_. 
 OpenSG users are recommended to clone the Github repository.
-Cloning the repository allows users to easily pull the latest updates to the pyNuMAD source code.
+Cloning the repository allows users to easily pull the latest updates to the opensg source code.
 These updates may improve the code's speed, accuracy and add additional functionality or advanced features.
 
 To download OpenSG using `git <https://git-scm.com/>`_, type the following in a git interface:: 
 
-    git clone https://github.com/sandialabs/pyNuMAD
+    git clone https://github.com/wenbinyugroup/opensg
 
 Installation
 ------------
@@ -22,7 +22,7 @@ To install OpenSG and create an environment where the code runs correctly, pleas
 
 1. Download the OpenSG repository::
 
-    git clone https://github.com/sandialabs/pyNuMAD
+    git clone https://github.com/wenbinyugroup/opensg
 
 2. Create the conda environment named `opensg_env` using the `environment.yml` file::
 
