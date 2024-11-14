@@ -1,4 +1,6 @@
-from opensg import __version__
+# from opensg import __version__
+__version__ = "0.0.1"
+# import mock
 
 # -- Project information -----------------------------------------------------
 project = u'opensg'
@@ -15,6 +17,7 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
+    'sphinx.ext.autosummary',
     # 'sphinx.ext.viewcode', # commenting out for now b/c bad render width
     'sphinx.ext.napoleon',
     'sphinxcontrib.bibtex',
@@ -32,6 +35,19 @@ source_suffix = '.rst'
 master_doc = 'index'
 language = "en"
 numfig = True
+
+autodoc_mock_imports = ["dolfinx", "basix", "ufl", "gmshio", "gmsh", "petsc4py", "scipy",
+                        "mpi4py", "numpy",]
+
+# Add any paths that contain templates here, relative to this directory.
+templates_path = ['_templates']
+
+# autosummary settings
+import glob
+autosummary_generate = ["api-doc.rst",] + glob.glob("apidoc/*.rst")
+# autosummary_generate = True
+autosummary_generate_overwrite = True
+
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
