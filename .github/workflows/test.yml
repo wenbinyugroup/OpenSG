@@ -33,28 +33,37 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v3
 
-    # Step 2: Set up Miniconda
-    - name: Set up Miniconda
+    - name: Set up environment
       uses: conda-incubator/setup-miniconda@v2
       with:
-        miniconda-version: 'latest'
-        auto-update-conda: true
-        python-version: '3.10'
+        python-version: 3.10
+        activate-environment: opensg_env
+        environment-file: environment.yml
+        auto-activate-base: false
 
-    # Step 3: Create or update Conda environment
-    - name: Create Environment
-      run: |
-        time (conda env create -f environment.yml || conda env update -f environment.yml)
-        conda init
-        source /home/runner/.bashrc
-        conda activate opensg_env
-        conda install pip pytest -y
-        pip install -e .
-        conda list
+    # # Step 2: Set up Miniconda
+    # - name: Set up Miniconda
+    #   uses: conda-incubator/setup-miniconda@v2
+    #   with:
+    #     miniconda-version: 'latest'
+    #     auto-update-conda: true
+    #     python-version: '3.10'
+
+    # # Step 3: Create or update Conda environment
+    # - name: Create Environment
+    #   run: |
+    #     time (conda env create -f environment.yml || conda env update -f environment.yml)
+    #     conda init
+    #     source /home/runner/.bashrc
+    #     conda activate opensg_env
+    #     conda install pip pytest -y
+    #     pip install -e .
+    #     conda list
 
     - name: Run tests
       # run: pytest opensg/tests/
       run:
+        pip install pytest
         which python
         conda info
         python -c "import opensg"
