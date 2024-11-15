@@ -14,7 +14,8 @@ authors = [
 # maintainers = [
 #   { name = "TODO", email = "TODO" },
 # ]
-requires-python = ">=3.9,<3.11" # this syntax might not work...
+requires-python = ">=3.9" # this syntax might not work...
+# requires-python = ">=3.9,<3.11" # this syntax might not work...
 
 # dependencies = [
 #   "numpy",

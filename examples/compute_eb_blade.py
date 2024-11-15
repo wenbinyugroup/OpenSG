@@ -3,6 +3,7 @@ from os.path import join
 # import pynumad
 import opensg
 import numpy as np
+import time
 
 # load blade.yml into pynumad
 # blade_path = join("data", "blade.yaml")
@@ -24,53 +25,68 @@ mesh_yaml = join("data", "bar_urc_shell_mesh.yaml")
 mesh_data = opensg.load_yaml(mesh_yaml)
 
 blade_mesh = opensg.BladeMesh(mesh_data)
-section_mesh = blade_mesh.generate_segment_mesh(segment_index=1, filename="section.msh")
+stiffness_matrices = []
+compute_times = []
+for i in range(1, 2):
+    start_time = time.time()
+    print(time.time()-start_time)
+ 
+    section_mesh = blade_mesh.generate_segment_mesh(segment_index=i, filename="section.msh")
+    print(time.time()-start_time)
 
-section_layups = section_mesh._generate_layup_data()
+    ABD = section_mesh.compute_ABD()
+    print(time.time()-start_time)
 
-frame = section_mesh.generate_local_orientations()
-
-section_mesh.extract_boundaries()
-
-section_mesh.generate_boundary_ABD()
-
-
-
-pause
-
-
-## Extract the mesh for the section
-nodes = mesh_data['nodes']
-numNds = len(nodes)
-elements = mesh_data['elements']
-numEls = len(elements)
-
-ndNewLabs = -1*np.ones(numNds,dtype=int)
-elNewLabs = -1*np.ones(numEls,dtype=int)
-elLayID = -1*np.ones(numEls,dtype=int)
-
-# iterate through blade
-
-segment_matrices = []
-
-for i in range(len(blade.ispan)):
-    # select ith blade segment
-    blade_segment_mesh = opensg.blade.select_segment(blade_mesh_info)
-    # analysis options
-    #   solid vs shell
-    #   whole segment vs boundary
-    # analyses:
-    # stresses/stiffness/buckling
-    # stresses after beamdyn
-    data = opensg.compute_eb_segment(blade_segment_mesh)
-    # data = opensg.compute_eb_boundaries(blade_segment_mesh)
-    # data = opensg.compute_timo_segment(blade_segment_mesh) # ***** high priority
-    # data = opensg.compute_eb_buckling(blade_segment_mesh)
-    # data = opensg.compute_timo_buckling(blade_segment_mesh) # **** top priority
-    # data = opensg.compute_timo_boundaries(blade_segment_mesh)
+    stiffness_matrix = section_mesh.compute_stiffness_EB(ABD)
+    print(time.time()-start_time)
     
-    segment_matrices.append(data)
+    stiffness_matrices.append(stiffness_matrix)
+    end_time = time.time()
+    compute_times.append(end_time - start_time)
+    
+print("Average compute time for a single segment: ", sum(compute_times)/len(compute_times))
+print("Maximum compute time for a single segment: ", max(compute_times))
+
+# combine matrices into a global 
+combined_stiffness_matrices = np.concat(stiffness_matrices)
+
+np.savetxt('stiffness_m.txt', combined_stiffness_matrices, fmt='%d')
+
+# pause
+
+
+# ## Extract the mesh for the section
+# nodes = mesh_data['nodes']
+# numNds = len(nodes)
+# elements = mesh_data['elements']
+# numEls = len(elements)
+
+# ndNewLabs = -1*np.ones(numNds,dtype=int)
+# elNewLabs = -1*np.ones(numEls,dtype=int)
+# elLayID = -1*np.ones(numEls,dtype=int)
+
+# # iterate through blade
+
+# segment_matrices = []
+
+# for i in range(len(blade.ispan)):
+#     # select ith blade segment
+#     blade_segment_mesh = opensg.blade.select_segment(blade_mesh_info)
+#     # analysis options
+#     #   solid vs shell
+#     #   whole segment vs boundary
+#     # analyses:
+#     # stresses/stiffness/buckling
+#     # stresses after beamdyn
+#     data = opensg.compute_eb_segment(blade_segment_mesh)
+#     # data = opensg.compute_eb_boundaries(blade_segment_mesh)
+#     # data = opensg.compute_timo_segment(blade_segment_mesh) # ***** high priority
+#     # data = opensg.compute_eb_buckling(blade_segment_mesh)
+#     # data = opensg.compute_timo_buckling(blade_segment_mesh) # **** top priority
+#     # data = opensg.compute_timo_boundaries(blade_segment_mesh)
+    
+#     segment_matrices.append(data)
     
 
-# ideally, we could also have a step to run beamdyn
-opensg.beamdyn.run_analysis(blade_mesh_info, segment_matrices)
+# # ideally, we could also have a step to run beamdyn
+# opensg.beamdyn.run_analysis(blade_mesh_info, segment_matrices)

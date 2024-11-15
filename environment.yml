@@ -7,7 +7,7 @@ dependencies:
   - scipy
   - mpi4py
   - meshio
-  - petsc4py
+  - petsc4py # 3.15.1
   - yaml
   - contextlib2  # For compatibility
   - pathlib
@@ -15,6 +15,7 @@ dependencies:
   - fenics-dolfinx 
   - fenics-basix 
   - fenics-ufl
+  - fenics-ffcx
   - mpich 
   - pyvista
   - pyyaml
