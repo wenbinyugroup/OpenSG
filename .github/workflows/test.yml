@@ -62,7 +62,7 @@ jobs:
 
     - name: Run tests
       # run: pytest opensg/tests/
-      run:
+      run: |
         pip install pytest
         which python
         conda info
