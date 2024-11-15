@@ -46,6 +46,7 @@ jobs:
       run: |
         conda env create -f environment.yml || conda env update -f environment.yml
         conda init
+        source /home/runner/.bashrc
         conda activate opensg_env
         conda install pip pytest
         pip install -e .
