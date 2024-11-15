@@ -47,6 +47,11 @@ jobs:
         run: |
           conda info
           conda list
+      - name: Install dolfinx via apt
+        run: |
+          sudo add-apt-repository ppa:fenics-packages/fenics
+          sudo apt update -y
+          sudo apt install fenicsx -y
       - name: Run tests
         run: |
           python -c "import opensg"
