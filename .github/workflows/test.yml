@@ -27,19 +27,37 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
 
     steps:
-    # Step 1: Checkout your code
-    - name: Checkout Code
-      uses: actions/checkout@v3
+      # Step 1: Checkout your code
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up environment
-      uses: conda-incubator/setup-miniconda@v2
-      with:
-        python-version: "3.10"
-        activate-environment: opensg_env
-        environment-file: environment.yml
-        auto-activate-base: false
+      - name: Set up environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: "3.10"
+          activate-environment: opensg_env
+          environment-file: environment.yml
+          auto-activate-base: false
+      - name: Check environmnet
+        run: |
+          conda info
+          conda list
+      - name: Run tests
+        run: |
+          which python
+          conda activate opensg_env
+          conda info
+          python -c "import opensg"
+        # run: pytest opensg/tests/
+        # pip install pytest
+
+
+
 
     # # Step 2: Set up Miniconda
     # - name: Set up Miniconda
@@ -59,11 +77,3 @@ jobs:
     #     conda install pip pytest -y
     #     pip install -e .
     #     conda list
-
-    - name: Run tests
-      # run: pytest opensg/tests/
-      run: |
-        pip install pytest
-        which python
-        conda info
-        python -c "import opensg"
