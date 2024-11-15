@@ -54,4 +54,7 @@ jobs:
 
     - name: Run tests
       # run: pytest opensg/tests/
-      run: python -c "import opensg"
+      run:
+        which python
+        conda info
+        python -c "import opensg"
