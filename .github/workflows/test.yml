@@ -49,12 +49,9 @@ jobs:
           conda list
       - name: Run tests
         run: |
-          which python
-          conda activate opensg_env
-          conda info
           python -c "import opensg"
-        # run: pytest opensg/tests/
-        # pip install pytest
+          pip install pytest
+          pytest opensg/tests/
 
 
 

@@ -19,4 +19,8 @@ dependencies:
   - mpich 
   - pyvista
   - pyyaml
+  - pip
+  - pip:
+    - -e .
+    - gmsh
   # - gmsh # I have to install this through pip for it to work.
