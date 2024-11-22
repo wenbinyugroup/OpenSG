@@ -14,7 +14,7 @@ dependencies:
   - typing-extensions
   - fenics-dolfinx=0.8.0
   - fenics-basix=0.8.0
-  - fenics-ufl=0.8.0
+  - fenics-ufl=2024.1.0
   - fenics-ffcx=0.8.0
   - mpich 
   - pyvista
