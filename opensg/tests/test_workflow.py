@@ -28,6 +28,7 @@ class TestExample(unittest.TestCase):
         # assert np.isclsoe(ABD, expected_ABD).all()
         
         stiffness_matrix = section_mesh.compute_stiffness_EB(ABD)
+        assert stiffness_matrix.shape == (4,4)
         # assert np.isclsoe(stiffness_matrix, expected_stiffness).all()
 
 
