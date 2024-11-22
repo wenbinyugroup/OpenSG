@@ -3,28 +3,6 @@ name: run tests
 on: [push, pull_request, workflow_dispatch]
 
 jobs:
-#   test:
-#     runs-on: ${{ matrix.os }}
-#     strategy:
-#       matrix:
-#         os: [ubuntu-latest] #[windows-latest, macOS-13, ubuntu-latest]
-#         python-version: ['3.10', '3.11', '3.12']
-#       fail-fast: false
-#     steps:
-#     - uses: actions/checkout@v2
-#     - name: Set up Python ${{ matrix.python-version }}
-#       uses: actions/setup-python@v4
-#       with:
-#         python-version: ${{ matrix.python-version }}
-#     - name: Install pynumad
-#       run: |
-#         python -m pip install --upgrade pip
-#         pip install -e .
-#     - name: Test with pytest
-#       run: |
-#         pip install --upgrade pytest coverage
-#         coverage run --source=pynumad --omit="*/tests/*" -m pytest
-
   test:
     runs-on: ubuntu-latest
     defaults:
@@ -39,43 +17,15 @@ jobs:
       - name: Set up environment
         uses: conda-incubator/setup-miniconda@v3
         with:
-          # activate-environment: opensg_env
           environment-file: environment.yml
-          # python-version: "3.9"
+          # python-version: "3.9" # setup-miniconda seems to ignore this setting.
           auto-activate-base: false
       - name: Check environmnet
         run: |
           conda info
           conda list
-      # - name: Install dolfinx via apt
-      #   run: |
-      #     sudo add-apt-repository ppa:fenics-packages/fenics
-      #     sudo apt update -y
-      #     sudo apt install fenicsx -y
       - name: Run tests
         run: |
           python -c "import opensg"
           pip install pytest
           pytest opensg/tests/
-
-
-
-
-    # # Step 2: Set up Miniconda
-    # - name: Set up Miniconda
-    #   uses: conda-incubator/setup-miniconda@v2
-    #   with:
-    #     miniconda-version: 'latest'
-    #     auto-update-conda: true
-    #     python-version: '3.10'
-
-    # # Step 3: Create or update Conda environment
-    # - name: Create Environment
-    #   run: |
-    #     time (conda env create -f environment.yml || conda env update -f environment.yml)
-    #     conda init
-    #     source /home/runner/.bashrc
-    #     conda activate opensg_env
-    #     conda install pip pytest -y
-    #     pip install -e .
-    #     conda list
