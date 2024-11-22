@@ -40,18 +40,18 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           # activate-environment: opensg_env
-          # environment-file: environment.yml
-          python-version: "3.9"
+          environment-file: environment.yml
+          # python-version: "3.9"
           auto-activate-base: false
       - name: Check environmnet
         run: |
           conda info
           conda list
-      - name: Install dolfinx via apt
-        run: |
-          sudo add-apt-repository ppa:fenics-packages/fenics
-          sudo apt update -y
-          sudo apt install fenicsx -y
+      # - name: Install dolfinx via apt
+      #   run: |
+      #     sudo add-apt-repository ppa:fenics-packages/fenics
+      #     sudo apt update -y
+      #     sudo apt install fenicsx -y
       - name: Run tests
         run: |
           python -c "import opensg"
