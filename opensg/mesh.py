@@ -3,8 +3,13 @@ import dolfinx
 import basix
 from dolfinx.io import gmshio
 from mpi4py import MPI
-
+from ufl import dot, as_tensor, rhs
+from dolfinx.fem.petsc import assemble_matrix
+from dolfinx.fem import form, petsc, Function, locate_dofs_topological, apply_lifting, set_bc
+from scipy.sparse import csr_matrix
+import scipy
 import opensg
+
 
 class BladeMesh:
     """This class processes and stores information about a wind turbine blade's mesh
@@ -131,8 +136,8 @@ class BladeMesh:
             parent_blade_mesh=self, 
             msh_file=filename)
         return segment_mesh
-        
-        
+
+
 class SegmentMesh():
     def __init__(
         self,
@@ -175,11 +180,15 @@ class SegmentMesh():
         lnn = self.subdomains.values[:]-1
         self.num_cells = self.mesh.topology.index_map(self.mesh.topology.dim).size_local 
         cells = np.arange(self.num_cells, dtype=np.int32)
-        # NOTE: Unsure what this next line does.
+
         self.subdomains = dolfinx.mesh.meshtags(self.mesh, self.mesh.topology.dim, cells, np.array(lnn,dtype=np.int32))
         
         self.tdim = self.mesh.topology.dim
         self.fdim = self.tdim - 1
+        
+        self._generate_layup_data()
+        self._build_local_orientations()
+        self._build_boundary_submeshes()
         
         return
     
@@ -213,7 +222,7 @@ class SegmentMesh():
         return layup_database
     
 
-    def generate_local_orientations(self):
+    def _build_local_orientations(self):
         # Local Orientation (DG0 function) of quad mesh element (from yaml data)
         VV = dolfinx.fem.functionspace(
             self.mesh, basix.ufl.element(
@@ -240,32 +249,26 @@ class SegmentMesh():
         self.N = N
         self.EE2 = EE2
         frame = [EE1,EE2,N]
+        self.frame = frame
         return frame
-    
-    
-    def extract_boundaries(self):
+
+
+    def _build_boundary_submeshes(self):
         # extract geometry
         pp = self.mesh.geometry.x
 
-        is_left_boundary, is_right_boundary = opensg.util.generate_boundary_markers(
+        is_left_boundary, is_right_boundary = opensg.generate_boundary_markers(
             min(pp[:,0]), max(pp[:,0]))
-        
 
         facets_left = dolfinx.mesh.locate_entities_boundary(
             self.mesh, dim=self.fdim, marker=is_left_boundary)
         facets_right = dolfinx.mesh.locate_entities_boundary(
             self.mesh, dim=self.fdim, marker=is_right_boundary)
 
-        right_mesh, right_entity_map, right_vertex_map, right_geom_map = dolfinx.mesh.create_submesh(
-            self.mesh, self.fdim, facets_right)
         left_mesh, left_entity_map, left_vertex_map, left_geom_map = dolfinx.mesh.create_submesh(
             self.mesh, self.fdim, facets_left)
-        
-        self.right_submesh = {
-            "mesh": right_mesh, 
-            "entity_map": right_entity_map, 
-            "vertex_map": right_vertex_map, 
-            "geom_map": right_geom_map}
+        right_mesh, right_entity_map, right_vertex_map, right_geom_map = dolfinx.mesh.create_submesh(
+            self.mesh, self.fdim, facets_right)
         
         self.left_submesh = {
             "mesh": left_mesh, 
@@ -273,10 +276,17 @@ class SegmentMesh():
             "vertex_map": left_vertex_map, 
             "geom_map": left_geom_map}
     
+        self.right_submesh = {
+            "mesh": right_mesh, 
+            "entity_map": right_entity_map, 
+            "vertex_map": right_vertex_map, 
+            "geom_map": right_geom_map}
+        
         # generate subdomains
         self.mesh.topology.create_connectivity(2,1)  # (quad mesh topology, boundary(1D) mesh topology)
         cell_of_facet_mesh = self.mesh.topology.connectivity(2,1)
         
+        # NOTE: found a different way to determine connectivity that didn't need this block -klb
         # Cell to Edge connectivity
         # cell_edge_map = []
         # for i in range(self.num_cells):
@@ -287,7 +297,11 @@ class SegmentMesh():
         # cell_edge_map = np.ndarray.flatten(np.array(cell_edge_map))
         
         # 
-        def subdomains_boundary(boundary_mesh, boundary_marker, boundary_entity_map):
+        def subdomains_boundary(
+            boundary_mesh, 
+            boundary_marker, 
+            boundary_entity_map
+            ):
             boundary_VV = dolfinx.fem.functionspace(
                 boundary_mesh, basix.ufl.element("DG", boundary_mesh.topology.cell_name(), 0, shape=(3, )))
             
@@ -295,14 +309,15 @@ class SegmentMesh():
             boundary_e2 = dolfinx.fem.Function(boundary_VV)
             boundary_n = dolfinx.fem.Function(boundary_VV)
             
-            boundary_subdomains = []
-            
-            boundary_facets_left = dolfinx.mesh.locate_entities(boundary_mesh, self.fdim, boundary_marker)
-
+            boundary_facets = dolfinx.mesh.locate_entities(boundary_mesh, self.fdim, boundary_marker)
             # TODO: review the subdomain assingments with akshat
+            boundary_subdomains = []
             for i, xx in enumerate(boundary_entity_map):
                 # assign subdomain
-                idx = int(np.where(cell_of_facet_mesh.array==xx)[0]/4) # 4 is for number of nodes in quad element
+                # 4 is for number of nodes in quad element
+                # NOTE: we should find a different way to do this that doesn't assume quad elements if
+                #    we plan to expand to other elements.
+                idx = int(np.where(cell_of_facet_mesh.array==xx)[0]/4) 
                 boundary_subdomains.append(self.subdomains.values[idx])
                 # assign orientation
                 for j in range(3):
@@ -310,25 +325,28 @@ class SegmentMesh():
                     boundary_e2.x.array[3*i+j] = self.EE2.x.array[3*idx+j]
                     boundary_n.x.array[3*i+j] = self.N.x.array[3*idx+j]
 
-            frame = [boundary_e1, boundary_e2, boundary_n]
+            boundary_frame = [boundary_e1, boundary_e2, boundary_n]
             boundary_subdomains = np.array(boundary_subdomains, dtype=np.int32)
             boundary_num_cells = boundary_mesh.topology.index_map(boundary_mesh.topology.dim).size_local 
             boundary_cells = np.arange(boundary_num_cells, dtype=np.int32)
             boundary_subdomains = dolfinx.mesh.meshtags(boundary_mesh, boundary_mesh.topology.dim, boundary_cells, boundary_subdomains)
-            return boundary_subdomains, frame, boundary_facets_left
-            # Mapping the orinetation data from quad mesh to boundary. The alternative is to use local_frame_1D(mesh_l).
+            
+            return boundary_subdomains, boundary_frame, boundary_facets
+            # Mapping the orinetation data from quad mesh to boundary. The alternative is to use local_frame_1D(self.left_submesh["mesh"]).
             # Either of both can be used in local_boun subroutine 
         
-        self.left_submesh["subdomains"], self.left_submesh["subdomains"], self.left_submesh["subdomains"] = subdomains_boundary(
+        self.left_submesh["subdomains"], self.left_submesh["frame"], self.left_submesh["facets"] = subdomains_boundary(
             self.left_submesh["mesh"], is_left_boundary, self.left_submesh["entity_map"]) 
-        self.right_submesh["subdomains"], self.right_submesh["subdomains"], self.right_submesh["subdomains"] = subdomains_boundary(
+        self.right_submesh["subdomains"], self.right_submesh["frame"], self.right_submesh["facets"] = subdomains_boundary(
             self.right_submesh["mesh"], is_right_boundary, self.right_submesh["entity_map"])
+        
+        return
 
-    def generate_boundary_ABD(self):
+    def compute_ABD(self):
         nphases = max(self.subdomains.values[:]) + 1
         ABD_ = []
         for i in range(nphases):
-            ABD_.append(opensg.ABD_mat(
+            ABD_.append(opensg.compute_ABD_matrix(
                 i, 
                 thick=self.layup_database["thick"], 
                 nlay=self.layup_database["nlay"], 
@@ -337,7 +355,229 @@ class SegmentMesh():
                 material_database=self.blade_mesh.material_database
                 ))
             
-        # print('Computed',nphases,'ABD matrix')
+        print('Computed',nphases,'ABD matrix')
+        return ABD_
 
-        # def ABD_matrix(i):
-        #     return(as_tensor(ABD_[i]))
+        
+    # def plot(self):
+    #     import pyvista
+    #     pyvista.start_xvfb()
+    #     u_topology, u_cell_types, u_geometry=dolfinx.plot.vtk_mesh(self.blade_mesh.mesh,self. mesh.blade_mesh.topology.dim)
+    #     grid = pyvista.UnstructuredGrid(u_topology, u_cell_types, u_geometry)
+    #     grid.cell_data["Marker"] = self.blade_mesh.subdomains.values[:]
+    #     grid.set_active_scalars("Marker")
+    #     u_plotter = pyvista.Plotter()
+    #     u_plotter.add_mesh(grid)
+    #     u_plotter.show_axes()
+    #     #u_plotter.view_xy() # z is beam axis
+    #     u_plotter.show()
+        
+    def compute_stiffness_EB(self, ABD):
+        # extract object data
+        mesh = self.mesh
+        frame = self.frame
+        subdomains = self.subdomains
+
+        D_eff = opensg.compute_stiffness_EB_blade_segment(
+            ABD, 
+            mesh, 
+            frame, 
+            subdomains, 
+            self.left_submesh, 
+            self.right_submesh)
+        
+        return D_eff
+    
+    def compute_boundary_stiffness_timo(self, ABD):
+
+        left_stiffness = opensg.compute_timo_boun(
+            ABD, 
+            self.left_submesh["mesh"],
+            self.left_submesh_submesh["subdomains"],
+            self.left_submesh["frame"],
+            self.nullspace, # quad nullspace
+            self.left_submesh["nullspace"],
+            self.nphases)[1]
+        
+        right_stiffness = opensg.compute_timo_boun(
+            ABD, 
+            self.right_submesh["mesh"],
+            self.right_submesh["subdomains"],
+            self.right_submesh["frame"],
+            self.nullspace, # quad nullspace
+            self.right_submesh["nullspace"],
+            self.nphases)[1]
+        
+        return left_stiffness, right_stiffness
+
+"""
+    def compute_stiffness_EB(self, ABD):
+        # extract object data
+        mesh = self.mesh
+        frame = self.frame
+        subdomains = self.subdomains
+        tdim=mesh.topology.dim
+        fdim = tdim - 1
+        nphases = max(self.subdomains.values[:]) + 1
+        
+        pp = mesh.geometry.x # point data
+        x_min, x_max=min(pp[:,0]), max(pp[:,0])
+        # Initialize terms
+        e_l, V_l, dvl, v_l, x_l, dx_l = opensg.local_boun(
+            self.left_submesh["mesh"], self.left_submesh["frame"] ,self.left_submesh["subdomains"])
+        
+        e_r, V_r, dvr, v_r, x_r, dx_r = opensg.local_boun(
+            self.right_submesh["mesh"], self.right_submesh["frame"] ,self.right_submesh["subdomains"])
+        
+        self.left_submesh["nullspace"] = opensg.compute_nullspace(V_l)
+        self.right_submesh["nullspace"] = opensg.compute_nullspace(V_r)
+        
+        A_l = opensg.A_mat(ABD, e_l,x_l,dx_l,self.left_submesh["nullspace"],v_l,dvl, nphases)
+        A_r = opensg.A_mat(ABD, e_r,x_r,dx_r,self.right_submesh["nullspace"],v_r,dvr, nphases)
+        
+        V0_l = opensg.solve_boun(ABD, self.left_submesh, nphases)
+        
+        V0_r = opensg.solve_boun(ABD, self.right_submesh, nphases)
+        # The local_frame_l(self.left_submesh["mesh"]) can be replaced with frame_l, if we want to use mapped orientation from given direction cosine matrix (orien mesh data-yaml)
+
+        # Quad mesh
+        e, V, dv, v_, x, dx = opensg.local_boun(mesh, frame, subdomains)
+        V0, Dle, Dhe, Dhd, Dld, D_ed, D_dd, D_ee, V1s = opensg.initialize_array(V)
+        mesh.topology.create_connectivity(1, 2)
+        self.left_submesh["mesh"].topology.create_connectivity(1, 1)
+        self.right_submesh["mesh"].topology.create_connectivity(1, 1)
+
+        # Obtaining coefficient matrix AA and BB with and without bc applied.
+        # Note: bc is applied at boundary dofs. We define v2a containing all dofs of entire wind blade.
+        boundary_dofs = locate_dofs_topological(V, fdim, np.concatenate((self.right_submesh["entity_map"], self.left_submesh["entity_map"]), axis=0))
+        F2=sum([dot(dot(as_tensor(ABD[i]), opensg.gamma_h(e,x,dv)), opensg.gamma_h(e,x,v_))*dx(i) for i in range(nphases)])  
+        v2a=Function(V) # b default, v2a has zero value for all. 
+        bc = dolfinx.fem.dirichletbc(v2a, boundary_dofs) # This shows only boundary_dofs are taken for v2a under bc, which are zero (known) as input.
+        a = form(F2)
+        
+        B = assemble_matrix(a)   # Obtain coefficient matrix without BC applied: BB
+        B.assemble()
+        ai, aj, av=B.getValuesCSR()
+        BB = csr_matrix((av, aj, ai))
+        BB = BB.toarray()  
+        
+        A = assemble_matrix(a,[bc])  # Obtain coefficient matrix with BC applied: AA
+        A.assemble()
+        ai, aj, av=A.getValuesCSR()
+        AA = csr_matrix((av, aj, ai))
+        AA=AA.toarray()
+        avg=np.trace(AA)/len(AA)     
+
+        # averaging is done so that all terms are of same order. Note after appliying bc at [A=assemble_matrix(a,[bc])], the dofs of
+        # coefficientmatrix has only 1 replaced at that dofs. 
+        for i,xx in enumerate(av):
+            if xx==1:
+                av[i]=avg        
+                                
+        AA_csr = csr_matrix((av, aj, ai))
+        AAA = AA_csr.toarray() 
+        AA = scipy.sparse.csr_matrix(AAA) 
+
+        # Assembly
+        # Running for 4 different F vector. However, F has bc applied to it where, stored known values of v2a is provided for each loop (from boun solve).
+        for p in range(4): # 4 load cases meaning 
+            # Boundary 
+            v2a = Function(V)
+            v2a = opensg.dof_mapping_quad(V, v2a,V_l,V0_l[:,p], self.left_submesh["facets"], self.left_submesh["entity_map"]) 
+            v2a = opensg.dof_mapping_quad(V, v2a,V_r,V0_r[:,p], self.right_submesh["facets"], self.right_submesh["entity_map"])  
+            
+            # quad mesh
+            F2=sum([dot(dot(as_tensor(ABD[i]),opensg.gamma_e(e,x)[:,p]), opensg.gamma_h(e,x,v_))*dx(i) for i in range(nphases)])  
+            bc = dolfinx.fem.dirichletbc(v2a, boundary_dofs)
+            F = petsc.assemble_vector(form(rhs(F2)))
+            apply_lifting(F, [a], [[bc]]) # apply bc to rhs vector (Dhe)
+            set_bc(F, [bc])
+            with F.localForm() as local_F:
+                for i in boundary_dofs:
+                    for k in range(3):
+                        # F[3*i+k]=avg*F[3*i+k] # normalize small terms
+                        local_index = 3 * i + k
+                        local_F[local_index] = avg * local_F[local_index]
+                    
+            V0[:,p]=  scipy.sparse.linalg.spsolve(AA, F, permc_spec=None, use_umfpack=True) # obtain sol: E* V1s = b*
+            Dhe[:,p]= scipy.sparse.csr_array(BB).dot(V0[:,p])
+            
+        D1 = np.matmul(V0.T,-Dhe) 
+        for s in range(4):
+            for k in range(4): 
+                f = dolfinx.fem.form(sum([dot(dot(opensg.gamma_e(e,x).T,as_tensor(ABD[i])),opensg.gamma_e(e,x))[s,k]*dx(i) for i in range(nphases)]))
+                D_ee[s,k]=dolfinx.fem.assemble_scalar(f)
+        L = (x_max - x_min)
+        D_eff= D_ee + D1
+        D_eff=D_eff/L  # L is divided because of 3D shell mesh and corresponding beam length need to divided.
+        #--------------------------------------Printing Output Data---------------------------------------
+        print('  ')  
+        print('Stiffness Matrix')
+        np.set_printoptions(precision=4)
+        print(np.around(D_eff))
+        
+        return D_eff
+"""
+        
+
+class MeshData:
+    def __init__(self, mesh):
+        # What data is required to start?
+        
+        pass
+    
+    def add_submesh_attributes(self,
+        entity_map,
+        vertex_map,
+        geom_map,
+        submesh_facets):
+        pass
+    
+    def process_data(self):
+        pass
+        # what downstream data can be generated with the starting data?
+        
+    def process_data_with_args(self, args):
+        pass
+        # what data needs external information to be generated?
+        # how do we track that this data is not soley derived from the init data?
+        
+            # Mapping the orinetation data from quad mesh to boundary. The alternative is to use local_frame_1D(self.left_submesh["mesh"]).
+            # Either of both can be used in local_boun subroutine 
+        
+            # self.left_submesh["subdomains"], self.left_submesh["frame"], self.left_submesh["facets"] = subdomains_boundary(
+            #     self.left_submesh["mesh"], is_left_boundary, self.left_submesh["entity_map"]) 
+            # self.right_submesh["subdomains"], self.right_submesh["frame"], self.right_submesh["facets"] = subdomains_boundary(
+            #     self.right_submesh["mesh"], is_right_boundary, self.right_submesh["entity_map"])
+            
+            
+def _generate_submesh_subdomains(submesh_data, mesh_data):
+        mesh_data.mesh.topology.create_connectivity(2,1)  # (quad mesh topology, boundary(1D) mesh topology)
+        cell_of_facet_mesh = mesh_data.mesh.topology.connectivity(2,1)
+        submesh_VV = dolfinx.fem.functionspace(
+            submesh_data.mesh, basix.ufl.element("DG", submesh_data.mesh.topology.cell_name(), 0, shape=(3, )))
+        
+        submesh_e1 = dolfinx.fem.Function(submesh_VV)
+        submesh_e2 = dolfinx.fem.Function(submesh_VV)
+        submesh_n = dolfinx.fem.Function(submesh_VV)
+        
+        submesh_facets = dolfinx.mesh.locate_entities(submesh_data.mesh, self.fdim, submesh_marker)
+        submesh_subdomains = []
+        for i, xx in enumerate(submesh_data.entity_map):
+            # assign subdomain
+            idx = int(np.where(cell_of_facet_mesh.array==xx)[0]/4) # 4 is for number of nodes in quad element
+            submesh_subdomains.append(mesh_data.subdomains.values[idx])
+            # assign orientation
+            for j in range(3):
+                submesh_e1.x.array[3*i+j] = mesh_data.EE1.x.array[3*idx+j]
+                submesh_e2.x.array[3*i+j] = mesh_data.EE2.x.array[3*idx+j]
+                submesh_n.x.array[3*i+j] = mesh_data.N.x.array[3*idx+j]
+
+        submesh_frame = [submesh_e1, submesh_e2, submesh_n]
+        submesh_subdomains = np.array(submesh_subdomains, dtype=np.int32)
+        submesh_num_cells = submesh_data.mesh.topology.index_map(submesh_data.mesh.topology.dim).size_local 
+        submesh_cells = np.arange(submesh_num_cells, dtype=np.int32)
+        submesh_subdomains = dolfinx.mesh.meshtags(
+            submesh_data.mesh, submesh_data.mesh.topology.dim, submesh_cells, submesh_subdomains)
+        
+        return submesh_subdomains, submesh_frame, submesh_facets

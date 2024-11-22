@@ -4,23 +4,28 @@ on: [push, pull_request, workflow_dispatch]
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, macOS-13, ubuntu-latest]
-        python-version: ['3.8', '3.9', '3.10']
-      fail-fast: false
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install pynumad
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .
-    - name: Test with pytest
-      run: |
-        pip install --upgrade pytest coverage
-        coverage run --source=pynumad --omit="*/tests/*" -m pytest
+      # Step 1: Checkout your code
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: environment.yml
+          # python-version: "3.9" # setup-miniconda seems to ignore this setting.
+          auto-activate-base: false
+      - name: Check environmnet
+        run: |
+          conda info
+          conda list
+      - name: Run tests
+        run: |
+          python -c "import opensg"
+          pip install pytest
+          pytest opensg/tests/
