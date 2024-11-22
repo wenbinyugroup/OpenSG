@@ -39,9 +39,9 @@ jobs:
       - name: Set up environment
         uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: "3.10"
           activate-environment: opensg_env
           environment-file: environment.yml
+          python-version: "3.9"
           auto-activate-base: false
       - name: Check environmnet
         run: |
