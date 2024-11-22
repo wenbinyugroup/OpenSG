@@ -41,7 +41,7 @@ jobs:
         with:
           activate-environment: opensg_env
           environment-file: environment.yml
-          python-version: "3.9"
+          # python-version: "3.9"
           auto-activate-base: false
       - name: Check environmnet
         run: |
