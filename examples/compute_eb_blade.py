@@ -31,13 +31,13 @@ for i in range(1, 2):
     start_time = time.time()
     print(time.time()-start_time)
  
-    section_mesh = blade_mesh.generate_segment_mesh(segment_index=i, filename="section.msh")
+    segment_mesh = blade_mesh.generate_segment_mesh(segment_index=i, filename="section.msh")
     print(time.time()-start_time)
 
-    ABD = section_mesh.compute_ABD()
+    ABD = segment_mesh.compute_ABD()
     print(time.time()-start_time)
 
-    stiffness_matrix = section_mesh.compute_stiffness_EB(ABD)
+    stiffness_matrix = segment_mesh.compute_stiffness_EB(ABD)
     print(time.time()-start_time)
     
     stiffness_matrices.append(stiffness_matrix)
