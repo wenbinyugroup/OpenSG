@@ -16,7 +16,8 @@ import ufl
 
 
 ### ABD matrix computation
-#@profile
+# @profile
+# NOTE can pass in thick[ii], nlay[ii], etc instead of the dictionaries
 def compute_ABD_matrix(ii, thick, nlay, angle, mat_names, material_database):
     """Compute the ABD matrix for a composite layup structure
 
@@ -133,10 +134,7 @@ def compute_ABD_matrix(ii, thick, nlay, angle, mat_names, material_database):
     # Scalar assembly for each term of D_ee matrix
     for s in range(6):  
         for k in range(6):
-            # Scalar assembly
-            # f = dolfinx.fem.form(sum([
-            #     Dee(x, u, )[s, k] * dx(i) 
-            #     for i in range(nphases)]))  
+            # f=dolfinx.fem.form(sum([opensg.compute_utils.Dee(x, u, material_props, theta, Eps)[s,k]*dx(i) for i in range(nphases)])) # Scalar assembly
             f = 0
             for j in range(nphases):
                 mat_name = mat_names[ii][j]
@@ -153,7 +151,7 @@ def compute_ABD_matrix(ii, thick, nlay, angle, mat_names, material_database):
 
 
 ### solve stiffness via EB method
-#@profile
+# @profile
 def compute_stiffness_EB_blade_segment(
     ABD, # array
     mesh, # 
@@ -279,7 +277,7 @@ def compute_stiffness_EB_blade_segment(
     
     for s in range(4):
         for k in range(4):
-            f = dolfinx.fem.form(sum([dot(dot(opensg.construct_gamma_e(e,x).T,as_tensor(ABD[i])),opensg.construct_gamma_e(e,x))[s,k]*dx(i) for i in range(nphases)])) 
+            # f = dolfinx.fem.form(sum([dot(dot(opensg.construct_gamma_e(e,x).T,as_tensor(ABD[i])),opensg.construct_gamma_e(e,x))[s,k]*dx(i) for i in range(nphases)])) 
             form_list = []
             for i in range(nphases):
                 q2 = as_tensor(ABD[i])

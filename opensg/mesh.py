@@ -180,7 +180,7 @@ class SegmentMesh():
         lnn = self.subdomains.values[:]-1
         self.num_cells = self.mesh.topology.index_map(self.mesh.topology.dim).size_local 
         cells = np.arange(self.num_cells, dtype=np.int32)
-        # NOTE: Unsure what this next line does.
+
         self.subdomains = dolfinx.mesh.meshtags(self.mesh, self.mesh.topology.dim, cells, np.array(lnn,dtype=np.int32))
         
         self.tdim = self.mesh.topology.dim
