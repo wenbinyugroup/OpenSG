@@ -304,14 +304,16 @@ class SegmentMesh():
             "entity_map": left_entity_map, 
             "vertex_map": left_vertex_map, 
             "geom_map": left_geom_map,
-            "facets": left_facets}
+            "marker": is_left_boundary}
+            # "facets": left_facets}
     
         self.right_submesh = {
             "mesh": right_mesh, 
             "entity_map": right_entity_map, 
             "vertex_map": right_vertex_map, 
             "geom_map": right_geom_map,
-            "facets": right_facets}
+            "marker": is_right_boundary}
+            # "facets": right_facets}
         
         self.mesh.topology.create_connectivity(2,1)  # (quad mesh topology, boundary(1D) mesh topology)
         cell_of_facet_mesh = self.mesh.topology.connectivity(2,1)
@@ -330,6 +332,7 @@ class SegmentMesh():
         def _build_boundary_subdomains(boundary_meshdata):
             boundary_mesh = boundary_meshdata["mesh"]
             boundary_entity_map = boundary_meshdata["entity_map"]
+            boundary_marker = boundary_meshdata["marker"]
             boundary_VV = dolfinx.fem.functionspace(
                 boundary_mesh, basix.ufl.element("DG", boundary_mesh.topology.cell_name(), 0, shape=(3, )))
             
@@ -337,8 +340,7 @@ class SegmentMesh():
             boundary_e2 = dolfinx.fem.Function(boundary_VV)
             boundary_n = dolfinx.fem.Function(boundary_VV)
             
-            # NOTE: added earlier so commented for now -klb
-            # boundary_facets = dolfinx.mesh.locate_entities(boundary_mesh, self.fdim, boundary_marker)
+            boundary_facets = dolfinx.mesh.locate_entities(boundary_mesh, self.fdim, boundary_marker)
             
             # TODO: review the subdomain assingments with akshat
             boundary_subdomains = []
@@ -361,12 +363,12 @@ class SegmentMesh():
             boundary_cells = np.arange(boundary_num_cells, dtype=np.int32)
             boundary_subdomains = dolfinx.mesh.meshtags(boundary_mesh, boundary_mesh.topology.dim, boundary_cells, boundary_subdomains)
             
-            return boundary_subdomains, boundary_frame
+            return boundary_subdomains, boundary_frame, boundary_facets
             # Mapping the orinetation data from quad mesh to boundary. The alternative is to use local_frame_1D(self.left_submesh["mesh"]).
             # Either of both can be used in local_boun subroutine 
         
-        self.left_submesh["subdomains"], self.left_submesh["frame"] = _build_boundary_subdomains(self.left_submesh) 
-        self.right_submesh["subdomains"], self.right_submesh["frame"] = _build_boundary_subdomains(self.right_submesh)
+        self.left_submesh["subdomains"], self.left_submesh["frame"], self.left_submesh["facets"] = _build_boundary_subdomains(self.left_submesh) 
+        self.right_submesh["subdomains"], self.right_submesh["frame"], self.right_submesh["facets"] = _build_boundary_subdomains(self.right_submesh)
         
         return
 
