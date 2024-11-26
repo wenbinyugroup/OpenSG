@@ -424,7 +424,23 @@ def A_mat(ABD, e_l, x_l, dx_l, nullspace_l, v_l, dvl, nphases):
     A_l.setNullSpace(nullspace_l) 
     return A_l
 
-def solve_boun(ABD, meshdata, nphases):
+def solve_eb_boundary(ABD, meshdata, nphases):
+    """_summary_
+
+    Parameters
+    ----------
+    ABD : List of ABD matrices for each phase
+        _description_
+    meshdata : _type_
+        _description_
+    nphases : _type_
+        _description_
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
     mesh = meshdata["mesh"]
     # frame = meshdata["frame"]
     frame = local_frame_1D(mesh)
