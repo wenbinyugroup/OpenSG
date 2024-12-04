@@ -189,7 +189,15 @@ def compute_stiffness_EB_blade_segment(
     pp = mesh.geometry.x # point data
     x_min, x_max=min(pp[:,0]), max(pp[:,0])
     
+    # Initialize nullspaces
+    V_l = dolfinx.fem.functionspace(mesh, basix.ufl.element(
+        "S", mesh.topology.cell_name(), 2, shape = (3, )))
+        
+    V_r = dolfinx.fem.functionspace(mesh, basix.ufl.element(
+        "S", mesh.topology.cell_name(), 2, shape = (3, )))
+    
     # Compute boundaries
+    # NOTE: not the stiffness matrix
     V0_l = compute_eb_blade_segment_boundary(ABD, l_submesh)
     V0_r = compute_eb_blade_segment_boundary(ABD, r_submesh)
     
@@ -241,7 +249,8 @@ def compute_stiffness_EB_blade_segment(
     for p in range(4): # 4 load cases meaning 
         # Boundary 
         v2a = Function(V)
-        v2a = opensg.dof_mapping_quad(V, v2a,V_l,V0_l[:,p], l_submesh["facets"], l_submesh["entity_map"])
+        # NOTE: V0 first dimension is degrees of freedom and second dimension is load cases
+        v2a = opensg.dof_mapping_quad(V, v2a, V_l, V0_l[:,p], l_submesh["facets"], l_submesh["entity_map"])
         # NOTE: does this second call overwrite previous, or is the data combined? -klb
         v2a = opensg.dof_mapping_quad(V, v2a,V_r,V0_r[:,p], r_submesh["facets"], r_submesh["entity_map"])  
         
@@ -327,7 +336,7 @@ def compute_timo_boun(ABD, mesh, subdomains, frame, nullspace, sub_nullspace, np
         sub_nullspace.remove(F_l)
         w_l = opensg.compute_utils.solve_ksp(A_l,F_l,V_l)
         Dhe[:,p]=  F_l[:]
-        V0[:,p]= w_l.vector[:]  
+        V0[:,p]= w_l.vector[:]
     D1 = np.matmul(V0.T,-Dhe)   
     for s in range(4):
         for k in range(4): 
