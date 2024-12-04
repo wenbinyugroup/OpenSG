@@ -40,7 +40,7 @@ from petsc4py import PETSc
 
 pp=11
 ## Updated: Define input parameters
-meshYaml = 'BAR_URC_numEl_52.yaml'  ## the name of the yaml file containing the whole blade mesh
+meshYaml = 'bar_urc_shell_mesh.yaml'  ## the name of the yaml file containing the whole blade mesh
 secInd = [pp] ## the index of the spanwise section you want
 mshFile = 'SG_shell.msh'
 
