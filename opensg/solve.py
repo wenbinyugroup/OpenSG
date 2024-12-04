@@ -198,11 +198,10 @@ def compute_stiffness_EB_blade_segment(
     
     # Compute boundaries
     # NOTE: not the stiffness matrix
+    
     V0_l = compute_eb_blade_segment_boundary(ABD, l_submesh)
     V0_r = compute_eb_blade_segment_boundary(ABD, r_submesh)
-    
-    # compute_eb_blade_segment_boundary
-    
+        
     # The local_frame_l(submesh["mesh"]) can be replaced with frame_l, if we want to use mapped orientation from given direction cosine matrix (orien mesh data-yaml)
 
     # Quad mesh
