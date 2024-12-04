@@ -56,6 +56,36 @@ class BladeMesh:
         self.material_database = material_database
         return
     
+    
+    def _generate_layup_data(self):
+        layup_database = dict()
+        
+        mat_names, thick, angle, nlay = [], [], [], []
+        for section in self.sections:
+            name_components = section['elementSet'].split('_')
+            if(len(name_components) > 2):
+                material_name, t, an = [], [], []
+                # if(int(name_components[1]) == self.segment_index):
+                layup = section['layup'] # layup = [[material_name: str, thickness: float, angle:]]
+                nlay.append(len(layup))
+                for layer in layup:
+                    material_name.append(layer[0])     
+                mat_names.append(material_name)
+                for layer in layup:
+                    t.append(layer[1])
+                thick.append(t)
+                for layer in layup:
+                    an.append(layer[2])
+                angle.append(an) 
+        
+        layup_database["mat_names"] = mat_names
+        layup_database["thick"] = thick
+        layup_database["angle"] = angle
+        layup_database["nlay"] = nlay
+        self.layup_database = layup_database
+        
+        return layup_database
+    
         
     def generate_segment_mesh(self, segment_index, filename):
         segment_node_labels = -1 * np.ones(self.num_nodes, dtype=int)
@@ -254,35 +284,37 @@ class SegmentMesh():
 
 
     def _build_boundary_submeshes(self):
-        # extract geometry
         pp = self.mesh.geometry.x
 
         is_left_boundary, is_right_boundary = opensg.generate_boundary_markers(
             min(pp[:,0]), max(pp[:,0]))
 
-        facets_left = dolfinx.mesh.locate_entities_boundary(
+        left_facets = dolfinx.mesh.locate_entities_boundary(
             self.mesh, dim=self.fdim, marker=is_left_boundary)
-        facets_right = dolfinx.mesh.locate_entities_boundary(
+        right_facets = dolfinx.mesh.locate_entities_boundary(
             self.mesh, dim=self.fdim, marker=is_right_boundary)
 
         left_mesh, left_entity_map, left_vertex_map, left_geom_map = dolfinx.mesh.create_submesh(
-            self.mesh, self.fdim, facets_left)
+            self.mesh, self.fdim, left_facets)
         right_mesh, right_entity_map, right_vertex_map, right_geom_map = dolfinx.mesh.create_submesh(
-            self.mesh, self.fdim, facets_right)
+            self.mesh, self.fdim, right_facets)
         
         self.left_submesh = {
             "mesh": left_mesh, 
             "entity_map": left_entity_map, 
             "vertex_map": left_vertex_map, 
-            "geom_map": left_geom_map}
+            "geom_map": left_geom_map,
+            "marker": is_left_boundary}
+            # "facets": left_facets}
     
         self.right_submesh = {
             "mesh": right_mesh, 
             "entity_map": right_entity_map, 
             "vertex_map": right_vertex_map, 
-            "geom_map": right_geom_map}
+            "geom_map": right_geom_map,
+            "marker": is_right_boundary}
+            # "facets": right_facets}
         
-        # generate subdomains
         self.mesh.topology.create_connectivity(2,1)  # (quad mesh topology, boundary(1D) mesh topology)
         cell_of_facet_mesh = self.mesh.topology.connectivity(2,1)
         
@@ -296,12 +328,11 @@ class SegmentMesh():
         #     cell_edge_map.append(c)
         # cell_edge_map = np.ndarray.flatten(np.array(cell_edge_map))
         
-        # 
-        def subdomains_boundary(
-            boundary_mesh, 
-            boundary_marker, 
-            boundary_entity_map
-            ):
+        # generate subdomains
+        def _build_boundary_subdomains(boundary_meshdata):
+            boundary_mesh = boundary_meshdata["mesh"]
+            boundary_entity_map = boundary_meshdata["entity_map"]
+            boundary_marker = boundary_meshdata["marker"]
             boundary_VV = dolfinx.fem.functionspace(
                 boundary_mesh, basix.ufl.element("DG", boundary_mesh.topology.cell_name(), 0, shape=(3, )))
             
@@ -310,13 +341,14 @@ class SegmentMesh():
             boundary_n = dolfinx.fem.Function(boundary_VV)
             
             boundary_facets = dolfinx.mesh.locate_entities(boundary_mesh, self.fdim, boundary_marker)
+            
             # TODO: review the subdomain assingments with akshat
             boundary_subdomains = []
             for i, xx in enumerate(boundary_entity_map):
                 # assign subdomain
                 # 4 is for number of nodes in quad element
                 # NOTE: we should find a different way to do this that doesn't assume quad elements if
-                #    we plan to expand to other elements.
+                #    we plan to expand to other elements. -klb
                 idx = int(np.where(cell_of_facet_mesh.array==xx)[0]/4) 
                 boundary_subdomains.append(self.subdomains.values[idx])
                 # assign orientation
@@ -335,10 +367,8 @@ class SegmentMesh():
             # Mapping the orinetation data from quad mesh to boundary. The alternative is to use local_frame_1D(self.left_submesh["mesh"]).
             # Either of both can be used in local_boun subroutine 
         
-        self.left_submesh["subdomains"], self.left_submesh["frame"], self.left_submesh["facets"] = subdomains_boundary(
-            self.left_submesh["mesh"], is_left_boundary, self.left_submesh["entity_map"]) 
-        self.right_submesh["subdomains"], self.right_submesh["frame"], self.right_submesh["facets"] = subdomains_boundary(
-            self.right_submesh["mesh"], is_right_boundary, self.right_submesh["entity_map"])
+        self.left_submesh["subdomains"], self.left_submesh["frame"], self.left_submesh["facets"] = _build_boundary_subdomains(self.left_submesh) 
+        self.right_submesh["subdomains"], self.right_submesh["frame"], self.right_submesh["facets"] = _build_boundary_subdomains(self.right_submesh)
         
         return
 
@@ -347,11 +377,10 @@ class SegmentMesh():
         ABD_ = []
         for i in range(nphases):
             ABD_.append(opensg.compute_ABD_matrix(
-                i, 
-                thick=self.layup_database["thick"], 
-                nlay=self.layup_database["nlay"], 
-                mat_names=self.layup_database["mat_names"],
-                angle=self.layup_database["angle"],
+                thick=self.layup_database["thick"][i], 
+                nlay=self.layup_database["nlay"][i], 
+                mat_names=self.layup_database["mat_names"][i],
+                angle=self.layup_database["angle"][i],
                 material_database=self.blade_mesh.material_database
                 ))
             
