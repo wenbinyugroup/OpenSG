@@ -1,10 +1,89 @@
-#!/usr/bin/env python
-# coding: utf-8
+######################Timoshenko Beam Model (Tapered Shell Wind Blade Segment)###################
+#Input: .yaml File
+#Output: Timoshenko Stiffness Matrix:
+# a) Boundary Timoshenko Stiffness (Deff_l/Deff_r)
+# b) Entire Blade Segment Timoshenko Stiffness (Deff_srt)
+# Byproduct and intermediate step of computation as:
+# c) Boundary Euler-Bernoulli Stiffness (D_effEB_l/D_effEB_r)
+# d) Entire Blade Segment Euler-Bernoulli  Stiffness (D_eff)
 
-# In[1]:
+# Input variables/data: 
+# section_id= Constant           ! Segment_id of wind blade to be computed
+# mesh= mesh data of entire wind blade (WB) segment 
+# subdomains= layup id of mesh elements ( a.k.a. physical domain of mesh)
+# boundaries= facet id of boundary elements of WB mesh  ! Not useful in computation
+# x_min,x_max= minimum/maximum x (beam axis) coordinate to define boundary mesh
+# tdim,fdim= mesh topology/facet dimension !   For quad mesh: tdim=2, fdim=1
+# facets_left/right= Left/Right boundary facet id of WB mesh (In WB numbering) ! useful in generating boundary mesh
+# mesh_r/mesh_l= left and right boundary mesh ( Generated in dolfinx as submesh)
+# entity_mapl/mapr= facet id of left/right boudnary (In boundary mesh numbering)
+# num_cells = number of quadrilateral mesh elements
+# o_cell_idx = Original mesh element connectivity (SG_Shell.msh). Note: dolfinx does the renumbering of vertex and mesh connectivity
+# VV = functionspace (Discontinuous galerkin) to store orientation data
+# frame ([EE1,EE2,N]) = Local Orientation frame (from .yaml) stored as ufl function
+# ! [EE1,EE2,N]: EE1-> curvilinear tangent direction (along beam axis), EE2-> Circumferential tangent Direction  (CCW about  +x (beam) axis), N -> Inward normal direction
+# material_parameters = Stores anisotropic material properties of layups ! Same for all WB Segments
 
 
-### Update for dolfinx latest v0.8
+# nphases = number of layups in the WB segment
+# nlay =  [nphases,1]                ! number of layers in each layup of WB segment
+# matid = [nphases,nlay,1]             ! Contains thickness data of layup id- nlay
+# thick = [nphases,nlay,1]
+# conn3 = [num_cells,4]              ! facet connecticty matrix for each element
+# subdomains_l = layup id of left boundary mesh ! Output for subdomains.values[:] arranged in boundary dofs
+# frame_l = Local orientation frame (orthogonal) for each left boundary element
+# ![E1l,E2l,Nl]: E1l-> beam axis (+x dir), E2l-> Circumferential tangent Direction  (CCW about  +x (beam) axis), E3l -> Inward normal direction
+# boundary_facets_left =  [num_facets_left_boundary,1]     !facet id connectivity of boundary mesh (In mesh_l based numbering)
+# D_effEB_l/D_effEB_r =  Euler-Bernoulli matrix of left/right boundaryy of WB Segment
+# Deff_l/Deff_r = Timoshenko Stiffness matrix of left/right boundary of WB Segment
+
+
+# ndofs_WBmesh = [3*len(np.arange(*V.dofmap.index_map.local_range)),1]  ! total dofs of WB segment mesh (Note: V=> functionspace of WB mesh)
+# V0_l/V0_r=  [ndofs_WBmesh,4]  ! Fluctuating function solution after solving 4 load cases (for EB Stiffness/a.k.a zeroth order) 
+# V1_l/V1_r=  [ndofs_WBmesh,4]  ! Fluctuating function solution after solving 4 load cases (for Timo Stiffness/ a.k.a first order) 
+# e_l = Local orientation Frame for left boundary mesh interpolated in V_l (Serendipidity) functionspace
+# e_r = Local orientation Frame for right boundary mesh interpolated in V_r (Serendipidity) functionspace
+# e =  Local orientation Frame for WB Segment mesh interpolated in V (Serendipidity) functionspace
+# V_l/V_r = functionspace of left/right boundary mesh (UFL)
+# V= functionspace for defining Wb segment mesh (UFL)
+# dvl,v_l= Trial and Test Functions for left boundary (V_l) (UFL)
+# dvr,v_r= Trial and Test Functions for right boundary (V_r) (UFL)
+# dv,v_= Trial and Test Functions for WB mesh (V) (UFL)
+# x_l,x_r = Spatial Coordinate Data for left/right boundary (UFL)
+# dx_l = Measure for left boundary mesh with subdomains_l assigned 
+# dx = Measure for WB mesh with subdomains assigned 
+# ! Used in defining weak form *dx(i) mean integration over mesh elements with layup id  i.
+# nullspace_l = contain nullspace vector for used as constraint to block Rigid body motion when solving variation form (ksp solver) over left boundary mesh.
+# ndofs_leftmesh=  [3*len(np.arange(*V.dofmap.index_map.local_range)),1]  ! total dofs of left boundary mesh 
+# A_l= [ndofs_leftmesh,ndofs_leftmesh]   !Global Assembly Coefficient matrix (in ufl form) for left boundary 
+# ! Can print matrix as array by A_l[:,:]
+# ! Used in solving 4 load cases where A_l w_l = F_l ( similar to Ax=b) 
+# ! Unknown w_l is stored in V0_l[:,p] for load case p
+# A = [ndofs_WBmesh,ndofs_WBmesh]    !Global Assembly matrix for WB mesh 
+# a= Bilinear weak form for WB mesh ! a(dv,v_) 
+# F2= Linear weak form for WB mesh  ! F2(v_) 
+# Can compare with weak form to solve as ! a(dv,v_) w = F2(v_), 
+# where w.vector[ndofs_WBmesh,1] is unknown dofs value stored in V0[ndofs_WBmesh,4] 
+# F= [ndofs_WBmesh,1]     ! Global Assembled Right hand vector for EB case
+# b =[ndofs_WBmesh, 4] ! Equivalent to Right hand vector F for Timo case
+# v0 = Stores the solved V0[ndofs_WBmesh,p] in ufl function form for each load case
+# v2a = UFL function defined over V (functionspace_WB mesh) ! Output by v2a.vector[:]
+# bc= dirichilet bc (known ufl function storing boundary solutions, dofs of boundary need to be constrained) 
+# Dhe = [ndofs_WBmesh,4] ! < gamma_h.T ABD gamma_e>
+# Dle = [ndofs_WBmesh,4] ! < gamma_l.T ABD gamma_e>
+# Dll = [ndofs_WBmesh,ndofs_WBmesh] ! < gamma_l.T ABD gamma_l>
+# Dhl = [ndofs_WBmesh,ndofs_WBmesh] ! < gamma_h.T ABD gamma_l>
+# D_ee = [4,4]    ! < gamma_e.T ABD gamma_e>
+# D1= [4,4]      ! < V0.T -Dhe> ! Information matrix from fluctuating function data 
+# V0= [ndofs_WBmesh, 4] ! Solve [A w =F] ! Fluctuating function after solving 4 load cases on WB mesh (EB)
+# V1s = [ndofs_WBmesh, 4] !Solve [A w =b] ! Fluctuating function after solving 4 load cases on WB mesh (Timo)
+# D_eff=[4,4] ! Euler-Bernoulli Stiffness matrix of entire WB segment 
+# Deff_srt=[6,6] ! Timoshenko Stiffness matrix of entire WB segment 
+
+# Note: Dhe, Dle, Dll, Dhl, Dee for Boundary Timo Solving, (dofs_leftmesh/dofs_rightmesh) replaces dofs_WBmesh 
+
+
+### Compatible with dolfinx latest v0.8
 from dolfinx.io import gmshio
 from dolfinx.fem.petsc import LinearProblem, assemble_matrix
 from dolfinx.mesh import locate_entities_boundary, exterior_facet_indices, create_submesh,CellType, GhostMode
@@ -25,17 +104,13 @@ from pathlib import Path
 from typing import Dict
 import scipy
 from scipy.sparse import csr_matrix
-import scipy.sparse.linalg 
-#import pyvista                                          
+import scipy.sparse.linalg                                        
 import basix
 import yaml
 from yaml import CLoader as cLd
 import basix.ufl
 import dolfinx as dfx
 from petsc4py import PETSc
-
-
-# In[2]:
 
 
 pp=11
