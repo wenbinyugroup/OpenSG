@@ -164,8 +164,8 @@ def compute_stiffness_EB_blade_segment(
 
     Parameters
     ----------
-    ABD : _type_
-        _description_
+    ABD : list[array]
+        list of ABD matrices for each phase
     mesh : _type_
         _description_
     frame : _type_
@@ -185,39 +185,23 @@ def compute_stiffness_EB_blade_segment(
     tdim = mesh.topology.dim
     fdim = tdim - 1
     nphases = max(subdomains.values[:]) + 1
-    
+    assert nphases == len(ABD)
     pp = mesh.geometry.x # point data
     x_min, x_max=min(pp[:,0]), max(pp[:,0])
-    # Initialize terms
-    # NOTE: only V_l/V_r used so replacing for now
-    # e_l, V_l, dvl, v_l, x_l, dx_l = opensg.local_boun(
-    #     l_submesh["mesh"], l_submesh["frame"], l_submesh["subdomains"])
-    
-    # e_r, V_r, dvr, v_r, x_r, dx_r = opensg.local_boun(
-    #     r_submesh["mesh"], r_submesh["frame"], r_submesh["subdomains"])
-    
-    # Initialize nullspaces
-    V_l = dolfinx.fem.functionspace(mesh, basix.ufl.element(
-        "S", mesh.topology.cell_name(), 2, shape = (3, )))
-        
-    V_r = dolfinx.fem.functionspace(mesh, basix.ufl.element(
-        "S", mesh.topology.cell_name(), 2, shape = (3, )))
-    
-    l_submesh["nullspace"] = opensg.compute_nullspace(V_l)
-    r_submesh["nullspace"] = opensg.compute_nullspace(V_r)
 
-    # NOTE: unused code
-    # A_l = opensg.A_mat(ABD, e_l, x_l, dx_l, l_submesh["nullspace"],v_l, dvl, nphases)
-    # A_r = opensg.A_mat(ABD, e_r, x_r, dx_r, r_submesh["nullspace"],v_r, dvr, nphases)
+    # Initialize nullspaces
+    V_l = dolfinx.fem.functionspace(l_submesh["mesh"], basix.ufl.element(
+        "S", l_submesh["mesh"].topology.cell_name(), 2, shape = (3, )))
+        
+    V_r = dolfinx.fem.functionspace(r_submesh["mesh"], basix.ufl.element(
+        "S", r_submesh["mesh"].topology.cell_name(), 2, shape = (3, )))
     
-    V0_l = opensg.solve_eb_boundary(ABD, l_submesh, nphases)
-    V0_r = opensg.solve_eb_boundary(ABD, r_submesh, nphases)
-    
-    # V0_l = opensg.compute_eb_blade_segment_boundary(ABD, l_submesh, nphases)
-    # V0_r = opensg.compute_eb_blade_segment_boundary(ABD, r_submesh, nphases)
-    
-    # compute_eb_blade_segment_boundary
-    
+    # Compute boundaries
+    # NOTE: not the stiffness matrix
+
+    V0_l = compute_eb_blade_segment_boundary(ABD, l_submesh)
+    V0_r = compute_eb_blade_segment_boundary(ABD, r_submesh)
+        
     # The local_frame_l(submesh["mesh"]) can be replaced with frame_l, if we want to use mapped orientation from given direction cosine matrix (orien mesh data-yaml)
 
     # Quad mesh
@@ -264,7 +248,8 @@ def compute_stiffness_EB_blade_segment(
     for p in range(4): # 4 load cases meaning 
         # Boundary 
         v2a = Function(V)
-        v2a = opensg.dof_mapping_quad(V, v2a,V_l,V0_l[:,p], l_submesh["facets"], l_submesh["entity_map"])
+        # NOTE: V0 first dimension is degrees of freedom and second dimension is load cases
+        v2a = opensg.dof_mapping_quad(V, v2a, V_l, V0_l[:,p], l_submesh["facets"], l_submesh["entity_map"])
         # NOTE: does this second call overwrite previous, or is the data combined? -klb
         v2a = opensg.dof_mapping_quad(V, v2a,V_r,V0_r[:,p], r_submesh["facets"], r_submesh["entity_map"])  
         
@@ -315,25 +300,22 @@ def compute_stiffness_EB_blade_segment(
 
 def compute_eb_blade_segment_boundary(
     ABD, # array
-    nphases, 
-    l_submesh, # dictionary with mesh data for l boundary
-    r_submesh # dictionary with mesh data for r boundary
+    submeshdata, # dictionary with mesh data for l boundary
+    # nphases
+    # r_submesh # dictionary with mesh data for r boundary
     ):
     
     # Initialize terms
-    e_l, V_l, dvl, v_l, x_l, dx_l = opensg.local_boun(
-        l_submesh["mesh"], l_submesh["frame"], l_submesh["subdomains"])
+    # e, V, dv, v, x, dx = opensg.local_boun(
+    #     submeshdata["mesh"], submeshdata["frame"], submeshdata["subdomains"])
+    V = dolfinx.fem.functionspace(submeshdata["mesh"], basix.ufl.element(
+        "S", submeshdata["mesh"].topology.cell_name(), 2, shape = (3, )))
     
-    e_r, V_r, dvr, v_r, x_r, dx_r = opensg.local_boun(
-        r_submesh["mesh"], r_submesh["frame"], r_submesh["subdomains"])
+    submeshdata["nullspace"] = opensg.compute_nullspace(V)
     
-    l_submesh["nullspace"] = opensg.compute_nullspace(V_l)
-    r_submesh["nullspace"] = opensg.compute_nullspace(V_r)
+    V0 = opensg.solve_eb_boundary(ABD, submeshdata)
     
-    V0_l = opensg.solve_eb_boundary(ABD, l_submesh, nphases)
-    V0_r = opensg.solve_eb_boundary(ABD, r_submesh, nphases)
-    
-    return V0_l, V0_r
+    return V0
     
 
 def compute_timo_boun(ABD, mesh, subdomains, frame, nullspace, sub_nullspace, nphases):
@@ -353,7 +335,7 @@ def compute_timo_boun(ABD, mesh, subdomains, frame, nullspace, sub_nullspace, np
         sub_nullspace.remove(F_l)
         w_l = opensg.compute_utils.solve_ksp(A_l,F_l,V_l)
         Dhe[:,p]=  F_l[:]
-        V0[:,p]= w_l.vector[:]  
+        V0[:,p]= w_l.vector[:]
     D1 = np.matmul(V0.T,-Dhe)   
     for s in range(4):
         for k in range(4): 
