@@ -190,11 +190,11 @@ def compute_stiffness_EB_blade_segment(
     x_min, x_max=min(pp[:,0]), max(pp[:,0])
 
     # Initialize nullspaces
-    V_l = dolfinx.fem.functionspace(mesh, basix.ufl.element(
-        "S", mesh.topology.cell_name(), 2, shape = (3, )))
+    V_l = dolfinx.fem.functionspace(l_submesh["mesh"], basix.ufl.element(
+        "S", l_submesh["mesh"].topology.cell_name(), 2, shape = (3, )))
         
-    V_r = dolfinx.fem.functionspace(mesh, basix.ufl.element(
-        "S", mesh.topology.cell_name(), 2, shape = (3, )))
+    V_r = dolfinx.fem.functionspace(r_submesh["mesh"], basix.ufl.element(
+        "S", r_submesh["mesh"].topology.cell_name(), 2, shape = (3, )))
     
     # Compute boundaries
     # NOTE: not the stiffness matrix
