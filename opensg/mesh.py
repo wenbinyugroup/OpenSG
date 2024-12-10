@@ -417,6 +417,12 @@ class SegmentMesh():
         
         return D_eff
     
+    def compute_stiffness_EB_boundary(self, ABD):
+        m_l = opensg.compute_eb_blade_segment_boundary(ABD, self.left_submesh)
+        m_r = opensg.compute_eb_blade_segment_boundary(ABD, self.right_submesh)
+        
+        return m_l, m_r
+    
     def compute_boundary_stiffness_timo(self, ABD):
 
         left_stiffness = opensg.compute_timo_boun(

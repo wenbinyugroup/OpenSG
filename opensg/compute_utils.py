@@ -415,16 +415,41 @@ def local_boun(mesh, frame, subdomains):
         
     return frame, V, dv, v, x, dx
           
-
-
 def A_mat(ABD, e_l, x_l, dx_l, nullspace_l, v_l, dvl, nphases):
+    """Assembly matrix
+
+    Parameters
+    ----------
+    ABD : _type_
+        _description_
+    e_l : _type_
+        _description_
+    x_l : _type_
+        _description_
+    dx_l : _type_
+        _description_
+    nullspace_l : _type_
+        _description_
+    v_l : _type_
+        _description_
+    dvl : _type_
+        _description_
+    nphases : _type_
+        _description_
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
     F2 = sum([dot(dot(as_tensor(ABD[i]),gamma_h(e_l,x_l,dvl)), gamma_h(e_l,x_l,v_l))*dx_l(i) for i in range(nphases)])   
     A_l = assemble_matrix(form(F2))
     A_l.assemble()
     A_l.setNullSpace(nullspace_l) 
     return A_l
 
-def solve_eb_boundary(ABD, meshdata, nphases):
+def solve_eb_boundary(ABD, meshdata):
+
     """_summary_
 
     Parameters
@@ -441,6 +466,10 @@ def solve_eb_boundary(ABD, meshdata, nphases):
     _type_
         _description_
     """
+
+    # assert len(ABD) == nphases
+    nphases = len(ABD)
+
     mesh = meshdata["mesh"]
     # frame = meshdata["frame"]
     frame = local_frame_1D(mesh)
@@ -475,12 +504,35 @@ def initialize_array(V_l):
     V1s = np.zeros((xxx,4))
     return V0,Dle,Dhe,Dhd,Dld,D_ed,D_dd,D_ee,V1s
 
-# dof mapping makes solved unknown value w_l(Function(V_l)) assigned to v2a (Function(V)). 
-# The boundary of wind blade mesh is a 1D curve. The facet/edge number is obtained from cell to edge connectivity (conn3) showed in subdomain subroutine.
-# The same facet/edge number of extracted mesh_l (submesh) is obtaine din entity_mapl (gloabl mesh number). refer how submesh was generated.
-#Therefore, once identifying the edge number being same for global(mesh)&boundary mesh(mesh_l), we equate the dofs and store w_l to v2a.
-# The dofs can be verified by comparing the coordinates of local and global dofs if required. 
+
 def dof_mapping_quad(V, v2a, V_l, w_ll, boundary_facets_left, entity_mapl):
+    """dof mapping makes solved unknown value w_l(Function(V_l)) assigned to v2a (Function(V)). 
+    The boundary of wind blade mesh is a 1D curve. The facet/edge number is obtained from cell to edge connectivity (conn3) showed in subdomain subroutine.
+    The same facet/edge number of extracted mesh_l (submesh) is obtaine din entity_mapl (gloabl mesh number). refer how submesh was generated.
+    Therefore, once identifying the edge number being same for global(mesh)&boundary mesh(mesh_l), we equate the dofs and store w_l to v2a.
+    The dofs can be verified by comparing the coordinates of local and global dofs if required. 
+
+    Parameters
+    ----------
+    V : _type_
+        _description_
+    v2a : _type_
+        _description_
+    V_l : _type_
+        _description_
+    w_ll : 1D array (len(4))
+        Fluctuating function data for case p
+    boundary_facets_left : _type_
+        _description_
+    entity_mapl : _type_
+        _description_
+
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
     dof_S2L = []
     deg = 2
     for i,xx in enumerate(entity_mapl):
