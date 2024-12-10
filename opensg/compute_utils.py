@@ -449,6 +449,7 @@ def A_mat(ABD, e_l, x_l, dx_l, nullspace_l, v_l, dvl, nphases):
     return A_l
 
 def solve_eb_boundary(ABD, meshdata):
+
     """_summary_
 
     Parameters
@@ -465,8 +466,10 @@ def solve_eb_boundary(ABD, meshdata):
     _type_
         _description_
     """
+
     # assert len(ABD) == nphases
     nphases = len(ABD)
+
     mesh = meshdata["mesh"]
     # frame = meshdata["frame"]
     frame = local_frame_1D(mesh)

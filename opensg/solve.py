@@ -188,7 +188,7 @@ def compute_stiffness_EB_blade_segment(
     assert nphases == len(ABD)
     pp = mesh.geometry.x # point data
     x_min, x_max=min(pp[:,0]), max(pp[:,0])
-    
+
     # Initialize nullspaces
     V_l = dolfinx.fem.functionspace(mesh, basix.ufl.element(
         "S", mesh.topology.cell_name(), 2, shape = (3, )))
@@ -198,7 +198,7 @@ def compute_stiffness_EB_blade_segment(
     
     # Compute boundaries
     # NOTE: not the stiffness matrix
-    
+
     V0_l = compute_eb_blade_segment_boundary(ABD, l_submesh)
     V0_r = compute_eb_blade_segment_boundary(ABD, r_submesh)
         
