@@ -18,7 +18,7 @@ import ufl
 ### ABD matrix computation
 # @profile
 # NOTE can pass in thick[ii], nlay[ii], etc instead of the dictionaries
-def compute_ABD_matrix(ii, thick, nlay, angle, mat_names, material_database):
+def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
     """Compute the ABD matrix for a composite layup structure
 
     Constructs a local stiffness matrix for a composite laminate
@@ -52,14 +52,14 @@ def compute_ABD_matrix(ii, thick, nlay, angle, mat_names, material_database):
 
     # nodes (1D SG)
     th, s = [0], 0  # Reference starting point
-    for k in thick[ii]:
+    for k in thick:
         s = s - k  # Add the thickness of each layer
         th.append(s)
     points = np.array(th)
     
     # elements
     cell = []
-    for k in range(nlay[ii]):
+    for k in range(nlay):
         cell.append([k, k + 1])
     cellss = np.array(cell)
     
@@ -87,9 +87,9 @@ def compute_ABD_matrix(ii, thick, nlay, angle, mat_names, material_database):
     # Weak form of energy
     F2 = 0
     for j in range(nphases):
-        mat_name = mat_names[ii][j]
+        mat_name = mat_names[j]
         material_props = material_database[mat_name]
-        theta = angle[ii][j]
+        theta = angle[j]
         sigma_val = opensg.compute_utils.sigma(u, material_props, theta, Eps = gamma_e[:,0])[0]
         inner_val = inner(sigma_val, opensg.compute_utils.eps(v)[0])
         F2 += inner_val * dx(j)
@@ -111,9 +111,9 @@ def compute_ABD_matrix(ii, thick, nlay, angle, mat_names, material_database):
         # weak form
         F2 = 0
         for j in range(nphases):
-            mat_name = mat_names[ii][j]
+            mat_name = mat_names[j]
             material_props = material_database[mat_name]
-            theta = angle[ii][j]
+            theta = angle[j]
             sigma_val = opensg.compute_utils.sigma(u, material_props, theta, Eps)[0]
             inner_val = inner(sigma_val, opensg.compute_utils.eps(v)[0])
             F2 += inner_val * dx(j)
@@ -137,9 +137,9 @@ def compute_ABD_matrix(ii, thick, nlay, angle, mat_names, material_database):
             # f=dolfinx.fem.form(sum([opensg.compute_utils.Dee(x, u, material_props, theta, Eps)[s,k]*dx(i) for i in range(nphases)])) # Scalar assembly
             f = 0
             for j in range(nphases):
-                mat_name = mat_names[ii][j]
+                mat_name = mat_names[j]
                 material_props = material_database[mat_name]
-                theta = angle[ii][j]
+                theta = angle[j]
                 dee_val = opensg.compute_utils.Dee(x, u, material_props, theta, Eps)[s, k]
                 f += dee_val * dx(j)
             f = dolfinx.fem.form(f)
@@ -189,20 +189,34 @@ def compute_stiffness_EB_blade_segment(
     pp = mesh.geometry.x # point data
     x_min, x_max=min(pp[:,0]), max(pp[:,0])
     # Initialize terms
-    e_l, V_l, dvl, v_l, x_l, dx_l = opensg.local_boun(
-        l_submesh["mesh"], l_submesh["frame"], l_submesh["subdomains"])
+    # NOTE: only V_l/V_r used so replacing for now
+    # e_l, V_l, dvl, v_l, x_l, dx_l = opensg.local_boun(
+    #     l_submesh["mesh"], l_submesh["frame"], l_submesh["subdomains"])
     
-    e_r, V_r, dvr, v_r, x_r, dx_r = opensg.local_boun(
-        r_submesh["mesh"], r_submesh["frame"], r_submesh["subdomains"])
+    # e_r, V_r, dvr, v_r, x_r, dx_r = opensg.local_boun(
+    #     r_submesh["mesh"], r_submesh["frame"], r_submesh["subdomains"])
+    
+    # Initialize nullspaces
+    V_l = dolfinx.fem.functionspace(mesh, basix.ufl.element(
+        "S", mesh.topology.cell_name(), 2, shape = (3, )))
+        
+    V_r = dolfinx.fem.functionspace(mesh, basix.ufl.element(
+        "S", mesh.topology.cell_name(), 2, shape = (3, )))
     
     l_submesh["nullspace"] = opensg.compute_nullspace(V_l)
     r_submesh["nullspace"] = opensg.compute_nullspace(V_r)
 
-    A_l = opensg.A_mat(ABD, e_l, x_l, dx_l, l_submesh["nullspace"],v_l, dvl, nphases)
-    A_r = opensg.A_mat(ABD, e_r, x_r, dx_r, r_submesh["nullspace"],v_r, dvr, nphases)
+    # NOTE: unused code
+    # A_l = opensg.A_mat(ABD, e_l, x_l, dx_l, l_submesh["nullspace"],v_l, dvl, nphases)
+    # A_r = opensg.A_mat(ABD, e_r, x_r, dx_r, r_submesh["nullspace"],v_r, dvr, nphases)
     
-    V0_l = opensg.solve_boun(ABD, l_submesh, nphases)
-    V0_r = opensg.solve_boun(ABD, r_submesh, nphases)
+    V0_l = opensg.solve_eb_boundary(ABD, l_submesh, nphases)
+    V0_r = opensg.solve_eb_boundary(ABD, r_submesh, nphases)
+    
+    # V0_l = opensg.compute_eb_blade_segment_boundary(ABD, l_submesh, nphases)
+    # V0_r = opensg.compute_eb_blade_segment_boundary(ABD, r_submesh, nphases)
+    
+    # compute_eb_blade_segment_boundary
     
     # The local_frame_l(submesh["mesh"]) can be replaced with frame_l, if we want to use mapped orientation from given direction cosine matrix (orien mesh data-yaml)
 
@@ -298,6 +312,28 @@ def compute_stiffness_EB_blade_segment(
     print(np.around(D_eff))
     
     return D_eff
+
+def compute_eb_blade_segment_boundary(
+    ABD, # array
+    nphases, 
+    l_submesh, # dictionary with mesh data for l boundary
+    r_submesh # dictionary with mesh data for r boundary
+    ):
+    
+    # Initialize terms
+    e_l, V_l, dvl, v_l, x_l, dx_l = opensg.local_boun(
+        l_submesh["mesh"], l_submesh["frame"], l_submesh["subdomains"])
+    
+    e_r, V_r, dvr, v_r, x_r, dx_r = opensg.local_boun(
+        r_submesh["mesh"], r_submesh["frame"], r_submesh["subdomains"])
+    
+    l_submesh["nullspace"] = opensg.compute_nullspace(V_l)
+    r_submesh["nullspace"] = opensg.compute_nullspace(V_r)
+    
+    V0_l = opensg.solve_eb_boundary(ABD, l_submesh, nphases)
+    V0_r = opensg.solve_eb_boundary(ABD, r_submesh, nphases)
+    
+    return V0_l, V0_r
     
 
 def compute_timo_boun(ABD, mesh, subdomains, frame, nullspace, sub_nullspace, nphases):
