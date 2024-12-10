@@ -1,4 +1,4 @@
-from opensg.solve import compute_ABD_matrix, compute_timo_boun, compute_stiffness_EB_blade_segment
+from opensg.solve import compute_ABD_matrix, compute_timo_boun, compute_stiffness_EB_blade_segment, compute_eb_blade_segment_boundary
 # from kirklocal.timo import local_frame_1D, directional_derivative, local_grad, ddot
 from opensg.io import load_yaml, write_yaml
 from opensg.mesh import BladeMesh
