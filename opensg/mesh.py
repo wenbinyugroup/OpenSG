@@ -56,36 +56,6 @@ class BladeMesh:
         self.material_database = material_database
         return
     
-    
-    def _generate_layup_data(self):
-        layup_database = dict()
-        
-        mat_names, thick, angle, nlay = [], [], [], []
-        for section in self.sections:
-            name_components = section['elementSet'].split('_')
-            if(len(name_components) > 2):
-                material_name, t, an = [], [], []
-                # if(int(name_components[1]) == self.segment_index):
-                layup = section['layup'] # layup = [[material_name: str, thickness: float, angle:]]
-                nlay.append(len(layup))
-                for layer in layup:
-                    material_name.append(layer[0])     
-                mat_names.append(material_name)
-                for layer in layup:
-                    t.append(layer[1])
-                thick.append(t)
-                for layer in layup:
-                    an.append(layer[2])
-                angle.append(an) 
-        
-        layup_database["mat_names"] = mat_names
-        layup_database["thick"] = thick
-        layup_database["angle"] = angle
-        layup_database["nlay"] = nlay
-        self.layup_database = layup_database
-        
-        return layup_database
-    
         
     def generate_segment_mesh(self, segment_index, filename):
         segment_node_labels = -1 * np.ones(self.num_nodes, dtype=int)
@@ -99,7 +69,15 @@ class BladeMesh:
             
             labels = element_set["labels"]
             if len(name_components) > 2:
-                if (int(name_components[1]) == segment_index):
+                # Some section names do not have indices. These are assumed to represent
+                # groups of multiple sections (eg all of the shear web elements)
+                # and are ignored.
+                try:
+                    section_index = int(name_components[1])
+                except ValueError:
+                    continue
+                
+                if section_index == segment_index:
                     for element_label in labels:
                         segment_element_labels[element_label] = 1
                         segment_element_layer_id[element_label] = layer_count
@@ -218,7 +196,7 @@ class SegmentMesh():
         
         self._generate_layup_data()
         self._build_local_orientations()
-        self._build_boundary_submeshes()
+        self._build_boundary_submeshdata()
         
         return
     
@@ -242,6 +220,7 @@ class SegmentMesh():
                     for layer in layup:
                         an.append(layer[2])
                     angle.append(an) 
+
         
         layup_database["mat_names"] = mat_names
         layup_database["thick"] = thick
@@ -283,7 +262,7 @@ class SegmentMesh():
         return frame
 
 
-    def _build_boundary_submeshes(self):
+    def _build_boundary_submeshdata(self):
         pp = self.mesh.geometry.x
 
         is_left_boundary, is_right_boundary = opensg.generate_boundary_markers(
@@ -305,7 +284,6 @@ class SegmentMesh():
             "vertex_map": left_vertex_map, 
             "geom_map": left_geom_map,
             "marker": is_left_boundary}
-            # "facets": left_facets}
     
         self.right_submesh = {
             "mesh": right_mesh, 
@@ -313,7 +291,6 @@ class SegmentMesh():
             "vertex_map": right_vertex_map, 
             "geom_map": right_geom_map,
             "marker": is_right_boundary}
-            # "facets": right_facets}
         
         self.mesh.topology.create_connectivity(2,1)  # (quad mesh topology, boundary(1D) mesh topology)
         cell_of_facet_mesh = self.mesh.topology.connectivity(2,1)
@@ -370,7 +347,7 @@ class SegmentMesh():
         self.left_submesh["subdomains"], self.left_submesh["frame"], self.left_submesh["facets"] = _build_boundary_subdomains(self.left_submesh) 
         self.right_submesh["subdomains"], self.right_submesh["frame"], self.right_submesh["facets"] = _build_boundary_subdomains(self.right_submesh)
         
-        return
+        return self.left_submesh, self.right_submesh
 
     def compute_ABD(self):
         nphases = max(self.subdomains.values[:]) + 1
@@ -425,14 +402,7 @@ class SegmentMesh():
     
     def compute_boundary_stiffness_timo(self, ABD):
 
-        left_stiffness = opensg.compute_timo_boun(
-            ABD, 
-            self.left_submesh["mesh"],
-            self.left_submesh_submesh["subdomains"],
-            self.left_submesh["frame"],
-            self.nullspace, # quad nullspace
-            self.left_submesh["nullspace"],
-            self.nphases)[1]
+        left_stiffness = opensg.compute_timo_boun(ABD, self.left_submesh)[1]
         
         right_stiffness = opensg.compute_timo_boun(
             ABD, 
@@ -444,6 +414,17 @@ class SegmentMesh():
             self.nphases)[1]
         
         return left_stiffness, right_stiffness
+    
+    def compute_timo_stiffness_segment(self, ABD):
+        return opensg.compute_timo_segment(
+            ABD=ABD,
+            mesh=self.mesh,
+            frame=self.frame,
+            subdomains=self.subdomains,
+            l_submesh=self.left_submesh,
+            r_submesh=self.right_submesh
+        )
+        
 
 """
     def compute_stiffness_EB(self, ABD):
