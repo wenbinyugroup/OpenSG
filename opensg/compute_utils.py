@@ -3,8 +3,10 @@ import numpy as np
 import dolfinx
 import basix
 from dolfinx.fem import form, petsc, Function, locate_dofs_topological
-from ufl import TrialFunction, TestFunction, rhs, as_tensor, dot, SpatialCoordinate, Measure
-import petsc4py.PETSc
+from ufl import TrialFunction, TestFunction, rhs, as_tensor, dot, SpatialCoordinate, Measure, \
+    inner, grad, jump, CellDiameter, FacetNormal, avg, div, as_vector
+
+from petsc4py import PETSc
 from dolfinx.fem.petsc import assemble_matrix
 
 from mpi4py import MPI
@@ -38,7 +40,7 @@ def solve_ksp(A, F, V):
         solution vector (displacement field)
     """
     w = Function(V)
-    ksp = petsc4py.PETSc.KSP()
+    ksp = PETSc.KSP()
     ksp.create(comm = MPI.COMM_WORLD)
     ksp.setOperators(A)
     ksp.setType("preonly")
@@ -50,10 +52,11 @@ def solve_ksp(A, F, V):
     ksp.setFromOptions()
     ksp.solve(F, w.vector)
     w.vector.ghostUpdate(
-        addv = petsc4py.PETSc.InsertMode.INSERT, mode = petsc4py.PETSc.ScatterMode.FORWARD
+        addv = PETSc.InsertMode.INSERT, mode = PETSc.ScatterMode.FORWARD
     )
     ksp.destroy()
     return w
+    # return w.vector[:],w
 
 def compute_nullspace(V):
     """Compute nullspace to restrict Rigid body motions
@@ -94,7 +97,7 @@ def compute_nullspace(V):
     # Create vector space basis and orthogonalize
     dolfinx.la.orthonormalize(nullspace_basis)
     
-    ret_val = petsc4py.PETSc.NullSpace().create(nullspace_basis, comm = MPI.COMM_WORLD)
+    ret_val = PETSc.NullSpace().create(nullspace_basis, comm = MPI.COMM_WORLD)
 
     return ret_val
 
@@ -123,19 +126,15 @@ def create_gamma_e(x):
     return gamma_e
 
 def R_sig(C, t):
-    """Compute rotation matrix
-
-    Parameters
-    ----------
-    C : _type_
-        _description_
-    t : _type_
-        _description_
-
-    Returns
-    -------
-    _type_
-        _description_
+    """
+    Performs rotation from local material frame to global frame
+    
+    Parameters:
+        C: [6,6] numpy array  ! Stiffness matrix
+        t: constant           ! rotation angle
+        
+    Returns:
+        C': Rotated Stiffness matrix
     """
     th = np.deg2rad(t)
     c, s, cs = np.cos(th), np.sin(th), np.cos(th) * np.sin(th)
@@ -163,7 +162,7 @@ def Dee(x, u, material_props, theta, Eps):
     _type_
         _description_
     """
-    C = sigma(u, material_props, theta, Eps)[1]
+    C = stiffness_matrix(u, material_props, theta, Eps)[1]
     x0 = x[0]
     dee = as_tensor([
         (C[0, 0], C[0, 1], C[0, 5], x0 * C[0, 0], x0 * C[0, 1], x0 * C[0, 5]),
@@ -175,7 +174,16 @@ def Dee(x, u, material_props, theta, Eps):
     ])
     return dee
 
-def sigma(vector, material_parameters, theta, Eps):
+def stiffness_matrix(vector, material_parameters, theta, Eps):
+    """
+    Compute the [6,6] Stiffness matrix using material elastic constants
+    
+    Parameters:
+        i: Material parameters id/ matid
+        
+    Returns:
+        C: [6,6] Stiffness Matrix
+    """
     E1, E2, E3 = material_parameters["E"]
     G12, G13, G23 = material_parameters["G"]
     v12, v13, v23 = material_parameters["nu"]
@@ -313,6 +321,11 @@ def gamma_h(e,x,w):
     ret_val = as_tensor([G1,G2,G3,G4,G5,G6])
     return ret_val
 
+
+def gamma_h_new(v): # (Gamma_h * w)
+    E1= as_vector([0,0,v[2].dx(0),(v[1].dx(0)),(v[0].dx(0)),0])
+    return E1
+
 def gamma_l(e,x,w): 
     # e,x required as element can be of left/right boundary or quad mesh
     y1,y2,y3 = x[2],x[0],x[1]  # In MSG-Shell formulations, y1 should be the beam axis & (y2,y3) as cross-sectional coordinates)
@@ -342,7 +355,7 @@ def gamma_l(e,x,w):
     return ret_val
     
 # Gamma_e matrix   
-def construct_gamma_e(e,x):
+def gamma_e(e,x):
     k11,k12,k21,k22,k13,k23= deri(e)
     x11,x21,x31= local_grad(e[0],x[0]), local_grad(e[0],x[1]), local_grad(e[0],x[2])
     x12,x22,x32= local_grad(e[1],x[0]), local_grad(e[1],x[1]), local_grad(e[1],x[2])
@@ -481,31 +494,50 @@ def solve_eb_boundary(ABD, meshdata):
     V0 = initialize_array(V)[0]
     A = A_mat(ABD, e,x,dx,compute_nullspace(V),v_,dv, nphases)
     for p in range(4):
-        Eps = construct_gamma_e(e,x)[:,p]
+        Eps = gamma_e(e,x)[:,p]
         F2 = sum([dot(dot(as_tensor(ABD[i]),Eps), gamma_h(e,x,v_))*dx(i) for i in range(nphases)])   
         r_he = form(rhs(F2))
         F = petsc.assemble_vector(r_he)
-        F.ghostUpdate(addv = petsc4py.PETSc.InsertMode.ADD, mode = petsc4py.PETSc.ScatterMode.REVERSE)
+        F.ghostUpdate(addv = PETSc.InsertMode.ADD, mode = PETSc.ScatterMode.REVERSE)
         nullspace.remove(F)
         w = solve_ksp(A,F,V)
         V0[:,p]= w.vector[:] 
     return V0
+
+# NOTE: different definition between timo and eb scripts
+# def initialize_array(V_l):
+#     xxx = 3*len(np.arange(*V_l.dofmap.index_map.local_range))  # total dofs 
+#     V0 = np.zeros((xxx,4))
+#     Dle = np.zeros((xxx,4))
+#     Dhe = np.zeros((xxx,4))
+#     Dhd = np.zeros((xxx,4))
+#     Dld = np.zeros((xxx,4))
+#     D_ed = np.zeros((4,4))
+#     D_dd = np.zeros((4,4))
+#     D_ee = np.zeros((4,4))  
+#     V1s = np.zeros((xxx,4))
+#     return V0,Dle,Dhe,Dhd,Dld,D_ed,D_dd,D_ee,V1s
+
+def initialize_array(V):
+    """
+    Output initialized numpy arrays
+    From Timo_Taper_ABDrearranged_debugging.py
     
-def initialize_array(V_l):
-    xxx = 3*len(np.arange(*V_l.dofmap.index_map.local_range))  # total dofs 
-    V0 = np.zeros((xxx,4))
-    Dle = np.zeros((xxx,4))
-    Dhe = np.zeros((xxx,4))
-    Dhd = np.zeros((xxx,4))
-    Dld = np.zeros((xxx,4))
-    D_ed = np.zeros((4,4))
-    D_dd = np.zeros((4,4))
-    D_ee = np.zeros((4,4))  
-    V1s = np.zeros((xxx,4))
-    return V0,Dle,Dhe,Dhd,Dld,D_ed,D_dd,D_ee,V1s
+    Parameters:
+        V: functionspace
+        
+    Returns:
+        V0,Dle,Dhe,D_ee,V1s: numpy arrays
+    """
+    ndofs=3*len(np.arange(*V.dofmap.index_map.local_range))  # total dofs of mesh
+    V0 = np.zeros((ndofs,4))
+    Dle=np.zeros((ndofs,4))
+    Dhe=np.zeros((ndofs,4))
+    D_ee=np.zeros((4,4))  
+    V1s=np.zeros((ndofs,4)) 
+    return V0,Dle,Dhe,D_ee,V1s
 
-
-def dof_mapping_quad(V, v2a, V_l, w_ll, boundary_facets_left, entity_mapl):
+def dof_mapping_quad(V, v2a, V_boundary, w_ll, boundary_facets, entity_mapl):
     """dof mapping makes solved unknown value w_l(Function(V_l)) assigned to v2a (Function(V)). 
     The boundary of wind blade mesh is a 1D curve. The facet/edge number is obtained from cell to edge connectivity (conn3) showed in subdomain subroutine.
     The same facet/edge number of extracted mesh_l (submesh) is obtaine din entity_mapl (gloabl mesh number). refer how submesh was generated.
@@ -517,15 +549,15 @@ def dof_mapping_quad(V, v2a, V_l, w_ll, boundary_facets_left, entity_mapl):
     V : _type_
         _description_
     v2a : _type_
-        _description_
-    V_l : _type_
-        _description_
+        ufl function to store boundary solutions
+    V_boundary : _type_
+        Boundary functionspace
     w_ll : 1D array (len(4))
-        Fluctuating function data for case p
-    boundary_facets_left : _type_
-        _description_
-    entity_mapl : _type_
-        _description_
+        Dims=[ndofs_leftmesh,1]. numpy column vector containing columns of V0_l (i.e. V0_l[:,p]).
+    boundary_facets : array
+        Dims=[num_facets_left,1]. Boundary facets id (numbering in boundary mesh).
+    entity_mapl : array
+        Dim=[num_facets_left,1].  Boundary facets id (numbering in Wb Segment mesh)
 
 
     Returns
@@ -534,13 +566,204 @@ def dof_mapping_quad(V, v2a, V_l, w_ll, boundary_facets_left, entity_mapl):
         _description_
     """
     dof_S2L = []
-    deg = 2
+    deg = 2 # hard coded for now, could change to optional kwarg.
     for i,xx in enumerate(entity_mapl):
         dofs = locate_dofs_topological(V, 1, np.array([xx]))
-        dofs_left= locate_dofs_topological(V_l, 1, np.array([boundary_facets_left[i]]))
+        dofs_left= locate_dofs_topological(V_boundary, 1, np.array([boundary_facets[i]]))
         for k in range(deg+1):
             if dofs[k] not in dof_S2L:
                 dof_S2L.append(dofs[k])
                 for j in range(3):
                     v2a.vector[3*dofs[k]+j] = w_ll[3*dofs_left[k]+j] # store boundary solution of fluctuating functions
     return v2a
+
+
+def tangential_projection(u: ufl.Coefficient, n: ufl.FacetNormal) -> ufl.Coefficient:
+    """
+    See for instance:
+    https://link.springer.com/content/pdf/10.1023/A:1022235512626.pdf
+    """
+    return (ufl.Identity(u.ufl_shape[0]) - ufl.outer(n, n)) * u
+
+
+def facet_vector_approximation(
+    V: dolfinx.fem.FunctionSpace,
+    mt: dolfinx.mesh.MeshTags | None = None,
+    mt_id: int | None = None,
+    tangent: bool = False,
+    interior: bool = False,
+    jit_options: dict | None = None,
+    form_compiler_options: dict | None = None) -> dolfinx.fem.Function:
+ 
+    jit_options = jit_options if jit_options is not None else {}
+    form_compiler_options = form_compiler_options if form_compiler_options is not None else {}
+
+    comm  = V.mesh.comm # MPI Communicator
+    n     = ufl.FacetNormal(V.mesh) # UFL representation of mesh facet normal
+    u, v  = ufl.TrialFunction(V), ufl.TestFunction(V) # Trial and test functions
+
+    # Create interior facet integral measure
+    dS = ufl.dS(domain=V.mesh) if mt is None else ufl.dS(domain=V.mesh, subdomain_data=mt, subdomain_id=mt_id)
+    
+    # If tangent==True, the right-hand side of the problem should be a tangential projection of the facet normal vector.
+
+
+    c = dolfinx.fem.Constant(V.mesh, (1.0, 1.0, 1.0)) # Vector to tangentially project the facet normal vectors on
+
+    a = (ufl.inner(u('+'), v('+')) + ufl.inner(u('-'), v('-'))) * dS
+    L = ufl.inner(tangential_projection(c, n('+')), v('+')) * dS \
+        + ufl.inner(tangential_projection(c, n('-')), v('-')) * dS
+    # If tangent==false the right-hand side is simply the facet normal vector.
+    a = (ufl.inner(u('+'), v('+')) + ufl.inner(u('-'), v('-'))) * dS
+    L = (ufl.inner(n('+'), v('+')) + ufl.inner(n('-'), v('-'))) * dS
+
+    # Find all boundary dofs, which are the dofs where we want to solve for the facet vector approximation.
+    # Start by assembling test functions integrated over the boundary integral measure.
+    ones = dolfinx.fem.Constant(V.mesh, dolfinx.default_scalar_type((1,) * V.mesh.geometry.dim)) # A vector of ones
+
+    local_val = dolfinx.fem.form((ufl.dot(ones, v('+')) + ufl.dot(ones, v('-')))*dS)
+    local_vec = dolfinx.fem.assemble_vector(local_val)
+
+    # For the dofs that do not lie on the boundary of the mesh the assembled vector has value zero.
+    # Extract these dofs and use them to deactivate the corresponding block in the linear system we will solve.
+    bdry_dofs_zero_val  = np.flatnonzero(np.isclose(local_vec.array, 0))
+    deac_blocks = np.unique(bdry_dofs_zero_val // V.dofmap.bs).astype(np.int32)
+
+    # Create sparsity pattern by manipulating the blocks to be deactivated and set
+    # a zero Dirichlet boundary condition for these dofs.
+    bilinear_form = dolfinx.fem.form(a, jit_options=jit_options,
+                                 form_compiler_options=form_compiler_options)
+    pattern = dolfinx.fem.create_sparsity_pattern(bilinear_form)
+    pattern.insert_diagonal(deac_blocks)
+    pattern.finalize()
+    u_0 = dolfinx.fem.Function(V)
+    u_0.vector.set(0)
+    bc_deac = dolfinx.fem.dirichletbc(u_0, deac_blocks)
+
+    # Create the matrix
+    A = dolfinx.cpp.la.petsc.create_matrix(comm, pattern)
+    A.zeroEntries()
+
+    # Assemble the matrix with all entries
+    form_coeffs = dolfinx.cpp.fem.pack_coefficients(bilinear_form._cpp_object)
+    form_consts = dolfinx.cpp.fem.pack_constants(bilinear_form._cpp_object)
+    dolfinx.fem.petsc.assemble_matrix(A, bilinear_form, constants=form_consts, coeffs=form_coeffs, bcs=[bc_deac])
+
+    # Insert the diagonal with the deactivated blocks.
+    if bilinear_form.function_spaces[0] is bilinear_form.function_spaces[1]:
+        A.assemblyBegin(PETSc.Mat.AssemblyType.FLUSH)
+        A.assemblyEnd(PETSc.Mat.AssemblyType.FLUSH)
+        dolfinx.cpp.fem.petsc.insert_diagonal(A=A, V=bilinear_form.function_spaces[0], bcs=[bc_deac._cpp_object], diagonal=1.0)
+    A.assemble()
+
+    # Assemble the linear form and the right-hand side vector.
+    linear_form = dolfinx.fem.form(L, jit_options=jit_options,
+                               form_compiler_options=form_compiler_options)
+    b = dolfinx.fem.petsc.assemble_vector(linear_form)
+
+
+    # Apply lifting to the right-hand side vector and set boundary conditions.
+    dolfinx.fem.petsc.apply_lifting(b, [bilinear_form], [[bc_deac]])
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
+    dolfinx.fem.petsc.set_bc(b, [bc_deac])
+
+    # Setup a linear solver using the Conjugate Gradient method.
+    solver = PETSc.KSP().create(MPI.COMM_WORLD)
+    solver.setType("cg")
+    solver.rtol = 1e-8
+    solver.setOperators(A)
+
+    # Solve the linear system and perform ghost update.
+    nh    = dolfinx.fem.Function(V)     # Function for the facet vector approximation
+    solver.solve(b, nh.vector)
+    nh.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+
+    # Normalize the vectors to get the unit facet normal/tangent vector.
+    nh_norm = ufl.sqrt(ufl.inner(nh, nh)) # Norm of facet vector
+    cond_norm = ufl.conditional(ufl.gt(nh_norm, 1e-10), nh_norm, 1.0) # Avoid division by zero
+    nh_norm_vec = ufl.as_vector((nh[0]/cond_norm, nh[1]/cond_norm, nh[2]/cond_norm))
+
+    nh_normalized = dolfinx.fem.Expression(nh_norm_vec, V.element.interpolation_points())
+    
+    n_out = dolfinx.fem.Function(V)
+    n_out.interpolate(nh_normalized)
+
+    return n_out
+
+
+def deri_constraint(dvl, v_l, mesh, nh):
+    """
+    Generate C0-Interior Penalty term for bilinear weak form to constrain normal and tangent derivative along the interface
+    Boundary mesh only requires normal derivative constraint, and WB mesh requires both tangent and normal derivative constraint
+    Parameters:
+        dv,v_: Trail and test function (either WB segment/boundary)
+        mesh: Input mesh (either WB segment/boundary)
+        nh: TODO
+        
+    Returns:
+        nn: bilinear normal derivative constraint terms (boundary mesh)
+        nn+tt: bilinear constraint terms for both normal and tangent boundary (WB surface mesh).
+    """
+    h = CellDiameter(mesh)
+    n = FacetNormal(mesh)
+    h_avg = (h('+') + h('-')) / 2.0
+    dS=Measure('dS')(domain=mesh)
+    if mesh.topology.dim==1:
+        alpha=1e10
+        nn= - inner(avg(div(grad(dvl))), jump(grad(v_l), n))*dS \
+            - inner(jump(grad(dvl), n), avg(div(grad(v_l))))*dS \
+            + (alpha/h_avg**2)*inner(jump(grad(dvl),n), jump(grad(v_l),n))*dS
+        return nn
+    elif mesh.topology.dim==2: 
+        alpha=1e10
+        beta=4e5
+        nn= - inner(avg(div(grad(dvl))), jump(grad(v_l), n))*dS \
+            - inner(jump(grad(dvl), n), avg(div(grad(v_l))))*dS \
+            + (alpha/h_avg**2)*inner(jump(grad(dvl),n), jump(grad(v_l),n))*dS
+        tt=- inner(avg(div(grad(dvl))), jump(grad(v_l), nh))*dS \
+           - inner(jump(grad(dvl), nh), avg(div(grad(v_l))))*dS \
+           + (beta/h_avg**2)*inner(jump(grad(dvl),nh), jump(grad(v_l),nh))*dS
+        return nn+tt
+
+
+# def Stiff_mat(i, angle, material_parameters):     
+#     """
+#     Compute the [6,6] Stiffness matrix using material elastic constants
+    
+#     Parameters:
+#         i: Material parameters id/ matid
+        
+#     Returns:
+#         C: [6,6] Stiffness Matrix
+#     """
+#     E1,E2,E3,G12,G13,G23,v12,v13,v23= material_parameters[matid[ii][i]]
+#     S = np.zeros((6,6))
+#     S[0,0], S[1,1], S[2,2]=1/E1, 1/E2, 1/E3
+#     S[0,1], S[0,2]= -v12/E1, -v13/E1
+#     S[1,0], S[1,2]= -v12/E1, -v23/E2
+#     S[2,0], S[2,1]= -v13/E1, -v23/E2
+#     S[3,3], S[4,4], S[5,5]= 1/G23, 1/G13, 1/G12    
+#     C = np.linalg.inv(S)
+#     theta = angle[ii][i] # ii denotes the layup id
+#     C = as_tensor(R_sig(C,theta)) 
+#     return  C
+
+
+# def Dee(i):  
+#     """
+#     Performs < gamma_e.T Stiffness_matrix gamma_e > and give simplified form
+    
+#     Parameters:
+#         i: matid 
+    
+#     Returns:
+#         Dee: [6,6] ufl tensor 
+#     """
+#     C = Stiff_mat(i)
+#     x0 = x[0]
+#     return as_tensor([(C[0,0],C[0,1],C[0,5],x0*C[0,0],x0*C[0,1],x0*C[0,5]),
+#                     (C[1,0],C[1,1],C[1,5],x0*C[1,0],x0*C[1,1],x0*C[1,5]),
+#                     (C[5,0],C[5,1],C[5,5],x0*C[5,0],x0*C[5,1],x0*C[5,5]),
+#                     (x0*C[0,0],x0*C[0,1],x0*C[0,5],x0*x0*C[0,0],x0*x0*C[0,1],x0*x0*C[0,5]),
+#                     (x0*C[1,0],x0*C[1,1],x0*C[1,5],x0*x0*C[1,0],x0*x0*C[1,1],x0*x0*C[1,5]),
+#                     (x0*C[5,0],x0*C[5,1],x0*C[5,5],x0*x0*C[5,0],x0*x0*C[5,1],x0*x0*C[5,5])])
