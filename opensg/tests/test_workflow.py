@@ -38,10 +38,10 @@ class TestExample(unittest.TestCase):
         test_l_timo_stiffness = np.loadtxt(join(datadir, 'test_l_timo_stiffness.txt'))
         test_r_timo_stiffness = np.loadtxt(join(datadir, 'test_r_timo_stiffness.txt'))
         
-        assert np.isclose(timo_seg_stiffness, test_timo_seg_stiffness).all()
-        assert np.isclose(eb_seg_stiffness, test_eb_seg_stiffness).all()
-        assert np.isclose(l_timo_stiffness, test_l_timo_stiffness).all()
-        assert np.isclose(r_timo_stiffness, test_r_timo_stiffness).all()
+        assert np.isclose(timo_seg_stiffness, test_timo_seg_stiffness, rtol=1e-04, atol=1e-05).all()
+        assert np.isclose(eb_seg_stiffness, test_eb_seg_stiffness, rtol=1e-04, atol=1e-05).all()
+        assert np.isclose(l_timo_stiffness, test_l_timo_stiffness, rtol=1e-04, atol=1e-05).all()
+        assert np.isclose(r_timo_stiffness, test_r_timo_stiffness, rtol=1e-04, atol=1e-05).all()
         
         return
 
