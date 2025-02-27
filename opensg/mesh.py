@@ -61,14 +61,32 @@ class BladeMesh:
         segment_node_labels = -1 * np.ones(self.num_nodes, dtype=int)
         segment_element_labels = -1 * np.ones(self.num_elements, dtype=int)
         segment_element_layer_id = -1 * np.ones(self.num_elements, dtype=int)
+        
+        # Load Layup Data 
+        mat_names, thick,angle,nlay=[],[],[],[]
+        for sec in self.sections:
+            name_components = sec['elementSet'].split('_')
+            if(len(name_components) > 2):
+                m,t,an=[],[],[]
+                if(int(name_components[1]) == segment_index):
+                    layup = sec['layup']
+                    nlay.append(len(layup))
+                    for l in layup:
+                        m.append(l[0])     
+                    mat_names.append(m)
+                    for l in layup:
+                        t.append(l[1])
+                    thick.append(t)
+                    for l in layup:
+                        an.append(l[2])
+                    angle.append(an) 
+        combined_rows = list(zip(thick, mat_names, angle))
 
-        layer_count = 0 # NOTE: Are we assuming that element sets are ordered in a particular way? -klb
-        for element_set in self.sets["element"]:
-            name = element_set["name"]
-            name_components = name.split("_")
-            
-            labels = element_set["labels"]
-            if len(name_components) > 2:
+        ii = 0
+        unique_rows=[]
+        for es in self.sets['element']:
+            name_components = es['name'].split('_')
+            if(len(name_components) > 2):
                 # Some section names do not have indices. These are assumed to represent
                 # groups of multiple sections (eg all of the shear web elements)
                 # and are ignored.
@@ -77,15 +95,26 @@ class BladeMesh:
                 except ValueError:
                     continue
                 
-                if section_index == segment_index:
-                    for element_label in labels:
-                        segment_element_labels[element_label] = 1
-                        segment_element_layer_id[element_label] = layer_count
-                        for node in self.elements[element_label]:
-                            if (node > -1): # when would this not be the case? - klb
-                                segment_node_labels[node] = 1
-                    layer_count += 1
+                if(section_index == segment_index):
+                    if combined_rows[ii] not in unique_rows:
+                    #   layCt+=1
+                        unique_rows.append(combined_rows[ii])
 
+                    lay_num=unique_rows.index(combined_rows[ii])    
+                    for eli in es['labels']:
+                        segment_element_labels[eli] = 1
+                        segment_element_layer_id[eli] = lay_num
+                        for nd in self.elements[eli]:
+                            if(nd > -1):
+                                segment_node_labels[nd] = 1
+                    ii+=1
+
+        thick, mat_names, angle = list(zip(*unique_rows))[0], list(zip(*unique_rows))[1], list(zip(*unique_rows))[2]
+        nlay = [len(item) for item in thick]
+        # combine into layup dictionary
+        layup_database = {"mat_names": mat_names, "thick": thick, "angle": angle, "nlay": nlay}
+        
+        
         element_label = 1
         for i, e in enumerate(segment_element_labels):
             if (e == 1):
@@ -140,7 +169,8 @@ class BladeMesh:
             segment_node_labels=segment_node_labels,
             segment_element_labels=segment_element_labels,
             segment_element_layer_id=segment_element_layer_id,
-            segment_index=segment_index, 
+            segment_index=segment_index,
+            layup_database=layup_database,
             parent_blade_mesh=self, 
             msh_file=filename)
         return segment_mesh
@@ -152,7 +182,8 @@ class SegmentMesh():
         segment_node_labels,
         segment_element_labels,
         segment_element_layer_id,
-        segment_index, 
+        segment_index,
+        layup_database,
         parent_blade_mesh, 
         msh_file):
         """This class manages the data and methods for the mesh of a segment of a blade.
@@ -181,6 +212,7 @@ class SegmentMesh():
         self.segment_element_labels = segment_element_labels
         self.segment_element_layer_id = segment_element_layer_id
         self.segment_index = segment_index
+        self.layup_database = layup_database
         self.blade_mesh = parent_blade_mesh
         
         self.mesh, self.subdomains, self.boundaries = gmshio.read_from_msh(msh_file, MPI.COMM_WORLD,0, gdim=3)
@@ -194,41 +226,41 @@ class SegmentMesh():
         self.tdim = self.mesh.topology.dim
         self.fdim = self.tdim - 1
         
-        self._generate_layup_data()
+        # self._generate_layup_data()
         self._build_local_orientations()
         self._build_boundary_submeshdata()
         
         return
     
-    def _generate_layup_data(self):
-        layup_database = dict()
+    # def _generate_layup_data(self):
+    #     layup_database = dict()
         
-        mat_names, thick, angle, nlay = [], [], [], []
-        for section in self.blade_mesh.sections:
-            name_components = section['elementSet'].split('_')
-            if(len(name_components) > 2):
-                material_name, t, an = [], [], []
-                if(int(name_components[1]) == self.segment_index):
-                    layup = section['layup'] # layup = [[material_name: str, thickness: float, angle:]]
-                    nlay.append(len(layup))
-                    for layer in layup:
-                        material_name.append(layer[0])     
-                    mat_names.append(material_name)
-                    for layer in layup:
-                        t.append(layer[1])
-                    thick.append(t)
-                    for layer in layup:
-                        an.append(layer[2])
-                    angle.append(an) 
+    #     mat_names, thick, angle, nlay = [], [], [], []
+    #     for section in self.blade_mesh.sections:
+    #         name_components = section['elementSet'].split('_')
+    #         if(len(name_components) > 2):
+    #             material_name, t, an = [], [], []
+    #             if(int(name_components[1]) == self.segment_index):
+    #                 layup = section['layup'] # layup = [[material_name: str, thickness: float, angle:]]
+    #                 nlay.append(len(layup))
+    #                 for layer in layup:
+    #                     material_name.append(layer[0])     
+    #                 mat_names.append(material_name)
+    #                 for layer in layup:
+    #                     t.append(layer[1])
+    #                 thick.append(t)
+    #                 for layer in layup:
+    #                     an.append(layer[2])
+    #                 angle.append(an) 
 
         
-        layup_database["mat_names"] = mat_names
-        layup_database["thick"] = thick
-        layup_database["angle"] = angle
-        layup_database["nlay"] = nlay
-        self.layup_database = layup_database
+    #     layup_database["mat_names"] = mat_names
+    #     layup_database["thick"] = thick
+    #     layup_database["angle"] = angle
+    #     layup_database["nlay"] = nlay
+    #     self.layup_database = layup_database
         
-        return layup_database
+    #     return layup_database
     
 
     def _build_local_orientations(self):
