@@ -497,28 +497,33 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
     return np.around(D_eff), np.around(Deff_srt), V0, V1s
 
 
-def compute_timo_segment(
-    ABD,  # array
-    mesh,  #
-    frame,  #
+def compute_stiffness(
+    ABD,
+    mesh,
     subdomains,
-    l_submesh,  # dictionary with mesh data for l boundary
-    r_submesh,  # dictionary with mesh data for r boundary
-    ):
+    l_submesh,
+    r_submesh):
     """_summary_
 
     Parameters
     ----------
     ABD : _type_
         _description_
+    mesh : _type_
+        _description_
+    subdomains : _type_
+        _description_
     l_submesh : _type_
+        _description_
+    r_submesh : _type_
         _description_
 
     Returns
     -------
-    _type_
-        _description_
+    tuple(np.array)
+        segment_timo_stiffness, segment_eb_stiffness, l_timo_stiffness, r_timo_stiffness
     """
+
     nphases = len(ABD)
     tdim=mesh.topology.dim
     fdim = tdim - 1
@@ -806,6 +811,5 @@ def compute_timo_segment(
         print("\n", ii, "\n")
         print(np.around(AB))
         
-    return Deff_srt, Deff_l
-    # return timo_Deff_srt, timo_Deff_l, eb_Deff_srt, eb_Deff_l
-    # eb seg stiffness = D_eff, what about l/r stiffness?
+    return Deff_srt, D_eff, Deff_l, Deff_r
+

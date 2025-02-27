@@ -447,11 +447,10 @@ class SegmentMesh():
         
         return left_stiffness, right_stiffness
     
-    def compute_timo_stiffness_segment(self, ABD):
-        return opensg.compute_timo_segment(
+    def compute_stiffness(self, ABD):
+        return opensg.compute_stiffness(
             ABD=ABD,
             mesh=self.mesh,
-            frame=self.frame,
             subdomains=self.subdomains,
             l_submesh=self.left_submesh,
             r_submesh=self.right_submesh

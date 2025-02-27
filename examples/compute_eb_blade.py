@@ -24,10 +24,10 @@ for i in range(segment_start_index, segment_end_index):
     segment_mesh = blade_mesh.generate_segment_mesh(segment_index=i, filename="section.msh")
     ABD = segment_mesh.compute_ABD()
 
-    segment_stiffness, left_boundary_stiffness = segment_mesh.compute_timo_stiffness_segment(ABD)
+    timo_segment_stiffness, eb_segment_stiffness, l_timo_stiffness, r_timo_stiffness = segment_mesh.compute_stiffness(ABD)
 
-    segment_stiffness_matrices.append(segment_stiffness)
-    boundary_stiffness_matrices.append(left_boundary_stiffness)
+    segment_stiffness_matrices.append(timo_segment_stiffness)
+    boundary_stiffness_matrices.append(l_timo_stiffness)
 
 # combine segment matrices and save
 combined_stiffness_matrices = np.concat(segment_stiffness_matrices)

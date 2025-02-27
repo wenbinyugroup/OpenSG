@@ -20,7 +20,7 @@ class TestExample(unittest.TestCase):
         
         # Mesh
         section_mesh = blade_mesh.generate_segment_mesh(segment_index=1, filename="section.msh")
-        assert filecmp.cmp("section.msh", "test_section.msh")
+        assert filecmp.cmp("section.msh", join(datadir,"test_section.msh"))
         
         # ABD
         abd = section_mesh.compute_ABD()
@@ -29,13 +29,21 @@ class TestExample(unittest.TestCase):
         expected_abd = np.loadtxt(join(datadir, "test_abd.txt"))
         assert np.isclose(abd_concat, expected_abd).all()
         
-        # timoshenko stiffness
-        seg_stiffness, lbound_stiffness = section_mesh.compute_timo_stiffness_segment(abd)
+        # Timoshenko stiffness
+        timo_seg_stiffness, eb_seg_stiffness, l_timo_stiffness, r_timo_stiffness = section_mesh.compute_stiffness(abd)
         
-        expected_seg_stiffness = np.loadtxt(join(datadir, 'test_seg_stiffness.txt'))
-        expected_lbound_stiffness = np.loadtxt(join(datadir, 'test_lbound_stiffness.txt'))
-        assert np.isclose(seg_stiffness, expected_seg_stiffness).all()
-        assert np.isclose(lbound_stiffness, expected_lbound_stiffness).all()
+        # Validate
+        test_timo_seg_stiffness = np.loadtxt(join(datadir, 'test_timo_seg_stiffness.txt'))
+        test_eb_seg_stiffness = np.loadtxt(join(datadir, 'test_eb_seg_stiffness.txt'))
+        test_l_timo_stiffness = np.loadtxt(join(datadir, 'test_l_timo_stiffness.txt'))
+        test_r_timo_stiffness = np.loadtxt(join(datadir, 'test_r_timo_stiffness.txt'))
+        
+        assert np.isclose(timo_seg_stiffness, test_timo_seg_stiffness).all()
+        assert np.isclose(eb_seg_stiffness, test_eb_seg_stiffness).all()
+        assert np.isclose(l_timo_stiffness, test_l_timo_stiffness).all()
+        assert np.isclose(r_timo_stiffness, test_r_timo_stiffness).all()
+        
+        return
 
 
 def run_workflow():
@@ -57,13 +65,15 @@ def run_workflow():
     np.savetxt(join(datadir, 'test_abd.txt'), abd_concat) 
     
     # Timoshenko stiffness
-    seg_stiffness, lbound_stiffness = section_mesh.compute_timo_stiffness_segment(abd)
+    timo_seg_stiffness, eb_seg_stiffness, l_timo_stiffness, r_timo_stiffness = section_mesh.compute_stiffness(abd)
     
-    np.savetxt(join(datadir, 'test_seg_stiffness.txt'), seg_stiffness)
-    np.savetxt(join(datadir, 'test_lbound_stiffness.txt'), lbound_stiffness)
+    np.savetxt(join(datadir, 'test_timo_seg_stiffness.txt'), timo_seg_stiffness)
+    np.savetxt(join(datadir, 'test_eb_seg_stiffness.txt'), eb_seg_stiffness)
+    np.savetxt(join(datadir, 'test_l_timo_stiffness.txt'), l_timo_stiffness)
+    np.savetxt(join(datadir, 'test_r_timo_stiffness.txt'), r_timo_stiffness)
     
     return
     
 if __name__ == "__main__":
-    # unittest.main()
-    run_workflow()
+    unittest.main()
+    # run_workflow()
