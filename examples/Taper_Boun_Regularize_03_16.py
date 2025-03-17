@@ -51,7 +51,7 @@ for segment in np.linspace(0,26,27):
     
     start_time = time.perf_counter()  # Start timer
     # ****************OBTAIN MESH DATA FROM YAML***********************
-    meshYaml = 'bar_urc_npl_1_ar_5-segment_'+ str(int(segment)) +'.yaml'  ## the name of the yaml file containing the whole blade mesh
+    meshYaml = '/Users/ecamare/myprojects/se_project/verification/solid/mesh/bar_urc_npl_1_ar_5-segment_'+ str(int(segment)) +'.yaml'  ## the name of the yaml file containing the whole blade mesh
     mshFile = 'SG_solid.msh'
     oriFile = 'solid.orientation'
     ## Read the mesh yaml file
@@ -203,9 +203,9 @@ for segment in np.linspace(0,26,27):
                  sub_L.append(subdomains.values[idx])
              #    th.vector[3*i],th.vector[3*i+1],th.vector[3*i+2]=orien[idx][2],orien[idx][0],orien[idx][1]
                  for j in range(3):
-                            El1.vector[3*i+j]=frame[0].vector[3*idx+j]
-                            El2.vector[3*i+j]=frame[1].vector[3*idx+j]
-                            Nl.vector[3*i+j] =frame[2].vector[3*idx+j]
+                            El1.x.array[3*i+j]=frame[0].x.array[3*idx+j]
+                            El2.x.array[3*i+j]=frame[1].x.array[3*idx+j]
+                            Nl.x.array[3*i+j] =frame[2].x.array[3*idx+j]
     
         frame_l=El1,El2,Nl                  
         sub_L= np.array(sub_L,dtype=np.int32)
