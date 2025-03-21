@@ -35,20 +35,122 @@ import gmsh
 ## Define input parameters
 import pyvista
 import time
+def write_beamdyn_files(beam_stiff, beam_inertia, radial_stations,file_name_prepend):
+    # extension='K'
+    # if station_list is None or len(station_list) == 0:
+    #     station_list = list(range(len(geometry.ispan)))
 
+    # radial_stations=geometry.ispan/geometry.ispan[-1]
+    # radial_stations=radial_stations[station_list]
 
-# In[2]:
+    if round(radial_stations[-1],2) ==1.0:
+        radial_stations[-1]=1.0
+    else:
+        raise ValueError('The last radial station should be 1.0')
+    if round(radial_stations[0],2) ==0.0:
+        radial_stations[0]=0.0
+    else:
+        raise ValueError('The first radial station should be 0.0')
+    
+    if len(beam_stiff) != len(beam_inertia) and len(beam_stiff) != len(radial_stations):
+        raise ValueError(f'\nThere are {len(beam_stiff)} stiffnesses\nThere are {len(beam_inertia)} inertias\nThere are {len(radial_stations)} radial stations \nThese need to be equal.')
 
+    mu=[0.00257593, 0.0017469,  0.0017469,  0.0017469,  0.00257593, 0.0017469]
+
+    beam_stiff,beam_inertia=transformMatrixToBeamDyn(beam_stiff,beam_inertia)
+    _=write_beamdyn_prop('.', file_name_prepend, radial_stations, beam_stiff, beam_inertia, mu)
+    
+    return 
+def write_beamdyn_prop(folder, wt_name, radial_stations, beam_stiff, beam_inertia, mu):
+    n_pts = len(radial_stations)
+
+        
+    propFileName= 'bd_props_'+wt_name + '.inp'
+    
+    
+    file = open(folder +'/'+propFileName, 'w')
+    file.write(' ------- BEAMDYN V1.00.* INDIVIDUAL BLADE INPUT FILE --------------------------\n')
+    file.write(' Test Format 1\n')
+    file.write(' ---------------------- BLADE PARAMETERS --------------------------------------\n')
+    file.write('%u   station_total    - Number of blade input stations (-)\n' % (n_pts))
+    file.write(' 1   damp_type        - Damping type: 0: no damping; 1: damped\n')
+    file.write('  ---------------------- DAMPING COEFFICIENT------------------------------------\n')
+    file.write('   mu1        mu2        mu3        mu4        mu5        mu6\n')
+    file.write('   (-)        (-)        (-)        (-)        (-)        (-)\n')
+    file.write('\t %.5e \t %.5e \t %.5e \t %.5e \t %.5e \t %.5e\n' % (mu[0], mu[1], mu[2], mu[3], mu[4], mu[5])) 
+    file.write(' ---------------------- DISTRIBUTED PROPERTIES---------------------------------\n')
+    
+    for i in range(n_pts):
+        file.write('\t %.6f \n' % (radial_stations[i]))
+        # write stiffness matrices
+        for j in range(6):
+            file.write('\t %.16e \t %.16e \t %.16e \t %.16e \t %.16e \t %.16e\n' % (
+            beam_stiff[i, j, 0], beam_stiff[i, j, 1], beam_stiff[i, j, 2], beam_stiff[i, j, 3], beam_stiff[i, j, 4],
+            beam_stiff[i, j, 5]))
+        file.write('\n')
+
+        # write inertia properties
+        for j in range(6):
+            file.write('\t %.16e \t %.16e \t %.16e \t %.16e \t %.16e \t %.16e\n' % (
+            beam_inertia[i, j, 0], beam_inertia[i, j, 1], beam_inertia[i, j, 2], beam_inertia[i, j, 3],
+            beam_inertia[i, j, 4], beam_inertia[i, j, 5]))
+        file.write('\n')
+        # ToDO: check correct translation of stiffness and mass matrices from VABS and anbax !!!
+    file.close()
+
+    print('Finished writing BeamDyn_Blade File')
+
+    return propFileName
+def transformMatrixToBeamDyn(beam_stiff,beam_inertia):
+    beamDynData={}
+
+    B = np.array([[0, 0, 1], [0, -1, 0], [1, 0, 0]])  # NEW transformation matrix
+    T = np.dot(np.identity(3), np.linalg.inv(B))
+    
+    nStations, _,_=np.shape(beam_stiff)
+
+    for i_station in range(nStations):
+        beam_stiff[i_station,:,:]=trsf_sixbysix(beam_stiff[i_station,:,:], T)
+        beam_inertia[i_station,:,:]=trsf_sixbysix(beam_inertia[i_station,:,:], T)
+   
+    return(beam_stiff,beam_inertia)
+def trsf_sixbysix(M, T):
+    """
+    Transform six-by-six compliance/stiffness matrix. 
+    change of reference frame in engineering (or Voigt) notation.
+    
+    Parameters
+    ----------
+    M : np.ndarray
+        6x6 Siffness or Mass Matrix
+    T : np.ndarray
+        Transformation Matrix
+        
+    Returns
+    ----------
+    res : np.ndarray
+        Transformed 6x6 matrix
+    """
+
+    TS_1 = np.dot(np.dot(T.T, M[0:3, 0:3]), T)
+    TS_2 = np.dot(np.dot(T.T, M[3:6, 0:3]), T)
+    TS_3 = np.dot(np.dot(T.T, M[0:3, 3:6]), T)
+    TS_4 = np.dot(np.dot(T.T, M[3:6, 3:6]), T)
+
+    tmp_1 = np.vstack((TS_1, TS_2))
+    tmp_2 = np.vstack((TS_3, TS_4))
+    res = np.hstack((tmp_1, tmp_2))
+    return res
 
 left_timo,right_timo, taper_timo=[],[],[]
 left_mass,right_mass, taper_mass=[],[],[]
-
+blade_length = 100
+left_origin,right_origin, taper_origin=[],[],[]
 
 # In[ ]:
 
-
-for segment in np.linspace(0,26,27):
-    
+# for segment in range(2):
+for segment in np.linspace(0,27,28):  
     start_time = time.perf_counter()  # Start timer
     # ****************OBTAIN MESH DATA FROM YAML***********************
     meshYaml = '/Users/ecamare/myprojects/se_project/verification/solid/mesh/bar_urc_npl_1_ar_5-segment_'+ str(int(segment)) +'.yaml'  ## the name of the yaml file containing the whole blade mesh
@@ -131,9 +233,12 @@ for segment in np.linspace(0,26,27):
     # ************Origin on beam axis*************************************
     
     x_min,x_max=min(pp[:,0]), max(pp[:,0])
+    left_origin.append(float(x_min)/blade_length),right_origin.append(float(x_max)/blade_length),taper_origin.append(0.5*(float(x_max)+float(x_min))/blade_length)
     L=x_max-x_min
     pp[:,0]=pp[:,0]-0.5*(x_max+x_min)
     x_min,x_max=min(pp[:,0]), max(pp[:,0])
+
+     
 
     print('Segment',str(int(segment)),'['+str(num_cells),'elements] \n')
     # ***********GENERATE BOUNDARY MESH************************
@@ -541,10 +646,10 @@ for segment in np.linspace(0,26,27):
     print(Deff_l) 
     
     D_effEB_r,Deff_r,V0_r,V1_r,ep2=timo_boun(mesh_r,subdomains_r,frame_r)
-    #right_timo.append(Deff_r)
-  #  print('Right Timo \n')
-  #  np.set_printoptions(precision=4) 
-   # print(np.around(Deff_r)) 
+    right_timo.append(Deff_r)
+    print('Right Timo \n')
+    np.set_printoptions(precision=4) 
+    print(np.around(Deff_r)) 
     
     t1 = time.perf_counter()
     print('\n Computed time for boundary:', str(t1-start_time))
@@ -737,22 +842,64 @@ for segment in np.linspace(0,26,27):
     
     np.set_printoptions(precision=4)
     print(np.around(Deff_srt),'\n')  
+    # left_timo.append(np.zeros([6,6]))
+    # left_mass.append(np.zeros([6,6]))
     
+    # right_timo.append(np.zeros([6,6]))
+    # right_mass.append(np.zeros([6,6]))
+
+    # taper_timo.append(np.zeros([6,6]))
+    # taper_mass.append(np.zeros([6,6]))
+print('\nleft_origin')
+print(left_origin)
+
+print('\nright_origin')
+print(right_origin)
+
+print('\ntaper_origin')
+print(taper_origin)
+#Append tip to left boundary values
+left_timo.append(right_timo[-1])
+left_origin.append(right_origin[-1])
+left_mass.append(right_mass[-1])
+print('\n\nleft_origin ###############')
+print(left_origin)
+
+#Prepend root to right boundary values
+right_timo.insert(0,left_timo[0])
+right_origin.insert(0,left_origin[0])
+right_mass.insert(0,left_mass[0])
+print('\n\nright_origin ###############')
+print(right_origin)
+
+#Prepend root to segment values
+taper_timo.insert(0,left_timo[0])
+taper_origin.insert(0,left_origin[0])
+taper_mass.insert(0,left_mass[0])
+print('\n\ntaper_origin ###############')
+print(taper_origin)
+
+#Append tip to segment values
+taper_timo.append(right_timo[-1])
+taper_origin.append(right_origin[-1])
+taper_mass.append(right_mass[-1])
+print('\n\ntaper_origin ###############')
+print(taper_origin)
+
+left_timo=np.array(left_timo)
+right_timo=np.array(right_timo)
+taper_timo=np.array(taper_timo)
+
+left_mass=np.array(left_mass)
+right_mass=np.array(right_mass)
+taper_mass=np.array(taper_mass)
+
+print(taper_origin)
+write_beamdyn_files(taper_timo, taper_mass, taper_origin,'bar_urc_segment')
+write_beamdyn_files(right_timo, right_mass, right_origin,'bar_urc_right')
+write_beamdyn_files(left_timo, left_mass, left_origin,'bar_urc_left')
 
 
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
 
 
 
