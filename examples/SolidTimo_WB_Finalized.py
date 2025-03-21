@@ -34,7 +34,7 @@ import pyvista
 for segment in np.linspace(0,27,28):
     # ****************OBTAIN MESH DATA FROM YAML***********************
     
-    meshYaml = 'bar_urc_npl_1_ar_5-segment_'+ str(int(segment)) +'.yaml'  ## the name of the yaml file containing the whole blade mesh
+    meshYaml = '/Users/ecamare/myprojects/se_project/verification/solid/mesh/bar_urc_npl_1_ar_5-segment_'+ str(int(segment)) +'.yaml'  ## the name of the yaml file containing the whole blade mesh
     #   meshYaml = 'new_tapered_solid_dcm.yaml'
     mshFile = 'SG_solid.msh'
     oriFile = 'solid.orientation'
