@@ -115,20 +115,20 @@ for segment in np.linspace(0,27,28):
     # ************Shifting origin to mid-length along axis***************************
     # ************Origin on beam axis*************************************
     
-    x_min,x_max=min(pp[:,0]), max(pp[:,0],atol=0.012)
+    x_min,x_max=min(pp[:,0]), max(pp[:,0])
     L=x_max-x_min
     mean=x_min  # Left origin for taper segments
     pp[:,0]=pp[:,0]-mean
-    x_min,x_max=min(pp[:,0]), max(pp[:,0],atol=0.012)
+    x_min,x_max=min(pp[:,0]), max(pp[:,0])
     
     # ***********GENERATE BOUNDARY MESH************************
     print('Segment',str(int(segment)),'[Left-Origin: ',str(mean),'] [',str(num_cells),']'+ '\n')
     
     fdim=2
     def left(x):
-        return np.isclose(x[0], x_min)
+        return np.isclose(x[0], x_min,atol=0.012)
     def right(x):
-        return np.isclose(x[0], x_max)
+        return np.isclose(x[0], x_max,atol=0.012)
     
     tdim=mesh.topology.dim
     fdim = tdim - 1
