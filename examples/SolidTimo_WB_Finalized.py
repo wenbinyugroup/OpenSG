@@ -115,11 +115,11 @@ for segment in np.linspace(0,27,28):
     # ************Shifting origin to mid-length along axis***************************
     # ************Origin on beam axis*************************************
     
-    x_min,x_max=min(pp[:,0]), max(pp[:,0])
+    x_min,x_max=min(pp[:,0]), max(pp[:,0],atol=0.012)
     L=x_max-x_min
     mean=x_min  # Left origin for taper segments
     pp[:,0]=pp[:,0]-mean
-    x_min,x_max=min(pp[:,0]), max(pp[:,0])
+    x_min,x_max=min(pp[:,0]), max(pp[:,0],atol=0.012)
     
     # ***********GENERATE BOUNDARY MESH************************
     print('Segment',str(int(segment)),'[Left-Origin: ',str(mean),'] [',str(num_cells),']'+ '\n')
@@ -203,7 +203,27 @@ for segment in np.linspace(0,27,28):
     
     # Direction cosine matrix
     dc_matrix=as_tensor([(frame[0][0],frame[1][0],frame[2][0]),(frame[0][1],frame[1][1],frame[2][1]),(frame[0][2],frame[1][2],frame[2][2])])   
-    
+    # import pyvista
+    # pyvista.start_xvfb() 
+    # u_topology, u_cell_types, u_geometry=dolfinx.plot.vtk_mesh(mesh_l,mesh_l.topology.dim)
+    # grid = pyvista.UnstructuredGrid(u_topology, u_cell_types, u_geometry)
+    # grid.cell_data["Marker"] = subdomains_l.values[:]
+    # grid.set_active_scalars("Marker")
+    # u_plotter = pyvista.Plotter()
+    # u_plotter.add_mesh(grid)
+    # u_plotter.show_axes()
+    # #u_plotter.view_yz() # z is beam axis
+    # u_plotter.show()
+    # pyvista.start_xvfb()    
+    # u_topology, u_cell_types, u_geometry=dolfinx.plot.vtk_mesh(mesh_r,mesh_r.topology.dim)
+    # grid = pyvista.UnstructuredGrid(u_topology, u_cell_types, u_geometry)
+    # grid.cell_data["Marker"] = subdomains_r.values[:]
+    # grid.set_active_scalars("Marker")
+    # u_plotter = pyvista.Plotter()
+    # u_plotter.add_mesh(grid)
+    # u_plotter.show_axes()
+    # #u_plotter.view_yz() # z is beam axis
+    # u_plotter.show()
     def Rsig(dc_matrix):   # ROTATION MATRIX IN UFL Form 
         b11,b12,b13=dc_matrix[0,0],dc_matrix[0,1],dc_matrix[0,2]
         b21,b22,b23=dc_matrix[1,0],dc_matrix[1,1],dc_matrix[1,2]
