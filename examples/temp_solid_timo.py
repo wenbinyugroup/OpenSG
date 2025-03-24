@@ -31,6 +31,118 @@ import gmsh
 import pyvista 
 
 
+def write_beamdyn_files(beam_stiff, beam_inertia, radial_stations,file_name_prepend):
+    # extension='K'
+    # if station_list is None or len(station_list) == 0:
+    #     station_list = list(range(len(geometry.ispan)))
+
+    # radial_stations=geometry.ispan/geometry.ispan[-1]
+    # radial_stations=radial_stations[station_list]
+
+    if round(radial_stations[-1],2) ==1.0:
+        radial_stations[-1]=1.0
+    else:
+        raise ValueError('The last radial station should be 1.0')
+    if round(radial_stations[0],2) ==0.0:
+        radial_stations[0]=0.0
+    else:
+        raise ValueError('The first radial station should be 0.0')
+    
+    if len(beam_stiff) != len(beam_inertia) and len(beam_stiff) != len(radial_stations):
+        raise ValueError(f'\nThere are {len(beam_stiff)} stiffnesses\nThere are {len(beam_inertia)} inertias\nThere are {len(radial_stations)} radial stations \nThese need to be equal.')
+
+    mu=[0.00257593, 0.0017469,  0.0017469,  0.0017469,  0.00257593, 0.0017469]
+
+    beam_stiff,beam_inertia=transformMatrixToBeamDyn(beam_stiff,beam_inertia)
+    _=write_beamdyn_prop('.', file_name_prepend, radial_stations, beam_stiff, beam_inertia, mu)
+    
+    return 
+def write_beamdyn_prop(folder, wt_name, radial_stations, beam_stiff, beam_inertia, mu):
+    n_pts = len(radial_stations)
+
+        
+    propFileName= 'bd_props_'+wt_name + '.inp'
+    
+    
+    file = open(folder +'/'+propFileName, 'w')
+    file.write(' ------- BEAMDYN V1.00.* INDIVIDUAL BLADE INPUT FILE --------------------------\n')
+    file.write(' Test Format 1\n')
+    file.write(' ---------------------- BLADE PARAMETERS --------------------------------------\n')
+    file.write('%u   station_total    - Number of blade input stations (-)\n' % (n_pts))
+    file.write(' 1   damp_type        - Damping type: 0: no damping; 1: damped\n')
+    file.write('  ---------------------- DAMPING COEFFICIENT------------------------------------\n')
+    file.write('   mu1        mu2        mu3        mu4        mu5        mu6\n')
+    file.write('   (-)        (-)        (-)        (-)        (-)        (-)\n')
+    file.write('\t %.5e \t %.5e \t %.5e \t %.5e \t %.5e \t %.5e\n' % (mu[0], mu[1], mu[2], mu[3], mu[4], mu[5])) 
+    file.write(' ---------------------- DISTRIBUTED PROPERTIES---------------------------------\n')
+    
+    for i in range(n_pts):
+        file.write('\t %.6f \n' % (radial_stations[i]))
+        # write stiffness matrices
+        for j in range(6):
+            file.write('\t %.16e \t %.16e \t %.16e \t %.16e \t %.16e \t %.16e\n' % (
+            beam_stiff[i, j, 0], beam_stiff[i, j, 1], beam_stiff[i, j, 2], beam_stiff[i, j, 3], beam_stiff[i, j, 4],
+            beam_stiff[i, j, 5]))
+        file.write('\n')
+
+        # write inertia properties
+        for j in range(6):
+            file.write('\t %.16e \t %.16e \t %.16e \t %.16e \t %.16e \t %.16e\n' % (
+            beam_inertia[i, j, 0], beam_inertia[i, j, 1], beam_inertia[i, j, 2], beam_inertia[i, j, 3],
+            beam_inertia[i, j, 4], beam_inertia[i, j, 5]))
+        file.write('\n')
+        # ToDO: check correct translation of stiffness and mass matrices from VABS and anbax !!!
+    file.close()
+
+    print('Finished writing BeamDyn_Blade File')
+
+    return propFileName
+def transformMatrixToBeamDyn(beam_stiff,beam_inertia):
+    beamDynData={}
+
+    B = np.array([[0, 0, 1], [0, -1, 0], [1, 0, 0]])  # NEW transformation matrix
+    T = np.dot(np.identity(3), np.linalg.inv(B))
+    
+    nStations, _,_=np.shape(beam_stiff)
+
+    for i_station in range(nStations):
+        beam_stiff[i_station,:,:]=trsf_sixbysix(beam_stiff[i_station,:,:], T)
+        beam_inertia[i_station,:,:]=trsf_sixbysix(beam_inertia[i_station,:,:], T)
+   
+    return(beam_stiff,beam_inertia)
+def trsf_sixbysix(M, T):
+    """
+    Transform six-by-six compliance/stiffness matrix. 
+    change of reference frame in engineering (or Voigt) notation.
+    
+    Parameters
+    ----------
+    M : np.ndarray
+        6x6 Siffness or Mass Matrix
+    T : np.ndarray
+        Transformation Matrix
+        
+    Returns
+    ----------
+    res : np.ndarray
+        Transformed 6x6 matrix
+    """
+
+    TS_1 = np.dot(np.dot(T.T, M[0:3, 0:3]), T)
+    TS_2 = np.dot(np.dot(T.T, M[3:6, 0:3]), T)
+    TS_3 = np.dot(np.dot(T.T, M[0:3, 3:6]), T)
+    TS_4 = np.dot(np.dot(T.T, M[3:6, 3:6]), T)
+
+    tmp_1 = np.vstack((TS_1, TS_2))
+    tmp_2 = np.vstack((TS_3, TS_4))
+    res = np.hstack((tmp_1, tmp_2))
+    return res
+
+left_timo,right_timo, taper_timo=[],[],[]
+left_mass,right_mass, taper_mass=[],[],[]
+blade_length = 100
+left_origin,right_origin, taper_origin=[],[],[]
+
 for segment in np.linspace(0,27,28):
     # ****************OBTAIN MESH DATA FROM YAML***********************
     
@@ -92,7 +204,7 @@ for segment in np.linspace(0,27,28):
     for mat in mat_name:
         es=meshData['materials'][mat_names.index(mat)]
         material_parameters.append(np.array((np.array(es['E']),np.array(es['G']),es['nu'])).flatten())
-      #  density.append(es['rho'])  
+        density.append(es['rho'])  
     
     outFile.close()
     gmsh.initialize()
@@ -118,6 +230,8 @@ for segment in np.linspace(0,27,28):
     x_min,x_max=min(pp[:,0]), max(pp[:,0])
     L=x_max-x_min
     mean=x_min  # Left origin for taper segments
+
+    left_origin.append(float(x_min)/blade_length),right_origin.append(float(x_max)/blade_length),taper_origin.append(float(mean)/blade_length)
     pp[:,0]=pp[:,0]-mean
     x_min,x_max=min(pp[:,0]), max(pp[:,0])
     
@@ -126,9 +240,9 @@ for segment in np.linspace(0,27,28):
     
     fdim=2
     def left(x):
-        return np.isclose(x[0], x_min,atol=0.012)
+        return np.isclose(x[0], x_min,atol=0.008)
     def right(x):
-        return np.isclose(x[0], x_max,atol=0.012)
+        return np.isclose(x[0], x_max,atol=0.008)
     
     tdim=mesh.topology.dim
     fdim = tdim - 1
@@ -545,21 +659,23 @@ for segment in np.linspace(0,27,28):
         return np.around(D_eff),np.around(Deff_srt),V0, V1s,Dhe,bb,A_prime,C_tim,B_tim
 
     D_effEB_l,Deff_l,V0_l,V1_l,bl1,bbl2,A_l,C_timl,B_timl=timo_boun(mesh_l,subdomains_l,frame_l) 
+    left_timo.append(Deff_l)
     #******************************TIMO BOUNDARY SOLVE*******************************
     print('Left Timo \n')
     np.set_printoptions(precision=4) 
     print(Deff_l) 
     
+    
     D_effEB_r,Deff_r,V0_r,V1_r,br2,br1,A_r,C_timr,B_timr=timo_boun(mesh_r,subdomains_r,frame_r)
-
-  #  print('Right Timo \n')
-  #  np.set_printoptions(precision=4) 
-  #  print(np.around(Deff_r)) 
+    right_timo.append(Deff_r)
+    print('Right Timo \n')
+    np.set_printoptions(precision=4) 
+    print(Deff_r) 
     
     # ******************MASS MATRIX**********************************
-    #left_mass.append(mass_boun(x_l,dx_l))
-    #right_mass.append(mass_boun(x_r,dx_r))    
-    #taper_mass.append((1/L)*mass_boun(x,dx))
+    left_mass.append(mass_boun(x_l,dx_l))
+    right_mass.append(mass_boun(x_r,dx_r))    
+    taper_mass.append((1/L)*mass_boun(x,dx))
 
     def dof_mapping_quad(v2a,V_l,w_ll,boundary_facets_left,entity_mapl):
         dof_S2L=[] 
@@ -636,9 +752,9 @@ for segment in np.linspace(0,27,28):
        v2a,dofs_l=dof_mapping_quad(v2a,V_l,V0_l[:,p],boundary_facets_left,entity_mapl)
        v2a,dofs_r=dof_mapping_quad(v2a,V_r,V0_r[:,p],boundary_facets_right,entity_mapr)  
        
-       F2=sum([dot(dot(C(i,dc_matrix),gamma_e(x)[:,p]),gamma_h(dx,v_))*dx(i) for i in range(nphases)]) 
+       F2=-sum([dot(dot(C(i,dc_matrix),gamma_e(x)[:,p]),gamma_h(dx,v_))*dx(i) for i in range(nphases)]) 
        bc = [dolfinx.fem.dirichletbc(v2a, boundary_dofs)]
-       F = petsc.assemble_vector(form(rhs(F2)))
+       F = petsc.assemble_vector(form((F2)))
        apply_lifting(F, [a], [bc]) # apply bc to rhs vector (Dhe) based on known fluc solutions
        set_bc(F, bc)    
      #  F_array=apply_null_rvec(F[:],nullspace_basis)
@@ -751,44 +867,58 @@ for segment in np.linspace(0,27,28):
     Deff_srt[1:3,3:6]=Y_tim.T[:,1:4]
     Deff_srt[1:3,0]=Y_tim.T[:,0].flatten()
     
+    taper_timo.append(Deff_srt)
     print('\n Solid Taper Timo \n')
     
     np.set_printoptions(precision=4)
     print(np.around(Deff_srt))  
 
+print('\nleft_origin')
+print(left_origin)
 
-# In[ ]:
+print('\nright_origin')
+print(right_origin)
 
+print('\ntaper_origin')
+print(taper_origin)
+#Append tip to left boundary values
+left_timo.append(right_timo[-1])
+left_origin.append(right_origin[-1])
+left_mass.append(right_mass[-1])
+print('\n\nleft_origin ###############')
+print(left_origin)
 
+#Prepend root to right boundary values
+right_timo.insert(0,left_timo[0])
+right_origin.insert(0,left_origin[0])
+right_mass.insert(0,left_mass[0])
+print('\n\nright_origin ###############')
+print(right_origin)
 
+# #Prepend root to segment values
+# taper_timo.insert(0,left_timo[0])
+# taper_origin.insert(0,left_origin[0])
+# taper_mass.insert(0,left_mass[0])
+# print('\n\ntaper_origin ###############')
+# print(taper_origin)
 
+#Append tip to segment values
+taper_timo.append(right_timo[-1])
+taper_origin.append(right_origin[-1])
+taper_mass.append(right_mass[-1])
+print('\n\ntaper_origin ###############')
+print(taper_origin)
 
-# In[ ]:
+left_timo=np.array(left_timo)
+right_timo=np.array(right_timo)
+taper_timo=np.array(taper_timo)
 
+left_mass=np.array(left_mass)
+right_mass=np.array(right_mass)
+taper_mass=np.array(taper_mass)
 
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
+print(taper_origin)
+write_beamdyn_files(taper_timo, taper_mass, taper_origin,'bar_urc_segment')
+write_beamdyn_files(right_timo, right_mass, right_origin,'bar_urc_right')
+write_beamdyn_files(left_timo, left_mass, left_origin,'bar_urc_left')
 
