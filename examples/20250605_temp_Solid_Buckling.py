@@ -971,12 +971,12 @@ w1s_2=Function(V)
 w_2=Function(V) 
 
 for i in range(len(V0[:,0])):
-    w_1.vector[i],w1s_1.vector[i],w1s_2.vector[i],w_2.vector[i]=a1[i],a2[i],a3[i],a4[i] 
+    w_1.vector[i], w1s_1.vector[i], w1s_2.vector[i], w_2.vector[i]=a1[i],a2[i],a3[i],a4[i] 
 
 # 3D strain recovery
 st_Eb=gamma_h(dx,w_1)+dot(gamma_e(x),as_vector((st_m)))
 st_Timo=gamma_h(dx,w1s_1)+ gamma_l(w_2)+gamma_l(w1s_2)
-st_3D=st_Eb+st_Timo                                   # Recovered 3D strain
+st_3D=st_Eb+st_Timo            # Recovered 3D strain
 
 V = dolfinx.fem.functionspace(mesh, basix.ufl.element(
         "CG", mesh.topology.cell_name(), 1, shape=(6, ))) 
@@ -985,6 +985,13 @@ strain_3D=Function(V)
 fexpr1=dolfinx.fem.Expression(st_3D,V.element.interpolation_points(), comm=MPI.COMM_WORLD)
 strain_3D.interpolate(fexpr1)  # Interpolate 3D strain to ufl function
 
+def sigma_prestress(i):
+    s_pre=dot(as_tensor(CC[i]),strain_3D)
+    return as_tensor([(s_pre[0],s_pre[5],s_pre[4]),
+                      (s_pre[5],s_pre[1],s_pre[3]),
+                      (s_pre[4],s_pre[3],s_pre[2])]) 
+    
+# Dehomgenization Ends
 CC=[]
 for i in range(nphases):
     E1,E2,E3,G12,G13,G23,v12,v13,v23= material_parameters[i]
@@ -996,15 +1003,10 @@ for i in range(nphases):
     S[3,3], S[4,4], S[5,5]= 1/G23, 1/G13, 1/G12 
     CC.append(np.linalg.inv(S))
 
-stress_3D_dehom=Function(V) 
-fexpr1=dolfinx.fem.Expression(dot(as_tensor(CC[0]),strain_3D),V.element.interpolation_points(), comm=MPI.COMM_WORLD)
-stress_3D_dehom.interpolate(fexpr1) # Recovered 3D stress for isotropic 
-
 V = dolfinx.fem.functionspace(mesh, basix.ufl.element(
         "CG", mesh.topology.cell_name(),1, shape=(3, ))) 
 
-u_ = TestFunction(V)
-du = TrialFunction(V) # For displacement
+du, u_ = TrialFunction(V), TestFunction(V)   # For displacement
 
 def epsilon(u): 
     E1=as_vector([u[0].dx(0),u[1].dx(1),u[2].dx(2),(u[1].dx(2)+u[2].dx(1)),(u[0].dx(2)+u[2].dx(0)),(u[0].dx(1)+u[1].dx(0))])
@@ -1038,24 +1040,18 @@ bcs = [
         V.sub(2),
     )
 ] 
-
 # Linear Elasticity Bilinear Form
+
 a = sum([dot(sigma(du,i)[1],epsilon(u_)[1])*dx(i) for i in range(nphases)])
 # Stiffness matrix
 K = assemble_matrix(form(a), bcs=bcs, diagonal=1)
 K.assemble() 
 
-def sigma_prestress(i):
-    s_pre=dot(as_tensor(CC[i]),strain_3D)
-    return as_tensor([(s_pre[0],s_pre[5],s_pre[4]),
-                      (s_pre[5],s_pre[1],s_pre[3]),
-                      (s_pre[4],s_pre[3],s_pre[2])]) 
+# Geometric Stiffness matrix
 
 kgform = -sum([inner(sigma_prestress(i),grad(du).T*grad(u_))*dx(i) for i in range(nphases)])
 KG = assemble_matrix(form(kgform), bcs=bcs, diagonal=0)
 KG.assemble()    # epsilon(du) and grad(du) both are same  
-
-from eigenvalue_solver import solve_GEP_shiftinvert, EPS_get_spectrum
 
 # Requested number of eigenvalues
 N_eig = 6
@@ -1068,13 +1064,13 @@ eigensolver = solve_GEP_shiftinvert(
     solver=SLEPc.EPS.Type.KRYLOVSCHUR,
     nev=N_eig,
     tol=1e-6,
-    shift=1e3,
+    shift=1e-3,
 )
 
 # Extract eigenpairs
 (eigval, eigvec_r, eigvec_i) = EPS_get_spectrum(eigensolver, V) 
 
-import pyvista
+# Eigen mode Plots
 pyvista.start_xvfb()
 pyvista.set_jupyter_backend("static")
 
@@ -1106,7 +1102,6 @@ for i in range(4):
         pl.add_mesh(u_grid.warp_by_vector(eigenmode, factor=40), show_scalar_bar=False)
         pl.view_isometric()
 
-  
         # Save the plot as a PNG
         pl.screenshot(f"eigenmode_{i+1:02}.png")
         pl.show() 
