@@ -15,6 +15,21 @@ from contextlib import ExitStack
 
 
 def generate_boundary_markers(xmin, xmax):
+    """Generate functions to mark left and right boundaries of a mesh.
+    
+    Parameters
+    ----------
+    xmin : float
+        Minimum x-coordinate of the mesh
+    xmax : float
+        Maximum x-coordinate of the mesh
+        
+    Returns
+    -------
+    tuple
+        Two functions that return True for points on the left and right
+        boundaries respectively
+    """
     def is_left_boundary(x):
         return np.isclose(x[0], xmin)
     def is_right_boundary(x):
@@ -23,21 +38,24 @@ def generate_boundary_markers(xmin, xmax):
 
 
 def solve_ksp(A, F, V):
-    """Krylov Subspace Solver for Aw = F
-
+    """Solve a linear system using the Krylov subspace method.
+    
+    This function solves the system Aw = F using PETSc's Krylov subspace solver
+    with LU preconditioner and MUMPS direct solver.
+    
     Parameters
     ----------
-    A : array
-        stiffness matrix
-    F : array
-        Load or force vector
-    V : function space
-        _description_
-
+    A : PETSc.Mat
+        System matrix
+    F : PETSc.Vec
+        Right-hand side vector
+    V : dolfinx.fem.FunctionSpace
+        Function space for the solution
+        
     Returns
     -------
-    array
-        solution vector (displacement field)
+    dolfinx.fem.Function
+        Solution function w
     """
     w = Function(V)
     ksp = PETSc.KSP()
@@ -59,20 +77,20 @@ def solve_ksp(A, F, V):
     # return w.vector[:],w
 
 def compute_nullspace(V):
-    """Compute nullspace to restrict Rigid body motions
-
-    Constructs a translational null space for the vector-valued function space V
-    and ensures that it is properly orthonormalized.
-
+    """Compute the nullspace to restrict rigid body motions.
+    
+    This function constructs a translational null space for the vector-valued 
+    function space V and ensures that it is properly orthonormalized.
+    
     Parameters
     ----------
-    V : functionspace
-        _description_
-
+    V : dolfinx.fem.FunctionSpace
+        Vector-valued function space
+        
     Returns
     -------
-    NullSpace
-        Nullspace of V
+    PETSc.NullSpace
+        Nullspace object containing the basis vectors
     """
     # extract the Index Map from the Function Space
     index_map = V.dofmap.index_map
@@ -101,7 +119,21 @@ def compute_nullspace(V):
 
     return ret_val
 
-def eps(vector):  # (Gamma_h * w)
+def eps(vector):
+    """Compute strain tensor and strain vector from displacement gradient.
+    
+    Parameters
+    ----------
+    vector : ufl.Coefficient
+        Displacement vector field
+        
+    Returns
+    -------
+    tuple
+        (strain_tensor, strain_vector) where:
+        - strain_tensor is a 3x3 tensor
+        - strain_vector is a 6-component vector [ε11, ε22, ε33, γ23, γ13, γ12]
+    """
     E1 = ufl.as_vector([0, 0, vector[2].dx(0), (vector[1].dx(0)), (vector[0].dx(0)), 0])
     ans = as_tensor([
         (E1[0], 0.5 * E1[5], 0.5 * E1[4]),
@@ -111,7 +143,25 @@ def eps(vector):  # (Gamma_h * w)
     return ans, E1
 
 ### local reference frames
-def local_frame(mesh): 
+def local_frame(mesh):
+    """Compute local orthonormal frame for shell elements.
+    
+    This function computes an orthonormal frame (e1, e2, e3) at each point
+    of the mesh, where:
+    - e1 is the first tangent vector
+    - e2 is the second tangent vector
+    - e3 is the normal vector
+    
+    Parameters
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        Mesh object
+        
+    Returns
+    -------
+    tuple
+        Three ufl.Vector objects (e1, e2, e3) forming the local frame
+    """
     t = Jacobian(mesh)
     t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]]) # tangential direction 
     t2 = as_vector([t[0, 1], t[1, 1], t[2, 1]]) 
@@ -122,7 +172,25 @@ def local_frame(mesh):
     e2 /= sqrt(dot(e2, e2)) # 2- direction  -circumferential (default not rh rule)
     return e1, e2, e3
 
-def local_frame_1D(mesh): 
+def local_frame_1D(mesh):
+    """Compute local orthonormal frame for 1D curved elements.
+    
+    This function computes an orthonormal frame (e1, e2, e3) at each point
+    of a 1D curved mesh, where:
+    - e1 is aligned with the global x-axis
+    - e2 is the tangent vector
+    - e3 is computed to complete the right-handed system
+    
+    Parameters
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        1D mesh object
+        
+    Returns
+    -------
+    tuple
+        Three ufl.Vector objects (e1, e2, e3) forming the local frame
+    """
     t = Jacobian(mesh)
     t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]])
     e2=  t1/ sqrt(dot(t1, t1))
@@ -131,8 +199,23 @@ def local_frame_1D(mesh):
     e3=  e3/ sqrt(dot(e3, e3)) 
     return e1, e2, e3
 
-def deri(e): # derivatives of local frame (Refer: Prof: Yu thesis)
+def deri(e):
+    """Compute derivatives and curvatures of a local frame.
     
+    This function computes the derivatives of the local frame vectors and
+    the associated curvatures of the shell element.
+    
+    Parameters
+    ----------
+    e : tuple
+        Tuple of three ufl.Vector objects (e1, e2, e3) forming the local frame
+        
+    Returns
+    -------
+    tuple
+        Six scalar values representing the curvatures:
+        (k11, k12, k21, k22, k13, k23)
+    """
     e1,e2,e3=e[0],e[1],e[2]
     a1_1=dot(e1,grad(e1))
     a1_2=dot(e2,grad(e1))   # directional derivative of e2 along e1 direction.
@@ -151,9 +234,37 @@ def deri(e): # derivatives of local frame (Refer: Prof: Yu thesis)
     return k11,k12,k21,k22,k13,k23
 
 def local_grad(ee,q):
+    """Compute directional derivative along a vector.
+    
+    Parameters
+    ----------
+    ee : ufl.Vector
+        Direction vector
+    q : ufl.Coefficient
+        Scalar or vector field
+        
+    Returns
+    -------
+    ufl.Coefficient
+        Directional derivative of q along ee
+    """
     return dot(ee,grad(q))
 
 def ddot(w,d1):
+    """Compute dot product of two 3D vectors.
+    
+    Parameters
+    ----------
+    w : ufl.Vector
+        First vector
+    d1 : ufl.Vector
+        Second vector
+        
+    Returns
+    -------
+    ufl.Coefficient
+        Scalar product w·d1
+    """
     return (d1[0]*w[0]+d1[1]*w[1]+d1[2]*w[2])
 
 ############################################################################
@@ -163,16 +274,25 @@ def ddot(w,d1):
 # For input, local frame (e), spatial coordinate x and dx is required as Gamma_h for left boun/right boun/main qaud mesh would be different.
 # Gamma_h*w column matrix
 def gamma_h(e,x,w): 
-    """
-    Generate (gamma_h*w) vector (ufl)  
+    """Compute the gamma_h operator for MSG-Shell formulations.
     
-    Parameters:
-        e: Local Orientation Frame in S functionspace (obtained from localboun)
-        x: Spatial Coordinate
-        w: Trial/Test Function   (i.e. dv/v_)
-    Returns:
-        gamma_h [6,1] (ufl tensor): Equivalent to gamma_h vector (ufl) showed in MSG-Shell formulations
+    This function computes the gamma_h operator that appears in the
+    Mixed-Space-Galerkin shell formulations. It represents the strain
+    measures in terms of the displacement field.
     
+    Parameters
+    ----------
+    e : tuple
+        Local frame vectors (e1, e2, e3)
+    x : ufl.SpatialCoordinate
+        Spatial coordinates
+    w : ufl.Coefficient
+        Test or trial function
+        
+    Returns
+    -------
+    ufl.Tensor
+        6-component vector representing the strain measures
     """
     k11,k12,k21,k22,k13,k23= deri(e) # extracting initial curvatures
     x11,x21,x31= local_grad(e[0],x[0]), local_grad(e[0],x[1]), local_grad(e[0],x[2])
@@ -210,19 +330,26 @@ def gamma_h(e,x,w):
     E1= as_tensor([G1,G2,G3,G4,G5,G6])
     return E1
 
-def gamma_l(e,x,w): 
-# e,x required as element can be of left/right boundary or quad mesh
-    """
-    Generate (gamma_l*w') tensor (ufl)  where w' related with MSG Shell formulation
-    showing derivative with same functionspace as dv/v_.
+def gamma_l(e, x, w):
+    """Compute the gamma_l operator for MSG-Shell formulations.
     
-    Parameters:
-        e: Local Orientation Frame in S functionspace (obtained from localboun)
-        x: Spatial Coordinate
-        w: Trial/Test Function   (i.e. dv/v_)
-    Returns:
-        gamma_l [6,1] (ufl tensor): Equivalent to gamma_l vector (ufl) showed in MSG-Shell formulations
+    This function computes the gamma_l operator that appears in the
+    Mixed-Space-Galerkin shell formulations. It represents the strain
+    measures in terms of the displacement field for the Timoshenko model.
     
+    Parameters
+    ----------
+    e : tuple
+        Local frame vectors (e1, e2, e3)
+    x : ufl.SpatialCoordinate
+        Spatial coordinates
+    w : ufl.Coefficient
+        Test or trial function
+        
+    Returns
+    -------
+    ufl.Tensor
+        6-component vector representing the strain measures
     """
     y1,y2,y3=x[2],x[0],x[1]  # In MSG-Shell formulations, y1 should be the beam axis & (y2,y3) as cross-sectional coordinates)
     # In mesh data, z coordinates are
@@ -248,16 +375,24 @@ def gamma_l(e,x,w):
     L6=-2*ddot(x11*w_d2+x12*w_d1,d3)+ddot(k12*(y1*dd3-x12*dd2)+k21*(y1*dd3-x11*dd1)-0.5*(k11+k22)*(x12*dd1+x11*dd2),w)
     return  as_tensor([L1,L2,L3,L4,L5,L6])
     
-def gamma_e(e,x):
-    """
-    Generate gamma_e tensor (ufl) whose columns are used as load cases.  
+def gamma_e(e, x):
+    """Compute the gamma_e operator for MSG-Shell formulations.
     
-    Parameters:
-        e: Local Orientation Frame in S functionspace (obtained from localboun)
-        x: Spatial Coordinate
-    Returns:
-        gamma_e [6,4] (ufl tensor): Equivalent to gamma_e tensor (ufl) showed in MSG-Shell formulations
+    This function computes the gamma_e operator that appears in the
+    Mixed-Space-Galerkin shell formulations. It represents the strain
+    measures in terms of the spatial coordinates.
     
+    Parameters
+    ----------
+    e : tuple
+        Local frame vectors (e1, e2, e3)
+    x : ufl.SpatialCoordinate
+        Spatial coordinates
+        
+    Returns
+    -------
+    ufl.Tensor
+        6x4 matrix representing the strain measures
     """
     k11,k12,k21,k22,k13,k23= deri(e)
     x11,x21,x31= local_grad(e[0],x[0]), local_grad(e[0],x[1]), local_grad(e[0],x[2])
@@ -293,7 +428,25 @@ def gamma_e(e,x):
                     (E51,E52,E53,E54), 
                     (E61,E62,E63,E64)])
 
-def gamma_d(e,x):
+def gamma_d(e, x):
+    """Compute the gamma_d operator for MSG-Shell formulations.
+    
+    This function computes the gamma_d operator that appears in the
+    Mixed-Space-Galerkin shell formulations. It represents additional
+    strain measures needed for the Timoshenko model.
+    
+    Parameters
+    ----------
+    e : tuple
+        Local frame vectors (e1, e2, e3)
+    x : ufl.SpatialCoordinate
+        Spatial coordinates
+        
+    Returns
+    -------
+    ufl.Tensor
+        6x4 matrix representing additional strain measures
+    """
     x11, x21, x31 = local_grad(e[0],x[0]), local_grad(e[0],x[1]), local_grad(e[0],x[2])
     x12, x22, x32 = local_grad(e[1],x[0]), local_grad(e[1],x[1]), local_grad(e[1],x[2])
     y1, y2, y3= local_grad(e[2],x[0]), local_grad(e[2],x[1]), local_grad(e[2],x[2])
@@ -302,19 +455,31 @@ def gamma_d(e,x):
     ret_val = as_tensor([O,O,O,x11*x11*R,x12*x12*R,2*x11*x12*R])
     return ret_val
 
-def local_boun(mesh_l,frame,subdomains_l):
-    """
-    Interpolate the local orientation frame to function space .i.e. from DG space to S space
+def local_boun(mesh_l, frame, subdomains_l):
+    """Set up function spaces and measures for boundary analysis.
     
-    Parameters:
-        mesh_l: Left Boundary mesh
-        frame_l: Left Boundary local orientation frame
-        subdomains_l: layup distribution subdomain of left boundary mesh (obtained after mapping)
-    Returns:
-        [e1l,e2l,e3l]: S functionspace interpolated frame
-        V_l: Left Boundary functionspace (interval mesh)
-        TrialFunction(V_l), TestFunction(V_l)
-        x,dx: Spatial Coordinate and integration measure 
+    This function creates the necessary function spaces and measures
+    for analyzing the boundary regions of a shell segment.
+    
+    Parameters
+    ----------
+    mesh_l : dolfinx.mesh.Mesh
+        Mesh for the boundary region
+    frame : tuple
+        Local frame vectors (e1, e2, e3)
+    subdomains_l : dolfinx.mesh.MeshTags
+        Tags identifying different regions in the boundary mesh
+        
+    Returns
+    -------
+    tuple
+        Contains:
+        - e: interpolated local frame
+        - V_l: function space
+        - dv: trial function
+        - v_: test function
+        - x: spatial coordinates
+        - dx: measure
     """
     V_l = dolfinx.fem.functionspace(mesh_l, basix.ufl.element(
         "S", mesh_l.topology.cell_name(), 2, shape=(3, )))
@@ -372,22 +537,24 @@ def local_boun(mesh_l,frame,subdomains_l):
 #     return A_l
 
 def solve_eb_boundary(ABD, meshdata):
-
-    """_summary_
-
+    """Solve the Euler-Bernoulli beam problem on a boundary.
+    
+    This function solves the Euler-Bernoulli beam equations on a
+    boundary region using the provided ABD matrices.
+    
     Parameters
     ----------
-    ABD : List of ABD matrices for each phase
-        _description_
-    meshdata : _type_
-        _description_
-    nphases : _type_
-        _description_
-
+    ABD : list
+        List of ABD matrices for each material
+    meshdata : dict
+        Dictionary containing mesh data for the boundary
+        
     Returns
     -------
-    _type_
-        _description_
+    tuple
+        Contains:
+        - D_eff: effective stiffness matrix
+        - V0: fluctuation functions
     """
 
     # assert len(ABD) == nphases
@@ -429,15 +596,21 @@ def solve_eb_boundary(ABD, meshdata):
 #     return V0,Dle,Dhe,Dhd,Dld,D_ed,D_dd,D_ee,V1s
 
 def initialize_array(V):
-    """
-    Output initialized numpy arrays
-    From Timo_Taper_ABDrearranged_debugging.py
+    """Initialize arrays for storing computation results.
     
-    Parameters:
-        V: functionspace
+    Parameters
+    ----------
+    V : dolfinx.fem.FunctionSpace
+        Function space determining the size of arrays
         
-    Returns:
-        V0,Dle,Dhe,D_ee,V1s: numpy arrays
+    Returns
+    -------
+    tuple
+        Contains initialized numpy arrays for:
+        - V0: fluctuation functions
+        - Dle, Dhe: strain matrices
+        - D_ee: stiffness matrix
+        - V1s: additional fluctuation functions
     """
     ndofs=3*len(np.arange(*V.dofmap.index_map.local_range))  # total dofs of mesh
     V0 = np.zeros((ndofs,4))
@@ -447,18 +620,31 @@ def initialize_array(V):
     V1s=np.zeros((ndofs,4)) 
     return V0,Dle,Dhe,D_ee,V1s
 
-def dof_mapping_quad(V, v2a, V_l,w_ll,boundary_facets_left,entity_mapl):
-    """
-    Map boundary solutions (V0_l and V1_l) to WB segment mesh functions to use a dirichilet boundary constraint
+def dof_mapping_quad(V, v2a, V_l, w_ll, boundary_facets_left, entity_mapl):
+    """Map degrees of freedom between boundary and main meshes.
     
-    Parameters:
-        v2a : ufl function to store boundary solutions
-        V_l:  Left boundary functionspace
-        w_ll[ndofs_leftmesh,1]: numpy column vector containing columns of V0_l (i.e. V0_l[:,p]) 
-        boundary_facets_left[num_facets_left,1]: Left Boundary facets id (numbering in left boundary mesh)
-        entity_mapl[num_facets_left,1]:  Left Boundary facets id (numbering in Wb Segment mesh)
-    Returns:
-        v2a: Modified WB mesh function containg V0_l data at boundary dofs 
+    This function maps the solution from a boundary mesh to the
+    corresponding degrees of freedom in the main mesh.
+    
+    Parameters
+    ----------
+    V : dolfinx.fem.FunctionSpace
+        Function space on main mesh
+    v2a : dolfinx.fem.Function
+        Function to store mapped values
+    V_l : dolfinx.fem.FunctionSpace
+        Function space on boundary mesh
+    w_ll : dolfinx.fem.Function
+        Solution on boundary mesh
+    boundary_facets_left : array
+        Array of boundary facet indices
+    entity_mapl : array
+        Mapping between boundary and main mesh entities
+        
+    Returns
+    -------
+    dolfinx.fem.Function
+        Updated v2a with mapped values
     """
     deg = 2
     dof_S2L=[]
@@ -475,10 +661,20 @@ def dof_mapping_quad(V, v2a, V_l,w_ll,boundary_facets_left,entity_mapl):
     return v2a
 
 
-def tangential_projection(u: ufl.Coefficient, n: ufl.FacetNormal) -> ufl.Coefficient:
-    """
-    See for instance:
-    https://link.springer.com/content/pdf/10.1023/A:1022235512626.pdf
+def tangential_projection(u, n):
+    """Project a vector field onto the tangent space.
+    
+    Parameters
+    ----------
+    u : ufl.Coefficient
+        Vector field to project
+    n : ufl.FacetNormal
+        Normal vector field
+        
+    Returns
+    -------
+    ufl.Coefficient
+        Projected vector field
     """
     return (ufl.Identity(u.ufl_shape[0]) - ufl.outer(n, n)) * u
 
@@ -589,17 +785,26 @@ def facet_vector_approximation(
 
 
 def deri_constraint(dvl, v_l, mesh, nh):
-    """
-    Generate C0-Interior Penalty term for bilinear weak form to constrain normal and tangent derivative along the interface
-    Boundary mesh only requires normal derivative constraint, and WB mesh requires both tangent and normal derivative constraint
-    Parameters:
-        dv,v_: Trail and test function (either WB segment/boundary)
-        mesh: Input mesh (either WB segment/boundary)
-        nh: TODO
+    """Compute derivative constraints for boundary conditions.
+    
+    This function computes constraints on derivatives that are
+    needed for proper boundary condition enforcement.
+    
+    Parameters
+    ----------
+    dvl : ufl.Coefficient
+        Trial function
+    v_l : ufl.Coefficient
+        Test function
+    mesh : dolfinx.mesh.Mesh
+        Mesh object
+    nh : float
+        Constraint parameter
         
-    Returns:
-        nn: bilinear normal derivative constraint terms (boundary mesh)
-        nn+tt: bilinear constraint terms for both normal and tangent boundary (WB surface mesh).
+    Returns
+    -------
+    ufl.Form
+        Form representing the derivative constraints
     """
     h = CellDiameter(mesh)
     n = FacetNormal(mesh)

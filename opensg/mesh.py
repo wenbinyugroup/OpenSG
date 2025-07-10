@@ -12,15 +12,47 @@ import opensg
 
 
 class BladeMesh:
-    """This class processes and stores information about a wind turbine blade's mesh
+    """A class representing the complete mesh of a wind turbine blade.
+    
+    This class processes and stores information about a wind turbine blade's mesh,
+    including nodes, elements, material properties, and section definitions. It provides
+    methods to generate segment meshes and manage material properties.
+    
+    Attributes
+    ----------
+    nodes : list
+        List of node coordinates for the blade mesh
+    num_nodes : int
+        Total number of nodes in the mesh
+    elements : list
+        List of element definitions
+    num_elements : int
+        Total number of elements in the mesh
+    sets : dict
+        Dictionary containing element and node sets
+    materials : dict
+        Dictionary containing material definitions
+    sections : dict
+        Dictionary containing section definitions
+    element_orientations : list
+        List of element orientation matrices
+    material_database : dict
+        Processed database of material properties
     """
     def __init__(self, mesh_data):
-        """
+        """Initialize a BladeMesh object from mesh data.
 
         Parameters
         ----------
         mesh_data : dict
-            dictionary of mesh data loaded in from the output of pynumad mesher
+            Dictionary of mesh data loaded from the output of pynumad mesher.
+            Expected to contain:
+                - nodes: list of node coordinates
+                - elements: list of element definitions
+                - sets: dictionary of element and node sets
+                - materials: dictionary of material definitions
+                - sections: dictionary of section definitions
+                - elementOrientations: list of element orientation matrices
         """
         self._mesh_data = mesh_data
         
@@ -39,6 +71,19 @@ class BladeMesh:
         
         
     def _generate_material_database(self):
+        """Generate a processed database of material properties.
+        
+        This internal method processes the raw material data into a more
+        accessible format. For each material, it extracts:
+            - Material ID
+            - Elastic properties (E, G, nu)
+            
+        The processed data is stored in self.material_database.
+        
+        Returns
+        -------
+        None
+        """
         material_database = dict()
         
         for i, material in enumerate(self.materials):
@@ -58,6 +103,24 @@ class BladeMesh:
     
         
     def generate_segment_mesh(self, segment_index, filename):
+        """Generate a mesh for a specific blade segment.
+        
+        This method extracts a portion of the blade mesh corresponding to the
+        specified segment index and creates a new SegmentMesh object. The segment
+        mesh is also written to a file in GMSH format.
+        
+        Parameters
+        ----------
+        segment_index : int
+            Index of the blade segment to extract
+        filename : str
+            Name of the file to write the GMSH mesh to
+            
+        Returns
+        -------
+        SegmentMesh
+            A new SegmentMesh object containing the extracted segment data
+        """
         segment_node_labels = -1 * np.ones(self.num_nodes, dtype=int)
         segment_element_labels = -1 * np.ones(self.num_elements, dtype=int)
         segment_element_layer_id = -1 * np.ones(self.num_elements, dtype=int)
@@ -177,6 +240,32 @@ class BladeMesh:
 
 
 class SegmentMesh():
+    """A class representing a segment of a wind turbine blade mesh.
+    
+    A segment is defined as the part of the blade between two fixed points along the blade span.
+    Given a set of N span points along the blade, there are N-1 segments defined between each consecutive pair
+    of span points. For example, the segment indexed by 0 is defined between the span points indexed by 0 and 1.
+    
+    This class manages the data and methods for analyzing the structural properties of a blade segment,
+    including computing ABD matrices and stiffness properties.
+    
+    Attributes
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        The FEniCS/DOLFINx mesh object for this segment
+    subdomains : dolfinx.mesh.MeshTags
+        Tags identifying different regions/materials in the mesh
+    left_submesh : dict
+        Data for the left boundary submesh
+    right_submesh : dict
+        Data for the right boundary submesh
+    layup_database : dict
+        Database containing layup information including:
+            - mat_names: list of material names
+            - thick: list of layer thicknesses
+            - angle: list of fiber angles
+            - nlay: list of number of layers
+    """
     def __init__(
         self,
         segment_node_labels,
@@ -186,28 +275,25 @@ class SegmentMesh():
         layup_database,
         parent_blade_mesh, 
         msh_file):
-        """This class manages the data and methods for the mesh of a segment of a blade.
+        """Initialize a SegmentMesh object.
         
-        A segment is defined as the part of the blade between two fixed points along the blade span.
-        Given a set of N span points along the blade, there are N-1 segments defined between each consecutive pair
-        of span points. For example, the segment indexed by 0 is defined between the span points indexed by 0 and 1
-
         Parameters
         ----------
         segment_node_labels : array[int]
-            _description_
+            Labels for nodes in this segment
         segment_element_labels : array[int]
-            _description_
+            Labels for elements in this segment
         segment_element_layer_id : array[int]
-            _description_
+            Layer IDs for each element
         segment_index : int
-            Index of the segment of blade
+            Index of this segment in the blade
+        layup_database : dict
+            Database containing layup information
         parent_blade_mesh : BladeMesh
-            BladeMesh object that SegmentMesh derives from.
-        msh_file : str or Path
-            Path to mesh file to load data from
+            Reference to the parent blade mesh object
+        msh_file : str
+            Path to the GMSH mesh file
         """
-        
         self.segment_node_labels = segment_node_labels
         self.segment_element_labels = segment_element_labels
         self.segment_element_layer_id = segment_element_layer_id
@@ -264,6 +350,17 @@ class SegmentMesh():
     
 
     def _build_local_orientations(self):
+        """Build local orientation vectors for each element.
+        
+        This method constructs the local coordinate system for each element
+        based on the element orientations provided in the mesh data.
+        
+        Returns
+        -------
+        tuple
+            Three dolfinx.fem.Function objects representing the local coordinate
+            vectors (e1, e2, e3) for each element.
+        """
         # Local Orientation (DG0 function) of quad mesh element (from yaml data)
         VV = dolfinx.fem.functionspace(
             self.mesh, basix.ufl.element(
@@ -295,6 +392,18 @@ class SegmentMesh():
 
 
     def _build_boundary_submeshdata(self):
+        """Build submesh data for the left and right boundaries.
+        
+        This method extracts and processes the mesh data for the boundary
+        regions of the segment, which are needed for applying boundary
+        conditions and computing boundary stiffness properties.
+        
+        Returns
+        -------
+        tuple
+            Two dictionaries containing the submesh data for the left and
+            right boundaries respectively.
+        """
         pp = self.mesh.geometry.x
 
         is_left_boundary, is_right_boundary = opensg.generate_boundary_markers(
@@ -382,6 +491,17 @@ class SegmentMesh():
         return self.left_submesh, self.right_submesh
 
     def compute_ABD(self):
+        """Compute the ABD (stiffness) matrices for the segment.
+        
+        This method computes the ABD matrices that relate forces and moments
+        to strains and curvatures for each unique layup in the segment.
+        
+        Returns
+        -------
+        list
+            List of 6x6 numpy arrays representing the ABD matrices for each
+            unique layup in the segment.
+        """
         nphases = max(self.subdomains.values[:]) + 1
         ABD_ = []
         for i in range(nphases):
@@ -411,6 +531,18 @@ class SegmentMesh():
     #     u_plotter.show()
         
     def compute_stiffness_EB(self, ABD):
+        """Compute the Euler-Bernoulli beam stiffness matrix.
+        
+        Parameters
+        ----------
+        ABD : list
+            List of ABD matrices for each unique layup
+            
+        Returns
+        -------
+        numpy.ndarray
+            4x4 stiffness matrix for Euler-Bernoulli beam theory
+        """
         # extract object data
         mesh = self.mesh
         frame = self.frame
@@ -433,7 +565,18 @@ class SegmentMesh():
         return m_l, m_r
     
     def compute_boundary_stiffness_timo(self, ABD):
-
+        """Compute the Timoshenko beam stiffness matrices for the boundaries.
+        
+        Parameters
+        ----------
+        ABD : list
+            List of ABD matrices for each unique layup
+            
+        Returns
+        -------
+        tuple
+            Left and right boundary 6x6 Timoshenko stiffness matrices
+        """
         left_stiffness = opensg.compute_timo_boun(ABD, self.left_submesh)[1]
         
         right_stiffness = opensg.compute_timo_boun(
@@ -448,6 +591,25 @@ class SegmentMesh():
         return left_stiffness, right_stiffness
     
     def compute_stiffness(self, ABD):
+        """Compute all stiffness matrices for the segment.
+        
+        This method computes both the Euler-Bernoulli and Timoshenko
+        stiffness matrices for the segment and its boundaries.
+        
+        Parameters
+        ----------
+        ABD : list
+            List of ABD matrices for each unique layup
+            
+        Returns
+        -------
+        tuple
+            Contains:
+            - segment_timo_stiffness: 6x6 Timoshenko stiffness matrix
+            - segment_eb_stiffness: 4x4 Euler-Bernoulli stiffness matrix
+            - l_timo_stiffness: 6x6 left boundary Timoshenko stiffness matrix
+            - r_timo_stiffness: 6x6 right boundary Timoshenko stiffness matrix
+        """
         return opensg.compute_stiffness(
             ABD=ABD,
             mesh=self.mesh,
