@@ -8,7 +8,8 @@ from dolfinx.fem.petsc import assemble_matrix
 from dolfinx.fem import form, petsc, Function, locate_dofs_topological, apply_lifting, set_bc
 from scipy.sparse import csr_matrix
 import scipy
-import opensg
+from ..core import solve as core
+from ..utils import compute_utils as utils
 
 
 class BladeMesh:
@@ -276,7 +277,7 @@ class SegmentMesh():
         parent_blade_mesh, 
         msh_file):
         """Initialize a SegmentMesh object.
-        
+
         Parameters
         ----------
         segment_node_labels : array[int]
@@ -577,9 +578,9 @@ class SegmentMesh():
         tuple
             Left and right boundary 6x6 Timoshenko stiffness matrices
         """
-        left_stiffness = opensg.compute_timo_boun(ABD, self.left_submesh)[1]
+        left_stiffness = core.compute_timo_boun(ABD, self.left_submesh)[1]
         
-        right_stiffness = opensg.compute_timo_boun(
+        right_stiffness = core.compute_timo_boun(
             ABD, 
             self.right_submesh["mesh"],
             self.right_submesh["subdomains"],
@@ -610,7 +611,7 @@ class SegmentMesh():
             - l_timo_stiffness: 6x6 left boundary Timoshenko stiffness matrix
             - r_timo_stiffness: 6x6 right boundary Timoshenko stiffness matrix
         """
-        return opensg.compute_stiffness(
+        return core.compute_stiffness(
             ABD=ABD,
             mesh=self.mesh,
             subdomains=self.subdomains,

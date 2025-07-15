@@ -42,7 +42,7 @@ def solve_ksp(A, F, V):
     
     This function solves the system Aw = F using PETSc's Krylov subspace solver
     with LU preconditioner and MUMPS direct solver.
-    
+
     Parameters
     ----------
     A : PETSc.Mat
@@ -51,7 +51,7 @@ def solve_ksp(A, F, V):
         Right-hand side vector
     V : dolfinx.fem.FunctionSpace
         Function space for the solution
-        
+
     Returns
     -------
     dolfinx.fem.Function
@@ -78,15 +78,15 @@ def solve_ksp(A, F, V):
 
 def compute_nullspace(V):
     """Compute the nullspace to restrict rigid body motions.
-    
+
     This function constructs a translational null space for the vector-valued 
     function space V and ensures that it is properly orthonormalized.
-    
+
     Parameters
     ----------
     V : dolfinx.fem.FunctionSpace
         Vector-valued function space
-        
+
     Returns
     -------
     PETSc.NullSpace
@@ -143,7 +143,7 @@ def eps(vector):
     return ans, E1
 
 ### local reference frames
-def local_frame(mesh):
+def local_frame(mesh): 
     """Compute local orthonormal frame for shell elements.
     
     This function computes an orthonormal frame (e1, e2, e3) at each point
@@ -172,7 +172,7 @@ def local_frame(mesh):
     e2 /= sqrt(dot(e2, e2)) # 2- direction  -circumferential (default not rh rule)
     return e1, e2, e3
 
-def local_frame_1D(mesh):
+def local_frame_1D(mesh): 
     """Compute local orthonormal frame for 1D curved elements.
     
     This function computes an orthonormal frame (e1, e2, e3) at each point
@@ -538,17 +538,17 @@ def local_boun(mesh_l, frame, subdomains_l):
 
 def solve_eb_boundary(ABD, meshdata):
     """Solve the Euler-Bernoulli beam problem on a boundary.
-    
+
     This function solves the Euler-Bernoulli beam equations on a
     boundary region using the provided ABD matrices.
-    
+
     Parameters
     ----------
     ABD : list
         List of ABD matrices for each material
     meshdata : dict
         Dictionary containing mesh data for the boundary
-        
+
     Returns
     -------
     tuple
