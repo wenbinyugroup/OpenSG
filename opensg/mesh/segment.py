@@ -1,11 +1,12 @@
 from opensg.core import shell as core
 
-
+import opensg
 import basix
 import dolfinx
 import numpy as np
 from dolfinx.io import gmshio
 from mpi4py import MPI
+
 
 
 class SegmentMesh():
@@ -175,7 +176,7 @@ class SegmentMesh():
         """
         pp = self.mesh.geometry.x
 
-        is_left_boundary, is_right_boundary = opensg.generate_boundary_markers(
+        is_left_boundary, is_right_boundary = opensg.utils.shell.generate_boundary_markers(
             min(pp[:,0]), max(pp[:,0]))
 
         left_facets = dolfinx.mesh.locate_entities_boundary(
