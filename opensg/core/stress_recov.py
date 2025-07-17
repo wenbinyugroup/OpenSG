@@ -12,6 +12,8 @@ import opensg
 import basix
 from mpi4py import MPI
 from slepc4py import SLEPc
+
+import opensg.utils.solid as utils
     
 def beam_reaction(file_name):
 
@@ -64,14 +66,14 @@ def recover_local_strain(timo,beam_force,segment,meshdata):
     
     # First Derivative
     F_1d=np.matmul(Deff_srt,st)
-    R1=opensg.recov(st)
+    R1=utils.recov(st)
     F1= np.matmul(R1,F_1d)
     st_Tim1=np.matmul(Comp_srt,F1)
     st_cl1=np.array([st_Tim1[0],st_Tim1[3],st_Tim1[4],st_Tim1[5]])
  #   gamma1=np.array([st_Tim1[1],st_Tim1[2]])
 
     # Second Derivative
-    R2=opensg.recov(st_Tim1)
+    R2=utils.recov(st_Tim1)
     F2=np.matmul(R1,F1)+np.matmul(R2,F_1d)
     st_Tim2=np.matmul(Comp_srt,F2)    
     st_cl2=np.array([st_Tim2[0],st_Tim2[3],st_Tim2[4],st_Tim2[5]])
@@ -92,8 +94,8 @@ def recover_local_strain(timo,beam_force,segment,meshdata):
         w_1.x.array[i],w1s_1.x.array[i],w1s_2.x.array[i],w_2.x.array[i]=a1[i],a2[i],a3[i],a4[i] 
     
     # 3D strain recovery
-    st_Eb=opensg.gamma_h(dx,w_1,dim=3)+ufl.dot(opensg.gamma_e(x),ufl.as_vector((st_m))) # EB Contribution
-    st_Timo=opensg.gamma_h(dx,w1s_1,dim=3)+opensg. gamma_l(w_2)+opensg.gamma_l(w1s_2)  # Timo Contribution
+    st_Eb=utils.gamma_h(dx,w_1,dim=3)+ufl.dot(utils.gamma_e(x),ufl.as_vector((st_m))) # EB Contribution
+    st_Timo=utils.gamma_h(dx,w1s_1,dim=3)+utils.gamma_l(w_2)+utils.gamma_l(w1s_2)  # Timo Contribution
     st_3D=st_Eb+st_Timo     
     
     strain_3D=dolfinx.fem.Function(VV)
@@ -105,7 +107,7 @@ def recover_local_strain(timo,beam_force,segment,meshdata):
     
 def local_stress(mat_param,segment_mesh,strain_3D,points):
      mesh=segment_mesh.meshdata["mesh"]
-     CC_=opensg.CC(mat_param)  
+     CC_=utils.CC(mat_param)  
      
      V_stiff=dolfinx.fem.functionspace(mesh, basix.ufl.element(
                  "DG", mesh.topology.cell_name(), 0, shape = (6,6 )))    
@@ -119,7 +121,7 @@ def local_stress(mat_param,segment_mesh,strain_3D,points):
      stress_3D=dolfinx.fem.Function(V_stress)
      fexpr1 = dolfinx.fem.Expression(stiffness*strain_3D,V_stress.element.interpolation_points(), comm = MPI.COMM_WORLD)
      stress_3D.interpolate(fexpr1) 
-     stress_eval=opensg.stress_output(mat_param,mesh,stress_3D,points)
+     stress_eval=utils.stress_output(mat_param,mesh,stress_3D,points)
      return stress_eval
  
 def eigen_stiffness_matrix(mat_param,segment_mesh,strain_3D, N_eig):
@@ -127,7 +129,7 @@ def eigen_stiffness_matrix(mat_param,segment_mesh,strain_3D, N_eig):
     
     dx = ufl.Measure('dx')(domain=mesh, subdomain_data=segment_mesh.meshdata["subdomains"])
 
-    CC=opensg.CC(mat_param)  
+    CC=utils.CC(mat_param)  
     nphases=len(mat_param)
     V=dolfinx.fem.functionspace(mesh, basix.ufl.element(
             "CG", mesh.topology.cell_name(), 1, shape = (3, )))
@@ -140,16 +142,16 @@ def eigen_stiffness_matrix(mat_param,segment_mesh,strain_3D, N_eig):
     # Taking no contribution from end boundary
     
     # Linear Elasticity Bilinear Form
-    a = sum([ufl.dot(opensg.sigma(du,i,CC)[1],opensg.epsilon(u_)[1])*dx(i) for i in range(nphases)])
+    a = sum([ufl.dot(utils.sigma(du,i,CC)[1],utils.epsilon(u_)[1])*dx(i) for i in range(nphases)])
     # Stiffness matrix
     K = dolfinx.fem.petsc.assemble_matrix(dolfinx.fem.form(a), bcs=bcs)
     K.assemble()     
 
-    kgform = -sum([ufl.inner(opensg.sigma_prestress(i,CC,strain_3D)[0],ufl.grad(du).T*ufl.grad(u_))*dx(i) for i in range(nphases)])
+    kgform = -sum([ufl.inner(utils.sigma_prestress(i,CC,strain_3D)[0],ufl.grad(du).T*ufl.grad(u_))*dx(i) for i in range(nphases)])
     KG = dolfinx.fem.petsc.assemble_matrix(dolfinx.fem.form(kgform), bcs=bcs, diagonal=0)
     KG.assemble()    # epsilon(du) and grad(du) both are same      
     
-    eigensolver = opensg.solve_GEP_shiftinvert(
+    eigensolver = utils.solve_GEP_shiftinvert(
     KG,   # Optimization Problem: Find maximum eigenvalue of this problem
     K,
     problem_type=SLEPc.EPS.ProblemType.GHIEP,
@@ -159,7 +161,7 @@ def eigen_stiffness_matrix(mat_param,segment_mesh,strain_3D, N_eig):
   #  shift=1,
     )
     # Extract eigenpairs
-    (eigval, eigvec_r, eigvec_i) = opensg.EPS_get_spectrum(eigensolver, V) 
+    (eigval, eigvec_r, eigvec_i) = utils.EPS_get_spectrum(eigensolver, V) 
     print('Critical Eigen val:', 1/(np.max(eigval)).real)
 
   #  pyvista.start_xvfb()

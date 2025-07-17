@@ -16,6 +16,8 @@ from scipy.sparse import csr_matrix
 import petsc4py.PETSc
 from dolfinx.fem.petsc import assemble_matrix
 import opensg
+import opensg.utils.solid as utils
+import opensg.utils.shared as shared_utils
 import scipy
 
 
@@ -45,39 +47,39 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
     boundary_subdomains = boundary_submeshdata["subdomains"]
     boundary_frame = boundary_submeshdata["frame"]
     # frame override:
-    boundary_frame = opensg.utils.shared.local_frame_1D(boundary_mesh)
+    boundary_frame = shared_utils.local_frame_1D(boundary_mesh)
 
     nphases = len(ABD)
 
-    e, V_l, dv, v_, x, dx = opensg.utils.solid.local_boun(
+    e, V_l, dv, v_, x, dx = utils.local_boun(
         boundary_mesh, boundary_frame, boundary_subdomains
     )
     boundary_mesh.topology.create_connectivity(1, 1)
-    V0, Dle, Dhe, D_ee, V1s = opensg.utils.solid.initialize_array(V_l)
-    nullspace_l = opensg.utils.shared.compute_nullspace(V_l)
+    V0, Dle, Dhe, D_ee, V1s = utils.initialize_array(V_l)
+    nullspace_l = shared_utils.compute_nullspace(V_l)
     #   A_l=A_mat(e,x,dx,nullspace(V_l),v_,dv,mesh_l)
     # Compute A_mat
     F2 = sum(
         [
             dot(
-                dot(as_tensor(ABD[i]), opensg.utils.solid.gamma_h(e, x, dv)),
-                opensg.utils.solid.gamma_h(e, x, v_),
+                dot(as_tensor(ABD[i]), utils.gamma_h(e, x, dv)),
+                utils.gamma_h(e, x, v_),
             )
             * dx(i)
             for i in range(nphases)
         ]
     )
-    ff = opensg.utils.shared.deri_constraint(dv, v_, boundary_mesh, nh)
+    ff = shared_utils.deri_constraint(dv, v_, boundary_mesh, nh)
     A_l = assemble_matrix(form(F2 + ff))
     A_l.assemble()
     A_l.setNullSpace(nullspace_l)
 
-    gamma_e = opensg.utils.solid.gamma_e(e, x)
+    gamma_e = utils.gamma_e(e, x)
     for p in range(4):
         Eps = gamma_e[:, p]
         F2 = sum(
             [
-                dot(dot(as_tensor(ABD[i]), Eps), opensg.utils.solid.gamma_h(e, x, v_)) * dx(i)
+                dot(dot(as_tensor(ABD[i]), Eps), utils.gamma_h(e, x, v_)) * dx(i)
                 for i in range(nphases)
             ]
         )
@@ -88,7 +90,7 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
         )
         nullspace_l.remove(F_l)
         Dhe[:, p] = petsc.assemble_vector(r_he)[:]
-        w = opensg.utils.shared.solve_ksp(A_l, F_l, V_l)
+        w = shared_utils.solve_ksp(A_l, F_l, V_l)
         V0[:, p] = w.x.array[:]
 
     D1 = np.matmul(V0.T, -Dhe)
@@ -108,8 +110,8 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
     F1 = sum(
         [
             dot(
-                dot(as_tensor(ABD[i]), opensg.utils.solid.gamma_l(e, x, v_)),
-                opensg.utils.solid.gamma_l(e, x, dv),
+                dot(as_tensor(ABD[i]), utils.gamma_l(e, x, v_)),
+                utils.gamma_l(e, x, dv),
             )
             * dx(i)
             for i in range(nphases)
@@ -125,7 +127,7 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
         Eps = gamma_e[:, p]
         F1 = sum(
             [
-                dot(dot(as_tensor(ABD[i]), Eps), opensg.gamma_l(e, x, v_)) * dx(i)
+                dot(dot(as_tensor(ABD[i]), Eps), utils.gamma_l(e, x, v_)) * dx(i)
                 for i in range(nphases)
             ]
         )
@@ -133,15 +135,15 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
 
     F_dhl = sum(
         [
-            dot(
-                dot(as_tensor(ABD[i]), opensg.gamma_h(e, x, dv)),
-                opensg.gamma_l(e, x, v_),
-            )
+                            dot(
+                    dot(as_tensor(ABD[i]), utils.gamma_h(e, x, dv)),
+                    utils.gamma_l(e, x, v_),
+                )
             * dx(i)
             for i in range(nphases)
         ]
     )
-    ff = opensg.deri_constraint(dv, v_, boundary_mesh, nh)
+    ff = shared_utils.deri_constraint(dv, v_, boundary_mesh, nh)
     a3 = form(F_dhl + ff)
     Dhl = assemble_matrix(a3)
     Dhl.assemble()
@@ -226,18 +228,18 @@ def compute_solidtimo_boun(mat_param, boundary_submeshdata):
     
     nphases = len(mat_param)
 
-    e, V_l, dv, v_, x, dx = opensg.utils.solid.local_boun(
+    e, V_l, dv, v_, x, dx = utils.local_boun(
         boundary_mesh, boundary_frame, boundary_subdomains
     )
-    boundary_null = opensg.utils.shared.compute_nullspace(V_l)
+    boundary_null = shared_utils.compute_nullspace(V_l)
     boundary_mesh.topology.create_connectivity(2,2)
-    V0, Dle, Dhe, D_ee, V1s = opensg.utils.solid.initialize_array(V_l)
+    V0, Dle, Dhe, D_ee, V1s = utils.initialize_array(V_l)
 
     F2 = sum(
         [
             dot(
-                dot(opensg.utils.solid.C(i,boundary_frame,mat_param),opensg.utils.solid.gamma_h(dx,dv,dim=2)),
-                opensg.utils.solid.gamma_h(dx, v_,dim=2)
+                dot(utils.C(i,boundary_frame,mat_param),utils.gamma_h(dx,dv,dim=2)),
+                utils.gamma_h(dx, v_,dim=2)
             )
             * dx(i)
             for i in range(nphases)
@@ -247,11 +249,11 @@ def compute_solidtimo_boun(mat_param, boundary_submeshdata):
     A_l.assemble()
     A_l.setNullSpace(boundary_null)
 
-    gamma_e = opensg.utils.solid.gamma_e(x)
+    gamma_e = utils.gamma_e(x)
     for p in range(4):
         F2 = sum(
             [
-            dot(dot(opensg.C(ii,boundary_frame,mat_param),gamma_e[:,p]),opensg.utils.solid.gamma_h(dx,v_,dim=2))
+            dot(dot(utils.C(ii,boundary_frame,mat_param),gamma_e[:,p]),utils.gamma_h(dx,v_,dim=2))
              *dx(ii) for ii in range(nphases)
             ]
         )
@@ -262,7 +264,8 @@ def compute_solidtimo_boun(mat_param, boundary_submeshdata):
         )
         boundary_null.remove(F_l)
         Dhe[:, p] = petsc.assemble_vector(r_he)[:]
-        V0[:,p]= opensg.utils.shared.solve_ksp(A_l, F_l, V_l) 
+        w = shared_utils.solve_ksp(A_l, F_l, V_l)
+        V0[:,p]= w.x.array[:] 
         
     V0_csr=csr_matrix(V0) 
     D1=V0_csr.T.dot(csr_matrix(-Dhe))
@@ -271,7 +274,7 @@ def compute_solidtimo_boun(mat_param, boundary_submeshdata):
             f = dolfinx.fem.form(
                 sum(
                     [
-                        dot(dot(gamma_e.T, opensg.C(i,boundary_frame,mat_param)), gamma_e)[s, k] * dx(i)
+                        dot(dot(gamma_e.T, utils.C(i,boundary_frame,mat_param)), gamma_e)[s, k] * dx(i)
                         for i in range(nphases)
                     ]
                 )
@@ -283,8 +286,8 @@ def compute_solidtimo_boun(mat_param, boundary_submeshdata):
     F1 = sum(
         [
             dot(
-                dot(opensg.C(i,boundary_frame,mat_param), opensg.utils.solid.gamma_l(dv)),
-                opensg.utils.solid.gamma_l(v_)
+                dot(utils.C(i,boundary_frame,mat_param), utils.gamma_l(dv)),
+                utils.gamma_l(v_)
             )
             * dx(i)
             for i in range(nphases)
@@ -299,7 +302,7 @@ def compute_solidtimo_boun(mat_param, boundary_submeshdata):
     for p in range(4):
         F1 = sum(
             [
-                dot(dot(opensg.C(i,boundary_frame,mat_param), gamma_e[:, p]), opensg.utils.solid.gamma_l(v_)) * dx(i)
+                dot(dot(utils.C(i,boundary_frame,mat_param), gamma_e[:, p]), utils.gamma_l(v_)) * dx(i)
                 for i in range(nphases)
             ]
         )
@@ -308,8 +311,8 @@ def compute_solidtimo_boun(mat_param, boundary_submeshdata):
     F_dhl = sum(
         [
             dot(
-                dot(opensg.C(i,boundary_frame,mat_param), opensg.utils.solid.gamma_h(dx, dv,dim=2)),
-                opensg.utils.solid.gamma_l(v_)
+                dot(utils.C(i,boundary_frame,mat_param), utils.gamma_h(dx, dv,dim=2)),
+                utils.gamma_l(v_)
             )
             * dx(i)
             for i in range(nphases)
@@ -338,7 +341,8 @@ def compute_solidtimo_boun(mat_param, boundary_submeshdata):
             addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
         )
         boundary_null.remove(F)
-        V1s[:,p]= opensg.utils.shared.solve_ksp(A_l, F, V_l) 
+        w = shared_utils.solve_ksp(A_l, F, V_l)
+        V1s[:,p]= w.x.array[:] 
 
     # Ainv
     Ainv=np.linalg.inv(D_eff).astype(np.float64)
@@ -415,24 +419,24 @@ def compute_stiffness(
     nphases=len(mat_param)
     # Initialize terms
     # NOTE: why do we need the frame from local_frame_1D instead of the already computed frames
-    e_l, V_l, dvl, v_l, x_l, dx_l = opensg.utils.solid.local_boun(l_submesh["mesh"], l_submesh["frame"],l_submesh["subdomains"])
-    e_r, V_r, dvr, v_r, x_r, dx_r = opensg.utils.solid.local_boun(r_submesh["mesh"], r_submesh["frame"] ,r_submesh["subdomains"])
+    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(l_submesh["mesh"], l_submesh["frame"],l_submesh["subdomains"])
+    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(r_submesh["mesh"], r_submesh["frame"] ,r_submesh["subdomains"])
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-    D_effEB_l, Deff_l, V0_l, V1_l = opensg.compute_solidtimo_boun(mat_param, l_submesh)
-    D_effEB_r, Deff_r, V0_r, V1_r = opensg.compute_solidtimo_boun(mat_param, r_submesh)
+    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.solid.compute_solidtimo_boun(mat_param, l_submesh)
+    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.solid.compute_solidtimo_boun(mat_param, r_submesh)
 
     # ***************** Wb Segment (surface mesh) computation begins************************
-    e, V, dv, v_, x, dx = opensg.utils.solid.local_boun(meshdata["mesh"], meshdata["frame"], meshdata["subdomains"])
-    V0, Dle, Dhe, D_ee, V1s = opensg.utils.solid.initialize_array(V)
-    gamma_e = opensg.utils.solid.gamma_e(x)
+    e, V, dv, v_, x, dx = utils.local_boun(meshdata["mesh"], meshdata["frame"], meshdata["subdomains"])
+    V0, Dle, Dhe, D_ee, V1s = utils.initialize_array(V)
+    gamma_e = utils.gamma_e(x)
     meshdata["mesh"].topology.create_connectivity(2, 3)
     l_submesh["mesh"].topology.create_connectivity(2, 2)
     r_submesh["mesh"].topology.create_connectivity(2, 2)
 
     F2 = sum(
         [
-            dot(dot(opensg.utils.solid.C(i, meshdata["frame"],mat_param), opensg.utils.solid.gamma_h(dx, dv,dim=3)), opensg.utils.solid.gamma_h(dx, v_,dim=3)) * dx(i)
+            dot(dot(utils.C(i, meshdata["frame"],mat_param), utils.gamma_h(dx, dv,dim=3)), utils.gamma_h(dx, v_,dim=3)) * dx(i)
             for i in range(nphases)
         ]
     )
@@ -454,12 +458,12 @@ def compute_stiffness(
         # Boundary
         v2a = Function(V)
         
-        v2a = opensg.utils.solid.dof_mapping_quad(V, v2a, V_l, V0_l[:, p], l_submesh["facets"], l_submesh["entity_map"])
-        v2a = opensg.utils.solid.dof_mapping_quad(V, v2a, V_r, V0_r[:, p], r_submesh["facets"], r_submesh["entity_map"])
+        v2a = utils.dof_mapping_quad(V, v2a, V_l, V0_l[:, p], l_submesh["facets"], l_submesh["entity_map"])
+        v2a = utils.dof_mapping_quad(V, v2a, V_r, V0_r[:, p], r_submesh["facets"], r_submesh["entity_map"])
 
         F2 = -sum(
             [
-                dot(dot(opensg.utils.solid.C(i,meshdata["frame"],mat_param), gamma_e[:, p]), opensg.utils.solid.gamma_h(dx, v_,dim=3)) * dx(i)
+                dot(dot(utils.C(i,meshdata["frame"],mat_param), gamma_e[:, p]), utils.gamma_h(dx, v_,dim=3)) * dx(i)
                 for i in range(nphases)
             ]
         )
@@ -472,7 +476,8 @@ def compute_stiffness(
         )  # apply bc to rhs vector (Dhe) based on known fluc solutions  C(i,frame,mat_param)
         set_bc(F, bc)
 
-        V0[:, p] = opensg.utils.shared.solve_ksp(A, F, V)
+        w = shared_utils.solve_ksp(A, F, V)
+        V0[:, p] = w.x.array[:]
 
     V0_csr=csr_matrix(V0)    
     D1=V0_csr.T.dot(csr_matrix(-Dhe)).astype(np.float64)
@@ -482,7 +487,7 @@ def compute_stiffness(
             f = dolfinx.fem.form(
                 sum(
                     [
-                        dot(dot(gamma_e.T, opensg.utils.solid.C(i,meshdata["frame"],mat_param)), gamma_e)[s, k] * dx(i)
+                        dot(dot(gamma_e.T, utils.C(i,meshdata["frame"],mat_param)), gamma_e)[s, k] * dx(i)
                         for i in range(nphases)
                     ]
                 )
@@ -496,7 +501,7 @@ def compute_stiffness(
     # Process is similar to Timoshenko boundary implemented over WB segment mesh
     F1 = sum(
         [
-            dot(dot(opensg.utils.solid.C(i,meshdata["frame"],mat_param), opensg.utils.solid.gamma_l(v_)), opensg.utils.solid.gamma_l(dv)) * dx(i)
+            dot(dot(utils.C(i,meshdata["frame"],mat_param), utils.gamma_l(v_)), utils.gamma_l(dv)) * dx(i)
             for i in range(nphases)
         ]
     ) 
@@ -509,7 +514,7 @@ def compute_stiffness(
     # Dhl
     F_dhl = sum(
         [
-            dot(dot(opensg.utils.solid.C(i,meshdata["frame"],mat_param), opensg.utils.solid.gamma_h(x, dv,dim=3)), opensg.utils.solid.gamma_l(v_)) * dx(i)
+            dot(dot(utils.C(i,meshdata["frame"],mat_param), utils.gamma_h(x, dv,dim=3)), utils.gamma_l(v_)) * dx(i)
             for i in range(nphases)
         ]
     )
@@ -522,7 +527,7 @@ def compute_stiffness(
     for p in range(4):
         F1 = sum(
             [
-                dot(dot(opensg.utils.solid.C(i,meshdata["frame"],mat_param), opensg.utils.solid.gamma_e(x)[:, p]), opensg.utils.solid.gamma_l(v_)) * dx(i)
+                dot(dot(utils.C(i,meshdata["frame"],mat_param), utils.gamma_e(x)[:, p]), utils.gamma_l(v_)) * dx(i)
                 for i in range(nphases)
             ]
         )
@@ -545,8 +550,8 @@ def compute_stiffness(
     for p in range(4):  # 4 load cases meaning
         # Boundary
         v2a = Function(V)
-        v2a = opensg.utils.solid.dof_mapping_quad(V, v2a, V_l, V1_l[:, p], l_submesh["facets"], l_submesh["entity_map"])
-        v2a = opensg.utils.solid.dof_mapping_quad(V, v2a, V_r, V1_r[:, p], r_submesh["facets"], r_submesh["entity_map"])
+        v2a = utils.dof_mapping_quad(V, v2a, V_l, V1_l[:, p], l_submesh["facets"], l_submesh["entity_map"])
+        v2a = utils.dof_mapping_quad(V, v2a, V_r, V1_r[:, p], r_submesh["facets"], r_submesh["entity_map"])
         bc = [dolfinx.fem.dirichletbc(v2a, boundary_dofs)]
 
         # quad mesh
@@ -558,7 +563,8 @@ def compute_stiffness(
         )
         apply_lifting(F, [a], [bc])
         set_bc(F, bc)
-        V1s[:, p] = opensg.utils.shared.solve_ksp(A, F, V)
+        w = shared_utils.solve_ksp(A, F, V)
+        V1s[:, p] = w.x.array[:]
 
     # Ainv
     Ainv=np.linalg.inv(D_eff).astype(np.float64)
