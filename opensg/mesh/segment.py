@@ -1,11 +1,12 @@
 from opensg.core import shell as core
 
-
+import opensg
 import basix
 import dolfinx
 import numpy as np
 from dolfinx.io import gmshio
 from mpi4py import MPI
+
 
 
 class SegmentMesh():
@@ -175,7 +176,7 @@ class SegmentMesh():
         """
         pp = self.mesh.geometry.x
 
-        is_left_boundary, is_right_boundary = opensg.generate_boundary_markers(
+        is_left_boundary, is_right_boundary = opensg.utils.shell.generate_boundary_markers(
             min(pp[:,0]), max(pp[:,0]))
 
         left_facets = dolfinx.mesh.locate_entities_boundary(
@@ -326,12 +327,6 @@ class SegmentMesh():
             self.right_submesh)
 
         return D_eff
-
-    def compute_stiffness_EB_boundary(self, ABD):
-        m_l = opensg.compute_eb_blade_segment_boundary(ABD, self.left_submesh)
-        m_r = opensg.compute_eb_blade_segment_boundary(ABD, self.right_submesh)
-
-        return m_l, m_r
 
     def compute_boundary_stiffness_timo(self, ABD):
         """Compute the Timoshenko beam stiffness matrices for the boundaries.

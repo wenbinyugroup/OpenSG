@@ -8,7 +8,7 @@ from scipy.sparse import csr_matrix
 import scipy
 
 from opensg.mesh.segment import SegmentMesh
-from ..utils import compute_utils as utils
+from ..utils import shell as utils
 
 
 class BladeMesh:

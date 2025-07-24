@@ -6,6 +6,6 @@ This module contains the main computational functions for:
 - General solvers
 """
 
-from .solve import compute_ABD_matrix, compute_timo_boun, compute_stiffness
+from opensg.core import shell, solid, stress_recov
 
 __all__ = ['compute_ABD_matrix', 'compute_timo_boun', 'compute_stiffness'] 
