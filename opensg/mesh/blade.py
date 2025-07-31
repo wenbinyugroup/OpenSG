@@ -8,7 +8,7 @@ from scipy.sparse import csr_matrix
 import scipy
 
 from opensg.mesh.segment import SegmentMesh
-from ..utils import compute_utils as utils
+from ..utils import shell as utils
 
 
 class BladeMesh:
@@ -102,7 +102,7 @@ class BladeMesh:
         return
     
         
-    def generate_segment_mesh(self, segment_index, filename):
+    def generate_segment_mesh(self, segment_index, filename="segment_mesh.msh"):
         """Generate a mesh for a specific blade segment.
         
         This method extracts a portion of the blade mesh corresponding to the
