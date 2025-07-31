@@ -3,6 +3,7 @@ from mpi4py import MPI
 import numpy as np
 import dolfinx
 import basix
+
 from dolfinx.fem import (
     form,
     petsc,
@@ -16,12 +17,13 @@ from ufl import TrialFunction, TestFunction, inner, lhs, rhs, as_tensor, dot, Sp
 from scipy.sparse import csr_matrix
 import petsc4py.PETSc
 from dolfinx.fem.petsc import assemble_matrix
-from ..utils import compute_utils as utils
 import scipy
 
 from mpi4py import MPI
 import ufl
-
+import opensg
+import opensg.utils.shared as shared_utils
+import opensg.utils.shell as utils
 
 ### ABD matrix computation
 # @profile
@@ -109,7 +111,7 @@ def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
     # lhs gives left hand side of weak form : coeff matrix here
     A = petsc.assemble_matrix(form(lhs(F2)))
     A.assemble()
-    null = utils.compute_nullspace(V)
+    null = shared_utils.compute_nullspace(V)
     A.setNullSpace(null)  # Set the nullspace
     xx = 3 * V.dofmap.index_map.local_range[1]  # total dofs
 
@@ -138,9 +140,9 @@ def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
             addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
         )
         null.remove(F)  # Orthogonalize F to the null space of A^T
-        w = utils.solve_ksp(A, F, V)
+        w = shared_utils.solve_ksp(A, F, V)
         Dhe[:, p] = F[:]  # Dhe matrix formation
-        V0[:, p] = w.vector[:]  # V0 matrix formation
+        V0[:, p] = w.x.array[:]  # V0 matrix formation
 
     # NOTE: fixed..
     D1 = np.matmul(V0.T, -Dhe)  # Additional information matrix
@@ -267,7 +269,7 @@ def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
     F2 = sum([dot(dot(Stiff_mat(material_database[mat_names[i]], angle[i]),gamma_h(dv)),gamma_h(v_))*dx(i) for i in range(nphases)]) # Weak form of energy(load vec)
     A=  petsc.assemble_matrix(form(F2))
     A.assemble()
-    null = utils.compute_nullspace(V)
+    null = shared_utils.compute_nullspace(V, ABD=True)
     A.setNullSpace(null)      # Set the nullspace
     ndofs = 3*V.dofmap.index_map.local_range[1] # total dofs
     # Initialization
@@ -282,8 +284,8 @@ def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
         F.ghostUpdate(addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE)
         null.remove(F)                        # Orthogonalize F to the null space of A^T
         Dhe[:,p]= F[:]                        # Dhe matrix formation
-        w = utils.solve_ksp(A,F,V)
-        V0[:,p]= w.vector[:]          # Solved Fluctuating Functions
+        w = shared_utils.solve_ksp(A,F,V)
+        V0[:,p]= w.x.array[:]          # Solved Fluctuating Functions
     D1=np.matmul(V0.T,-Dhe)
     
     def Dee_abd(x, material_parameters, theta):  
@@ -334,9 +336,12 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
     """
     boundary_mesh = boundary_submeshdata["mesh"]
     boundary_subdomains = boundary_submeshdata["subdomains"]
-    boundary_frame = boundary_submeshdata["frame"]
-    # frame override:
-    boundary_frame = utils.local_frame_1D(boundary_mesh)
+    # boundary_frame = boundary_submeshdata["frame"]
+    # Use pre-computed frame if available, otherwise compute it
+    if "frame" in boundary_submeshdata:
+        boundary_frame = boundary_submeshdata["frame"]
+    else:
+        boundary_frame = utils.local_frame_1D(boundary_mesh)
 
     nphases = len(ABD)
 
@@ -345,7 +350,7 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
     )
     boundary_mesh.topology.create_connectivity(1, 1)
     V0, Dle, Dhe, D_ee, V1s = utils.initialize_array(V_l)
-    nullspace_l = utils.compute_nullspace(V_l)
+    nullspace_l = shared_utils.compute_nullspace(V_l)
     #   A_l=A_mat(e,x,dx,nullspace(V_l),v_,dv,mesh_l)
     # Compute A_mat
     F2 = sum(
@@ -358,7 +363,7 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
             for i in range(nphases)
         ]
     )
-    ff = utils.deri_constraint(dv, v_, boundary_mesh, nh)
+    ff = shared_utils.deri_constraint(dv, v_, boundary_mesh, nh)
     A_l = assemble_matrix(form(F2 + ff))
     A_l.assemble()
     A_l.setNullSpace(nullspace_l)
@@ -379,8 +384,8 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
         )
         nullspace_l.remove(F_l)
         Dhe[:, p] = petsc.assemble_vector(r_he)[:]
-        w = utils.solve_ksp(A_l, F_l, V_l)
-        V0[:, p] = w.vector[:]
+        w = shared_utils.solve_ksp(A_l, F_l, V_l)
+        V0[:, p] = w.x.array[:]
 
     D1 = np.matmul(V0.T, -Dhe)
     for s in range(4):
@@ -432,7 +437,7 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
             for i in range(nphases)
         ]
     )
-    ff = utils.deri_constraint(dv, v_, boundary_mesh, nh)
+    ff = shared_utils.deri_constraint(dv, v_, boundary_mesh, nh)
     a3 = form(F_dhl + ff)
     Dhl = assemble_matrix(a3)
     Dhl.assemble()
@@ -594,16 +599,27 @@ def compute_stiffness(
     )
     
     # Initialize terms
+    # Use pre-computed frames if available, otherwise compute them
     # NOTE: why do we need the frame from local_frame_1D instead of the already computed frames
-    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(l_submesh["mesh"], utils.local_frame_1D(l_submesh["mesh"]),l_submesh["subdomains"])
-    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(r_submesh["mesh"], utils.local_frame_1D(r_submesh["mesh"]) ,r_submesh["subdomains"])
+    if "frame" in l_submesh:
+        l_frame = l_submesh["frame"]
+    else:
+        l_frame = utils.local_frame_1D(l_submesh["mesh"])
+    
+    if "frame" in r_submesh:
+        r_frame = r_submesh["frame"]
+    else:
+        r_frame = utils.local_frame_1D(r_submesh["mesh"])
+    
+    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(l_submesh["mesh"], l_frame, l_submesh["subdomains"])
+    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(r_submesh["mesh"], r_frame, r_submesh["subdomains"])
 
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-    D_effEB_l, Deff_l, V0_l, V1_l = core.compute_timo_boun(ABD, l_submesh, nh)
+    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.shell.compute_timo_boun(ABD, l_submesh, nh)
         # mesh_l, subdomains_l, local_frame_1D(mesh_l)
     # )
-    D_effEB_r, Deff_r, V0_r, V1_r = core.compute_timo_boun(ABD, r_submesh, nh)
+    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.shell.compute_timo_boun(ABD, r_submesh, nh)
         # mesh_r, subdomains_r, local_frame_1D(mesh_r)
     # )
 
@@ -624,7 +640,7 @@ def compute_stiffness(
             for i in range(nphases)
         ]
     )
-    ff = utils.deri_constraint(dv, v_, mesh, nh)
+    ff = shared_utils.deri_constraint(dv, v_, mesh, nh)
     a = form(F2 + ff)
     B = assemble_matrix(form(F2))  # Obtain coefficient matrix without BC applied: BB
     B.assemble()
@@ -662,8 +678,8 @@ def compute_stiffness(
             F, [a], [bc]
         )  # apply bc to rhs vector (Dhe) based on known fluc solutions
         set_bc(F, bc)
-        v = utils.solve_ksp(A, F, V)
-        V0[:, p] = v.vector[:]
+        v = shared_utils.solve_ksp(A, F, V)
+        V0[:, p] = v.x.array[:]
         #  Dhe[:,p]= petsc.assemble_vector(form(F2))
         Dhe[:, p] = scipy.sparse.csr_array(BB).dot(V0[:, p])
 
@@ -757,8 +773,8 @@ def compute_stiffness(
         )
         apply_lifting(F, [a], [bc])
         set_bc(F, bc)
-        w = utils.solve_ksp(A, F, V)
-        V1s[:, p] = w.vector[:]
+        w = shared_utils.solve_ksp(A, F, V)
+        V1s[:, p] = w.x.array[:]
 
     # C_tim
     C_tim = V0DllV0 + np.matmul(V1s.T, DhlV0 + DhlTV0Dle)

@@ -4,7 +4,7 @@ import dolfinx
 import basix
 from dolfinx.fem import form, petsc, Function, locate_dofs_topological
 from ufl import TrialFunction, TestFunction, rhs, as_tensor, dot, SpatialCoordinate, Measure, \
-    inner, grad, jump, CellDiameter, FacetNormal, avg, div, as_vector, Jacobian, sqrt, cross
+    grad, as_vector, Jacobian, sqrt, cross
 
 from petsc4py import PETSc
 from dolfinx.fem.petsc import assemble_matrix
@@ -12,6 +12,8 @@ from dolfinx.fem.petsc import assemble_matrix
 from mpi4py import MPI
 import ufl
 from contextlib import ExitStack
+
+from opensg.utils.shared import local_frame_1D
 
 
 def generate_boundary_markers(xmin, xmax):
@@ -36,88 +38,6 @@ def generate_boundary_markers(xmin, xmax):
         return np.isclose(x[0], xmax)
     return is_left_boundary, is_right_boundary
 
-
-def solve_ksp(A, F, V):
-    """Solve a linear system using the Krylov subspace method.
-    
-    This function solves the system Aw = F using PETSc's Krylov subspace solver
-    with LU preconditioner and MUMPS direct solver.
-
-    Parameters
-    ----------
-    A : PETSc.Mat
-        System matrix
-    F : PETSc.Vec
-        Right-hand side vector
-    V : dolfinx.fem.FunctionSpace
-        Function space for the solution
-
-    Returns
-    -------
-    dolfinx.fem.Function
-        Solution function w
-    """
-    w = Function(V)
-    ksp = PETSc.KSP()
-    ksp.create(comm = MPI.COMM_WORLD)
-    ksp.setOperators(A)
-    ksp.setType("preonly")
-    ksp.getPC().setType("lu")
-    ksp.getPC().setFactorSolverType("mumps")
-    ksp.getPC().setFactorSetUpSolverType()
-    ksp.getPC().getFactorMatrix().setMumpsIcntl(icntl = 24, ival = 1)  # detect null pivots
-    ksp.getPC().getFactorMatrix().setMumpsIcntl(icntl = 25, ival = 0)  # do not compute null space again
-    ksp.setFromOptions()
-    ksp.solve(F, w.vector)
-    w.vector.ghostUpdate(
-        addv = PETSc.InsertMode.INSERT, mode = PETSc.ScatterMode.FORWARD
-    )
-    ksp.destroy()
-    return w
-    # return w.vector[:],w
-
-def compute_nullspace(V):
-    """Compute the nullspace to restrict rigid body motions.
-
-    This function constructs a translational null space for the vector-valued 
-    function space V and ensures that it is properly orthonormalized.
-
-    Parameters
-    ----------
-    V : dolfinx.fem.FunctionSpace
-        Vector-valued function space
-
-    Returns
-    -------
-    PETSc.NullSpace
-        Nullspace object containing the basis vectors
-    """
-    # extract the Index Map from the Function Space
-    index_map = V.dofmap.index_map
-
-    # initialize nullspace basis with petsc vectors
-    nullspace_basis = [
-        dolfinx.la.create_petsc_vector(index_map, V.dofmap.index_map_bs)
-        for _ in range(4)
-    ]
-
-    with ExitStack() as stack:
-        vec_local = [stack.enter_context(xx.localForm()) for xx in nullspace_basis]
-        basis = [np.asarray(xx) for xx in vec_local]
-
-    # identify the degrees of freedom indices for each subspace (x, y, z)
-    dofs = [V.sub(i).dofmap.list for i in range(3)]
-
-    # Build translational null space basis
-    for i in range(3):
-        basis[i][dofs[i]] = 1.0
-
-    # Create vector space basis and orthogonalize
-    dolfinx.la.orthonormalize(nullspace_basis)
-    
-    ret_val = PETSc.NullSpace().create(nullspace_basis, comm = MPI.COMM_WORLD)
-
-    return ret_val
 
 def eps(vector):
     """Compute strain tensor and strain vector from displacement gradient.
@@ -170,33 +90,6 @@ def local_frame(mesh):
     e1=  t2/ sqrt(dot(t2, t2)) # 1- direction axis
     e2 = cross(e3, e1)
     e2 /= sqrt(dot(e2, e2)) # 2- direction  -circumferential (default not rh rule)
-    return e1, e2, e3
-
-def local_frame_1D(mesh): 
-    """Compute local orthonormal frame for 1D curved elements.
-    
-    This function computes an orthonormal frame (e1, e2, e3) at each point
-    of a 1D curved mesh, where:
-    - e1 is aligned with the global x-axis
-    - e2 is the tangent vector
-    - e3 is computed to complete the right-handed system
-    
-    Parameters
-    ----------
-    mesh : dolfinx.mesh.Mesh
-        1D mesh object
-        
-    Returns
-    -------
-    tuple
-        Three ufl.Vector objects (e1, e2, e3) forming the local frame
-    """
-    t = Jacobian(mesh)
-    t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]])
-    e2=  t1/ sqrt(dot(t1, t1))
-    e1=  as_vector([1,0,0]) # Right Lay up
-    e3= cross(e1,e2)
-    e3=  e3/ sqrt(dot(e3, e3)) 
     return e1, e2, e3
 
 def deri(e):
@@ -394,9 +287,9 @@ def gamma_e(e, x):
     ufl.Tensor
         6x4 matrix representing the strain measures
     """
-    k11,k12,k21,k22,k13,k23= deri(e)
-    x11,x21,x31= local_grad(e[0],x[0]), local_grad(e[0],x[1]), local_grad(e[0],x[2])
-    x12,x22,x32= local_grad(e[1],x[0]), local_grad(e[1],x[1]), local_grad(e[1],x[2])
+    k11,k12,k21,k22,k13,k23 = deri(e)
+    x11,x21,x31 = local_grad(e[0],x[0]), local_grad(e[0],x[1]), local_grad(e[0],x[2])
+    x12,x22,x32 = local_grad(e[1],x[0]), local_grad(e[1],x[1]), local_grad(e[1],x[2])
     y1,y2,y3= local_grad(e[2],x[0]), local_grad(e[2],x[1]), local_grad(e[2],x[2])
     d1=[x11,x21,x31]
     d2=[x12,x22,x32]
@@ -578,7 +471,7 @@ def solve_eb_boundary(ABD, meshdata):
         F.ghostUpdate(addv = PETSc.InsertMode.ADD, mode = PETSc.ScatterMode.REVERSE)
         nullspace.remove(F)
         w = solve_ksp(A,F,V)
-        V0[:,p]= w.vector[:] 
+        V0[:,p]= w.x.array[:] 
     return V0
 
 # NOTE: different definition between timo and eb scripts
@@ -657,7 +550,7 @@ def dof_mapping_quad(V, v2a, V_l, w_ll, boundary_facets_left, entity_mapl):
             if dofs[k] not in dof_S2L:
                 dof_S2L.append(dofs[k])
                 for j in range(3):
-                    v2a.vector[3*dofs[k]+j]=w_ll[3*dofs_left[k]+j] # store boundary solution of fluctuating functions
+                    v2a.x.array[3*dofs[k]+j]=w_ll[3*dofs_left[k]+j] # store boundary solution of fluctuating functions
     return v2a
 
 
@@ -730,7 +623,7 @@ def facet_vector_approximation(
     pattern.insert_diagonal(deac_blocks)
     pattern.finalize()
     u_0 = dolfinx.fem.Function(V)
-    u_0.vector.set(0)
+    u_0.x.array[:] = 0
     bc_deac = dolfinx.fem.dirichletbc(u_0, deac_blocks)
 
     # Create the matrix
@@ -768,8 +661,8 @@ def facet_vector_approximation(
 
     # Solve the linear system and perform ghost update.
     nh    = dolfinx.fem.Function(V)     # Function for the facet vector approximation
-    solver.solve(b, nh.vector)
-    nh.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+    solver.solve(b, nh.x.petsc_vec)
+    nh.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
     # Normalize the vectors to get the unit facet normal/tangent vector.
     nh_norm = ufl.sqrt(ufl.inner(nh, nh)) # Norm of facet vector
@@ -784,65 +677,3 @@ def facet_vector_approximation(
     return n_out
 
 
-def deri_constraint(dvl, v_l, mesh, nh):
-    """Compute derivative constraints for boundary conditions.
-    
-    This function computes constraints on derivatives that are
-    needed for proper boundary condition enforcement.
-    
-    Parameters
-    ----------
-    dvl : ufl.Coefficient
-        Trial function
-    v_l : ufl.Coefficient
-        Test function
-    mesh : dolfinx.mesh.Mesh
-        Mesh object
-    nh : float
-        Constraint parameter
-        
-    Returns
-    -------
-    ufl.Form
-        Form representing the derivative constraints
-    """
-    h = CellDiameter(mesh)
-    n = FacetNormal(mesh)
-    h_avg = (h('+') + h('-')) / 2.0
-    dS=Measure('dS')(domain=mesh)
-    if mesh.topology.dim==1:
-        alpha=1e10
-        nn= - inner(avg(div(grad(dvl))), jump(grad(v_l), n))*dS \
-            - inner(jump(grad(dvl), n), avg(div(grad(v_l))))*dS \
-            + (alpha/h_avg**2)*inner(jump(grad(dvl),n), jump(grad(v_l),n))*dS
-        return nn
-    elif mesh.topology.dim==2: 
-        alpha=1e10
-        beta=4e5
-        nn= - inner(avg(div(grad(dvl))), jump(grad(v_l), n))*dS \
-            - inner(jump(grad(dvl), n), avg(div(grad(v_l))))*dS \
-            + (alpha/h_avg**2)*inner(jump(grad(dvl),n), jump(grad(v_l),n))*dS
-        tt=- inner(avg(div(grad(dvl))), jump(grad(v_l), nh))*dS \
-           - inner(jump(grad(dvl), nh), avg(div(grad(v_l))))*dS \
-           + (beta/h_avg**2)*inner(jump(grad(dvl),nh), jump(grad(v_l),nh))*dS
-        return nn+tt
-
-
-# def Dee(i):  
-#     """
-#     Performs < gamma_e.T Stiffness_matrix gamma_e > and give simplified form
-    
-#     Parameters:
-#         i: matid 
-    
-#     Returns:
-#         Dee: [6,6] ufl tensor 
-#     """
-#     C = Stiff_mat(i)
-#     x0 = x[0]
-#     return as_tensor([(C[0,0],C[0,1],C[0,5],x0*C[0,0],x0*C[0,1],x0*C[0,5]),
-#                     (C[1,0],C[1,1],C[1,5],x0*C[1,0],x0*C[1,1],x0*C[1,5]),
-#                     (C[5,0],C[5,1],C[5,5],x0*C[5,0],x0*C[5,1],x0*C[5,5]),
-#                     (x0*C[0,0],x0*C[0,1],x0*C[0,5],x0*x0*C[0,0],x0*x0*C[0,1],x0*x0*C[0,5]),
-#                     (x0*C[1,0],x0*C[1,1],x0*C[1,5],x0*x0*C[1,0],x0*x0*C[1,1],x0*x0*C[1,5]),
-#                     (x0*C[5,0],x0*C[5,1],x0*C[5,5],x0*x0*C[5,0],x0*x0*C[5,1],x0*x0*C[5,5])])
