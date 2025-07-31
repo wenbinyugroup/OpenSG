@@ -64,6 +64,9 @@ class SolidSegmentMesh():
 
         self.subdomains = dolfinx.mesh.meshtags(self.mesh, self.mesh.topology.dim, cells, np.array(lnn,dtype=np.int32))
         
+        # Update elLayID to contain the mapped segment layup IDs (same as StandaloneSolidSegmentMesh)
+        # self.elLayID = np.array(lnn, dtype=np.float64)
+        
         self.tdim = self.mesh.topology.dim
         self.fdim = self.tdim - 1
         
@@ -365,7 +368,7 @@ class StandaloneSolidSegmentMesh:
         
         # Store elLayID for compatibility with SolidSegmentMesh
         # This should be the layup IDs in the order of the DOLFINx mesh cells
-        self.elLayID = np.array(lnn, dtype=np.float64)  # Match the dtype from SolidBladeMesh
+        # self.elLayID = np.array(lnn, dtype=np.float64)  # Match the dtype from SolidBladeMesh
         
         # Set up topology
         self.tdim = self.mesh.topology.dim
