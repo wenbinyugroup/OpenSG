@@ -207,7 +207,7 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
 
     return np.around(D_eff), np.around(Deff_srt), V0, V1s
 
-def compute_solidtimo_boun(mat_param, boundary_submeshdata):
+def compute_timo_boun(mat_param, boundary_submeshdata):
     """
     Solve EB and Timo model for boundary mesh.
     The output fluctuating functions V0 and V1s are used dirichilet boundary constraints
@@ -423,8 +423,8 @@ def compute_stiffness(
     e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(r_submesh["mesh"], r_submesh["frame"] ,r_submesh["subdomains"])
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.solid.compute_solidtimo_boun(mat_param, l_submesh)
-    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.solid.compute_solidtimo_boun(mat_param, r_submesh)
+    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.solid.compute_timo_boun(mat_param, l_submesh)
+    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.solid.compute_timo_boun(mat_param, r_submesh)
 
     # ***************** Wb Segment (surface mesh) computation begins************************
     e, V, dv, v_, x, dx = utils.local_boun(meshdata["mesh"], meshdata["frame"], meshdata["subdomains"])

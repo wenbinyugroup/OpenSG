@@ -16,6 +16,7 @@ from opensg.core.shell import compute_ABD_matrix, compute_timo_boun, compute_sti
 # from opensg.core.solid import 
 
 # I/O operations
+import opensg.io as io
 from opensg.io import load_yaml, write_yaml
 
 # Mesh handling

@@ -7,5 +7,4 @@ This module contains functions for:
 """
 
 from .io import load_yaml, write_yaml, write_mesh, validate_mesh_data
-
-__all__ = ['load_yaml', 'write_yaml', 'write_mesh', 'validate_mesh_data'] 
+from .util import generate_segment_shell_mesh_files

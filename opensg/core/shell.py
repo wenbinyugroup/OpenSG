@@ -269,7 +269,7 @@ def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
     F2 = sum([dot(dot(Stiff_mat(material_database[mat_names[i]], angle[i]),gamma_h(dv)),gamma_h(v_))*dx(i) for i in range(nphases)]) # Weak form of energy(load vec)
     A=  petsc.assemble_matrix(form(F2))
     A.assemble()
-    null = shared_utils.compute_nullspace(V)
+    null = shared_utils.compute_nullspace(V, ABD=True)
     A.setNullSpace(null)      # Set the nullspace
     ndofs = 3*V.dofmap.index_map.local_range[1] # total dofs
     # Initialization
@@ -336,9 +336,12 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
     """
     boundary_mesh = boundary_submeshdata["mesh"]
     boundary_subdomains = boundary_submeshdata["subdomains"]
-    boundary_frame = boundary_submeshdata["frame"]
-    # frame override:
-    boundary_frame = utils.local_frame_1D(boundary_mesh)
+    # boundary_frame = boundary_submeshdata["frame"]
+    # Use pre-computed frame if available, otherwise compute it
+    if "frame" in boundary_submeshdata:
+        boundary_frame = boundary_submeshdata["frame"]
+    else:
+        boundary_frame = utils.local_frame_1D(boundary_mesh)
 
     nphases = len(ABD)
 
@@ -596,9 +599,20 @@ def compute_stiffness(
     )
     
     # Initialize terms
+    # Use pre-computed frames if available, otherwise compute them
     # NOTE: why do we need the frame from local_frame_1D instead of the already computed frames
-    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(l_submesh["mesh"], utils.local_frame_1D(l_submesh["mesh"]),l_submesh["subdomains"])
-    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(r_submesh["mesh"], utils.local_frame_1D(r_submesh["mesh"]) ,r_submesh["subdomains"])
+    if "frame" in l_submesh:
+        l_frame = l_submesh["frame"]
+    else:
+        l_frame = utils.local_frame_1D(l_submesh["mesh"])
+    
+    if "frame" in r_submesh:
+        r_frame = r_submesh["frame"]
+    else:
+        r_frame = utils.local_frame_1D(r_submesh["mesh"])
+    
+    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(l_submesh["mesh"], l_frame, l_submesh["subdomains"])
+    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(r_submesh["mesh"], r_frame, r_submesh["subdomains"])
 
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
