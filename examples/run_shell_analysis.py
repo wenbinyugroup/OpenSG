@@ -35,7 +35,7 @@ opensg.io.generate_segment_shell_mesh_files(
 segment_stiffness_matrices = []
 boundary_stiffness_matrices = []
 compute_times = []
-for i in range(30):
+for i in range(3):
     segment_file = Path("segments_all", f"{blade_mesh_file.stem}_segment_{i+1}.yaml")
     # Generate mesh for current segment
     segment_mesh = StandaloneSegmentMesh(segment_file)
