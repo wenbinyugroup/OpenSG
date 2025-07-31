@@ -11,31 +11,34 @@ The script processes a wind turbine blade mesh and computes its structural
 properties using both Euler-Bernoulli and Timoshenko beam theories.
 """
 
-from os.path import join
+from pathlib import Path
 
 # import pynumad
 import opensg
 import numpy as np
 import time
+from opensg.mesh.segment import StandaloneSegmentMesh
 
 # 1) Load in mesh data
-# mesh_yaml = join("data", "BAR_URC_numEl_52.yaml")
-mesh_yaml = join("data", "bar_urc_shell_mesh.yaml")
-mesh_data = opensg.load_yaml(mesh_yaml)
+blade_mesh_file = Path("data", "bar_urc_shell_mesh.yaml")
 
-# 2) Create BladeMesh Object
-blade_mesh = opensg.BladeMesh(mesh_data)
+# Generate all segments (default behavior)
+print("\nGenerating all segments...")
+opensg.io.generate_segment_shell_mesh_files(
+    blade_mesh_file, 
+    segment_folder="segments_all/"
+)
+
 
 # 3) Compute stiffness matrices for each blade segment
-segment_start_index = 1
-segment_end_index = 2
 
 segment_stiffness_matrices = []
 boundary_stiffness_matrices = []
 compute_times = []
-for i in range(segment_start_index, segment_end_index):
+for i in range(30):
+    segment_file = Path("segments_all", f"{blade_mesh_file.stem}_segment_{i+1}.yaml")
     # Generate mesh for current segment
-    segment_mesh = blade_mesh.generate_segment_mesh(segment_index=i, filename="section.msh")
+    segment_mesh = StandaloneSegmentMesh(segment_file)
     
     # Compute ABD matrices for the segment
     ABD = segment_mesh.compute_ABD()
