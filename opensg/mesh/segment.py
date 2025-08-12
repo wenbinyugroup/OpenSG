@@ -625,29 +625,6 @@ class StandaloneSegmentMesh:
         print('Computed', nphases, 'ABD matrix')
         return ABD_
     
-    def compute_stiffness_EB(self, ABD):
-        """Compute the Euler-Bernoulli beam stiffness matrix.
-        
-        Parameters
-        ----------
-        ABD : list
-            List of ABD matrices for each unique layup
-            
-        Returns
-        -------
-        numpy.ndarray
-            4x4 stiffness matrix for Euler-Bernoulli beam theory
-        """
-        D_eff = opensg.compute_stiffness_EB_blade_segment(
-            ABD,
-            self.mesh,
-            self.frame,
-            self.subdomains,
-            self.left_submesh,
-            self.right_submesh)
-
-        return D_eff
-    
     def compute_stiffness(self, ABD):
         """Compute all stiffness matrices for the segment.
         
