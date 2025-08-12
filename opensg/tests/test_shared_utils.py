@@ -8,7 +8,7 @@ import basix
 from mpi4py import MPI
 import petsc4py.PETSc as PETSc
 
-from opensg.utils.shared import compute_nullspace, solve_ksp, local_frame_1D
+from opensg.utils.shared import compute_nullspace, solve_ksp, local_frame_1D, deri_constraint
 
 
 class TestSharedUtils(unittest.TestCase):
@@ -90,6 +90,54 @@ class TestSharedUtils(unittest.TestCase):
     # def test_solve_ksp_simple_system(self):
     #     """Test solve_ksp with a simple linear system."""
 
+class TestDeriConstraint(unittest.TestCase):
+    """Test case for the deri_constraint function."""
+    
+    def test_deri_constraint_1d(self):
+        """Test deri_constraint for a 1D mesh."""
+        # Create a simple 1D mesh
+        mesh = dolfinx.mesh.create_unit_interval(MPI.COMM_WORLD, 10)
+        
+        # Create a function space
+        element = basix.ufl.element("Lagrange", "interval", 2)
+        V = dolfinx.fem.functionspace(mesh, element)
+        
+        # Create trial and test functions
+        u = ufl.TrialFunction(V)
+        v = ufl.TestFunction(V)
+        
+        # Create a normal vector for the constraint
+        nh = ufl.as_vector([1.0, 0.0])
+        
+        # Compute the derivative constraint
+        constraint = deri_constraint(u, v, mesh, nh)
+        
+        # Check that the constraint is a UFL form
+        self.assertIsNotNone(constraint)
+        self.assertTrue(hasattr(constraint, 'ufl_domain'))
+    
+    def test_deri_constraint_2d(self):
+        """Test deri_constraint for a 2D mesh."""
+        # Create a simple 2D mesh
+        mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 5, 5)
+        
+        # Create a function space
+        element = basix.ufl.element("Lagrange", "triangle", 2)
+        V = dolfinx.fem.functionspace(mesh, element)
+        
+        # Create trial and test functions
+        u = ufl.TrialFunction(V)
+        v = ufl.TestFunction(V)
+        
+        # Create a normal vector for the constraint
+        nh = ufl.as_vector([1.0, 0.0])
+        
+        # Compute the derivative constraint
+        constraint = deri_constraint(u, v, mesh, nh)
+        
+        # Check that the constraint is a UFL form
+        self.assertIsNotNone(constraint)
+        self.assertTrue(hasattr(constraint, 'ufl_domain'))
 
 if __name__ == "__main__":
     unittest.main()
