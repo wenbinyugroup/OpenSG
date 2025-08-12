@@ -91,7 +91,7 @@ def sigma_prestress(i,CC,strain_3D):
                       (s_pre[5],s_pre[1],s_pre[3]),
                       (s_pre[4],s_pre[3],s_pre[2])]),s_pre
                           
-def mass_boun(x,dx,density,nphases): # Mass matrix
+def get_mass_solid(x,dx,density,nphases): # Mass matrix
     mu= assemble_scalar(form(sum([density[i]*dx(i) for i in range(nphases)])))
     xm2=(1/mu)*assemble_scalar(form(sum([x[1]*density[i]*dx(i) for i in range(nphases)])))
     xm3=(1/mu)*assemble_scalar(form(sum([x[2]*density[i]*dx(i) for i in range(nphases)])))
