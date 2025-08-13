@@ -20,26 +20,26 @@ class TestShell(unittest.TestCase):
         """Test against baseline results for a segment"""        
         segment_file = test_data_dir / "bar_urc_shell_mesh_segment_2.yaml"
         
-        section_mesh = ShellSegmentMesh(str(segment_file))
+        segment_mesh = ShellSegmentMesh(str(segment_file))
         
-        section_mesh.generate_mesh_file("test_section.msh")
-        assert filecmp.cmp("test_section.msh", validation_data_dir / "test_section.msh")
+        segment_mesh.generate_mesh_file("test_shell_segment.msh")
+        assert filecmp.cmp("test_shell_segment.msh", validation_data_dir / "test_shell_segment.msh")
         
         # ABD computation
-        abd = section_mesh.compute_ABD()
+        abd = segment_mesh.compute_ABD()
         abd_concat = np.concatenate(abd)
         
-        expected_abd = np.loadtxt(join(validation_data_dir, "test_abd.txt"))
+        expected_abd = np.loadtxt(join(validation_data_dir, "test_shell_abd.txt"))
         assert np.isclose(abd_concat, expected_abd).all()
         
         # Stiffness computation
-        timo_seg_stiffness, eb_seg_stiffness, l_timo_stiffness, r_timo_stiffness = section_mesh.compute_stiffness(abd)
+        timo_seg_stiffness, eb_seg_stiffness, l_timo_stiffness, r_timo_stiffness = segment_mesh.compute_stiffness(abd)
         
         # Validate results against baseline
-        test_timo_seg_stiffness = np.loadtxt(join(validation_data_dir, 'test_timo_seg_stiffness.txt'))
-        test_eb_seg_stiffness = np.loadtxt(join(validation_data_dir, 'test_eb_seg_stiffness.txt'))
-        test_l_timo_stiffness = np.loadtxt(join(validation_data_dir, 'test_l_timo_stiffness.txt'))
-        test_r_timo_stiffness = np.loadtxt(join(validation_data_dir, 'test_r_timo_stiffness.txt'))
+        test_timo_seg_stiffness = np.loadtxt(join(validation_data_dir, "test_shell_timo_seg_stiffness.txt"))
+        test_eb_seg_stiffness = np.loadtxt(join(validation_data_dir, "test_shell_eb_seg_stiffness.txt"))
+        test_l_timo_stiffness = np.loadtxt(join(validation_data_dir, "test_shell_l_timo_stiffness.txt"))
+        test_r_timo_stiffness = np.loadtxt(join(validation_data_dir, "test_shell_r_timo_stiffness.txt"))
         
         # print("TROUBLESHOOT TEST")
         # print((timo_seg_stiffness - test_timo_seg_stiffness).max())
@@ -58,7 +58,7 @@ class TestShell(unittest.TestCase):
         assert np.isclose(r_timo_stiffness, test_r_timo_stiffness, rtol=1e-03, atol=1e-04).all()
         
         # Remove generated files
-        os.remove("test_section.msh")
+        os.remove("test_shell_segment.msh")
         
         print("Baseline validation passed!")
         return
@@ -78,21 +78,21 @@ def run_workflow():
     
     segment_file =  test_data_dir / "bar_urc_shell_mesh_segment_2.yaml"
         
-    section_mesh = ShellSegmentMesh(str(segment_file))
+    segment_mesh = ShellSegmentMesh(str(segment_file))
     
-    section_mesh.generate_mesh_file(validation_data_dir /"test_section.msh")
+    segment_mesh.generate_mesh_file(validation_data_dir /"test_shell_segment.msh")
     
-    abd = section_mesh.compute_ABD()
+    abd = segment_mesh.compute_ABD()
     abd_concat = np.concatenate(abd)
     
-    np.savetxt(validation_data_dir / 'test_abd.txt', abd_concat) 
+    np.savetxt(validation_data_dir / "test_shell_abd.txt", abd_concat) 
     
-    timo_seg_stiffness, eb_seg_stiffness, l_timo_stiffness, r_timo_stiffness = section_mesh.compute_stiffness(abd)
+    timo_seg_stiffness, eb_seg_stiffness, l_timo_stiffness, r_timo_stiffness = segment_mesh.compute_stiffness(abd)
     
-    np.savetxt(join(validation_data_dir, 'test_timo_seg_stiffness.txt'), timo_seg_stiffness)
-    np.savetxt(join(validation_data_dir, 'test_eb_seg_stiffness.txt'), eb_seg_stiffness)
-    np.savetxt(join(validation_data_dir, 'test_l_timo_stiffness.txt'), l_timo_stiffness)
-    np.savetxt(join(validation_data_dir, 'test_r_timo_stiffness.txt'), r_timo_stiffness)
+    np.savetxt(join(validation_data_dir, "test_shell_timo_seg_stiffness.txt"), timo_seg_stiffness)
+    np.savetxt(join(validation_data_dir, "test_shell_eb_seg_stiffness.txt"), eb_seg_stiffness)
+    np.savetxt(join(validation_data_dir, "test_shell_l_timo_stiffness.txt"), l_timo_stiffness)
+    np.savetxt(join(validation_data_dir, "test_shell_r_timo_stiffness.txt"), r_timo_stiffness)
     
     return
     

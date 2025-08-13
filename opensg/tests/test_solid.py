@@ -21,17 +21,17 @@ class TestSolid(unittest.TestCase):
         """Test against baseline results for a solid segment"""
         segment_file = test_data_dir / "bar_urc_npl_2_ar_10-segment_2.yaml"
 
-        section_mesh = SolidSegmentMesh(segment_file)
+        segment_mesh = SolidSegmentMesh(segment_file)
         
-        section_mesh.generate_mesh_file("test_solid_section.msh")
-        baseline_mesh_file = validation_data_dir / "test_solid_section.msh"
-        assert filecmp.cmp("test_solid_section.msh", baseline_mesh_file)
+        segment_mesh.generate_mesh_file("test_solid_segment.msh")
+        baseline_mesh_file = validation_data_dir / "test_solid_segment.msh"
+        assert filecmp.cmp("test_solid_segment.msh", baseline_mesh_file)
         
         # Extract material parameters and mesh data
-        material_parameters, density = section_mesh.material_database
-        meshdata = section_mesh.meshdata
-        l_submesh = section_mesh.left_submesh
-        r_submesh = section_mesh.right_submesh
+        material_parameters, density = segment_mesh.material_database
+        meshdata = segment_mesh.meshdata
+        l_submesh = segment_mesh.left_submesh
+        r_submesh = segment_mesh.right_submesh
         
         # Compute stiffness matrices
         timo_seg_stiffness, V0, V1s = compute_stiffness(
@@ -57,8 +57,8 @@ class TestSolid(unittest.TestCase):
         assert np.isclose(V1s, test_V1s, rtol=1e-03, atol=1e-04).all()
 
         # Remove generated files
-        if os.path.exists("test_solid_section.msh"):
-            os.remove("test_solid_section.msh")
+        if os.path.exists("test_solid_segment.msh"):
+            os.remove("test_solid_segment.msh")
         
         print("Solid baseline validation passed!")
         return
@@ -95,15 +95,15 @@ def run_solid_workflow():
 
     segment_file = test_data_dir / "bar_urc_npl_2_ar_10-segment_2.yaml"
     
-    section_mesh = SolidSegmentMesh(str(segment_file))
+    segment_mesh = SolidSegmentMesh(str(segment_file))
     
-    section_mesh.generate_mesh_file(validation_data_dir / "test_solid_section.msh")
+    segment_mesh.generate_mesh_file(validation_data_dir / "test_solid_segment.msh")
     
     # Extract material parameters and mesh data
-    material_parameters, density = section_mesh.material_database
-    meshdata = section_mesh.meshdata
-    l_submesh = section_mesh.left_submesh
-    r_submesh = section_mesh.right_submesh
+    material_parameters, density = segment_mesh.material_database
+    meshdata = segment_mesh.meshdata
+    l_submesh = segment_mesh.left_submesh
+    r_submesh = segment_mesh.right_submesh
     
     # Compute stiffness matrices
     timo_seg_stiffness, V0, V1s = compute_stiffness(
