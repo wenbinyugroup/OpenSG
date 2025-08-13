@@ -73,60 +73,60 @@ def validate_mesh_data(mesh_data):
     """
     raise NotImplementedError("Mesh data validation is not yet implemented")
 
-def write_mesh(filename, blade_mesh):
-    """Write mesh data to a GMSH format file.
+# def write_mesh(filename, blade_mesh):
+#     """Write mesh data to a GMSH format file.
     
-    Parameters
-    ----------
-    filename : str
-        Path to the output mesh file
-    blade_mesh : BladeMesh
-        BladeMesh object containing the mesh data to write
+#     Parameters
+#     ----------
+#     filename : str
+#         Path to the output mesh file
+#     blade_mesh : BladeMesh
+#         BladeMesh object containing the mesh data to write
         
-    Returns
-    -------
-    None
+#     Returns
+#     -------
+#     None
     
-    Notes
-    -----
-    The mesh is written in GMSH 2.2 format with the following sections:
-    - MeshFormat: version and type information
-    - Nodes: node coordinates
-    - Elements: element definitions with tags
-    """
-    mesh_file = open(filename, 'w')
+#     Notes
+#     -----
+#     The mesh is written in GMSH 2.2 format with the following sections:
+#     - MeshFormat: version and type information
+#     - Nodes: node coordinates
+#     - Elements: element definitions with tags
+#     """
+#     mesh_file = open(filename, 'w')
 
-    mesh_file.write('$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n')
-    newNumNds = np.max(ndNewLabs)
-    mesh_file.write(str(newNumNds) + '\n')
+#     mesh_file.write('$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n')
+#     newNumNds = np.max(ndNewLabs)
+#     mesh_file.write(str(newNumNds) + '\n')
 
-    for i, nd in enumerate(nodes):
-        lab = ndNewLabs[i]
-        if(lab > -1):
-            ln = [str(lab),str(nd[2]),str(nd[0]),str(nd[1])]
-        #  ln = [str(lab),str(nd[0]),str(nd[1]),str(nd[2])]
-            mesh_file.write(' '.join(ln) + '\n')
+#     for i, nd in enumerate(nodes):
+#         lab = ndNewLabs[i]
+#         if(lab > -1):
+#             ln = [str(lab),str(nd[2]),str(nd[0]),str(nd[1])]
+#         #  ln = [str(lab),str(nd[0]),str(nd[1]),str(nd[2])]
+#             mesh_file.write(' '.join(ln) + '\n')
 
-    mesh_file.write('$EndNodes\n$Elements\n')
+#     mesh_file.write('$EndNodes\n$Elements\n')
 
-    newNumEls = np.max(elNewLabs)
-    mesh_file.write(str(newNumEls) + '\n')
+#     newNumEls = np.max(elNewLabs)
+#     mesh_file.write(str(newNumEls) + '\n')
 
-    for i, el in enumerate(elements):
-        lab = elNewLabs[i]
-        if(lab > -1):
-            ln = [str(lab)]
-            if(el[3] == -1):
-                ln.append('2')
-            else:
-                ln.append('3')
-            ln.append('2')
-            ln.append(str(elLayID[i]+1))
-            ln.append(str(elLayID[i]+1))
-            for nd in el:
-                if(nd > -1):
-                    ln.append(str(ndNewLabs[nd]))
-            mesh_file.write(' '.join(ln) + '\n')
-    mesh_file.write('$EndElements\n')
+#     for i, el in enumerate(elements):
+#         lab = elNewLabs[i]
+#         if(lab > -1):
+#             ln = [str(lab)]
+#             if(el[3] == -1):
+#                 ln.append('2')
+#             else:
+#                 ln.append('3')
+#             ln.append('2')
+#             ln.append(str(elLayID[i]+1))
+#             ln.append(str(elLayID[i]+1))
+#             for nd in el:
+#                 if(nd > -1):
+#                     ln.append(str(ndNewLabs[nd]))
+#             mesh_file.write(' '.join(ln) + '\n')
+#     mesh_file.write('$EndElements\n')
 
-    mesh_file.close()
+#     mesh_file.close()
