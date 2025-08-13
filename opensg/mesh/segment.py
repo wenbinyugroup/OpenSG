@@ -17,11 +17,11 @@ import tempfile
 
 class ShellSegmentMesh:
     """A standalone class representing a segment of a wind turbine blade mesh.
-
+    
     This class is designed to work independently without requiring a parent BladeMesh.
     It reads all necessary data directly from segment YAML files and provides
     the same computational capabilities as the original SegmentMesh.
-
+    
     Attributes
     ----------
     mesh : dolfinx.mesh.Mesh
@@ -41,20 +41,20 @@ class ShellSegmentMesh:
     material_database : dict
         Processed database of material properties
     """
-
+    
     def __init__(self, segment_yaml_file):
         """Initialize a StandaloneSegmentMesh object from a YAML file.
-
+        
         Parameters
         ----------
         segment_yaml_file : str
             Path to the segment YAML file containing all necessary data
         """
-
+        
         # Load segment data from YAML
         with open(segment_yaml_file, 'r') as f:
             segment_data = yaml.safe_load(f)
-
+        
         # Extract data from YAML
         self.nodes = segment_data['nodes']
         self.elements = segment_data['elements']
@@ -62,20 +62,20 @@ class ShellSegmentMesh:
         self.materials = segment_data['materials']
         self.sections = segment_data['sections']
         self.element_orientations = segment_data['elementOrientations']
-
+        
         # Build mesh
         self._build_mesh()
-
+        
         # Build layup database
         self._build_layup_database()
-
+        
         # Build local orientations and boundary data
         self._build_local_orientations()
         self._build_boundary_submeshdata()
-
+        
     def _build_layup_database(self):
         """Build the layup database from the segment data.
-
+        
         This method creates a dictionary containing the layup information
         for each section in the segment.
         """
@@ -89,7 +89,7 @@ class ShellSegmentMesh:
             material_dict["G"] = elastic['G']
             material_dict["nu"] = elastic['nu']
             self.material_database[material['name']] = material_dict
-
+        
         # Create layup database from sections
         mat_names, thick, angle, nlay = [], [], [], []
         for section in self.sections:
@@ -103,46 +103,60 @@ class ShellSegmentMesh:
             mat_names.append(m)
             thick.append(t)
             angle.append(an)
-
+        
         self.layup_database = {"mat_names": mat_names, "thick": thick, "angle": angle, "nlay": nlay}
-
-    def _build_mesh(self):
-        """Build the mesh from the segment data.
-
-        This method creates a DOLFINx mesh object from the segment data.
+        
+    def generate_mesh_file(self, filename):
+        """Generate a GMSH format mesh file from the segment data.
+        
+        Parameters
+        ----------
+        filename : str
+            Path where the mesh file should be written
         """
-        # Create temporary MSH file for DOLFINx compatibility
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.msh', delete=False) as temp_msh:
-            msh_filename = temp_msh.name
-
+        with open(filename, 'w') as msh_file:
             # Write GMSH format
-            temp_msh.write('$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n')
-            temp_msh.write(f'{len(self.nodes)}\n')
-
+            msh_file.write('$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n')
+            msh_file.write(f'{len(self.nodes)}\n')
+            
             for i, node in enumerate(self.nodes):
-                temp_msh.write(f'{i+1} {node[2]} {node[0]} {node[1]}\n')
-
-            temp_msh.write('$EndNodes\n$Elements\n')
-            temp_msh.write(f'{len(self.elements)}\n')
-
+                msh_file.write(f'{i+1} {node[2]} {node[0]} {node[1]}\n')
+            
+            msh_file.write('$EndNodes\n$Elements\n')
+            msh_file.write(f'{len(self.elements)}\n')
+            
             # Create subdomain mapping from sets
             subdomains = np.zeros(len(self.elements), dtype=int)
             for i, element_set in enumerate(self.sets['element']):
                 for element_idx in element_set['labels']:
                     subdomains[element_idx] = i
-
+            
             for i, element in enumerate(self.elements):
                 element_type = '3' if len(element) == 4 else '2'  # 3=quad, 2=tri
-                temp_msh.write(f'{i+1} {element_type} 2 {subdomains[i]+1} {subdomains[i]+1}')
+                msh_file.write(f'{i+1} {element_type} 2 {subdomains[i]+1} {subdomains[i]+1}')
                 for node_idx in element:
-                    temp_msh.write(f' {node_idx+1}')
-                temp_msh.write('\n')
+                    msh_file.write(f' {node_idx+1}')
+                msh_file.write('\n')
+            
+            msh_file.write('$EndElements\n')
+        
+        return
 
-            temp_msh.write('$EndElements\n')
-
+    def _build_mesh(self):
+        """Build the mesh from the segment data.
+        
+        This method creates a DOLFINx mesh object from the segment data.
+        """
+        # Create temporary MSH file for DOLFINx compatibility
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.msh', delete=False) as temp_msh:
+            msh_filename = temp_msh.name
+        
+        # Generate the mesh file content
+        self.generate_mesh_file(msh_filename)
+        
         # Load mesh using DOLFINx
         self.mesh, self.subdomains, self.boundaries = gmshio.read_from_msh(msh_filename, MPI.COMM_WORLD, 0, gdim=3)
-
+        
         self.original_cell_index = self.mesh.topology.original_cell_index # Original cell Index from mesh file
         lnn = self.subdomains.values[:] - 1
         self.num_cells = self.mesh.topology.index_map(self.mesh.topology.dim).size_local
@@ -152,14 +166,16 @@ class ShellSegmentMesh:
 
         # Clean up temporary file
         os.unlink(msh_filename)
-
+        
         # Set up topology
         self.tdim = self.mesh.topology.dim
         self.fdim = self.tdim - 1
-
+        
+        return
+    
     def _build_local_orientations(self):
         """Build local orientation vectors for each element.
-
+        
         This method constructs the local coordinate system for each element
         based on the element orientations provided in the mesh data.
         """
@@ -178,15 +194,15 @@ class ShellSegmentMesh:
             EE2.x.array[3*k], EE2.x.array[3*k+1], EE2.x.array[3*k+2] = orientation[5], orientation[3], orientation[4]  # e2
             N.x.array[3*k], N.x.array[3*k+1], N.x.array[3*k+2] = orientation[8], orientation[6], orientation[7]   # e3 
             EE1.x.array[3*k], EE1.x.array[3*k+1], EE1.x.array[3*k+2] = orientation[2], orientation[0], orientation[1]  # e1
-
+        
         self.EE1 = EE1
         self.N = N
         self.EE2 = EE2
         self.frame = [EE1, EE2, N]
-
+    
     def _build_boundary_submeshdata(self):
         """Build submesh data for the left and right boundaries.
-
+        
         This method extracts and processes the mesh data for the boundary
         regions of the segment, which are needed for applying boundary
         conditions and computing boundary stiffness properties.
@@ -258,13 +274,13 @@ class ShellSegmentMesh:
 
         self.left_submesh["subdomains"], self.left_submesh["frame"], self.left_submesh["facets"] = _build_boundary_subdomains(self.left_submesh)
         self.right_submesh["subdomains"], self.right_submesh["frame"], self.right_submesh["facets"] = _build_boundary_subdomains(self.right_submesh)
-
+    
     def compute_ABD(self):
         """Compute the ABD (stiffness) matrices for the segment.
-
+        
         This method computes the ABD matrices that relate forces and moments
         to strains and curvatures for each unique layup in the segment.
-
+        
         Returns
         -------
         list
@@ -284,18 +300,18 @@ class ShellSegmentMesh:
 
         print('Computed', nphases, 'ABD matrix')
         return ABD_
-
+    
     def compute_stiffness(self, ABD):
         """Compute all stiffness matrices for the segment.
-
+        
         This method computes both the Euler-Bernoulli and Timoshenko
         stiffness matrices for the segment and its boundaries.
-
+        
         Parameters
         ----------
         ABD : list
             List of ABD matrices for each unique layup
-
+            
         Returns
         -------
         tuple
@@ -404,37 +420,51 @@ class SolidSegmentMesh:
         self.material_database = (material_parameters, density)
         return
 
-    def _build_mesh(self):
-        """Build the mesh from the segment data (same as SolidBladeMesh.generate_segment_mesh + SolidSegmentMesh.__init__)."""
-        # Create temporary MSH file for DOLFINx compatibility (same as SolidBladeMesh.generate_segment_mesh)
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.msh', delete=False) as temp_msh:
-            msh_filename = temp_msh.name
-
+    def generate_mesh_file(self, filename):
+        """Generate a GMSH format mesh file from the solid segment data.
+        
+        Parameters
+        ----------
+        filename : str
+            Path where the mesh file should be written
+        """
+        with open(filename, 'w') as msh_file:
             # Write GMSH format
-            temp_msh.write('$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n')
-            temp_msh.write(str(self.num_nodes) + '\n')
+            msh_file.write('$MeshFormat\n2.2 0 8\n$EndMeshFormat\n$Nodes\n')
+            msh_file.write(str(self.num_nodes) + '\n')
 
             for i, nd in enumerate(self.nodes):
                 # Handle node format (same as SolidBladeMesh.generate_segment_mesh)
                 nd = nd[0].split()
                 ln = [str(i+1), str(nd[2]), str(nd[0]), str(nd[1])]  # Making x-axis as beam axis
-                temp_msh.write(' '.join(ln) + '\n')
+                msh_file.write(' '.join(ln) + '\n')
 
-            temp_msh.write('$EndNodes\n$Elements\n')
-            temp_msh.write(str(self.num_elements) + '\n')
+            msh_file.write('$EndNodes\n$Elements\n')
+            msh_file.write(str(self.num_elements) + '\n')
 
             for j, eli in enumerate(self.elements):
                 ln = [str(j+1)]
-                ln.append('5')
+                ln.append('5')  # Element type 5 for solid elements
                 ln.append('2')
                 ln.append(str(1))
                 ln.append(str(1))
                 ell = eli[0].split()
                 for n in ell:
                     ln.append(n)
-                temp_msh.write(' '.join(ln) + '\n')
+                msh_file.write(' '.join(ln) + '\n')
 
-            temp_msh.write('$EndElements\n')
+            msh_file.write('$EndElements\n')
+
+        return
+
+    def _build_mesh(self):
+        """Build the mesh from the segment data (same as SolidBladeMesh.generate_segment_mesh + SolidSegmentMesh.__init__)."""
+        # Create temporary MSH file for DOLFINx compatibility (same as SolidBladeMesh.generate_segment_mesh)
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.msh', delete=False) as temp_msh:
+            msh_filename = temp_msh.name
+
+        # Generate the mesh file content
+        self.generate_mesh_file(msh_filename)
 
         # Load mesh using DOLFINx (same as SolidSegmentMesh.__init__)
         gmsh.initialize()
@@ -467,6 +497,8 @@ class SolidSegmentMesh:
 
         # Clean up temporary file
         os.unlink(msh_filename)
+
+        return
 
     def _build_local_orientations(self):
         """Build local orientation vectors for each element (same as SolidSegmentMesh._build_local_orientations)."""
