@@ -20,10 +20,7 @@ import opensg.io as io
 from opensg.io import load_yaml, write_yaml
 
 # Mesh handling
-from opensg.mesh.blade import BladeMesh
-from opensg.mesh.solidblade import SolidBladeMesh
-from opensg.mesh.segment import SegmentMesh
-from opensg.mesh.solidsegment import SolidSegmentMesh
+from opensg.mesh.blade import ShellBladeMesh, SolidBladeMesh, ShellBladeSegmentMesh, SolidBladeSegmentMesh
 
 
 # Utility functions
@@ -41,7 +38,7 @@ __all__ = [
     'load_yaml', 'write_yaml',
     
     # Classes
-    'BladeMesh', 'ConfigManager',
+    'ShellBladeMesh', 'ConfigManager',
     
     # Utility functions
     'solve_ksp', 'solve_eb_boundary', 'compute_nullspace',

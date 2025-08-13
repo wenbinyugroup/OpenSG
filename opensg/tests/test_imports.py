@@ -2,6 +2,8 @@
 
 import unittest
 
+from kirklocal.pyNuMAD.src.pynumad.objects.blade import BladeSegmentMesh
+
 
 class TestImports(unittest.TestCase):
     """Test case for package imports."""
@@ -20,9 +22,9 @@ class TestImports(unittest.TestCase):
 
     def test_import_mesh(self):
         """Test that mesh modules can be imported."""
-        from opensg.mesh import BladeMesh, SegmentMesh
-        self.assertIsNotNone(BladeMesh)
-        self.assertIsNotNone(SegmentMesh)
+        from opensg.mesh import ShellBladeMesh
+        self.assertIsNotNone(ShellBladeMesh)
+        self.assertIsNotNone(BladeSegmentMesh)
 
     def test_import_io(self):
         """Test that I/O modules can be imported."""

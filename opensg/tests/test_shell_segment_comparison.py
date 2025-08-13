@@ -13,8 +13,8 @@ import tempfile
 import shutil
 
 import opensg
-from opensg.mesh.blade import BladeMesh
-from opensg.mesh.segment import StandaloneSegmentMesh
+from opensg.mesh.blade import ShellBladeMesh
+from opensg.mesh.segment import ShellSegmentMesh
 
 
 test_data_path = Path(__file__).parent / "data"
@@ -67,11 +67,11 @@ class TestSegmentComparison(unittest.TestCase):
         """Test that both segment creation methods work."""
         # Method 1: Create segment using BladeMesh
         mesh_data = opensg.load_yaml(self.blade_mesh_yaml)
-        blade_mesh = BladeMesh(mesh_data)
+        blade_mesh = ShellBladeMesh(mesh_data)
         blade_segment = blade_mesh.generate_segment_mesh(self.segment_index)
         
         # Method 2: Create segment using StandaloneSegmentMesh
-        standalone_segment = StandaloneSegmentMesh(self.test_file)
+        standalone_segment = ShellSegmentMesh(self.test_file)
         
         # Verify both segments were created successfully
         self.assertIsNotNone(blade_segment)

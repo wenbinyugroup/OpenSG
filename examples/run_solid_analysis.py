@@ -14,7 +14,7 @@ from pathlib import Path
 import opensg
 import numpy as np
 import time
-from opensg.mesh.solidsegment import StandaloneSolidSegmentMesh
+from opensg.mesh.segment import SolidSegmentMesh
 from opensg.core.solid import compute_stiffness
 
 segments_folder = Path("data", "Solid OpenSG Beam", "bar_urc_npl_2_ar_10")
@@ -35,7 +35,7 @@ for i in range(3):
     print(f"Processing segment {i}...")
     
     # Generate mesh for current segment using StandaloneSolidSegmentMesh
-    segment_mesh = StandaloneSolidSegmentMesh(str(segment_file))
+    segment_mesh = SolidSegmentMesh(str(segment_file))
     
     # The solid segment mesh provides the necessary data for stiffness computation
     print(f"  Segment {i}: {segment_mesh.num_cells} elements, {len(segment_mesh.material_database[0])} materials")

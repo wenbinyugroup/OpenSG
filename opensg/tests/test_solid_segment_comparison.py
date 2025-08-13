@@ -17,8 +17,8 @@ import tempfile
 import shutil
 import yaml
 
-from opensg.mesh.solidblade import SolidBladeMesh
-from opensg.mesh.solidsegment import StandaloneSolidSegmentMesh
+from opensg.mesh.blade import SolidBladeMesh
+from opensg.mesh.segment import SolidSegmentMesh
 
 
 class TestSolidSegmentComparison(unittest.TestCase):
@@ -46,7 +46,7 @@ class TestSolidSegmentComparison(unittest.TestCase):
         cls.blade_segment = cls.blade_mesh.generate_segment_mesh(segment_index, str(cls.segment_msh_file))
         
         # Create standalone segment
-        cls.standalone_segment = StandaloneSolidSegmentMesh(str(cls.segment_mesh_file))
+        cls.standalone_segment = SolidSegmentMesh(str(cls.segment_mesh_file))
         
         # Debug: Print information about element sets
         print(f"\nDEBUG: Element set comparison")

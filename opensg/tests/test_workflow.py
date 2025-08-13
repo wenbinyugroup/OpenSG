@@ -16,7 +16,7 @@ class TestExample(unittest.TestCase):
         # Setup
         mesh_yaml = join(datadir, "bar_urc_shell_mesh.yaml")
         mesh_data = opensg.load_yaml(mesh_yaml)
-        blade_mesh = opensg.BladeMesh(mesh_data)
+        blade_mesh = opensg.ShellBladeMesh(mesh_data)
         
         # Mesh
         section_mesh = blade_mesh.generate_segment_mesh(segment_index=1, filename="section.msh")
@@ -64,7 +64,7 @@ def run_workflow():
     # Setup
     mesh_yaml = join(datadir, "bar_urc_shell_mesh.yaml")
     mesh_data = opensg.load_yaml(mesh_yaml)
-    blade_mesh = opensg.BladeMesh(mesh_data)
+    blade_mesh = opensg.ShellBladeMesh(mesh_data)
     
     # Mesh
     section_mesh = blade_mesh.generate_segment_mesh(segment_index=1, filename=join(datadir, "test_section.msh"))
