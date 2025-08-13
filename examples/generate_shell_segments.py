@@ -61,8 +61,8 @@ test_segment_file = specific_segment_files[0]
 print(f"\nLoading segment from: {test_segment_file}")
 
 # Use StandaloneSegmentMesh directly
-from opensg.mesh.segment import StandaloneSegmentMesh
-segment_mesh = StandaloneSegmentMesh(test_segment_file)
+from opensg.mesh.segment import ShellSegmentMesh
+segment_mesh = ShellSegmentMesh(test_segment_file)
 
 print(f"  ✓ Successfully loaded segment")
 print(f"  ✓ Mesh has {segment_mesh.mesh.geometry.x.shape[0]} nodes")

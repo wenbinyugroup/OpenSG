@@ -17,7 +17,7 @@ from pathlib import Path
 import opensg
 import numpy as np
 import time
-from opensg.mesh.segment import StandaloneSegmentMesh
+from opensg.mesh.segment import ShellSegmentMesh
 
 # 1) Load in mesh data
 blade_mesh_file = Path("data", "bar_urc_shell_mesh.yaml")
@@ -38,7 +38,7 @@ compute_times = []
 for i in range(3):
     segment_file = Path("segments_all", f"{blade_mesh_file.stem}_segment_{i+1}.yaml")
     # Generate mesh for current segment
-    segment_mesh = StandaloneSegmentMesh(segment_file)
+    segment_mesh = ShellSegmentMesh(segment_file)
     
     # Compute ABD matrices for the segment
     ABD = segment_mesh.compute_ABD()
