@@ -146,9 +146,9 @@ def solve_GEP_shiftinvert(
     EPS = SLEPc.EPS()
     EPS.create(comm=MPI.COMM_WORLD)
     EPS.setOperators(A, B)
-   # deflation_vector = PETSc.Vec().createSeq(A.getLocalSize())
-   # deflation_vector.set(1.0)
-    #EPS.setDeflationSpace(deflation_vector)
+    # deflation_vector = PETSc.Vec().createSeq(A.getLocalSize())
+    # deflation_vector.set(1.0)
+    # EPS.setDeflationSpace(deflation_vector)
 
     # Set initial vector (example: random vector)
     initial_vector = PETSc.Vec().createSeq(A.getLocalSize())
@@ -169,9 +169,9 @@ def solve_GEP_shiftinvert(
     ST = EPS.getST()
     ST.setType(SLEPc.ST.Type.SINVERT)
     ST.setShift(shift)
-   # ST.getKSP().setType("preonly")
-   # ST.getKSP().getPC().setType("lu")
-   # ST.getKSP().getPC().setFactorSolverType("mumps")
+    # ST.getKSP().setType("preonly")
+    # ST.getKSP().getPC().setType("lu")
+    # ST.getKSP().getPC().setFactorSolverType("mumps")
     EPS.setST(ST)
     # set monitor
     it_skip = 1

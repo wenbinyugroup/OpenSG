@@ -10,12 +10,12 @@ import numpy as np
 
 def load_yaml(yaml_file):
     """Load mesh data from a YAML file.
-    
+
     Parameters
     ----------
     yaml_file : str
         Path to the YAML file containing mesh data
-        
+
     Returns
     -------
     dict
@@ -27,45 +27,47 @@ def load_yaml(yaml_file):
         - sections: dictionary of section definitions
         - elementOrientations: list of element orientation matrices
     """
-    with open(yaml_file, 'r') as file:
+    with open(yaml_file, "r") as file:
         mesh_data = yaml.load(file, Loader=yaml.CLoader)
     return mesh_data
 
+
 def write_yaml(data, yaml_file):
     """Write data to a YAML file.
-    
+
     Parameters
     ----------
     data : dict
         Data to write to the file
     yaml_file : str
         Path to the output YAML file
-        
+
     Returns
     -------
     None
     """
-    with open(yaml_file, 'w') as file:
+    with open(yaml_file, "w") as file:
         yaml.dump(data, file, Loader=yaml.CLoader)
     return
+
 
 # TODO write a function to validate mesh data schema
 def validate_mesh_data(mesh_data):
     """Validate the structure and content of mesh data.
-    
+
     This function is not yet implemented. It will check that the mesh data
     contains all required fields and that they have the correct structure.
-    
+
     Parameters
     ----------
     mesh_data : dict
         Dictionary containing mesh data to validate
-        
+
     Returns
     -------
     bool
         True if the data is valid, False otherwise
-        
+
     Raises
     ------
     NotImplementedError
@@ -73,20 +75,21 @@ def validate_mesh_data(mesh_data):
     """
     raise NotImplementedError("Mesh data validation is not yet implemented")
 
+
 # def write_mesh(filename, blade_mesh):
 #     """Write mesh data to a GMSH format file.
-    
+
 #     Parameters
 #     ----------
 #     filename : str
 #         Path to the output mesh file
 #     blade_mesh : BladeMesh
 #         BladeMesh object containing the mesh data to write
-        
+
 #     Returns
 #     -------
 #     None
-    
+
 #     Notes
 #     -----
 #     The mesh is written in GMSH 2.2 format with the following sections:

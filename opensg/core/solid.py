@@ -1,4 +1,3 @@
-
 # Initialization of libraries
 from mpi4py import MPI
 import numpy as np
@@ -28,6 +27,7 @@ import scipy
 # Generate ABD matrix (Plate model)
 # def compute_timo_boun(ABD, mesh, subdomains, frame, nullspace, sub_nullspace, nphases):
 
+
 def compute_timo_boun(mat_param, boundary_submeshdata):
     """
     Solve EB and Timo model for boundary mesh.
@@ -46,21 +46,23 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     boundary_mesh = boundary_submeshdata["mesh"]
     boundary_subdomains = boundary_submeshdata["subdomains"]
     boundary_frame = boundary_submeshdata["frame"]
-    
+
     nphases = len(mat_param)
 
     e, V_l, dv, v_, x, dx = utils.local_boun(
         boundary_mesh, boundary_frame, boundary_subdomains
     )
     boundary_null = shared_utils.compute_nullspace(V_l)
-    boundary_mesh.topology.create_connectivity(2,2)
+    boundary_mesh.topology.create_connectivity(2, 2)
     V0, Dle, Dhe, D_ee, V1s = utils.initialize_array(V_l)
 
     F2 = sum(
         [
             dot(
-                dot(utils.C(i,boundary_frame,mat_param),utils.gamma_h(dx,dv,dim=2)),
-                utils.gamma_h(dx, v_,dim=2)
+                dot(
+                    utils.C(i, boundary_frame, mat_param), utils.gamma_h(dx, dv, dim=2)
+                ),
+                utils.gamma_h(dx, v_, dim=2),
             )
             * dx(i)
             for i in range(nphases)
@@ -74,8 +76,12 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     for p in range(4):
         F2 = sum(
             [
-            dot(dot(utils.C(ii,boundary_frame,mat_param),gamma_e[:,p]),utils.gamma_h(dx,v_,dim=2))
-             *dx(ii) for ii in range(nphases)
+                dot(
+                    dot(utils.C(ii, boundary_frame, mat_param), gamma_e[:, p]),
+                    utils.gamma_h(dx, v_, dim=2),
+                )
+                * dx(ii)
+                for ii in range(nphases)
             ]
         )
         r_he = form(rhs(F2))
@@ -86,16 +92,20 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
         boundary_null.remove(F_l)
         Dhe[:, p] = petsc.assemble_vector(r_he)[:]
         w = shared_utils.solve_ksp(A_l, F_l, V_l)
-        V0[:,p]= w.x.array[:] 
-        
-    V0_csr=csr_matrix(V0) 
-    D1=V0_csr.T.dot(csr_matrix(-Dhe))
+        V0[:, p] = w.x.array[:]
+
+    V0_csr = csr_matrix(V0)
+    D1 = V0_csr.T.dot(csr_matrix(-Dhe))
     for s in range(4):
         for k in range(4):
             f = dolfinx.fem.form(
                 sum(
                     [
-                        dot(dot(gamma_e.T, utils.C(i,boundary_frame,mat_param)), gamma_e)[s, k] * dx(i)
+                        dot(
+                            dot(gamma_e.T, utils.C(i, boundary_frame, mat_param)),
+                            gamma_e,
+                        )[s, k]
+                        * dx(i)
                         for i in range(nphases)
                     ]
                 )
@@ -107,8 +117,8 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     F1 = sum(
         [
             dot(
-                dot(utils.C(i,boundary_frame,mat_param), utils.gamma_l(dv)),
-                utils.gamma_l(v_)
+                dot(utils.C(i, boundary_frame, mat_param), utils.gamma_l(dv)),
+                utils.gamma_l(v_),
             )
             * dx(i)
             for i in range(nphases)
@@ -123,7 +133,11 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     for p in range(4):
         F1 = sum(
             [
-                dot(dot(utils.C(i,boundary_frame,mat_param), gamma_e[:, p]), utils.gamma_l(v_)) * dx(i)
+                dot(
+                    dot(utils.C(i, boundary_frame, mat_param), gamma_e[:, p]),
+                    utils.gamma_l(v_),
+                )
+                * dx(i)
                 for i in range(nphases)
             ]
         )
@@ -132,8 +146,10 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     F_dhl = sum(
         [
             dot(
-                dot(utils.C(i,boundary_frame,mat_param), utils.gamma_h(dx, dv,dim=2)),
-                utils.gamma_l(v_)
+                dot(
+                    utils.C(i, boundary_frame, mat_param), utils.gamma_h(dx, dv, dim=2)
+                ),
+                utils.gamma_l(v_),
             )
             * dx(i)
             for i in range(nphases)
@@ -144,41 +160,43 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     Dhl.assemble()
     ai, aj, av = Dhl.getValuesCSR()
     Dhl = csr_matrix((av, aj, ai))
-    
-    #DhlV0
-    DhlV0=Dhl.T.dot(V0_csr) 
-    
-    #DhlTV0Dle
-    DhlTV0Dle=Dhl.dot(V0_csr)+csr_matrix(Dle)
-    
-    #V0DllV0
-    V0DllV0=(V0_csr.T.dot(Dll)).dot(V0_csr)
+
+    # DhlV0
+    DhlV0 = Dhl.T.dot(V0_csr)
+
+    # DhlTV0Dle
+    DhlTV0Dle = Dhl.dot(V0_csr) + csr_matrix(Dle)
+
+    # V0DllV0
+    V0DllV0 = (V0_csr.T.dot(Dll)).dot(V0_csr)
 
     # V1s  ****Updated from previous version as for solving boundary V1s, we can directly use (A_l V1s=b),  and solve for V1s
     b = (DhlTV0Dle - DhlV0).toarray()
     for p in range(4):
-        F=petsc4py.PETSc.Vec().createWithArray(b[:,p],comm=MPI.COMM_WORLD)
+        F = petsc4py.PETSc.Vec().createWithArray(b[:, p], comm=MPI.COMM_WORLD)
         F.ghostUpdate(
             addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
         )
         boundary_null.remove(F)
         w = shared_utils.solve_ksp(A_l, F, V_l)
-        V1s[:,p]= w.x.array[:] 
+        V1s[:, p] = w.x.array[:]
 
     # Ainv
-    Ainv=np.linalg.inv(D_eff).astype(np.float64)
-    
+    Ainv = np.linalg.inv(D_eff).astype(np.float64)
+
     # B_tim
-    B_tim=DhlTV0Dle.T.dot(V0_csr)
-    B_tim=B_tim.toarray().astype(np.float64)
+    B_tim = DhlTV0Dle.T.dot(V0_csr)
+    B_tim = B_tim.toarray().astype(np.float64)
 
     # C_tim
-    C_tim= V0DllV0 + csr_matrix(V1s).T.dot(DhlV0 + DhlTV0Dle) 
-    C_tim=0.5*(C_tim+C_tim.T)
-    C_tim=C_tim.toarray().astype(np.float64)
+    C_tim = V0DllV0 + csr_matrix(V1s).T.dot(DhlV0 + DhlTV0Dle)
+    C_tim = 0.5 * (C_tim + C_tim.T)
+    C_tim = C_tim.toarray().astype(np.float64)
 
     # Ginv
-    Q_tim = np.matmul(Ainv, np.array([(0, 0), (0, 0), (0, -1), (1, 0)])).astype(np.float64)
+    Q_tim = np.matmul(Ainv, np.array([(0, 0), (0, 0), (0, -1), (1, 0)])).astype(
+        np.float64
+    )
     Ginv = np.matmul(
         np.matmul(Q_tim.T, (C_tim - np.matmul(np.matmul(B_tim.T, Ainv), B_tim))), Q_tim
     )
@@ -208,13 +226,9 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     Deff_srt[1:3, 0] = Y_tim.T[:, 0].flatten()
 
     return np.around(D_eff), np.around(Deff_srt), V0, V1s
-    
 
-def compute_stiffness(
-    mat_param,
-    meshdata,
-    l_submesh,
-    r_submesh):
+
+def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh):
     """_summary_
 
     Parameters
@@ -235,20 +249,30 @@ def compute_stiffness(
     tuple(np.array)
         segment_timo_stiffness, segment_eb_stiffness, l_timo_stiffness, r_timo_stiffness
     """
-    tdim=meshdata["mesh"].topology.dim
+    tdim = meshdata["mesh"].topology.dim
     fdim = tdim - 1
-    nphases=len(mat_param)
+    nphases = len(mat_param)
     # Initialize terms
     # NOTE: why do we need the frame from local_frame_1D instead of the already computed frames
-    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(l_submesh["mesh"], l_submesh["frame"],l_submesh["subdomains"])
-    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(r_submesh["mesh"], r_submesh["frame"] ,r_submesh["subdomains"])
+    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(
+        l_submesh["mesh"], l_submesh["frame"], l_submesh["subdomains"]
+    )
+    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(
+        r_submesh["mesh"], r_submesh["frame"], r_submesh["subdomains"]
+    )
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.solid.compute_timo_boun(mat_param, l_submesh)
-    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.solid.compute_timo_boun(mat_param, r_submesh)
+    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.solid.compute_timo_boun(
+        mat_param, l_submesh
+    )
+    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.solid.compute_timo_boun(
+        mat_param, r_submesh
+    )
 
     # ***************** Wb Segment (surface mesh) computation begins************************
-    e, V, dv, v_, x, dx = utils.local_boun(meshdata["mesh"], meshdata["frame"], meshdata["subdomains"])
+    e, V, dv, v_, x, dx = utils.local_boun(
+        meshdata["mesh"], meshdata["frame"], meshdata["subdomains"]
+    )
     V0, Dle, Dhe, D_ee, V1s = utils.initialize_array(V)
     gamma_e = utils.gamma_e(x)
     meshdata["mesh"].topology.create_connectivity(2, 3)
@@ -257,16 +281,25 @@ def compute_stiffness(
 
     F2 = sum(
         [
-            dot(dot(utils.C(i, meshdata["frame"],mat_param), utils.gamma_h(dx, dv,dim=3)), utils.gamma_h(dx, v_,dim=3)) * dx(i)
+            dot(
+                dot(
+                    utils.C(i, meshdata["frame"], mat_param),
+                    utils.gamma_h(dx, dv, dim=3),
+                ),
+                utils.gamma_h(dx, v_, dim=3),
+            )
+            * dx(i)
             for i in range(nphases)
         ]
     )
 
     # bc applied
     boundary_dofs = locate_dofs_topological(
-        V, fdim, np.concatenate((r_submesh["entity_map"], l_submesh["entity_map"]), axis=0)
+        V,
+        fdim,
+        np.concatenate((r_submesh["entity_map"], l_submesh["entity_map"]), axis=0),
     )
-    a= form(F2)
+    a = form(F2)
     v2a = Function(V)
     bc = dolfinx.fem.dirichletbc(v2a, boundary_dofs)
     A = assemble_matrix(a, [bc])  # Obtain coefficient matrix with BC applied: AA
@@ -278,19 +311,27 @@ def compute_stiffness(
     for p in range(4):  # 4 load cases meaning
         # Boundary
         v2a = Function(V)
-        
-        v2a = utils.dof_mapping_quad(V, v2a, V_l, V0_l[:, p], l_submesh["facets"], l_submesh["entity_map"])
-        v2a = utils.dof_mapping_quad(V, v2a, V_r, V0_r[:, p], r_submesh["facets"], r_submesh["entity_map"])
+
+        v2a = utils.dof_mapping_quad(
+            V, v2a, V_l, V0_l[:, p], l_submesh["facets"], l_submesh["entity_map"]
+        )
+        v2a = utils.dof_mapping_quad(
+            V, v2a, V_r, V0_r[:, p], r_submesh["facets"], r_submesh["entity_map"]
+        )
 
         F2 = -sum(
             [
-                dot(dot(utils.C(i,meshdata["frame"],mat_param), gamma_e[:, p]), utils.gamma_h(dx, v_,dim=3)) * dx(i)
+                dot(
+                    dot(utils.C(i, meshdata["frame"], mat_param), gamma_e[:, p]),
+                    utils.gamma_h(dx, v_, dim=3),
+                )
+                * dx(i)
                 for i in range(nphases)
             ]
         )
         bc = [dolfinx.fem.dirichletbc(v2a, boundary_dofs)]
         F = petsc.assemble_vector(form(F2))
-        Dhe[:,p]=F
+        Dhe[:, p] = F
 
         apply_lifting(
             F, [a], [bc]
@@ -300,32 +341,40 @@ def compute_stiffness(
         w = shared_utils.solve_ksp(A, F, V)
         V0[:, p] = w.x.array[:]
 
-    V0_csr=csr_matrix(V0)    
-    D1=V0_csr.T.dot(csr_matrix(-Dhe)).astype(np.float64)
+    V0_csr = csr_matrix(V0)
+    D1 = V0_csr.T.dot(csr_matrix(-Dhe)).astype(np.float64)
 
     for s in range(4):
         for k in range(4):
             f = dolfinx.fem.form(
                 sum(
                     [
-                        dot(dot(gamma_e.T, utils.C(i,meshdata["frame"],mat_param)), gamma_e)[s, k] * dx(i)
+                        dot(
+                            dot(gamma_e.T, utils.C(i, meshdata["frame"], mat_param)),
+                            gamma_e,
+                        )[s, k]
+                        * dx(i)
                         for i in range(nphases)
                     ]
                 )
             )
             D_ee[s, k] = dolfinx.fem.assemble_scalar(f)
-    L = max(meshdata["mesh"].geometry.x[:,0]) - min(meshdata["mesh"].geometry.x[:,0])
-    D_eff = (D_ee.astype(np.float64) + D1)/L 
-    D_eff=0.5*(D_eff+D_eff.T)
+    L = max(meshdata["mesh"].geometry.x[:, 0]) - min(meshdata["mesh"].geometry.x[:, 0])
+    D_eff = (D_ee.astype(np.float64) + D1) / L
+    D_eff = 0.5 * (D_eff + D_eff.T)
 
     ##################Timoshenko Stiffness Matrix for WB segment begins###################################
     # Process is similar to Timoshenko boundary implemented over WB segment mesh
     F1 = sum(
         [
-            dot(dot(utils.C(i,meshdata["frame"],mat_param), utils.gamma_l(v_)), utils.gamma_l(dv)) * dx(i)
+            dot(
+                dot(utils.C(i, meshdata["frame"], mat_param), utils.gamma_l(v_)),
+                utils.gamma_l(dv),
+            )
+            * dx(i)
             for i in range(nphases)
         ]
-    ) 
+    )
     a1 = form(F1)
     Dll = assemble_matrix(a1)
     Dll.assemble()
@@ -335,7 +384,14 @@ def compute_stiffness(
     # Dhl
     F_dhl = sum(
         [
-            dot(dot(utils.C(i,meshdata["frame"],mat_param), utils.gamma_h(x, dv,dim=3)), utils.gamma_l(v_)) * dx(i)
+            dot(
+                dot(
+                    utils.C(i, meshdata["frame"], mat_param),
+                    utils.gamma_h(x, dv, dim=3),
+                ),
+                utils.gamma_l(v_),
+            )
+            * dx(i)
             for i in range(nphases)
         ]
     )
@@ -348,20 +404,26 @@ def compute_stiffness(
     for p in range(4):
         F1 = sum(
             [
-                dot(dot(utils.C(i,meshdata["frame"],mat_param), utils.gamma_e(x)[:, p]), utils.gamma_l(v_)) * dx(i)
+                dot(
+                    dot(
+                        utils.C(i, meshdata["frame"], mat_param), utils.gamma_e(x)[:, p]
+                    ),
+                    utils.gamma_l(v_),
+                )
+                * dx(i)
                 for i in range(nphases)
             ]
         )
         Dle[:, p] = petsc.assemble_vector(form(F1))[:]
 
-    #DhlV0
-    DhlV0=Dhl.T.dot(V0_csr) 
-    
-    #DhlTV0Dle
-    DhlTV0Dle=Dhl.dot(V0_csr)+csr_matrix(Dle)
-    
-    #V0DllV0
-    V0DllV0=(V0_csr.T.dot(Dll)).dot(V0_csr)
+    # DhlV0
+    DhlV0 = Dhl.T.dot(V0_csr)
+
+    # DhlTV0Dle
+    DhlTV0Dle = Dhl.dot(V0_csr) + csr_matrix(Dle)
+
+    # V0DllV0
+    V0DllV0 = (V0_csr.T.dot(Dll)).dot(V0_csr)
 
     # V1s
     b = (DhlTV0Dle - DhlV0).toarray()
@@ -371,8 +433,12 @@ def compute_stiffness(
     for p in range(4):  # 4 load cases meaning
         # Boundary
         v2a = Function(V)
-        v2a = utils.dof_mapping_quad(V, v2a, V_l, V1_l[:, p], l_submesh["facets"], l_submesh["entity_map"])
-        v2a = utils.dof_mapping_quad(V, v2a, V_r, V1_r[:, p], r_submesh["facets"], r_submesh["entity_map"])
+        v2a = utils.dof_mapping_quad(
+            V, v2a, V_l, V1_l[:, p], l_submesh["facets"], l_submesh["entity_map"]
+        )
+        v2a = utils.dof_mapping_quad(
+            V, v2a, V_r, V1_r[:, p], r_submesh["facets"], r_submesh["entity_map"]
+        )
         bc = [dolfinx.fem.dirichletbc(v2a, boundary_dofs)]
 
         # quad mesh
@@ -388,19 +454,21 @@ def compute_stiffness(
         V1s[:, p] = w.x.array[:]
 
     # Ainv
-    Ainv=np.linalg.inv(D_eff).astype(np.float64)
-    
+    Ainv = np.linalg.inv(D_eff).astype(np.float64)
+
     # B_tim
-    B_tim=DhlTV0Dle.T.dot(V0_csr)
-    B_tim=B_tim.toarray().astype(np.float64)/L
+    B_tim = DhlTV0Dle.T.dot(V0_csr)
+    B_tim = B_tim.toarray().astype(np.float64) / L
 
     # C_tim
-    C_tim= V0DllV0 + csr_matrix(V1s).T.dot(DhlV0 + DhlTV0Dle) 
-    C_tim=0.5*(C_tim+C_tim.T)
-    C_tim=C_tim.toarray().astype(np.float64)/L
+    C_tim = V0DllV0 + csr_matrix(V1s).T.dot(DhlV0 + DhlTV0Dle)
+    C_tim = 0.5 * (C_tim + C_tim.T)
+    C_tim = C_tim.toarray().astype(np.float64) / L
 
     # Ginv
-    Q_tim = np.matmul(Ainv, np.array([(0, 0), (0, 0), (0, -1), (1, 0)])).astype(np.float64)
+    Q_tim = np.matmul(Ainv, np.array([(0, 0), (0, 0), (0, -1), (1, 0)])).astype(
+        np.float64
+    )
     Ginv = np.matmul(
         np.matmul(Q_tim.T, (C_tim - np.matmul(np.matmul(B_tim.T, Ainv), B_tim))), Q_tim
     )
@@ -428,8 +496,7 @@ def compute_stiffness(
     Deff_srt[1:3, 1:3] = G_tim
     Deff_srt[1:3, 3:6] = Y_tim.T[:, 1:4]
     Deff_srt[1:3, 0] = Y_tim.T[:, 0].flatten()
-    print('Tapered Timo Stiffness: VABS Convention')    
-    np.set_printoptions(precision=4) 
-    print(np.around(Deff_srt)) 
-    return Deff_srt, V0, V1s 
-
+    print("Tapered Timo Stiffness: VABS Convention")
+    np.set_printoptions(precision=4)
+    print(np.around(Deff_srt))
+    return Deff_srt, V0, V1s

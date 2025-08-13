@@ -1,10 +1,25 @@
-from ufl import CellDiameter, FacetNormal, Jacobian, Measure, as_vector, avg, cross, div, dot, grad, inner, jump, sqrt
+from ufl import (
+    CellDiameter,
+    FacetNormal,
+    Jacobian,
+    Measure,
+    as_vector,
+    avg,
+    cross,
+    div,
+    dot,
+    grad,
+    inner,
+    jump,
+    sqrt,
+)
 import dolfinx
 import petsc4py
 import numpy as np
 from dolfinx.fem import Function
 import mpi4py.MPI as MPI
 import petsc4py.PETSc as PETSc
+
 
 def compute_nullspace(V, ABD=False):
     """Compute nullspace to restrict Rigid body motions
@@ -34,7 +49,11 @@ def compute_nullspace(V, ABD=False):
 
     # Create list of vectors for null space
     nullspace_basis = [
-        dolfinx.la.vector(V.dofmap.index_map, bs=V.dofmap.index_map_bs, dtype=petsc4py.PETSc.ScalarType)  # type: ignore
+        dolfinx.la.vector(
+            V.dofmap.index_map,
+            bs=V.dofmap.index_map_bs,
+            dtype=petsc4py.PETSc.ScalarType,
+        )  # type: ignore
         for i in range(dim)
     ]
 
@@ -57,10 +76,13 @@ def compute_nullspace(V, ABD=False):
     dolfinx.la.orthonormalize(nullspace_basis)
     local_size = V.dofmap.index_map.size_local * V.dofmap.index_map_bs
     basis_petsc = [
-        petsc4py.PETSc.Vec().createWithArray(x[:local_size], bsize=gdim, comm=V.mesh.comm)  # type: ignore
+        petsc4py.PETSc.Vec().createWithArray(
+            x[:local_size], bsize=gdim, comm=V.mesh.comm
+        )  # type: ignore
         for x in basis
     ]
     return petsc4py.PETSc.NullSpace().create(comm=V.mesh.comm, vectors=basis_petsc)  # type: ignore
+
 
 def solve_ksp(A, F, V):
     """Krylov Subspace Solver for Aw = F
@@ -91,20 +113,22 @@ def solve_ksp(A, F, V):
     mat = ksp.getPC().getFactorMatrix()
     mat.setMumpsIcntl(icntl=24, ival=1)  # detect null pivots
     mat.setMumpsIcntl(icntl=25, ival=0)  # do not compute null space again
-    mat.setMumpsIcntl(icntl=4, ival=1) 
+    mat.setMumpsIcntl(icntl=4, ival=1)
     mat.setMumpsIcntl(icntl=14, ival=80)
     mat.setMumpsIcntl(icntl=7, ival=7)
     mat.setMumpsIcntl(icntl=1, ival=1e-6)
     # Enable solver monitoring
 
-#     PETSc.Options().setValue("ksp_monitor", "")  # Equivalent to "ksp_monitor": None in petsc_options
+    #     PETSc.Options().setValue("ksp_monitor", "")  # Equivalent to "ksp_monitor": None in petsc_options
     ksp.setFromOptions()
     ksp.solve(F, w.x.petsc_vec)  # Solve scaled system
 
     w.x.petsc_vec.ghostUpdate(
-        addv=petsc4py.PETSc.InsertMode.INSERT, mode=petsc4py.PETSc.ScatterMode.FORWARD)
+        addv=petsc4py.PETSc.InsertMode.INSERT, mode=petsc4py.PETSc.ScatterMode.FORWARD
+    )
     ksp.destroy()
     return w
+
 
 def deri_constraint(dvl, v_l, mesh, nh):
     """Compute derivative constraints for boundary conditions.
@@ -130,24 +154,30 @@ def deri_constraint(dvl, v_l, mesh, nh):
     """
     h = CellDiameter(mesh)
     n = FacetNormal(mesh)
-    h_avg = (h('+') + h('-')) / 2.0
-    dS=Measure('dS')(domain=mesh)
-    if mesh.topology.dim==1:
-        alpha=1e10
-        nn= - inner(avg(div(grad(dvl))), jump(grad(v_l), n))*dS \
-            - inner(jump(grad(dvl), n), avg(div(grad(v_l))))*dS \
-            + (alpha/h_avg**2)*inner(jump(grad(dvl),n), jump(grad(v_l),n))*dS
+    h_avg = (h("+") + h("-")) / 2.0
+    dS = Measure("dS")(domain=mesh)
+    if mesh.topology.dim == 1:
+        alpha = 1e10
+        nn = (
+            -inner(avg(div(grad(dvl))), jump(grad(v_l), n)) * dS
+            - inner(jump(grad(dvl), n), avg(div(grad(v_l)))) * dS
+            + (alpha / h_avg**2) * inner(jump(grad(dvl), n), jump(grad(v_l), n)) * dS
+        )
         return nn
-    elif mesh.topology.dim==2:
-        alpha=1e10
-        beta=4e5
-        nn= - inner(avg(div(grad(dvl))), jump(grad(v_l), n))*dS \
-            - inner(jump(grad(dvl), n), avg(div(grad(v_l))))*dS \
-            + (alpha/h_avg**2)*inner(jump(grad(dvl),n), jump(grad(v_l),n))*dS
-        tt=- inner(avg(div(grad(dvl))), jump(grad(v_l), nh))*dS \
-           - inner(jump(grad(dvl), nh), avg(div(grad(v_l))))*dS \
-           + (beta/h_avg**2)*inner(jump(grad(dvl),nh), jump(grad(v_l),nh))*dS
-        return nn+tt
+    elif mesh.topology.dim == 2:
+        alpha = 1e10
+        beta = 4e5
+        nn = (
+            -inner(avg(div(grad(dvl))), jump(grad(v_l), n)) * dS
+            - inner(jump(grad(dvl), n), avg(div(grad(v_l)))) * dS
+            + (alpha / h_avg**2) * inner(jump(grad(dvl), n), jump(grad(v_l), n)) * dS
+        )
+        tt = (
+            -inner(avg(div(grad(dvl))), jump(grad(v_l), nh)) * dS
+            - inner(jump(grad(dvl), nh), avg(div(grad(v_l)))) * dS
+            + (beta / h_avg**2) * inner(jump(grad(dvl), nh), jump(grad(v_l), nh)) * dS
+        )
+        return nn + tt
 
 
 def local_frame_1D(mesh):
@@ -171,8 +201,8 @@ def local_frame_1D(mesh):
     """
     t = Jacobian(mesh)
     t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]])
-    e2=  t1/ sqrt(dot(t1, t1))
-    e1=  as_vector([1,0,0]) # Right Lay up
-    e3= cross(e1,e2)
-    e3=  e3/ sqrt(dot(e3, e3))
+    e2 = t1 / sqrt(dot(t1, t1))
+    e1 = as_vector([1, 0, 0])  # Right Lay up
+    e3 = cross(e1, e2)
+    e3 = e3 / sqrt(dot(e3, e3))
     return e1, e2, e3

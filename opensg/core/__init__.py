@@ -8,4 +8,4 @@ This module contains the main computational functions for:
 
 from opensg.core import shell, solid, stress_recov
 
-__all__ = ['compute_ABD_matrix', 'compute_timo_boun', 'compute_stiffness'] 
+__all__ = ["compute_ABD_matrix", "compute_timo_boun", "compute_stiffness"]
