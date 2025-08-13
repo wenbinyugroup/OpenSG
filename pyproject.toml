@@ -28,7 +28,6 @@ dependencies = [
     "pyyaml>=5.4.0",
     "meshio",
     "gmsh",
-    "pyvista",
 ]
 
 classifiers = [
