@@ -6,7 +6,17 @@ This module contains classes and functions for:
 - Mesh data structures
 """
 
-from opensg.mesh.blade import ShellBladeMesh, ShellBladeSegmentMesh, SolidBladeMesh, SolidBladeSegmentMesh
+from opensg.mesh.blade import (
+    ShellBladeMesh,
+    ShellBladeSegmentMesh,
+    SolidBladeMesh,
+    SolidBladeSegmentMesh,
+)
 
 
-__all__ = ['ShellBladeMesh', 'ShellBladeSegmentMesh', 'SolidBladeMesh', 'SolidBladeSegmentMesh'] 
+__all__ = [
+    "ShellBladeMesh",
+    "ShellBladeSegmentMesh",
+    "SolidBladeMesh",
+    "SolidBladeSegmentMesh",
+]
