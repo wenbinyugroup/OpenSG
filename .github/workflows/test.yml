@@ -17,7 +17,7 @@ jobs:
       - name: Install system dependencies for gmsh
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-glx libglu1-mesa
+          sudo apt-get install -y libopengl0 libgl1-mesa-dri libglu1-mesa-dev
 
       - name: Set up environment
         uses: conda-incubator/setup-miniconda@v3
