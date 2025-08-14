@@ -245,7 +245,7 @@ class ShellBladeMesh:
         file.close()
 
         # initialize segmentmesh object
-        segment_mesh = BladeSegmentMesh(
+        segment_mesh = ShellBladeSegmentMesh(
             segment_node_labels=segment_node_labels,
             segment_element_labels=segment_element_labels,
             segment_element_layer_id=segment_element_layer_id,
