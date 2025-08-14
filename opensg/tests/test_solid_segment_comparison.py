@@ -33,7 +33,7 @@ class TestSolidSegmentComparison(unittest.TestCase):
     def setUpClass(cls):
         """Set up test data once for all tests."""
         # Test with a known solid segment mesh file
-        cls.segment_mesh_file = test_data_dir / "bar_urc_npl_2_ar_10-segment_0.yaml"
+        cls.segment_mesh_file = test_data_dir / "bar_urc_npl_2_ar_10-segment_2.yaml"
 
         if not Path(cls.segment_mesh_file).exists():
             raise FileNotFoundError(

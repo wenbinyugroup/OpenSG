@@ -31,7 +31,7 @@ class TestSegmentComparison(unittest.TestCase):
         # Test with a known blade mesh file
         cls.blade_mesh_yaml = test_data_dir / "bar_urc_shell_mesh.yaml"
 
-        segment_list = [6]
+        segment_list = [2]
 
         if not Path(cls.blade_mesh_yaml).exists():
             raise FileNotFoundError(f"Blade mesh file not found: {cls.blade_mesh_yaml}")
