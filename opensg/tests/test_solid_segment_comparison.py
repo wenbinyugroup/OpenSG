@@ -9,6 +9,8 @@ Note: In the solid workflow, SolidBladeMesh takes a segment YAML file directly,
 not a full blade mesh like in the shell workflow.
 """
 
+from os.path import abspath, dirname, join
+from pathlib import Path
 import unittest
 import opensg
 import numpy as np
@@ -21,6 +23,9 @@ from opensg.mesh.blade import SolidBladeMesh
 from opensg.mesh.segment import SolidSegmentMesh
 
 
+testdir = dirname(abspath(str(__file__)))
+test_data_dir = Path(join(testdir, "testing_data"))
+
 class TestSolidSegmentComparison(unittest.TestCase):
     """Test cases for comparing SolidBladeMesh and StandaloneSolidSegmentMesh segment creation."""
 
@@ -28,15 +33,7 @@ class TestSolidSegmentComparison(unittest.TestCase):
     def setUpClass(cls):
         """Set up test data once for all tests."""
         # Test with a known solid segment mesh file
-        cls.segment_mesh_file = Path(
-            "..",
-            "..",
-            "examples",
-            "data",
-            "Solid OpenSG Beam",
-            "bar_urc_npl_2_ar_10",
-            "bar_urc_npl_2_ar_10-segment_0.yaml",
-        )
+        cls.segment_mesh_file = test_data_dir / "bar_urc_npl_2_ar_10-segment_0.yaml"
 
         if not Path(cls.segment_mesh_file).exists():
             raise FileNotFoundError(

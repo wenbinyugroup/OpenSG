@@ -11,13 +11,15 @@ import numpy as np
 from pathlib import Path
 import tempfile
 import shutil
+from os.path import abspath, dirname, join
 
 import opensg
 from opensg.mesh.blade import ShellBladeMesh
 from opensg.mesh.segment import ShellSegmentMesh
 
 
-test_data_path = Path(__file__).parent / "data"
+testdir = dirname(abspath(str(__file__)))
+test_data_dir = Path(join(testdir, "testing_data"))
 
 
 class TestSegmentComparison(unittest.TestCase):
@@ -27,7 +29,7 @@ class TestSegmentComparison(unittest.TestCase):
     def setUpClass(cls):
         """Set up test data once for all tests."""
         # Test with a known blade mesh file
-        cls.blade_mesh_yaml = test_data_path / "bar_urc_shell_mesh.yaml"
+        cls.blade_mesh_yaml = test_data_dir / "bar_urc_shell_mesh.yaml"
 
         segment_list = [6]
 
