@@ -3,6 +3,7 @@ from mpi4py import MPI
 import numpy as np
 import dolfinx
 import basix
+import gmsh
 from ufl import dot, as_tensor, rhs
 from dolfinx.fem.petsc import assemble_matrix
 from dolfinx.fem import (
