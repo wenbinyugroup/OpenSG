@@ -1,14 +1,8 @@
 User Guide
 ==========
 
-OpenSG (Open Source Structural Analysis for Wind Turbine Blades) is a Python package.
-
-Sandia Funding Statement
-------------------------
-
-Sandia National Laboratories is a multimission laboratory managed and operated by National Technology and 
-Engineering Solutions of Sandia, LLC., a wholly owned subsidiary of Honeywell International, Inc., for the 
-U.S. Department of Energy's National Nuclear Security Administration under contract DE-NA-0003525.
+OpenSG is an open source platform for multiscale structural analysis using FEniCS backend which 
+works on the Mechanics of Structure Genome (MSG) theory. 
 
 .. toctree::
    :maxdepth: 1
