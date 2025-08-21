@@ -16,7 +16,7 @@ API documentation
         :recursive:
         :template: autosummary/module.rst
     
-        compute_utils
+        core
         io
         mesh
-        solve
+        utils

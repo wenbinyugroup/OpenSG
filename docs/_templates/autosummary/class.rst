@@ -32,6 +32,4 @@
 {% endif %}
 {% endblock %}
 
-   {% if methods or attributes %}
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   {% endif %}
+
