@@ -1,4 +1,7 @@
-.. theory:
+.. _theory:
+
+Theory
+======
 
 TODO discuss underlying theory
 
