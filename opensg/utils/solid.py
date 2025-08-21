@@ -479,10 +479,11 @@ def solve_GEP_shiftinvert(
         interval on the real axis. To search for only positive eigenvalues,
         you could use `interval=(1e-9, PETSc.DECIMAL_MAX)`.
         This feature is supported by solvers like KRYLOVSCHUR.
-     Returns
-     -------
-     EPS
-        The SLEPc solver
+    
+    Returns
+    -------
+    EPS
+    The SLEPc solver
     """
 
     # Build an Eigenvalue Problem Solver object
