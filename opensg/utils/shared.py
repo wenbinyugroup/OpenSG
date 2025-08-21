@@ -56,7 +56,7 @@ def compute_nullspace(V, ABD=False):
 
     # Set dimension of nullspace
     # if ABD:
-    dim = 3
+    dim = 4
     # else:
     #     dim = 4
 
@@ -77,14 +77,15 @@ def compute_nullspace(V, ABD=False):
     for i in range(gdim):
         basis[i][dofs[i]] = 1.0
     # Build rotational null space basis
-    # if not ABD:
-    #     xx = V.tabulate_dof_coordinates()
-    #     dofs_block = V.dofmap.list.reshape(-1)
-    #     x2, x3 = xx[dofs_block, 1], xx[dofs_block, 2]
-    #     basis[3][dofs[1]] = -x3
-    #     basis[3][dofs[2]] = x2
-    #     for b in nullspace_basis:
-    #         b.scatter_forward()
+
+    xx = V.tabulate_dof_coordinates()
+    dofs_block = V.dofmap.list.reshape(-1)
+    x2, x3 = xx[dofs_block, 1], xx[dofs_block, 2]
+    
+    basis[3][dofs[1]] = -x3
+    basis[3][dofs[2]] = x2
+    for b in nullspace_basis:
+        b.scatter_forward()
 
     dolfinx.la.orthonormalize(nullspace_basis)
     local_size = V.dofmap.index_map.size_local * V.dofmap.index_map_bs
