@@ -25,6 +25,21 @@ from slepc4py import SLEPc
 
 
 def generate_boundary_markers(xmin, xmax):
+    """Generate functions to mark left and right boundaries of a mesh.
+
+    Parameters
+    ----------
+    xmin : float
+        Minimum x-coordinate of the mesh
+    xmax : float
+        Maximum x-coordinate of the mesh
+
+    Returns
+    -------
+    tuple
+        Two functions that return True for points on the left and right
+        boundaries respectively
+    """
     def is_left_boundary(x):
         return np.isclose(x[0], xmin, atol=0.01)
 
@@ -34,7 +49,19 @@ def generate_boundary_markers(xmin, xmax):
     return is_left_boundary, is_right_boundary
 
 
-def Rsig(frame):  # ROTATION MATRIX IN UFL Form
+def Rsig(frame):
+    """Generate rotation matrix in UFL form.
+    
+    Parameters
+    ----------
+    frame : array-like
+        Local coordinate frame
+        
+    Returns
+    -------
+    ufl.Tensor
+        Rotation matrix tensor
+    """
     b11, b12, b13 = frame[0][0], frame[1][0], frame[2][0]
     b21, b22, b23 = frame[0][1], frame[1][1], frame[2][1]
     b31, b32, b33 = frame[0][2], frame[1][2], frame[2][2]
@@ -143,6 +170,18 @@ def CC(mat_param):
 
 
 def epsilon(u):
+    """Compute strain tensor from displacement field.
+    
+    Parameters
+    ----------
+    u : dolfinx.fem.Function
+        Displacement field
+        
+    Returns
+    -------
+    ufl.Expr
+        Strain tensor
+    """
     E1 = as_vector(
         [
             u[0].dx(0),
@@ -210,17 +249,17 @@ def get_mass_solid(x, dx, density, nphases):  # Mass matrix
 
 
 def gamma_e(x):
-    """_summary_
+    """Compute gamma_e matrix.
 
     Parameters
     ----------
-    x : _type_
-        _description_
+    x : array-like
+        Coordinate point
 
     Returns
     -------
-    _type_
-        _description_
+    ufl.Tensor
+        Gamma_e matrix tensor
     """
     gamma_e = as_tensor(
         [

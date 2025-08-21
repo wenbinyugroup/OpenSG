@@ -12,58 +12,32 @@ Main modules:
 """
 
 # Core computations
-from opensg.core.shell import compute_ABD_matrix, compute_timo_boun, compute_stiffness
+import opensg.core as core
+# from opensg.core.shell import compute_ABD_matrix, compute_timo_boun, compute_stiffness
 # from opensg.core.solid import
 
 # I/O operations
 import opensg.io as io
-from opensg.io import load_yaml, write_yaml
+# from opensg.io import load_yaml, write_yaml
 
 # Mesh handling
-from opensg.mesh.blade import (
-    ShellBladeMesh,
-    SolidBladeMesh,
-    ShellBladeSegmentMesh,
-    SolidBladeSegmentMesh,
-)
+import opensg.mesh as mesh
+# from opensg.mesh.blade import (
+    # ShellBladeMesh,
+    # SolidBladeMesh,
+    # ShellBladeSegmentMesh,
+    # SolidBladeSegmentMesh,
+# )
 
 
 # Utility functions
 import opensg.utils as utils
-
-import opensg.core as core
+# from opensg.utils.shared import solve_ksp, compute_nullspace, local_frame_1D, deri_constraint
+# from opensg.utils.shell import (
+#     solve_eb_boundary, local_boun, local_frame, local_grad, deri, ddot,
+#     gamma_d, gamma_e, gamma_h, gamma_l, initialize_array, dof_mapping_quad,
+#     generate_boundary_markers, facet_vector_approximation, tangential_projection
+# )
 
 __version__ = "0.1.0"
 
-__all__ = [
-    # Core functions
-    "compute_ABD_matrix",
-    "compute_timo_boun",
-    "compute_stiffness",
-    # I/O functions
-    "load_yaml",
-    "write_yaml",
-    # Classes
-    "ShellBladeMesh",
-    "ConfigManager",
-    # Utility functions
-    "solve_ksp",
-    "solve_eb_boundary",
-    "compute_nullspace",
-    "local_boun",
-    "local_frame_1D",
-    "local_frame",
-    "local_grad",
-    "deri",
-    "ddot",
-    "gamma_d",
-    "gamma_e",
-    "gamma_h",
-    "gamma_l",
-    "initialize_array",
-    "dof_mapping_quad",
-    "generate_boundary_markers",
-    "deri_constraint",
-    "facet_vector_approximation",
-    "tangential_projection",
-]

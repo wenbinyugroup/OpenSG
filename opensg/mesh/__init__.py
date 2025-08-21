@@ -13,10 +13,17 @@ from opensg.mesh.blade import (
     SolidBladeSegmentMesh,
 )
 
+from opensg.mesh.segment import (
+    ShellSegmentMesh,
+    SolidSegmentMesh,
+)
+
 
 __all__ = [
     "ShellBladeMesh",
     "ShellBladeSegmentMesh",
-    "SolidBladeMesh",
+    "SolidBladeMesh", 
     "SolidBladeSegmentMesh",
+    "ShellSegmentMesh",
+    "SolidSegmentMesh",
 ]

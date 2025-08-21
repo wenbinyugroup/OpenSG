@@ -350,7 +350,7 @@ class ShellSegmentMesh:
         ABD_ = []
         for i in range(nphases):
             ABD_.append(
-                opensg.compute_ABD_matrix(
+                core.compute_ABD_matrix(
                     thick=self.layup_database["thick"][i],
                     nlay=self.layup_database["nlay"][i],
                     mat_names=self.layup_database["mat_names"][i],

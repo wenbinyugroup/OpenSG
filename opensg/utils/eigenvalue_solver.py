@@ -17,21 +17,21 @@ def print0(string: str):
 def monitor_EPS_short(
     EPS: SLEPc.EPS, it: int, nconv: int, eig: list, err: list, it_skip: int
 ):
-    """
-    Concise monitor for EPS.solve().
+    """Concise monitor for EPS.solve().
+    
     Parameters
     ----------
-    eps
+    EPS : SLEPc.EPS
         Eigenvalue Problem Solver class.
-    it
-       Current iteration number.
-    nconv
-       Number of converged eigenvalue.
-    eig
-       Eigenvalues
-    err
-       Computed errors.
-    it_skip
+    it : int
+        Current iteration number.
+    nconv : int
+        Number of converged eigenvalue.
+    eig : list
+        Eigenvalues
+    err : list
+        Computed errors.
+    it_skip : int
         Iteration skip.
     """
     if it == 1:
@@ -73,16 +73,19 @@ def EPS_get_spectrum(
     EPS: SLEPc.EPS, V: FunctionSpace
 ) -> Tuple[List[complex], List[PETSc.Vec], List[PETSc.Vec]]:
     """Retrieve eigenvalues and eigenfunctions from SLEPc EPS object.
+    
     Parameters
     ----------
-    EPS
-       The SLEPc solver
-    V
-       The function space
+    EPS : SLEPc.EPS
+        The SLEPc solver
+    V : FunctionSpace
+        The function space
+        
     Returns
     -------
+    tuple
         Tuple consisting of: List of complex converted eigenvalues,
-         lists of converted eigenvectors (real part) and (imaginary part)
+        lists of converted eigenvectors (real part) and (imaginary part)
     """
     # Get results in lists
     eigval = list()
@@ -113,34 +116,34 @@ def solve_GEP_shiftinvert(
     target: float = 1.0,
     shift: float = 0.0,
 ) -> SLEPc.EPS:
-    """
-     Solve generalized eigenvalue problem A*x=lambda*B*x using shift-and-invert
-     as spectral transform method.
+    """Solve generalized eigenvalue problem A*x=lambda*B*x using shift-and-invert as spectral transform method.
+     
      Parameters
      ----------
-     A
-        The matrix A
-     B
-        The matrix B
-     problem_type
-        The problem type, for options see: https://bit.ly/3gM5pth
-    solver:
-        Solver type, for options see: https://bit.ly/35LDcMG
-     nev
+     A : PETSc.Mat
+         The matrix A
+     B : PETSc.Mat
+         The matrix B
+     problem_type : SLEPc.EPS.ProblemType
+         The problem type, for options see: https://bit.ly/3gM5pth
+     solver : SLEPc.EPS.Type
+         Solver type, for options see: https://bit.ly/35LDcMG
+     nev : int
          Number of requested eigenvalues.
-     tol
-        Tolerance for slepc solver
-     max_it
-        Maximum number of iterations.
-     target
-        Target eigenvalue. Also used for sorting.
-     shift
-        Shift 'sigma' used in shift-and-invert.
+     tol : float
+         Tolerance for slepc solver
+     max_it : int
+         Maximum number of iterations.
+     target : float
+         Target eigenvalue. Also used for sorting.
+     shift : float
+         Shift 'sigma' used in shift-and-invert.
+         
      Returns
      -------
-     EPS
+     SLEPc.EPS
         The SLEPc solver
-    """
+     """
 
     # Build an Eigenvalue Problem Solver object
     EPS = SLEPc.EPS()

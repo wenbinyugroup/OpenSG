@@ -8,7 +8,6 @@ Created on Thu Jun 19 11:04:59 2025
 import numpy as np
 import dolfinx
 import ufl
-import opensg
 import basix
 from mpi4py import MPI
 from slepc4py import SLEPc
@@ -17,6 +16,22 @@ import opensg.utils.solid as utils
 
 
 def beam_reaction(file_name):
+    """Parse beam reaction forces from output file.
+
+    Reads and parses beam reaction forces from a simulation output file,
+    extracting force and moment components for each blade segment.
+
+    Parameters
+    ----------
+    file_name : str
+        Base name of the output file (without .out extension)
+
+    Returns
+    -------
+    list
+        List of beam force data for each segment, where each segment contains
+        6 components (3 forces, 3 moments) with labels and values.
+    """
     data = np.loadtxt(file_name + ".out", delimiter=",", skiprows=0, dtype=str)
     index = data[1].split()
     last_data = data[-1].split()
@@ -40,6 +55,31 @@ def beam_reaction(file_name):
 
 
 def recover_local_strain(timo, beam_force, segment, meshdata):
+    """Recover local strain field from beam analysis results.
+
+    This function recovers the local 3D strain field within a blade segment
+    using the fluctuating functions from the homogenized beam analysis and
+    the applied beam forces.
+
+    Parameters
+    ----------
+    timo : list
+        Timoshenko analysis results containing [Deff_srt, V0, V1] where:
+        - Deff_srt: effective stiffness matrix
+        - V0: boundary fluctuating functions
+        - V1: volume fluctuating functions
+    beam_force : list
+        Beam force components [Fx, Fy, Fz, Mx, My, Mz] applied to the segment
+    segment : int
+        Segment index for identification
+    meshdata : dict
+        Dictionary containing mesh information including the 3D mesh object
+
+    Returns
+    -------
+    dolfinx.fem.Function
+        Function containing the recovered 3D strain field in the segment
+    """
     Deff_srt, V0, V1 = timo[:]
     V = dolfinx.fem.functionspace(
         meshdata["mesh"],

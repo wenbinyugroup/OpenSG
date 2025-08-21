@@ -14,10 +14,9 @@ from ufl import rhs, as_tensor, dot
 from scipy.sparse import csr_matrix
 import petsc4py.PETSc
 from dolfinx.fem.petsc import assemble_matrix
-import opensg
 import opensg.utils.solid as utils
 import opensg.utils.shared as shared_utils
-import scipy
+import opensg.core.solid as core    
 
 
 ### ABD matrix computation
@@ -29,19 +28,45 @@ import scipy
 
 
 def compute_timo_boun(mat_param, boundary_submeshdata):
-    """
-    Solve EB and Timo model for boundary mesh.
-    The output fluctuating functions V0 and V1s are used dirichilet boundary constraints
+    """Compute boundary stiffness matrices for solid elements using EB and Timoshenko theories.
 
-    Parameters:
-        mesh_l: Left Boundary mesh
-        subdomains_l:  Left Boundary subdomains (layup information)
-        frame_l: local orientation frame (DG space)
-    Returns:
-        D_eff (np array): [4,4] !Boundary EB Stiffness matrix
-        Deff_srt (np array):[6,6] !Boundary Timoshenko Stiffness matrix
-        V0 (np array): [ndofs_leftmesh,4] !Boundary fluctuating function solutions after solving load cases (useful in WB segment EB)
-        V1s (np array):[ndofs_leftmesh,4] !Boundary fluctuating function solutions after solving load cases (useful in WB segment Timoshenko Stiffness)
+    This function solves both Euler-Bernoulli (EB) and Timoshenko beam models on the 
+    boundary of solid meshes to compute effective stiffness matrices and fluctuating 
+    functions used for Dirichlet boundary constraints in 3D solid segment analysis.
+
+    Parameters
+    ----------
+    mat_param : list[dict]
+        List of material parameter dictionaries for each material phase.
+        Each dictionary should contain elastic properties (E, G, nu) for the material.
+    boundary_submeshdata : dict
+        Dictionary containing boundary mesh data with keys:
+        
+        * 'mesh': Boundary mesh object (2D surface mesh)
+        * 'subdomains': Subdomain tags for different materials  
+        * 'frame': Local orientation frame functions for the boundary
+
+    Returns
+    -------
+    tuple
+        Contains (D_eff, Deff_srt, V0, V1s):
+        
+        * D_eff : numpy.ndarray
+            4x4 boundary Euler-Bernoulli stiffness matrix for solid cross-section
+        * Deff_srt : numpy.ndarray  
+            6x6 boundary Timoshenko stiffness matrix including shear effects
+        * V0 : numpy.ndarray
+            Boundary fluctuating function solutions [ndofs_boundary, 4] for EB model
+        * V1s : numpy.ndarray
+            Boundary fluctuating function solutions [ndofs_boundary, 4] for Timoshenko model
+
+    Notes
+    -----
+    This is the solid element version of the boundary computation, handling:
+    
+    * 3D constitutive relationships for solid materials
+    * Surface integration over the boundary mesh
+    * Proper coupling between membrane and bending effects in solid sections
     """
     boundary_mesh = boundary_submeshdata["mesh"]
     boundary_subdomains = boundary_submeshdata["subdomains"]
@@ -229,24 +254,22 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
 
 
 def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh):
-    """_summary_
+    """Compute stiffness matrices for solid segments.
 
     Parameters
     ----------
-    ABD : _type_
-        _description_
-    mesh : _type_
-        _description_
-    subdomains : _type_
-        _description_
-    l_submesh : _type_
-        _description_
-    r_submesh : _type_
-        _description_
+    mat_param : list
+        Material parameters
+    meshdata : dict
+        Mesh data dictionary
+    l_submesh : dict
+        Left submesh data
+    r_submesh : dict
+        Right submesh data
 
     Returns
     -------
-    tuple(np.array)
+    tuple
         segment_timo_stiffness, segment_eb_stiffness, l_timo_stiffness, r_timo_stiffness
     """
     tdim = meshdata["mesh"].topology.dim
@@ -262,10 +285,10 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh):
     )
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.solid.compute_timo_boun(
+    D_effEB_l, Deff_l, V0_l, V1_l = core.compute_timo_boun(
         mat_param, l_submesh
     )
-    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.solid.compute_timo_boun(
+    D_effEB_r, Deff_r, V0_r, V1_r = core.compute_timo_boun(
         mat_param, r_submesh
     )
 

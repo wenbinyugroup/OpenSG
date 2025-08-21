@@ -6,5 +6,5 @@ This module contains functions for:
 - Data validation
 """
 
-from .io import load_yaml, write_yaml, validate_mesh_data
-from .util import generate_segment_shell_mesh_files
+from opensg.io.io import load_yaml, write_yaml, validate_mesh_data
+from opensg.io.util import generate_segment_shell_mesh_files

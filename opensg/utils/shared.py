@@ -22,20 +22,33 @@ import petsc4py.PETSc as PETSc
 
 
 def compute_nullspace(V, ABD=False):
-    """Compute nullspace to restrict Rigid body motions
+    """Compute nullspace to restrict rigid body motions in finite element analysis.
 
     Constructs a translational null space for the vector-valued function space V
-    and ensures that it is properly orthonormalized.
+    and ensures that it is properly orthonormalized. This is essential for solving 
+    systems with potential rigid body motions that need to be constrained.
 
     Parameters
     ----------
-    V : functionspace
-        _description_
+    V : dolfinx.fem.FunctionSpace
+        Vector-valued function space (typically with 3 components for 3D problems)
+        representing displacement degrees of freedom
+    ABD : bool, optional
+        Flag indicating if this is for ABD matrix computation (default: False).
+        Currently only affects internal dimension settings.
 
     Returns
     -------
-    NullSpace
-        Nullspace of V
+    petsc4py.PETSc.NullSpace
+        PETSc nullspace object containing orthonormalized basis vectors for
+        translational rigid body modes. Used to constrain the linear system
+        and ensure uniqueness of the solution.
+
+    Notes
+    -----
+    The function creates a nullspace with 3 translational modes (one for each 
+    coordinate direction). The basis vectors are orthonormalized using the 
+    DOLFINx linear algebra utilities to ensure numerical stability.
     """
 
     # Get geometric dim
@@ -85,21 +98,37 @@ def compute_nullspace(V, ABD=False):
 
 
 def solve_ksp(A, F, V):
-    """Krylov Subspace Solver for Aw = F
+    """Solve linear system Aw = F using PETSc Krylov Subspace solver.
+
+    This function sets up and solves a linear system using PETSc's KSP
+    (Krylov Subspace) solver with MUMPS direct factorization for robust
+    solution of finite element systems.
 
     Parameters
     ----------
-    A : array
-        stiffness matrix
-    F : array
-        Load or force vector
-    V : function space
-        _description_
+    A : petsc4py.PETSc.Mat
+        Assembled stiffness matrix from finite element discretization
+    F : petsc4py.PETSc.Vec
+        Right-hand side vector (load vector or force vector)
+    V : dolfinx.fem.FunctionSpace
+        Function space corresponding to the degrees of freedom in the system
 
     Returns
     -------
-    Function
-        solution function (displacement field)
+    dolfinx.fem.Function
+        Solution function containing the displacement field that satisfies Aw = F
+
+    Notes
+    -----
+    The solver is configured with:
+    - MUMPS direct solver for robustness
+    - Automatic null pivot detection
+    - Optimized memory management for large systems
+    - Monitoring capabilities for debugging (optional)
+    
+    This is the primary linear solver used throughout OpenSG for solving
+    finite element systems arising from ABD matrix computations and
+    boundary value problems.
     """
 
     w = Function(V)

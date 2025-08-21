@@ -32,37 +32,44 @@ import scipy
 
 from mpi4py import MPI
 import ufl
-import opensg
 import opensg.utils.shared as shared_utils
 import opensg.utils.shell as utils
+import opensg.core.shell as core
 
 
 ### ABD matrix computation
 # @profile
 # NOTE can pass in thick[ii], nlay[ii], etc instead of the dictionaries
 def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
-    """Compute the ABD matrix for a composite layup structure
+    """Compute the ABD matrix for a composite layup structure (legacy version).
 
     Constructs a local stiffness matrix for a composite laminate
-    by assembling the contributions from multiple layers.
+    by assembling the contributions from multiple layers using Mixed-Space-Galerkin formulations.
 
     Parameters
     ----------
-    ii : _type_
-        _description_
-    thick : _type_
-        _description_
-    nlay : _type_
-        _description_
-    material_parameters : _type_
-        _description_
-    matid : _type_
-        _description_
+    thick : list[float]
+        List of layer thicknesses for each layer in the laminate
+    nlay : int
+        Number of layers in the composite laminate
+    angle : list[float]
+        List of fiber angles (in radians) for each layer
+    mat_names : list[str]
+        List of material names corresponding to each layer
+    material_database : dict
+        Database containing material properties for each material name.
+        Each material should have properties: E1, E2, G12, nu12, etc.
 
     Returns
     -------
-    _type_
-        _description_
+    numpy.ndarray
+        6x6 ABD matrix representing the laminate stiffness matrix.
+        Relates forces/moments to strains/curvatures through [N,M]^T = ABD * [e,k]^T
+        where N are in-plane forces, M are moments, e are strains, k are curvatures.
+
+    Notes
+    -----
+    This is a legacy implementation. Use `compute_ABD_matrix` for current functionality.
     """
 
     ## 1D mesh generation
@@ -179,15 +186,43 @@ def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
 
 # Generate ABD matrix (Plate model)
 def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
-    """
-    MSG based Kirchoff plate stiffness matrix of composite laminates
+    """Compute the ABD matrix for composite laminates using Mixed-Space-Galerkin formulations.
 
-    Parameters:
-        ii: Layup id
+    This function implements the MSG-based Kirchhoff plate stiffness matrix computation
+    for composite laminates. It creates a 1D through-thickness mesh and computes
+    the homogenized stiffness properties for the laminate.
 
-    Returns:
-        ABD: [6,6] ! Plate Stiffness Matrix
+    Parameters
+    ----------
+    thick : list[float]
+        List of layer thicknesses for each layer in the laminate [length units]
+    nlay : int
+        Number of layers in the composite laminate
+    angle : list[float]
+        List of fiber angles (in radians) for each layer
+    mat_names : list[str]
+        List of material names corresponding to each layer
+    material_database : dict
+        Database containing material properties for each material name.
+        Each material should have orthotropic properties: E1, E2, G12, nu12, etc.
 
+    Returns
+    -------
+    numpy.ndarray
+        6x6 ABD matrix representing the laminate stiffness matrix.
+        Structure: [[A, B], [B, D]] where:
+        - A: membrane stiffness (3x3)
+        - B: coupling stiffness (3x3) 
+        - D: bending stiffness (3x3)
+        Relates generalized forces to generalized strains: {N, M} = ABD * {ε₀, κ}
+
+    Notes
+    -----
+    The computation uses:
+    - 1D finite element mesh through the laminate thickness
+    - Quadratic integration for accuracy
+    - Mixed-Space-Galerkin formulation for computational efficiency
+    - Accounts for material anisotropy and layer orientation
     """
     deg = 2
     cell = ufl.Cell("interval")
@@ -241,11 +276,16 @@ def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
         """
         Performs rotation from local material frame to global frame
 
-        Parameters:
-            C: [6,6] numpy array  ! Stiffness matrix
-            t: constant           ! rotation angle
+        Parameters
+        ----------
+        C : numpy.ndarray
+            [6,6] numpy array - Stiffness matrix
+        t : float
+            rotation angle
 
-        Returns:
+        Returns
+        -------
+        numpy.ndarray
             C': Rotated Stiffness matrix
         """
         th = np.deg2rad(t)
@@ -266,10 +306,16 @@ def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
         """
         Compute the [6,6] Stiffness matrix using material elastic constants
 
-        Parameters:
-            i: Material parameters id/ matid
+        Parameters
+        ----------
+        material_parameters : dict
+            Material parameters
+        theta : float
+            Rotation angle
 
-        Returns:
+        Returns
+        -------
+        numpy.ndarray
             C: [6,6] Stiffness Matrix
         """
         # E1,E2,E3,G12,G13,G23,v12,v13,v23= material_parameters[matid[ii][i]]
@@ -339,10 +385,18 @@ def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
         """
         Performs < gamma_e.T Stiffness_matrix gamma_e > and give simplified form
 
-        Parameters:
-            i: matid
+        Parameters
+        ----------
+        x : array-like
+            Coordinate point
+        material_parameters : dict
+            Material parameters
+        theta : float
+            Rotation angle
 
-        Returns:
+        Returns
+        -------
+        ufl.Tensor
             Dee: [6,6] ufl tensor
         """
         C = Stiff_mat(material_parameters, theta)
@@ -399,19 +453,48 @@ def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
 
 # def compute_timo_boun(ABD, mesh, subdomains, frame, nullspace, sub_nullspace, nphases):
 def compute_timo_boun(ABD, boundary_submeshdata, nh):
-    """
-    Solve EB and Timo model for boundary mesh.
-    The output flcutuating functions V0 and V1s are used dirichilet boundary constraints
+    """Compute boundary stiffness matrices for Euler-Bernoulli and Timoshenko beam theories.
 
-    Parameters:
-        mesh_l: Left Boundary mesh
-        subdomains_l:  Left Boundary subdomains (layup information)
-        frame_l: local orientation frame (DG space)
-    Returns:
-        D_eff (np array): [4,4] !Boundary EB Stiffness matrix
-        Deff_srt (np array):[6,6] !Boundary Timoshenko Stiffness matrix
-        V0 (np array): [ndofs_leftmesh,4] !Boundary fluctuating function solutions after solving load cases (useful in WB segment EB)
-        V1s (np array):[ndofs_leftmesh,4] !Boundary fluctuating function solutions after solving load cases (useful in WB segment Timoshenko Stiffness)
+    This function solves both Euler-Bernoulli (EB) and Timoshenko beam models on the 
+    boundary mesh to compute effective stiffness matrices and fluctuating functions 
+    used for Dirichlet boundary constraints in segment analysis.
+
+    Parameters
+    ----------
+    ABD : list[numpy.ndarray]
+        List of 6x6 ABD matrices for each layup in the boundary mesh
+    boundary_submeshdata : dict
+        Dictionary containing boundary mesh data with keys:
+        - 'mesh': Boundary mesh object
+        - 'subdomains': Subdomain tags for different layups
+        - 'frame': Local orientation frame functions (optional, computed if not provided)
+    nh : int
+        Number of hierarchical constraint equations for mesh consistency
+
+    Returns
+    -------
+    tuple
+        Contains (D_eff, Deff_srt, V0, V1s):
+        
+        - D_eff : numpy.ndarray
+            4x4 boundary Euler-Bernoulli stiffness matrix relating boundary forces
+            to boundary displacements and rotations
+        - Deff_srt : numpy.ndarray  
+            6x6 boundary Timoshenko stiffness matrix including shear deformation effects
+        - V0 : numpy.ndarray
+            Boundary fluctuating function solutions [ndofs_boundary, 4] for EB model.
+            Used for imposing boundary constraints in segment analysis
+        - V1s : numpy.ndarray
+            Boundary fluctuating function solutions [ndofs_boundary, 4] for Timoshenko model.
+            Used for imposing boundary constraints with shear effects
+
+    Notes
+    -----
+    The function:
+    - Creates local coordinate systems on the boundary
+    - Assembles stiffness matrices using Mixed-Space-Galerkin formulations
+    - Solves 4 load cases corresponding to unit boundary conditions
+    - Computes effective homogenized properties for the boundary cross-section
     """
     boundary_mesh = boundary_submeshdata["mesh"]
     boundary_subdomains = boundary_submeshdata["subdomains"]
@@ -582,24 +665,24 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
 
 
 def compute_stiffness(ABD, mesh, subdomains, l_submesh, r_submesh):
-    """_summary_
+    """Compute stiffness matrices for shell segments.
 
     Parameters
     ----------
-    ABD : _type_
-        _description_
-    mesh : _type_
-        _description_
-    subdomains : _type_
-        _description_
-    l_submesh : _type_
-        _description_
-    r_submesh : _type_
-        _description_
+    ABD : numpy.ndarray
+        ABD matrix
+    mesh : dolfinx.mesh.Mesh
+        Mesh object
+    subdomains : dict
+        Subdomain data
+    l_submesh : dict
+        Left submesh data
+    r_submesh : dict
+        Right submesh data
 
     Returns
     -------
-    tuple(np.array)
+    tuple
         segment_timo_stiffness, segment_eb_stiffness, l_timo_stiffness, r_timo_stiffness
     """
 
@@ -693,12 +776,12 @@ def compute_stiffness(ABD, mesh, subdomains, l_submesh, r_submesh):
     )
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.shell.compute_timo_boun(
+    D_effEB_l, Deff_l, V0_l, V1_l = core.compute_timo_boun(
         ABD, l_submesh, nh
     )
     # mesh_l, subdomains_l, local_frame_1D(mesh_l)
     # )
-    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.shell.compute_timo_boun(
+    D_effEB_r, Deff_r, V0_r, V1_r = core.compute_timo_boun(
         ABD, r_submesh, nh
     )
     # mesh_r, subdomains_r, local_frame_1D(mesh_r)

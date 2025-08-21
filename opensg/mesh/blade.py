@@ -59,12 +59,13 @@ class ShellBladeMesh:
         mesh_data : dict
             Dictionary of mesh data loaded from the output of pynumad mesher.
             Expected to contain:
-                - nodes: list of node coordinates
-                - elements: list of element definitions
-                - sets: dictionary of element and node sets
-                - materials: dictionary of material definitions
-                - sections: dictionary of section definitions
-                - elementOrientations: list of element orientation matrices
+            
+            - nodes: list of node coordinates
+            - elements: list of element definitions
+            - sets: dictionary of element and node sets
+            - materials: dictionary of material definitions
+            - sections: dictionary of section definitions
+            - elementOrientations: list of element orientation matrices
         """
         self._mesh_data = mesh_data
 
@@ -259,6 +260,12 @@ class ShellBladeMesh:
 
 
 class SolidBladeSegmentMesh:
+    """A class representing a segment mesh for solid blade analysis.
+    
+    This class manages the data and methods for the mesh of a segment of a blade
+    using solid elements for 3D structural analysis.
+    """
+    
     def __init__(
         self,
         # segment_node_labels,
@@ -396,7 +403,7 @@ class SolidBladeSegmentMesh:
         #    pp[:,0]=pp[:,0]-mean
 
         is_left_boundary, is_right_boundary = (
-            opensg.utils.solid.generate_boundary_markers(min(pp[:, 0]), max(pp[:, 0]))
+            utils.generate_boundary_markers(min(pp[:, 0]), max(pp[:, 0]))
         )
 
         left_facets = dolfinx.mesh.locate_entities_boundary(
@@ -937,7 +944,7 @@ class ShellBladeSegmentMesh:
         ABD_ = []
         for i in range(nphases):
             ABD_.append(
-                opensg.compute_ABD_matrix(
+                compute_ABD_matrix(
                     thick=self.layup_database["thick"][i],
                     nlay=self.layup_database["nlay"][i],
                     mat_names=self.layup_database["mat_names"][i],
@@ -962,29 +969,6 @@ class ShellBladeSegmentMesh:
     #     #u_plotter.view_xy() # z is beam axis
     #     u_plotter.show()
 
-    def compute_stiffness_EB(self, ABD):
-        """Compute the Euler-Bernoulli beam stiffness matrix.
-
-        Parameters
-        ----------
-        ABD : list
-            List of ABD matrices for each unique layup
-
-        Returns
-        -------
-        numpy.ndarray
-            4x4 stiffness matrix for Euler-Bernoulli beam theory
-        """
-        # extract object data
-        mesh = self.mesh
-        frame = self.frame
-        subdomains = self.subdomains
-
-        D_eff = opensg.compute_stiffness_EB_blade_segment(
-            ABD, mesh, frame, subdomains, self.left_submesh, self.right_submesh
-        )
-
-        return D_eff
 
     def compute_boundary_stiffness_timo(self, ABD):
         """Compute the Timoshenko beam stiffness matrices for the boundaries.

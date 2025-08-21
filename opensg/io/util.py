@@ -1,8 +1,8 @@
 import numpy as np
 from os.path import join, exists
 import os
-import opensg
 import yaml
+from opensg.io.io import load_yaml
 
 
 def generate_segment_shell_mesh_files(
@@ -37,7 +37,7 @@ def generate_segment_shell_mesh_files(
     b_mesh_name = os.path.basename(blade_mesh_yaml)
     b_mesh_name = os.path.splitext(b_mesh_name)[0]
 
-    b_mesh_data = opensg.load_yaml(blade_mesh_yaml)
+    b_mesh_data = load_yaml(blade_mesh_yaml)
 
     segment_mesh_data = dict()
 
