@@ -1,6 +1,10 @@
+# Add the parent directory to Python path to find opensg package
+import os
+import sys
+sys.path.insert(0, os.path.abspath('..'))
+
 # from opensg import __version__
 __version__ = "0.0.1"
-# import mock
 
 # -- Project information -----------------------------------------------------
 project = u'opensg'
@@ -29,7 +33,7 @@ numpydoc_show_inherited_class_members = False
 numpydoc_class_members_toctree = False
 autodoc_member_order = 'bysource'
 autoclass_content = 'both'
-bibtex_bibfiles = ['refs/publications.bib','refs/conclusion.bib']
+bibtex_bibfiles = ['user-guide/references.bib']
 templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
@@ -37,7 +41,7 @@ language = "en"
 numfig = True
 
 autodoc_mock_imports = ["dolfinx", "basix", "ufl", "gmshio", "gmsh", "petsc4py", "scipy",
-                        "mpi4py", "numpy",]
+                        "mpi4py", "numpy", "slepc4py", "meshio", "pyvista"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

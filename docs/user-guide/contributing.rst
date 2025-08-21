@@ -84,7 +84,7 @@ the code.
 Stylistic conventions
 ^^^^^^^^^^^^^^^^^^^^^
 
--  Please `black <https://black.readthedocs.io/en/stable/>`__ your code.
+-  Please apply `black <https://black.readthedocs.io/en/stable/>`__ formatting to your code.
    This enforces a standard style across the project with minimal
    thought and effort
 
@@ -94,68 +94,7 @@ Stylistic conventions
 Developer Installation
 ----------------------
 
-To maintain a local installation, developers should use the following
-commands:
-
-.. code::
-
-   git clone https://github.com/wenbinyugroup/opensg
-   cd opensg
-   pip install -e .
-
-
-Running Common Developer Tasks
-------------------------------
-
-Many common developer tasks have been implemented through nox for
-convenient and consistent results. The following subsections describe
-the various tasks available through the `nox <https://nox.thea.codes/en/stable/>`__ task-runner.
-
-Testing
-^^^^^^^
-
-To run tests locally, run:
-
-.. code::
-
-   nox -s tests
-
-at the root of the repository. 
-
-Formatting
-^^^^^^^^^^
-
-To check if your code complies to the black style run:
-
-.. code::
-
-   nox -s check_style
-
-at the root of the repository. If you find it does not, please run:
-
-.. code::
-
-   nox -s enforce_style
-
-Building Docs
-^^^^^^^^^^^^^
-
-To build docs locally, navigate to ``opensg/docs`` and run:
-
-.. code::
-
-   nox -s docs
-
-After building, the static html files can be found in ``_build/html``.
-
-Serving Docs
-^^^^^^^^^^^^
-
-To view the docs locally, navigate to ``opensg/docs`` and run:
-
-.. code::
-
-   nox -s serve
+The standard installation method will install the package in editable mode, so no additional steps are required.
 
 Documentation
 -------------
