@@ -1,8 +1,7 @@
 User Guide
 ==========
 
-OpenSG (Open Source Structural Analysis for Wind Turbine Blades) is a Python package 
-designed for structural analysis of wind turbine blades using Mixed-Space-Galerkin (MSG) formulations and finite element methods.
+OpenSG (Open Source Structural Analysis for Wind Turbine Blades) is a Python package.
 
 Sandia Funding Statement
 ------------------------

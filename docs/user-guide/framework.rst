@@ -70,7 +70,7 @@ These are listed in :numref:`table-core-subpackage`.
    =================================================  =============================================================================================================================================================================================================================================================================
    Module/Function                                    Description
    =================================================  =============================================================================================================================================================================================================================================================================
-   :func:`~opensg.core.shell.compute_ABD_matrix`     Function to compute ABD matrices for composite laminates using Mixed-Space-Galerkin formulations. Relates forces/moments to strains/curvatures in shell structures.
+   :func:`~opensg.core.shell.compute_ABD_matrix`     Function to compute ABD matrices for composite laminates. Relates forces/moments to strains/curvatures in shell structures.
    :func:`~opensg.core.shell.compute_timo_boun`      Function to compute boundary stiffness matrices for Euler-Bernoulli and Timoshenko beam theories on shell boundaries.
    :func:`~opensg.core.shell.compute_stiffness`      Function to compute segment stiffness matrices using shell element formulations.
    :func:`~opensg.core.solid.compute_timo_boun`      Function to compute boundary stiffness matrices for solid element analyses.

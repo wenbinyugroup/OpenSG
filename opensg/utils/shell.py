@@ -194,8 +194,7 @@ def ddot(w, d1):
 def gamma_h(e, x, w):
     """Compute the gamma_h operator for MSG-Shell formulations.
 
-    This function computes the gamma_h operator that appears in the
-    Mixed-Space-Galerkin shell formulations. It represents the strain
+    This function computes the gamma_h operator. It represents the strain
     measures in terms of the displacement field.
 
     Parameters
@@ -281,8 +280,7 @@ def gamma_h(e, x, w):
 def gamma_l(e, x, w):
     """Compute the gamma_l operator for MSG-Shell formulations.
 
-    This function computes the gamma_l operator that appears in the
-    Mixed-Space-Galerkin shell formulations. It represents the strain
+    This function computes the gamma_l operator. It represents the strain
     measures in terms of the displacement field for the Timoshenko model.
 
     Parameters
@@ -348,8 +346,7 @@ def gamma_l(e, x, w):
 def gamma_e(e, x):
     """Compute the gamma_e operator for MSG-Shell formulations.
 
-    This function computes the gamma_e operator that appears in the
-    Mixed-Space-Galerkin shell formulations. It represents the strain
+    This function computes the gamma_e operator.  It represents the strain
     measures in terms of the spatial coordinates.
 
     Parameters
@@ -458,8 +455,7 @@ def gamma_e(e, x):
 def gamma_d(e, x):
     """Compute the gamma_d operator for MSG-Shell formulations.
 
-    This function computes the gamma_d operator that appears in the
-    Mixed-Space-Galerkin shell formulations. It represents additional
+    This function computes the gamma_d operator. It represents additional
     strain measures needed for the Timoshenko model.
 
     Parameters
