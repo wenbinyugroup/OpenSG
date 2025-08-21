@@ -43,8 +43,7 @@ import opensg.core.shell as core
 def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
     """Compute the ABD matrix for a composite layup structure (legacy version).
 
-    Constructs a local stiffness matrix for a composite laminate
-    by assembling the contributions from multiple layers using Mixed-Space-Galerkin formulations.
+    Constructs a local stiffness matrix for a composite laminate.
 
     Parameters
     ----------
@@ -186,7 +185,7 @@ def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
 
 # Generate ABD matrix (Plate model)
 def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
-    """Compute the ABD matrix for composite laminates using Mixed-Space-Galerkin formulations.
+    """Compute the ABD matrix for composite laminates.
 
     This function implements the MSG-based Kirchhoff plate stiffness matrix computation
     for composite laminates. It creates a 1D through-thickness mesh and computes
@@ -215,14 +214,6 @@ def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
         - B: coupling stiffness (3x3) 
         - D: bending stiffness (3x3)
         Relates generalized forces to generalized strains: {N, M} = ABD * {ε₀, κ}
-
-    Notes
-    -----
-    The computation uses:
-    - 1D finite element mesh through the laminate thickness
-    - Quadratic integration for accuracy
-    - Mixed-Space-Galerkin formulation for computational efficiency
-    - Accounts for material anisotropy and layer orientation
     """
     deg = 2
     cell = ufl.Cell("interval")
@@ -477,24 +468,15 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
         Contains (D_eff, Deff_srt, V0, V1s):
         
         - D_eff : numpy.ndarray
-            4x4 boundary Euler-Bernoulli stiffness matrix relating boundary forces
-            to boundary displacements and rotations
+            4x4 boundary Euler-Bernoulli stiffness matrix 
         - Deff_srt : numpy.ndarray  
-            6x6 boundary Timoshenko stiffness matrix including shear deformation effects
+            6x6 boundary Timoshenko stiffness matrix
         - V0 : numpy.ndarray
             Boundary fluctuating function solutions [ndofs_boundary, 4] for EB model.
             Used for imposing boundary constraints in segment analysis
         - V1s : numpy.ndarray
             Boundary fluctuating function solutions [ndofs_boundary, 4] for Timoshenko model.
             Used for imposing boundary constraints with shear effects
-
-    Notes
-    -----
-    The function:
-    - Creates local coordinate systems on the boundary
-    - Assembles stiffness matrices using Mixed-Space-Galerkin formulations
-    - Solves 4 load cases corresponding to unit boundary conditions
-    - Computes effective homogenized properties for the boundary cross-section
     """
     boundary_mesh = boundary_submeshdata["mesh"]
     boundary_subdomains = boundary_submeshdata["subdomains"]
