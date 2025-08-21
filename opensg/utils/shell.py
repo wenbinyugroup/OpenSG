@@ -2,6 +2,7 @@ from mpi4py import MPI
 import numpy as np
 import dolfinx
 import basix
+from typing import Union
 from dolfinx.fem import form, petsc, Function, locate_dofs_topological
 from ufl import (
     TrialFunction,
@@ -512,7 +513,7 @@ def local_boun(mesh_l, frame, subdomains_l):
         - e: interpolated local frame
         - V_l: function space
         - dv: trial function
-        - v_: test function
+        - v: test function
         - x: spatial coordinates
         - dx: measure
     """
@@ -739,12 +740,12 @@ def tangential_projection(u, n):
 
 def facet_vector_approximation(
     V: dolfinx.fem.FunctionSpace,
-    mt: dolfinx.mesh.MeshTags | None = None,
-    mt_id: int | None = None,
+    mt: Union[dolfinx.mesh.MeshTags, None] = None,
+    mt_id: Union[int, None] = None,
     tangent: bool = False,
     interior: bool = False,
-    jit_options: dict | None = None,
-    form_compiler_options: dict | None = None,
+    jit_options: Union[dict, None] = None,
+    form_compiler_options: Union[dict, None] = None,
 ) -> dolfinx.fem.Function:
     jit_options = jit_options if jit_options is not None else {}
     form_compiler_options = (
