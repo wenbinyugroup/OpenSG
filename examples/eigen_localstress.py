@@ -2,6 +2,8 @@ import opensg
 import numpy as np
 import time
 
+import opensg.mesh.blade
+
 
 out_file_name='bar_urc_npl_2_ar_10-segment_'
 beam_force=opensg.core.stress_recov.beam_reaction(out_file_name)
@@ -16,7 +18,7 @@ for segment in np.linspace(1,1,1): # np.linspace(start segment, end segment, (en
     mesh_data = opensg.load_yaml(mesh_yaml)
   
    # Blade Segment Mesh 
-    blade_mesh = opensg.SolidBladeMesh(mesh_data)  
+    blade_mesh = opensg.mesh.blade.SolidBladeMesh(mesh_data)  
     segment_mesh=blade_mesh.generate_segment_mesh(segment_index=0, filename="section.msh")
     print('\n Mesh Time of:'+str(blade_mesh.num_elements),"elements segment is ", time.time()-tic)
   

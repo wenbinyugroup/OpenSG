@@ -13,7 +13,18 @@ from dolfinx.fem import (
     set_bc,
     locate_dofs_topological,
 )
-from ufl import TrialFunction, TestFunction, inner, lhs, rhs, as_tensor, dot, SpatialCoordinate, Measure, as_vector
+from ufl import (
+    TrialFunction,
+    TestFunction,
+    inner,
+    lhs,
+    rhs,
+    as_tensor,
+    dot,
+    SpatialCoordinate,
+    Measure,
+    as_vector,
+)
 from scipy.sparse import csr_matrix
 import petsc4py.PETSc
 from dolfinx.fem.petsc import assemble_matrix
@@ -21,36 +32,44 @@ import scipy
 
 from mpi4py import MPI
 import ufl
-import opensg
 import opensg.utils.shared as shared_utils
 import opensg.utils.shell as utils
+import opensg.core.shell as core
+
 
 ### ABD matrix computation
 # @profile
 # NOTE can pass in thick[ii], nlay[ii], etc instead of the dictionaries
 def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
-    """Compute the ABD matrix for a composite layup structure
+    """Compute the ABD matrix for a composite layup structure (legacy version).
 
     Constructs a local stiffness matrix for a composite laminate
-    by assembling the contributions from multiple layers.
+    by assembling the contributions from multiple layers using Mixed-Space-Galerkin formulations.
 
     Parameters
     ----------
-    ii : _type_
-        _description_
-    thick : _type_
-        _description_
-    nlay : _type_
-        _description_
-    material_parameters : _type_
-        _description_
-    matid : _type_
-        _description_
+    thick : list[float]
+        List of layer thicknesses for each layer in the laminate
+    nlay : int
+        Number of layers in the composite laminate
+    angle : list[float]
+        List of fiber angles (in radians) for each layer
+    mat_names : list[str]
+        List of material names corresponding to each layer
+    material_database : dict
+        Database containing material properties for each material name.
+        Each material should have properties: E1, E2, G12, nu12, etc.
 
     Returns
     -------
-    _type_
-        _description_
+    numpy.ndarray
+        6x6 ABD matrix representing the laminate stiffness matrix.
+        Relates forces/moments to strains/curvatures through [N,M]^T = ABD * [e,k]^T
+        where N are in-plane forces, M are moments, e are strains, k are curvatures.
+
+    Notes
+    -----
+    This is a legacy implementation. Use `compute_ABD_matrix` for current functionality.
     """
 
     ## 1D mesh generation
@@ -85,8 +104,9 @@ def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
 
     # assigning each element as subdomain
     subdomain = dolfinx.mesh.meshtags(dom, dom.topology.dim, cells, cells)
-    x, dx = ufl.SpatialCoordinate(dom), ufl.Measure("dx")(
-        domain=dom, subdomain_data=subdomain
+    x, dx = (
+        ufl.SpatialCoordinate(dom),
+        ufl.Measure("dx")(domain=dom, subdomain_data=subdomain),
     )
     gamma_e = utils.create_gamma_e(x)
 
@@ -102,9 +122,7 @@ def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
         mat_name = mat_names[j]
         material_props = material_database[mat_name]
         theta = angle[j]
-        sigma_val = utils.sigma(
-            u, material_props, theta, Eps=gamma_e[:, 0]
-        )[0]
+        sigma_val = utils.sigma(u, material_props, theta, Eps=gamma_e[:, 0])[0]
         inner_val = inner(sigma_val, utils.eps(v)[0])
         F2 += inner_val * dx(j)
 
@@ -156,9 +174,7 @@ def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
                 mat_name = mat_names[j]
                 material_props = material_database[mat_name]
                 theta = angle[j]
-                dee_val = utils.Dee(x, u, material_props, theta, Eps)[
-                    s, k
-                ]
+                dee_val = utils.Dee(x, u, material_props, theta, Eps)[s, k]
                 f += dee_val * dx(j)
             f = dolfinx.fem.form(f)
             D_ee[s, k] = dolfinx.fem.assemble_scalar(f)
@@ -170,169 +186,315 @@ def compute_ABD_matrix_old(thick, nlay, angle, mat_names, material_database):
 
 # Generate ABD matrix (Plate model)
 def compute_ABD_matrix(thick, nlay, angle, mat_names, material_database):
+    """Compute the ABD matrix for composite laminates using Mixed-Space-Galerkin formulations.
+
+    This function implements the MSG-based Kirchhoff plate stiffness matrix computation
+    for composite laminates. It creates a 1D through-thickness mesh and computes
+    the homogenized stiffness properties for the laminate.
+
+    Parameters
+    ----------
+    thick : list[float]
+        List of layer thicknesses for each layer in the laminate [length units]
+    nlay : int
+        Number of layers in the composite laminate
+    angle : list[float]
+        List of fiber angles (in radians) for each layer
+    mat_names : list[str]
+        List of material names corresponding to each layer
+    material_database : dict
+        Database containing material properties for each material name.
+        Each material should have orthotropic properties: E1, E2, G12, nu12, etc.
+
+    Returns
+    -------
+    numpy.ndarray
+        6x6 ABD matrix representing the laminate stiffness matrix.
+        Structure: [[A, B], [B, D]] where:
+        - A: membrane stiffness (3x3)
+        - B: coupling stiffness (3x3) 
+        - D: bending stiffness (3x3)
+        Relates generalized forces to generalized strains: {N, M} = ABD * {ε₀, κ}
+
+    Notes
+    -----
+    The computation uses:
+    - 1D finite element mesh through the laminate thickness
+    - Quadratic integration for accuracy
+    - Mixed-Space-Galerkin formulation for computational efficiency
+    - Accounts for material anisotropy and layer orientation
     """
-    MSG based Kirchoff plate stiffness matrix of composite laminates
-    
-    Parameters:
-        ii: Layup id
-
-    Returns:
-        ABD: [6,6] ! Plate Stiffness Matrix
-
-    """  
     deg = 2
     cell = ufl.Cell("interval")
-    elem= basix.ufl.element("Lagrange", "interval", 1, shape=(3, ))
+    elem = basix.ufl.element("Lagrange", "interval", 1, shape=(3,))
     domain = ufl.Mesh(elem)
 
     # Nodes (1D SG)
-    th,s=[0],0 # Reference-------- 0
+    th, s = [0], 0  # Reference-------- 0
     for k in thick:
-        s = s + k           # Inward normal in orien provided by yaml file
+        s = s + k  # Inward normal in orien provided by yaml file
         th.append(s)
-    points = np.array(th) 
-    # Elements  
-    cell=[]
+    points = np.array(th)
+    # Elements
+    cell = []
     for k in range(nlay):
-        cell.append([k,k+1])   
+        cell.append([k, k + 1])
     cellss = np.array(cell)
-    
+
     # Create 1D SG mesh
     dom = dolfinx.mesh.create_mesh(MPI.COMM_WORLD, cellss, points, domain)
-    num_cells= dom.topology.index_map(dom.topology.dim).size_local 
+    num_cells = dom.topology.index_map(dom.topology.dim).size_local
     cells = np.arange(num_cells, dtype=np.int32)
-    subdomain = dolfinx.mesh.meshtags(dom, dom.topology.dim, cells, cells) # assigning each element as subdomain
-    x,dx = SpatialCoordinate(dom), Measure('dx')(domain=dom, subdomain_data=subdomain, metadata={"quadrature_degree": 4})
+    subdomain = dolfinx.mesh.meshtags(
+        dom, dom.topology.dim, cells, cells
+    )  # assigning each element as subdomain
+    x, dx = (
+        SpatialCoordinate(dom),
+        Measure("dx")(
+            domain=dom, subdomain_data=subdomain, metadata={"quadrature_degree": 4}
+        ),
+    )
 
-    gamma_e=as_tensor([(1,0,0,x[0],0,0),       # Gamma_e matrix
-                      (0,1,0,0,x[0],0),
-                      (0,0,0,0,0,0),
-                      (0,0,0,0,0,0),
-                      (0,0,0,0,0,0),
-                      (0,0,1,0,0,x[0])])  
+    gamma_e = as_tensor(
+        [
+            (1, 0, 0, x[0], 0, 0),  # Gamma_e matrix
+            (0, 1, 0, 0, x[0], 0),
+            (0, 0, 0, 0, 0, 0),
+            (0, 0, 0, 0, 0, 0),
+            (0, 0, 0, 0, 0, 0),
+            (0, 0, 1, 0, 0, x[0]),
+        ]
+    )
 
     nphases = len(cells)
-    
-    def gamma_h(v): # (Gamma_h * w)
-        E1= as_vector([0,0,v[2].dx(0),(v[1].dx(0)),(v[0].dx(0)),0])
+
+    def gamma_h(v):  # (Gamma_h * w)
+        E1 = as_vector([0, 0, v[2].dx(0), (v[1].dx(0)), (v[0].dx(0)), 0])
         return E1
 
-    def R_sig(C,t): # Rotation matrix
+    def R_sig(C, t):  # Rotation matrix
         """
         Performs rotation from local material frame to global frame
-        
-        Parameters:
-            C: [6,6] numpy array  ! Stiffness matrix
-            t: constant           ! rotation angle
-            
-        Returns:
+
+        Parameters
+        ----------
+        C : numpy.ndarray
+            [6,6] numpy array - Stiffness matrix
+        t : float
+            rotation angle
+
+        Returns
+        -------
+        numpy.ndarray
             C': Rotated Stiffness matrix
         """
-        th=np.deg2rad(t)
-        c,s,cs=np.cos(th),np.sin(th),np.cos(th)*np.sin(th)
-        R_Sig= np.array([(c**2, s**2, 0,0,0,-2*cs),
-                   (s**2, c**2, 0,0,0,2*cs),
-                   (0,0,1,0,0,0),
-                   (0,0,0,c,s,0),
-                   (0,0,0,-s,c,0),
-                   (cs,-cs,0,0,0,c**2-s**2)])
-        return np.matmul(np.matmul(R_Sig,C),R_Sig.transpose())
+        th = np.deg2rad(t)
+        c, s, cs = np.cos(th), np.sin(th), np.cos(th) * np.sin(th)
+        R_Sig = np.array(
+            [
+                (c**2, s**2, 0, 0, 0, -2 * cs),
+                (s**2, c**2, 0, 0, 0, 2 * cs),
+                (0, 0, 1, 0, 0, 0),
+                (0, 0, 0, c, s, 0),
+                (0, 0, 0, -s, c, 0),
+                (cs, -cs, 0, 0, 0, c**2 - s**2),
+            ]
+        )
+        return np.matmul(np.matmul(R_Sig, C), R_Sig.transpose())
 
-    def Stiff_mat(material_parameters, theta):     
+    def Stiff_mat(material_parameters, theta):
         """
         Compute the [6,6] Stiffness matrix using material elastic constants
-        
-        Parameters:
-            i: Material parameters id/ matid
-            
-        Returns:
+
+        Parameters
+        ----------
+        material_parameters : dict
+            Material parameters
+        theta : float
+            Rotation angle
+
+        Returns
+        -------
+        numpy.ndarray
             C: [6,6] Stiffness Matrix
         """
         # E1,E2,E3,G12,G13,G23,v12,v13,v23= material_parameters[matid[ii][i]]
         E1, E2, E3 = material_parameters["E"]
         G12, G13, G23 = material_parameters["G"]
         v12, v13, v23 = material_parameters["nu"]
-        S=np.zeros((6,6))
-        S[0,0], S[1,1], S[2,2]=1/E1, 1/E2, 1/E3
-        S[0,1], S[0,2]= -v12/E1, -v13/E1
-        S[1,0], S[1,2]= -v12/E1, -v23/E2
-        S[2,0], S[2,1]= -v13/E1, -v23/E2
-        S[3,3], S[4,4], S[5,5]= 1/G23, 1/G13, 1/G12    
-        C=np.linalg.inv(S)
+        S = np.zeros((6, 6))
+        S[0, 0], S[1, 1], S[2, 2] = 1 / E1, 1 / E2, 1 / E3
+        S[0, 1], S[0, 2] = -v12 / E1, -v13 / E1
+        S[1, 0], S[1, 2] = -v12 / E1, -v23 / E2
+        S[2, 0], S[2, 1] = -v13 / E1, -v23 / E2
+        S[3, 3], S[4, 4], S[5, 5] = 1 / G23, 1 / G13, 1 / G12
+        C = np.linalg.inv(S)
         # theta=angle[ii][i] # ii denotes the layup id
-        C= as_tensor(R_sig(C,theta)) 
-        return  C
-        
+        C = as_tensor(R_sig(C, theta))
+        return C
+
     # Creating FE function Space
-    V = functionspace(dom, basix.ufl.element("CG", "interval", deg, shape=(3, )))
-    dv,v_ = TrialFunction(V), TestFunction(V)
-    F2 = sum([dot(dot(Stiff_mat(material_database[mat_names[i]], angle[i]),gamma_h(dv)),gamma_h(v_))*dx(i) for i in range(nphases)]) # Weak form of energy(load vec)
-    A=  petsc.assemble_matrix(form(F2))
+    V = functionspace(dom, basix.ufl.element("CG", "interval", deg, shape=(3,)))
+    dv, v_ = TrialFunction(V), TestFunction(V)
+    F2 = sum(
+        [
+            dot(
+                dot(Stiff_mat(material_database[mat_names[i]], angle[i]), gamma_h(dv)),
+                gamma_h(v_),
+            )
+            * dx(i)
+            for i in range(nphases)
+        ]
+    )  # Weak form of energy(load vec)
+    A = petsc.assemble_matrix(form(F2))
     A.assemble()
     null = shared_utils.compute_nullspace(V, ABD=True)
-    A.setNullSpace(null)      # Set the nullspace
-    ndofs = 3*V.dofmap.index_map.local_range[1] # total dofs
+    A.setNullSpace(null)  # Set the nullspace
+    ndofs = 3 * V.dofmap.index_map.local_range[1]  # total dofs
     # Initialization
-    V0, Dhe, D_ee = np.zeros((ndofs,6)), np.zeros((ndofs,6)), np.zeros((6,6))
+    V0, Dhe, D_ee = np.zeros((ndofs, 6)), np.zeros((ndofs, 6)), np.zeros((6, 6))
 
     # Assembly ! 6 Load Cases
     for p in range(6):
         # Right Hand Side vector in weak form (F2(v_))
         # < gamma_e[:,p].T Stiffness_Matrix gamma_h>
-        F2= -sum([dot(dot(Stiff_mat(material_database[mat_names[i]], angle[i]),gamma_e[:,p]),gamma_h(v_))*dx(i) for i in range(nphases)]) 
+        F2 = -sum(
+            [
+                dot(
+                    dot(
+                        Stiff_mat(material_database[mat_names[i]], angle[i]),
+                        gamma_e[:, p],
+                    ),
+                    gamma_h(v_),
+                )
+                * dx(i)
+                for i in range(nphases)
+            ]
+        )
         F = petsc.assemble_vector(form(F2))
-        F.ghostUpdate(addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE)
-        null.remove(F)                        # Orthogonalize F to the null space of A^T
-        Dhe[:,p]= F[:]                        # Dhe matrix formation
-        w = shared_utils.solve_ksp(A,F,V)
-        V0[:,p]= w.x.array[:]          # Solved Fluctuating Functions
-    D1=np.matmul(V0.T,-Dhe)
-    
-    def Dee_abd(x, material_parameters, theta):  
+        F.ghostUpdate(
+            addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
+        )
+        null.remove(F)  # Orthogonalize F to the null space of A^T
+        Dhe[:, p] = F[:]  # Dhe matrix formation
+        w = shared_utils.solve_ksp(A, F, V)
+        V0[:, p] = w.x.array[:]  # Solved Fluctuating Functions
+    D1 = np.matmul(V0.T, -Dhe)
+
+    def Dee_abd(x, material_parameters, theta):
         """
         Performs < gamma_e.T Stiffness_matrix gamma_e > and give simplified form
-        
-        Parameters:
-            i: matid 
-     
-        Returns:
-            Dee: [6,6] ufl tensor 
+
+        Parameters
+        ----------
+        x : array-like
+            Coordinate point
+        material_parameters : dict
+            Material parameters
+        theta : float
+            Rotation angle
+
+        Returns
+        -------
+        ufl.Tensor
+            Dee: [6,6] ufl tensor
         """
         C = Stiff_mat(material_parameters, theta)
         x0 = x[0]
-        return as_tensor([(C[0,0],C[0,1],C[0,5],x0*C[0,0],x0*C[0,1],x0*C[0,5]),
-                      (C[1,0],C[1,1],C[1,5],x0*C[1,0],x0*C[1,1],x0*C[1,5]),
-                      (C[5,0],C[5,1],C[5,5],x0*C[5,0],x0*C[5,1],x0*C[5,5]),
-                      (x0*C[0,0],x0*C[0,1],x0*C[0,5],x0*x0*C[0,0],x0*x0*C[0,1],x0*x0*C[0,5]),
-                      (x0*C[1,0],x0*C[1,1],x0*C[1,5],x0*x0*C[1,0],x0*x0*C[1,1],x0*x0*C[1,5]),
-                     (x0*C[5,0],x0*C[5,1],x0*C[5,5],x0*x0*C[5,0],x0*x0*C[5,1],x0*x0*C[5,5])])
-    
+        return as_tensor(
+            [
+                (C[0, 0], C[0, 1], C[0, 5], x0 * C[0, 0], x0 * C[0, 1], x0 * C[0, 5]),
+                (C[1, 0], C[1, 1], C[1, 5], x0 * C[1, 0], x0 * C[1, 1], x0 * C[1, 5]),
+                (C[5, 0], C[5, 1], C[5, 5], x0 * C[5, 0], x0 * C[5, 1], x0 * C[5, 5]),
+                (
+                    x0 * C[0, 0],
+                    x0 * C[0, 1],
+                    x0 * C[0, 5],
+                    x0 * x0 * C[0, 0],
+                    x0 * x0 * C[0, 1],
+                    x0 * x0 * C[0, 5],
+                ),
+                (
+                    x0 * C[1, 0],
+                    x0 * C[1, 1],
+                    x0 * C[1, 5],
+                    x0 * x0 * C[1, 0],
+                    x0 * x0 * C[1, 1],
+                    x0 * x0 * C[1, 5],
+                ),
+                (
+                    x0 * C[5, 0],
+                    x0 * C[5, 1],
+                    x0 * C[5, 5],
+                    x0 * x0 * C[5, 0],
+                    x0 * x0 * C[5, 1],
+                    x0 * x0 * C[5, 5],
+                ),
+            ]
+        )
+
     # Scalar assembly
     for s in range(6):
         for k in range(6):
-            f=dolfinx.fem.form(sum([
-                Dee_abd(x, material_database[mat_names[i]], angle[i])[s,k]*dx(i) for i in range(nphases)])) 
-            D_ee[s,k]=dolfinx.fem.assemble_scalar(f)   # D_ee [6,6]  
+            f = dolfinx.fem.form(
+                sum(
+                    [
+                        Dee_abd(x, material_database[mat_names[i]], angle[i])[s, k]
+                        * dx(i)
+                        for i in range(nphases)
+                    ]
+                )
+            )
+            D_ee[s, k] = dolfinx.fem.assemble_scalar(f)  # D_ee [6,6]
 
-    D_eff = D_ee + D1 
-    return(D_eff)
+    D_eff = D_ee + D1
+    return D_eff
 
 
 # def compute_timo_boun(ABD, mesh, subdomains, frame, nullspace, sub_nullspace, nphases):
 def compute_timo_boun(ABD, boundary_submeshdata, nh):
-    """
-    Solve EB and Timo model for boundary mesh.
-    The output flcutuating functions V0 and V1s are used dirichilet boundary constraints
+    """Compute boundary stiffness matrices for Euler-Bernoulli and Timoshenko beam theories.
 
-    Parameters:
-        mesh_l: Left Boundary mesh
-        subdomains_l:  Left Boundary subdomains (layup information)
-        frame_l: local orientation frame (DG space)
-    Returns:
-        D_eff (np array): [4,4] !Boundary EB Stiffness matrix
-        Deff_srt (np array):[6,6] !Boundary Timoshenko Stiffness matrix
-        V0 (np array): [ndofs_leftmesh,4] !Boundary fluctuating function solutions after solving load cases (useful in WB segment EB)
-        V1s (np array):[ndofs_leftmesh,4] !Boundary fluctuating function solutions after solving load cases (useful in WB segment Timoshenko Stiffness)
+    This function solves both Euler-Bernoulli (EB) and Timoshenko beam models on the 
+    boundary mesh to compute effective stiffness matrices and fluctuating functions 
+    used for Dirichlet boundary constraints in segment analysis.
+
+    Parameters
+    ----------
+    ABD : list[numpy.ndarray]
+        List of 6x6 ABD matrices for each layup in the boundary mesh
+    boundary_submeshdata : dict
+        Dictionary containing boundary mesh data with keys:
+        - 'mesh': Boundary mesh object
+        - 'subdomains': Subdomain tags for different layups
+        - 'frame': Local orientation frame functions (optional, computed if not provided)
+    nh : int
+        Number of hierarchical constraint equations for mesh consistency
+
+    Returns
+    -------
+    tuple
+        Contains (D_eff, Deff_srt, V0, V1s):
+        
+        - D_eff : numpy.ndarray
+            4x4 boundary Euler-Bernoulli stiffness matrix relating boundary forces
+            to boundary displacements and rotations
+        - Deff_srt : numpy.ndarray  
+            6x6 boundary Timoshenko stiffness matrix including shear deformation effects
+        - V0 : numpy.ndarray
+            Boundary fluctuating function solutions [ndofs_boundary, 4] for EB model.
+            Used for imposing boundary constraints in segment analysis
+        - V1s : numpy.ndarray
+            Boundary fluctuating function solutions [ndofs_boundary, 4] for Timoshenko model.
+            Used for imposing boundary constraints with shear effects
+
+    Notes
+    -----
+    The function:
+    - Creates local coordinate systems on the boundary
+    - Assembles stiffness matrices using Mixed-Space-Galerkin formulations
+    - Solves 4 load cases corresponding to unit boundary conditions
+    - Computes effective homogenized properties for the boundary cross-section
     """
     boundary_mesh = boundary_submeshdata["mesh"]
     boundary_subdomains = boundary_submeshdata["subdomains"]
@@ -502,39 +664,34 @@ def compute_timo_boun(ABD, boundary_submeshdata, nh):
     return np.around(D_eff), np.around(Deff_srt), V0, V1s
 
 
-def compute_stiffness(
-    ABD,
-    mesh,
-    subdomains,
-    l_submesh,
-    r_submesh):
-    """_summary_
+def compute_stiffness(ABD, mesh, subdomains, l_submesh, r_submesh):
+    """Compute stiffness matrices for shell segments.
 
     Parameters
     ----------
-    ABD : _type_
-        _description_
-    mesh : _type_
-        _description_
-    subdomains : _type_
-        _description_
-    l_submesh : _type_
-        _description_
-    r_submesh : _type_
-        _description_
+    ABD : numpy.ndarray
+        ABD matrix
+    mesh : dolfinx.mesh.Mesh
+        Mesh object
+    subdomains : dict
+        Subdomain data
+    l_submesh : dict
+        Left submesh data
+    r_submesh : dict
+        Right submesh data
 
     Returns
     -------
-    tuple(np.array)
+    tuple
         segment_timo_stiffness, segment_eb_stiffness, l_timo_stiffness, r_timo_stiffness
     """
 
     nphases = len(ABD)
-    tdim=mesh.topology.dim
+    tdim = mesh.topology.dim
     fdim = tdim - 1
-    
-    pp=mesh.geometry.x
-    x_min, x_max=min(pp[:,0]), max(pp[:,0])
+
+    pp = mesh.geometry.x
+    x_min, x_max = min(pp[:, 0]), max(pp[:, 0])
 
     # Case flags
     all_facets = False  # Approximate all facet vectors if True, subset if False
@@ -597,7 +754,7 @@ def compute_stiffness(
     nh = utils.facet_vector_approximation(
         V=space, mt=facet_tags, mt_id=ft_id, interior=interior, tangent=tangent_flag
     )
-    
+
     # Initialize terms
     # Use pre-computed frames if available, otherwise compute them
     # NOTE: why do we need the frame from local_frame_1D instead of the already computed frames
@@ -605,22 +762,29 @@ def compute_stiffness(
         l_frame = l_submesh["frame"]
     else:
         l_frame = utils.local_frame_1D(l_submesh["mesh"])
-    
+
     if "frame" in r_submesh:
         r_frame = r_submesh["frame"]
     else:
         r_frame = utils.local_frame_1D(r_submesh["mesh"])
-    
-    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(l_submesh["mesh"], l_frame, l_submesh["subdomains"])
-    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(r_submesh["mesh"], r_frame, r_submesh["subdomains"])
 
+    e_l, V_l, dvl, v_l, x_l, dx_l = utils.local_boun(
+        l_submesh["mesh"], l_frame, l_submesh["subdomains"]
+    )
+    e_r, V_r, dvr, v_r, x_r, dx_r = utils.local_boun(
+        r_submesh["mesh"], r_frame, r_submesh["subdomains"]
+    )
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-    D_effEB_l, Deff_l, V0_l, V1_l = opensg.core.shell.compute_timo_boun(ABD, l_submesh, nh)
-        # mesh_l, subdomains_l, local_frame_1D(mesh_l)
+    D_effEB_l, Deff_l, V0_l, V1_l = core.compute_timo_boun(
+        ABD, l_submesh, nh
+    )
+    # mesh_l, subdomains_l, local_frame_1D(mesh_l)
     # )
-    D_effEB_r, Deff_r, V0_r, V1_r = opensg.core.shell.compute_timo_boun(ABD, r_submesh, nh)
-        # mesh_r, subdomains_r, local_frame_1D(mesh_r)
+    D_effEB_r, Deff_r, V0_r, V1_r = core.compute_timo_boun(
+        ABD, r_submesh, nh
+    )
+    # mesh_r, subdomains_r, local_frame_1D(mesh_r)
     # )
 
     # ***************** Wb Segment (surface mesh) computation begins************************
@@ -636,7 +800,10 @@ def compute_stiffness(
 
     F2 = sum(
         [
-            dot(dot(as_tensor(ABD[i]), utils.gamma_h(e, x, dv)), utils.gamma_h(e, x, v_)) * dx(i)
+            dot(
+                dot(as_tensor(ABD[i]), utils.gamma_h(e, x, dv)), utils.gamma_h(e, x, v_)
+            )
+            * dx(i)
             for i in range(nphases)
         ]
     )
@@ -649,7 +816,9 @@ def compute_stiffness(
 
     # bc applied
     boundary_dofs = locate_dofs_topological(
-        V, fdim, np.concatenate((r_submesh["entity_map"], l_submesh["entity_map"]), axis=0)
+        V,
+        fdim,
+        np.concatenate((r_submesh["entity_map"], l_submesh["entity_map"]), axis=0),
     )
     v2a = Function(V)
     bc = dolfinx.fem.dirichletbc(v2a, boundary_dofs)
@@ -662,13 +831,21 @@ def compute_stiffness(
     for p in range(4):  # 4 load cases meaning
         # Boundary
         v2a = Function(V)
-        
-        v2a = utils.dof_mapping_quad(V, v2a, V_l, V0_l[:, p], l_submesh["facets"], l_submesh["entity_map"])
-        v2a = utils.dof_mapping_quad(V, v2a, V_r, V0_r[:, p], r_submesh["facets"], r_submesh["entity_map"])
+
+        v2a = utils.dof_mapping_quad(
+            V, v2a, V_l, V0_l[:, p], l_submesh["facets"], l_submesh["entity_map"]
+        )
+        v2a = utils.dof_mapping_quad(
+            V, v2a, V_r, V0_r[:, p], r_submesh["facets"], r_submesh["entity_map"]
+        )
 
         F2 = -sum(
             [
-                dot(dot(as_tensor(ABD[i]), utils.gamma_e(e, x)[:, p]), utils.gamma_h(e, x, v_)) * dx(i)
+                dot(
+                    dot(as_tensor(ABD[i]), utils.gamma_e(e, x)[:, p]),
+                    utils.gamma_h(e, x, v_),
+                )
+                * dx(i)
                 for i in range(nphases)
             ]
         )
@@ -689,7 +866,10 @@ def compute_stiffness(
             f = dolfinx.fem.form(
                 sum(
                     [
-                        dot(dot(utils.gamma_e(e, x).T, as_tensor(ABD[i])), utils.gamma_e(e, x))[s, k]
+                        dot(
+                            dot(utils.gamma_e(e, x).T, as_tensor(ABD[i])),
+                            utils.gamma_e(e, x),
+                        )[s, k]
                         * dx(i)
                         for i in range(nphases)
                     ]
@@ -707,7 +887,10 @@ def compute_stiffness(
     # Process is similar to Timoshenko boundary implemented over WB segment mesh
     F1 = sum(
         [
-            dot(dot(as_tensor(ABD[i]), utils.gamma_l(e, x, v_)), utils.gamma_l(e, x, dv)) * dx(i)
+            dot(
+                dot(as_tensor(ABD[i]), utils.gamma_l(e, x, v_)), utils.gamma_l(e, x, dv)
+            )
+            * dx(i)
             for i in range(nphases)
         ]
     )
@@ -720,7 +903,10 @@ def compute_stiffness(
     # Dhl
     F_dhl = sum(
         [
-            dot(dot(as_tensor(ABD[i]), utils.gamma_h(e, x, dv)), utils.gamma_l(e, x, v_)) * dx(i)
+            dot(
+                dot(as_tensor(ABD[i]), utils.gamma_h(e, x, dv)), utils.gamma_l(e, x, v_)
+            )
+            * dx(i)
             for i in range(nphases)
         ]
     )
@@ -733,7 +919,11 @@ def compute_stiffness(
     for p in range(4):
         F1 = sum(
             [
-                dot(dot(as_tensor(ABD[i]), utils.gamma_e(e, x)[:, p]), utils.gamma_l(e, x, v_)) * dx(i)
+                dot(
+                    dot(as_tensor(ABD[i]), utils.gamma_e(e, x)[:, p]),
+                    utils.gamma_l(e, x, v_),
+                )
+                * dx(i)
                 for i in range(nphases)
             ]
         )
@@ -760,8 +950,12 @@ def compute_stiffness(
     for p in range(4):  # 4 load cases meaning
         # Boundary
         v2a = Function(V)
-        v2a = utils.dof_mapping_quad(V, v2a, V_l, V1_l[:, p], l_submesh["facets"], l_submesh["entity_map"])
-        v2a = utils.dof_mapping_quad(V, v2a, V_r, V1_r[:, p], r_submesh["facets"], r_submesh["entity_map"])
+        v2a = utils.dof_mapping_quad(
+            V, v2a, V_l, V1_l[:, p], l_submesh["facets"], l_submesh["entity_map"]
+        )
+        v2a = utils.dof_mapping_quad(
+            V, v2a, V_r, V1_r[:, p], r_submesh["facets"], r_submesh["entity_map"]
+        )
         bc = [dolfinx.fem.dirichletbc(v2a, boundary_dofs)]
 
         # quad mesh
@@ -826,6 +1020,5 @@ def compute_stiffness(
         np.set_printoptions(precision=4)
         print("\n", ii, "\n")
         print(np.around(AB))
-        
-    return Deff_srt, D_eff, Deff_l, Deff_r
 
+    return Deff_srt, D_eff, Deff_l, Deff_r
