@@ -1,7 +1,3 @@
-.. figure:: _static/logo.png
-   :scale: 15 %
-   :alt: OpenSG Logo
-
 User Guide
 ==========
 
@@ -20,27 +16,27 @@ U.S. Department of Energy's National Nuclear Security Administration under contr
    :hidden:
    :caption: Introduction
 
-   user-guide/overview
-   user-guide/installation
-   user-guide/framework
-   user-guide/getting-started
-   user-guide/examples
+   overview
+   installation
+   framework
+   getting-started
+   examples
 
 .. toctree::
    :maxdepth: 1
    :hidden:
    :caption: Usage
    
-   user-guide/input
-   user-guide/theory
+   input
+   theory
 
 .. toctree::
    :maxdepth: 1
    :hidden:
    :caption: Backmatter
 
-   user-guide/citing_opensg
-   user-guide/contributing
-   user-guide/license
-   user-guide/glossary
-   user-guide/reference 
+   citing_opensg
+   contributing
+   license
+   glossary
+   reference 

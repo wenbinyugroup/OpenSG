@@ -68,6 +68,26 @@ pygments_style = 'sphinx'
 
 html_theme = 'pydata_sphinx_theme'
 
+# Theme options for PyData Sphinx Theme
+html_theme_options = {
+    "sidebar_includehidden": True,
+    "navigation_with_keys": True,
+    "show_prev_next": True,
+    "navbar_persistent": ["search-button"],
+    "primary_sidebar_end": ["sidebar-ethical-ads"],
+    "secondary_sidebar_items": ["page-toc", "edit-this-page", "sourcelink"],
+    "collapse_navigation": False,
+    "navigation_depth": 4,
+    "show_toc_level": 2,
+    "navbar_align": "content",
+    "use_edit_page_button": False,
+}
+
+# Configure sidebar content
+html_sidebars = {
+    "**": ["sidebar-nav-bs", "sidebar-ethical-ads"]
+}
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
