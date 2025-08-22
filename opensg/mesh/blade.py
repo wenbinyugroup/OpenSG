@@ -19,7 +19,7 @@ import scipy
 
 import opensg
 from opensg.core import shell as core
-from ..utils import shell as utils
+from opensg.utils import shell as utils
 
 
 class ShellBladeMesh:
@@ -944,7 +944,7 @@ class ShellBladeSegmentMesh:
         ABD_ = []
         for i in range(nphases):
             ABD_.append(
-                compute_ABD_matrix(
+                core.compute_ABD_matrix(
                     thick=self.layup_database["thick"][i],
                     nlay=self.layup_database["nlay"][i],
                     mat_names=self.layup_database["mat_names"][i],
