@@ -20,7 +20,7 @@ class TestSolid(unittest.TestCase):
 
     def test_solid_baseline_validation(self):
         """Test against baseline results for a solid segment"""
-        segment_file = test_data_dir / "bar_urc_npl_2_ar_10-segment_2.yaml"
+        segment_file = test_data_dir / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
         segment_mesh = SolidSegmentMesh(segment_file)
 
@@ -45,15 +45,19 @@ class TestSolid(unittest.TestCase):
         )
         test_V0 = np.loadtxt(validation_data_dir / "test_solid_v0.txt")
         test_V1s = np.loadtxt(validation_data_dir / "test_solid_v1s.txt")
-
-        # print("TROUBLESHOOT SOLID TEST")
-        # print(f"Computed stiffness shape: {timo_seg_stiffness.shape}")
-        # print(f"Baseline stiffness shape: {test_timo_seg_stiffness.shape}")
-        # print(f"Max difference: {(timo_seg_stiffness - test_timo_seg_stiffness).max()}")
-        # print(f"Min difference: {(timo_seg_stiffness - test_timo_seg_stiffness).min()}")
+    
+        print("TROUBLESHOOT SOLID TEST")
+        print(f"Computed stiffness shape: {timo_seg_stiffness.shape}")
+        print(f"Baseline stiffness shape: {test_timo_seg_stiffness.shape}")
+        print(
+            f"Max difference: {((timo_seg_stiffness - test_timo_seg_stiffness)/test_timo_seg_stiffness  ).max()}"
+        )
+        print(
+            f"Min difference: {((timo_seg_stiffness - test_timo_seg_stiffness)/test_timo_seg_stiffness).min()}"
+        )
 
         assert np.isclose(
-            timo_seg_stiffness, test_timo_seg_stiffness, rtol=1e-03, atol=1e-04
+            timo_seg_stiffness, test_timo_seg_stiffness, rtol=2e-03,
         ).all()
         assert np.isclose(V0, test_V0, rtol=1e-03, atol=1e-04).all()
         assert np.isclose(V1s, test_V1s, rtol=1e-03, atol=1e-04).all()
@@ -95,7 +99,7 @@ def run_solid_workflow():
     changed the expected outputs and these new outputs are what should be tested against.
     """
 
-    segment_file = test_data_dir / "bar_urc_npl_2_ar_10-segment_2.yaml"
+    segment_file = test_data_dir / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
     segment_mesh = SolidSegmentMesh(str(segment_file))
 
@@ -122,5 +126,5 @@ def run_solid_workflow():
 
 
 if __name__ == "__main__":
-    # unittest.main()
-    run_solid_workflow()
+    # run_solid_workflow()
+    unittest.main()

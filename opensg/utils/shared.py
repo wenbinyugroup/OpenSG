@@ -22,6 +22,7 @@ import petsc4py.PETSc as PETSc
 
 
 def compute_nullspace(V, ABD=False):
+
     """Compute nullspace to restrict rigid body motions in finite element analysis.
 
     Constructs a translational null space for the vector-valued function space V
@@ -50,15 +51,14 @@ def compute_nullspace(V, ABD=False):
     coordinate direction). The basis vectors are orthonormalized using the 
     DOLFINx linear algebra utilities to ensure numerical stability.
     """
+# Get geometric dim
 
-    # Get geometric dim
     gdim = 3
 
     # Set dimension of nullspace
-    # if ABD:
-    dim = 3
-    # else:
-    #     dim = 4
+    dim=4
+    if ABD:
+         dim = 3
 
     # Create list of vectors for null space
     nullspace_basis = [
@@ -77,14 +77,14 @@ def compute_nullspace(V, ABD=False):
     for i in range(gdim):
         basis[i][dofs[i]] = 1.0
     # Build rotational null space basis
-    # if not ABD:
-    #     xx = V.tabulate_dof_coordinates()
-    #     dofs_block = V.dofmap.list.reshape(-1)
-    #     x2, x3 = xx[dofs_block, 1], xx[dofs_block, 2]
-    #     basis[3][dofs[1]] = -x3
-    #     basis[3][dofs[2]] = x2
-    #     for b in nullspace_basis:
-    #         b.scatter_forward()
+    if not ABD:
+         xx = V.tabulate_dof_coordinates()
+         dofs_block = V.dofmap.list.reshape(-1)
+         x2, x3 = xx[dofs_block, 1], xx[dofs_block, 2]
+         basis[3][dofs[1]] = -x3
+         basis[3][dofs[2]] = x2
+         for b in nullspace_basis:
+             b.scatter_forward()
 
     dolfinx.la.orthonormalize(nullspace_basis)
     local_size = V.dofmap.index_map.size_local * V.dofmap.index_map_bs

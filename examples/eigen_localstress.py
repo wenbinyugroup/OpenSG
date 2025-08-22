@@ -15,7 +15,7 @@ for segment in np.linspace(1,1,1): # np.linspace(start segment, end segment, (en
 
     # read yaml mesh
     mesh_yaml = file_name+ str(int(segment)) +'.yaml'  ## the name of the yaml file containing the whole blade mesh
-    mesh_data = opensg.load_yaml(mesh_yaml)
+    mesh_data = opensg.io.load_yaml(mesh_yaml)
   
    # Blade Segment Mesh 
     blade_mesh = opensg.mesh.blade.SolidBladeMesh(mesh_data)  

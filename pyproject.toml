@@ -49,8 +49,9 @@ dev = [
     "pytest-cov>=2.10.0",
 ]
 docs = [
-    "sphinx>=4.0.0",
-    "sphinx-rtd-theme>=1.0.0",
+    "sphinx>=8.0.0",
+    "pydata-sphinx-theme>=0.16.0",
+    "sphinxcontrib-bibtex",
     "numpydoc>=1.1.0",
 ]
 
