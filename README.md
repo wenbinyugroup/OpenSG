@@ -27,7 +27,7 @@ import numpy as np
 from opensg.mesh.segment import ShellSegmentMesh
 
 # 1) Load blade mesh data and generate segment files
-blade_mesh_file = Path("data", "bar_urc_shell_mesh.yaml")
+blade_mesh_file = Path("examples", "data", "bar_urc_shell_mesh.yaml")
 
 # Generate all segment mesh files
 opensg.io.generate_segment_shell_mesh_files(
