@@ -1,13 +1,12 @@
-"""Example script demonstrating the computation of solid blade stiffness matrices.
+"""Example script demonstrating the computation of solid blade stiffness matrices
+using both Euler-Bernoulli and Timoshenko beam theories.
 
 This script shows how to use the OpenSG package to:
-1. Load solid mesh data from a YAML file
-2. Generate segment meshes for solid analysis
-3. Compute ABD and stiffness matrices for each segment
+1. Load solid mesh data from mesh YAML files
+2. Preprocess segment meshes for solid analysis
+3. Compute stiffness matrices for each segment
 4. Save the results
 
-The script processes a wind turbine blade solid mesh and computes its structural
-properties using both Euler-Bernoulli and Timoshenko beam theories.
 """
 
 from pathlib import Path
@@ -17,7 +16,7 @@ import time
 from opensg.mesh.segment import SolidSegmentMesh
 from opensg.core.solid import compute_stiffness
 
-segments_folder = Path("data", "Solid OpenSG Beam", "bar_urc_npl_2_ar_10")
+segments_folder = Path("data", "bar_urc_npl_2_ar_10")
 
 segment_stiffness_matrices = []
 boundary_stiffness_matrices = []
@@ -27,15 +26,10 @@ compute_times = []
 for i in range(3):
     segment_file = Path(segments_folder, f"bar_urc_npl_2_ar_10-segment_{i}.yaml")
     
-    # Check if segment file exists
-    if not segment_file.exists():
-        print(f"Segment {i} file not found, skipping...")
-        continue
-    
     print(f"Processing segment {i}...")
     
-    # Generate mesh for current segment using StandaloneSolidSegmentMesh
-    segment_mesh = SolidSegmentMesh(str(segment_file))
+    # Initialize segment mesh with segment file
+    segment_mesh = SolidSegmentMesh(segment_file)
     
     # The solid segment mesh provides the necessary data for stiffness computation
     print(f"  Segment {i}: {segment_mesh.num_cells} elements, {len(segment_mesh.material_database[0])} materials")
