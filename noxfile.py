@@ -17,8 +17,8 @@ def lint(session):
 def docs(session):
     """Generate documentation."""
     session.run("pip", "install", "-e", ".")
-    session.install("sphinx")
-    session.install("pydata-sphinx-theme")
+    session.install("sphinx>=8.0.0")
+    session.install("pydata-sphinx-theme>=0.16.0")
     session.install("sphinxcontrib-bibtex")
     session.cd("docs/")
     session.run("make", "html")
