@@ -514,7 +514,7 @@ def local_boun(mesh_l, frame, subdomains_l):
         - dx: measure
     """
     V_l = dolfinx.fem.functionspace(
-        mesh_l, basix.ufl.element("S", mesh_l.topology.cell_name(), 2, shape=(3,))
+        mesh_l, basix.ufl.element("CG", mesh_l.topology.cell_name(), 2, shape=(3,))
     )
     le1, le2, le3 = frame
     e1l, e2l, e3l = Function(V_l), Function(V_l), Function(V_l)
