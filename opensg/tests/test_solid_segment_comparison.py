@@ -44,7 +44,7 @@ class TestSolidSegmentComparison(unittest.TestCase):
         cls.test_dir = Path(tempfile.mkdtemp(prefix="test_solid_comparison_"))
 
         # Load mesh data from segment YAML file
-        mesh_data = opensg.load_yaml(cls.segment_mesh_file)
+        mesh_data = opensg.io.load_yaml(cls.segment_mesh_file)
         cls.blade_mesh = SolidBladeMesh(mesh_data)
 
         # Generate segment mesh file

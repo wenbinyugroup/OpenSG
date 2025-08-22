@@ -68,7 +68,7 @@ class TestSegmentComparison(unittest.TestCase):
     def test_segment_creation_methods(self):
         """Test that both segment creation methods work."""
         # Method 1: Create segment using BladeMesh
-        mesh_data = opensg.load_yaml(self.blade_mesh_yaml)
+        mesh_data = opensg.io.load_yaml(self.blade_mesh_yaml)
         blade_mesh = ShellBladeMesh(mesh_data)
         blade_segment = blade_mesh.generate_segment_mesh(self.segment_index)
 
