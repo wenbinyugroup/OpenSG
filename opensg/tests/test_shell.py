@@ -128,5 +128,5 @@ def run_workflow():
 
 
 if __name__ == "__main__":
-    # unittest.main()
-    run_workflow()
+    # run_workflow()
+    unittest.main()

@@ -11,3 +11,6 @@ opensg/tests/validation_data/test_solid_timo_stiffness.txt filter=lfs diff=lfs m
 opensg/tests/validation_data/test_solid_v0.txt filter=lfs diff=lfs merge=lfs -text
 opensg/tests/validation_data/test_solid_segment.msh filter=lfs diff=lfs merge=lfs -text
 opensg/tests/validation_data/test_solid_v1s.txt filter=lfs diff=lfs merge=lfs -text
+examples/data/bar_urc_npl_2_ar_10/bar_urc_npl_2_ar_10-segment_1.yaml filter=lfs diff=lfs merge=lfs -text
+examples/data/bar_urc_npl_2_ar_10/bar_urc_npl_2_ar_10-segment_2.yaml filter=lfs diff=lfs merge=lfs -text
+examples/data/bar_urc_npl_2_ar_10/bar_urc_npl_2_ar_10-segment_0.yaml filter=lfs diff=lfs merge=lfs -text

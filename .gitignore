@@ -177,3 +177,9 @@ venv/
 # Editor-specific files
 .idea/
 .vscode/
+
+# Project specific files
+
+# Examples
+examples/segments_all/
+examples/segments_specific/

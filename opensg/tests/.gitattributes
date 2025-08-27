@@ -1,0 +1,2 @@
+testing_data/bar_urc_npl_1_ar_5-segment_12.yaml filter=lfs diff=lfs merge=lfs -text
+testing_data/bar_urc_npl_1_ar_5-segment_2.yaml filter=lfs diff=lfs merge=lfs -text

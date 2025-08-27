@@ -3,38 +3,21 @@
 Mesh Input Format Guide
 =======================
 
-This guide describes the input file formats supported by OpenSG and how to load mesh data into the various mesh classes for wind turbine blade analysis.
+This guide describes the yaml input file format supported by OpenSG and how to load mesh data into the 
+various mesh classes for wind turbine blade analysis.
 
 Overview
 --------
 
-OpenSG supports multiple input formats for wind turbine blade meshes, with YAML being the primary format for both full blade meshes and individual segment meshes. This guide covers the structure of these input files and demonstrates how to load them into OpenSG's mesh classes for analysis.
-
-Supported File Formats
-----------------------
-
-OpenSG supports the following input file formats:
-
-**YAML Format (Recommended)**
-   - Primary format for blade mesh definitions
+OpenSG currently supports a yaml file format:
+   - Primary format for mesh definitions
    - Human-readable and easily editable
    - Contains complete mesh geometry, materials, and layup information
-   - Used for both full blade meshes and individual segment meshes
-
-**GMSH Format (.msh)**
-   - Legacy support for mesh geometry
-   - Contains node coordinates and element connectivity
-   - Requires separate material and layup definition files
-
-**Segment YAML Format**
-   - Simplified YAML format for individual blade segments
-   - Self-contained with all necessary data for standalone analysis
-   - Generated automatically from full blade YAML files
 
 YAML File Structure
 -------------------
 
-The YAML format contains several key sections that define the complete blade mesh:
+The YAML format contains several key sections that define the complete mesh:
 
 Basic Structure
 ~~~~~~~~~~~~~~~
@@ -101,11 +84,6 @@ The ``nodes`` section defines the 3D coordinates of all mesh vertices:
      - [1.0, 1.0, 0.0]      # Node 3
      - [0.0, 1.0, 0.0]      # Node 4
 
-**Requirements:**
-- Coordinates in meters (SI units)
-- Node indices start from 1 (GMSH convention)
-- Typically x-axis aligned with blade span direction
-
 Elements Section
 ~~~~~~~~~~~~~~~~
 
@@ -168,35 +146,11 @@ The ``sets`` section groups elements by their layup configurations:
 **Requirements:**
 - Element IDs must reference valid elements
 - Names should be descriptive and unique
-- Segment-based naming convention recommended for blade analysis
 
 Loading Mesh Data into OpenSG
 -----------------------------
 
 OpenSG provides several classes for loading and working with mesh data:
-
-Loading Full Blade Meshes
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-For complete blade analysis, use the ``ShellBladeMesh`` or ``SolidBladeMesh`` classes:
-
-.. code-block:: python
-
-   from opensg.mesh.blade import ShellBladeMesh, SolidBladeMesh
-   import opensg.io as opensg_io
-   
-   # Load blade mesh from YAML file
-   blade_data = opensg_io.load_yaml("blade_mesh.yaml")
-   
-   # Create shell blade mesh object
-   shell_blade = ShellBladeMesh(blade_data)
-   
-   # Create solid blade mesh object  
-   solid_blade = SolidBladeMesh(blade_data)
-   
-   # Access mesh properties
-   print(f"Blade has {shell_blade.num_elements} elements")
-   print(f"Blade has {shell_blade.num_nodes} nodes")
 
 Loading Individual Segment Meshes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -208,26 +162,24 @@ For segment-based analysis, use the ``ShellSegmentMesh`` or ``SolidSegmentMesh``
    from opensg.mesh.segment import ShellSegmentMesh, SolidSegmentMesh
    
    # Load segment mesh directly from YAML file
-   shell_segment = ShellSegmentMesh("segment_1.yaml")
-   solid_segment = SolidSegmentMesh("segment_1.yaml")
-   
-   # Access segment properties
-   print(f"Segment has {shell_segment.mesh.topology.index_map(2).size_local} elements")
+   shell_segment = ShellSegmentMesh("your_shell_segment_mesh.yaml")
+   solid_segment = SolidSegmentMesh("your_solid_segment_mesh.yaml")
 
 Generating Segment Files from Blade Mesh
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-OpenSG can automatically generate individual segment files from a full blade mesh:
+OpenSG can automatically generate individual segment files from a full blade mesh. 
+This is currently only available for shell mesh:
 
 .. code-block:: python
 
    from pathlib import Path
-   import opensg.io as opensg_io
+   import opensg
    
    # Generate all segment files from blade mesh
-   blade_mesh_file = Path("data", "blade_mesh.yaml")
+   blade_mesh_file = Path("your_shell_blade_mesh.yaml")
    
-   segment_files = opensg_io.generate_segment_shell_mesh_files(
+   segment_files = opensg.io.generate_segment_shell_mesh_files(
        blade_mesh_file, 
        segment_folder="segments/",
        segment_indices=None  # Generate all segments (default)
@@ -239,50 +191,3 @@ OpenSG can automatically generate individual segment files from a full blade mes
        segment_folder="segments/", 
        segment_indices=[0, 1, 2]  # Only segments 0, 1, and 2
    )
-
-Segment YAML Format
--------------------
-
-Individual segment YAML files have a simplified structure optimized for standalone analysis:
-
-.. code-block:: yaml
-
-   # Simplified segment mesh format
-   nodes:
-     - [0.0, 0.0, 0.0]
-     - [1.0, 0.0, 0.1]
-     # ... segment nodes only
-   
-   elements:
-     - [1, 2, 3, 4]
-     # ... segment elements only
-   
-   materials:
-     - name: "carbon_fiber"
-       E1: 150000.0
-       E2: 10000.0
-       G12: 5000.0
-       nu12: 0.3
-   
-   sets:
-     element:
-       - name: "layup_0"      # Simplified naming
-         elements: [1, 2, 3]
-       - name: "layup_1"
-         elements: [4, 5, 6]
-   
-   sections:
-     - elementSet: "layup_0"
-       layup:
-         - ["carbon_fiber", 0.001, 0.0]
-         - ["carbon_fiber", 0.001, 1.57]
-   
-   elementOrientations:
-     - [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-     # ... one per element
-
-**Key Differences from Full Blade YAML:**
-- Contains only nodes/elements for the specific segment
-- Simplified element set names (``layup_0``, ``layup_1``, etc.)
-- Self-contained with all necessary data
-- No references to parent blade structure

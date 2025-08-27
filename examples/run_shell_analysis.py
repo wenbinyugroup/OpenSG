@@ -12,32 +12,29 @@ properties using both Euler-Bernoulli and Timoshenko beam theories.
 """
 
 from pathlib import Path
-
-# import pynumad
 import opensg
 import numpy as np
 import time
 from opensg.mesh.segment import ShellSegmentMesh
 
-# 1) Load in mesh data
+# Generate all segments from blade data
 blade_mesh_file = Path("data", "bar_urc_shell_mesh.yaml")
 
-# Generate all segments (default behavior)
 print("\nGenerating all segments...")
 opensg.io.generate_segment_shell_mesh_files(
     blade_mesh_file, 
-    segment_folder="segments_all/"
+    segment_folder="data/segments_all/"
 )
-
-
-# 3) Compute stiffness matrices for each blade segment
 
 segment_stiffness_matrices = []
 boundary_stiffness_matrices = []
 compute_times = []
+
+# Process segments (adjust range based on desired segments)
 for i in range(3):
     segment_file = Path("segments_all", f"{blade_mesh_file.stem}_segment_{i+1}.yaml")
-    # Generate mesh for current segment
+    
+    # Initialize segment mesh with segment file
     segment_mesh = ShellSegmentMesh(segment_file)
     
     # Compute ABD matrices for the segment
@@ -52,5 +49,6 @@ for i in range(3):
 
 # Combine segment matrices and save
 combined_stiffness_matrices = np.concat(segment_stiffness_matrices)
-
-np.savetxt('stiffness_m.txt', combined_stiffness_matrices, fmt='%d')
+np.savetxt('stiffness_shell.txt', combined_stiffness_matrices, fmt='%d')
+print(f"Saved {len(segment_stiffness_matrices)} segment stiffness matrices to stiffness_shell.txt")
+print(f"Matrix shape: {combined_stiffness_matrices.shape}")
