@@ -26,6 +26,11 @@ jobs:
           activate-environment: opensg_env
           environment-file: environment.yml
           
+      - name: Install documentation dependencies
+        shell: bash -l {0}
+        run: |
+          pip install -r docs/requirements.txt
+          
       - name: Build documentation
         shell: bash -l {0}
         run: |
