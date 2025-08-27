@@ -14,6 +14,8 @@ dependencies:
   - fenics-ufl
   - fenics-ffcx>=0.9.0
   - mpich 
+  - sphinx
+  - sphinxcontrib-bibtex
   - pip
   - pip:
     - gmsh
