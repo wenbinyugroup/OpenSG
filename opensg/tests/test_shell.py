@@ -54,16 +54,16 @@ class TestShell(unittest.TestCase):
             join(validation_data_dir, "test_shell_r_timo_stiffness.txt")
         )
 
-        # print("TROUBLESHOOT TEST")
-        # print((timo_seg_stiffness - test_timo_seg_stiffness).max())
-        # print((eb_seg_stiffness - test_eb_seg_stiffness).max())
-        # print((l_timo_stiffness - test_l_timo_stiffness).max())
-        # print((r_timo_stiffness - test_r_timo_stiffness).max())
+        print("TROUBLESHOOT TEST")
+        print((timo_seg_stiffness - test_timo_seg_stiffness).max())
+        print((eb_seg_stiffness - test_eb_seg_stiffness).max())
+        print((l_timo_stiffness - test_l_timo_stiffness).max())
+        print((r_timo_stiffness - test_r_timo_stiffness).max())
 
-        # print((timo_seg_stiffness - test_timo_seg_stiffness).min())
-        # print((eb_seg_stiffness - test_eb_seg_stiffness).min())
-        # print((l_timo_stiffness - test_l_timo_stiffness).min())
-        # print((r_timo_stiffness - test_r_timo_stiffness).min())
+        print((timo_seg_stiffness - test_timo_seg_stiffness).min())
+        print((eb_seg_stiffness - test_eb_seg_stiffness).min())
+        print((l_timo_stiffness - test_l_timo_stiffness).min())
+        print((r_timo_stiffness - test_r_timo_stiffness).min())
 
         assert np.isclose(
             timo_seg_stiffness, test_timo_seg_stiffness, rtol=1e-03, atol=1e-04
@@ -128,5 +128,5 @@ def run_workflow():
 
 
 if __name__ == "__main__":
-    run_workflow()
+    # run_workflow()
     unittest.main()
