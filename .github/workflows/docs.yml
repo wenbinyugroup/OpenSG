@@ -17,10 +17,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Setup nox
-        uses: excitedleigh/setup-nox@v2.0.0
-      - name: Build docs
-        run: nox -s docs
+      
+      - name: Setup Conda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: "3.11"
+          activate-environment: opensg_env
+          environment-file: environment.yml
+          
+      - name: Build documentation
+        shell: bash -l {0}
+        run: |
+          cd docs
+          make html
+          
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
