@@ -22,7 +22,7 @@ jobs:
       - name: Build docs
         run: nox -s docs
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: 'docs/_build/html'
   deploy:
