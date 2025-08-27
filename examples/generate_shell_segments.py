@@ -20,7 +20,7 @@ print("=" * 50)
 # 1. Generate segment mesh YAML files from a blade mesh file
 print("\n1. Generating segment mesh YAML files...")
 
-blade_mesh_file = join("data", "bar_urc_shell_mesh.yaml")
+blade_mesh_file = join("..", "data", "shell_blade", "bar_urc_shell_mesh.yaml")
 print(f"Using blade mesh file: {blade_mesh_file}")
 
 # Generate all segments (default behavior)

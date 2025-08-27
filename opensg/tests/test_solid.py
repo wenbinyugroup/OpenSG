@@ -10,7 +10,8 @@ import shutil
 import os
 
 testdir = dirname(abspath(str(__file__)))
-test_data_dir = Path(join(testdir, "testing_data"))
+root_dir = Path(join(testdir, "..", ".."))
+data_dir = Path(join(root_dir, "data"))
 validation_data_dir = Path(join(testdir, "validation_data"))
 
 
@@ -20,7 +21,7 @@ class TestSolid(unittest.TestCase):
 
     def test_solid_baseline_validation(self):
         """Test against baseline results for a solid segment"""
-        segment_file = test_data_dir / "bar_urc_npl_1_ar_5-segment_2.yaml"
+        segment_file = data_dir / "solid_blade" / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
         segment_mesh = SolidSegmentMesh(segment_file)
 
@@ -71,7 +72,7 @@ class TestSolid(unittest.TestCase):
 
     def test_solid_mesh_file_generation(self):
         """Test that solid mesh file generation works correctly"""
-        segment_file = test_data_dir / "bar_urc_npl_2_ar_10-segment_2.yaml"
+        segment_file = data_dir / "solid_blade" / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
         segment_mesh = SolidSegmentMesh(str(segment_file))
 
@@ -99,7 +100,7 @@ def run_solid_workflow():
     changed the expected outputs and these new outputs are what should be tested against.
     """
 
-    segment_file = test_data_dir / "bar_urc_npl_1_ar_5-segment_2.yaml"
+    segment_file = data_dir / "solid_blade" / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
     segment_mesh = SolidSegmentMesh(str(segment_file))
 
@@ -126,5 +127,5 @@ def run_solid_workflow():
 
 
 if __name__ == "__main__":
-    # run_solid_workflow()
+    run_solid_workflow()
     unittest.main()

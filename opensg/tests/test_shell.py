@@ -9,9 +9,9 @@ import shutil
 import os
 
 testdir = dirname(abspath(str(__file__)))
-test_data_dir = Path(join(testdir, "testing_data"))
+root_dir = Path(join(testdir, "..", ".."))
+data_dir = Path(join(root_dir, "data"))
 validation_data_dir = Path(join(testdir, "validation_data"))
-
 
 class TestShell(unittest.TestCase):
     def setUp(self):
@@ -19,7 +19,7 @@ class TestShell(unittest.TestCase):
 
     def test_baseline_validation(self):
         """Test against baseline results for a segment"""
-        segment_file = test_data_dir / "bar_urc_shell_mesh_segment_2.yaml"
+        segment_file = data_dir / "shell_blade" / "bar_urc_shell_mesh_segment_2.yaml"
 
         segment_mesh = ShellSegmentMesh(str(segment_file))
 
@@ -89,13 +89,13 @@ def run_workflow():
     """This function regenerates the test results. Use this if updates to the code have
     changed the expected outputs and these new outputs are what should be tested against.
     """
-    mesh_yaml = join(test_data_dir, "bar_urc_shell_mesh.yaml")
+    mesh_yaml = join(data_dir, "shell_blade", "bar_urc_shell_mesh.yaml")
 
     opensg.io.generate_segment_shell_mesh_files(
-        mesh_yaml, segment_folder=test_data_dir, segment_list=[2]
+        mesh_yaml, segment_folder=data_dir, segment_list=[2]
     )
 
-    segment_file = test_data_dir / "bar_urc_shell_mesh_segment_2.yaml"
+    segment_file = data_dir / "bar_urc_shell_mesh_segment_2.yaml"
 
     segment_mesh = ShellSegmentMesh(str(segment_file))
 
@@ -128,5 +128,5 @@ def run_workflow():
 
 
 if __name__ == "__main__":
-    # run_workflow()
+    run_workflow()
     unittest.main()
