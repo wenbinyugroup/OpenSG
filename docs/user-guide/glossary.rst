@@ -211,7 +211,7 @@ Variable Name Conventions
 **Function Spaces and Solution Variables:**
 
 ``ndofs_WBmesh``
-    [3*len(np.arange(*V.dofmap.index_map.local_range)),1] - total dofs of WB segment mesh (Note: V=> functionspace of WB mesh)
+    [3*len(np.arange(\*V.dofmap.index_map.local_range)),1] - total dofs of WB segment mesh (Note: V=> functionspace of WB mesh)
 
 ``V0_l/V0_r``
     [ndofs_leftmesh,4] - Fluctuating function solution after solving 4 load cases (for EB Stiffness/a.k.a zeroth order)
@@ -250,13 +250,13 @@ Variable Name Conventions
     Measure for left boundary mesh with subdomains_l assigned
 
 ``dx``
-    Measure for WB mesh with subdomains assigned (Used in defining weak form *dx(i) mean integration over mesh elements with layup id i)
+    Measure for WB mesh with subdomains assigned (Used in defining weak form \*dx(i) mean integration over mesh elements with layup id i)
 
 ``nullspace_l``
     contain nullspace vector for used as constraint to block Rigid body motion when solving variation form (ksp solver) over left boundary mesh
 
 ``ndofs_leftmesh``
-    [3*len(np.arange(*V.dofmap.index_map.local_range)),1] - total dofs of left boundary mesh
+    [3*len(np.arange(\*V.dofmap.index_map.local_range)),1] - total dofs of left boundary mesh
 
 **Assembly Matrices and Weak Forms:**
 
@@ -276,7 +276,7 @@ Variable Name Conventions
 ``F2``
     Linear weak form for WB mesh - F2(v_)
     
-    * Can compare with weak form to solve as a(dv,v_) w = F2(v_), where w.vector[ndofs_WBmesh,1] is unknown dofs value stored in V0[ndofs_WBmesh,4]
+    * Can compare with weak form to solve as a(dv,v\_) w = F2(v\_), where w.vector[ndofs_WBmesh,1] is unknown dofs value stored in V0[ndofs_WBmesh,4]
 
 ``F``
     [ndofs_WBmesh,1] - Global Assembled Right hand vector for EB case

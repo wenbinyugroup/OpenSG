@@ -18,6 +18,6 @@ This script shows how to use the OpenSG package to:
 4. Compute ABD and stiffness matrices for each segment
 5. Save the results
 
-.. literalinclude:: ../examples/run_shell_analysis.py
+.. literalinclude:: ../../examples/run_shell_analysis.py
 
 See :ref:`examples` for more information on downloading and running examples.

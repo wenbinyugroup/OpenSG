@@ -53,11 +53,12 @@ To install OpenSG and create an environment where the code runs correctly, pleas
     conda activate opensg_env
 
 .. note::
-On some systems, there is a bug where `gmsh` must be installed through pip, rather than conda, to interface with `dolfinx` correctly.
-If this bug occurs for you please run the following commands::
 
-    conda remove gmsh
-    pip install gmsh
+   On some systems, there is a bug where `gmsh` must be installed through pip, rather than conda, to interface with `dolfinx` correctly.
+   If this bug occurs for you please run the following commands::
+
+       conda remove gmsh
+       pip install gmsh
 
 
 Troubleshooting
