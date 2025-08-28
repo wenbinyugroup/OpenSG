@@ -1,7 +1,3 @@
-.. raw:: latex
-
-    \clearpage
-
 .. _examples:
 
 Examples
@@ -10,22 +6,15 @@ Examples
 This page provides examples demonstrating the capabilities of OpenSG for wind turbine blade structural analysis.
 All examples are available in the ``examples/`` directory of the OpenSG repository.
 
-Getting Started Example
------------------------
+Current examples include:
 
-The simplest way to get started with OpenSG is to run the basic blade segment analysis example:
+* run_shell_analysis.py: This example demonstrates how to use the OpenSG package to compute the stiffness matrix for shell blade segments.
 
-.. literalinclude:: ../examples/run_shell_analysis.py
-   :language: python
-   :caption: Basic shell segment analysis
+* run_solid_analysis.py: This example demonstrates how to use the OpenSG package to compute the stiffness matrix for solid blade segments.
 
-This example demonstrates:
+* generate_shell_segments.py: This example demonstrates how to use the OpenSG package 
+preprocess the shell blade mesh data to individual segment meshes.
 
-* Loading a blade mesh from YAML file
-* Generating segment files
-* Computing ABD matrices for composite layups
-* Computing stiffness matrices using beam theories
-* Saving results for further analysis
 
 Running the Examples
 --------------------
@@ -38,3 +27,13 @@ To run the examples, first ensure OpenSG is properly installed:
    conda activate opensg_env
    cd examples/
    python run_shell_analysis.py
+
+Example data
+-------------
+
+Data for the examples are available in the ``data/`` directory of the OpenSG repository.
+
+* shell_blade: This directory contains a shell blade mesh and an example shell segment mesh.
+
+* solid_blade: This directory contains examples of solid segment meshes. A full solidblade mesh is not provided, as the file would be too large
+
