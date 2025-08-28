@@ -39,8 +39,8 @@ funded by the U.S. Department of Energy’s Wind Energy Technologies Technologie
 Current members of the development team include:
 
 - Akshat Bagla (Purdue University)
-- Ernesto Camarena (Sandia)
-- Kirk Bonney (Sandia)
+- Ernesto Camarena (Sandia National Laboratories)
+- Kirk Bonney (Sandia National Laboratories)
 
 Funding
 =======

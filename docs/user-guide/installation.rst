@@ -48,20 +48,26 @@ To install OpenSG and create an environment where the code runs correctly, pleas
 
     conda env create -f environment.yml
 
-3. On some systems, there is a bug where `gmsh` must be installed through pip, rather than conda, to interface with `dolfinx` correctly.
+3. Activate the environment::
+
+    conda activate opensg_env
+
+.. note::
+On some systems, there is a bug where `gmsh` must be installed through pip, rather than conda, to interface with `dolfinx` correctly.
 If this bug occurs for you please run the following commands::
 
     conda remove gmsh
     pip install gmsh
 
-4. Install the OpenSG package by running the following command in the root of the OpenSG repository::
 
-    pip install .
+Troubleshooting
+---------------
 
-Alternatively, to perform a development installation run::
+If you encounter issues during installation:
 
-    pip install -e .
+1. **Environment Issues**: Make sure you're using the correct conda environment
+2. **Dependencies**: Check that all required packages are installed correctly
+3. **GMSH Issues**: Try the pip installation method for gmsh if conda installation fails
+4. **DOLFINx Compatibility**: Ensure you have a compatible version of DOLFINx installed
 
-
-.. Developers are recommended to install using the instructions on
-.. :ref:`contributing<contributing>` page.
+For additional help, please check the :ref:`contributing<contributing>` page or create an issue on the GitHub repository. 

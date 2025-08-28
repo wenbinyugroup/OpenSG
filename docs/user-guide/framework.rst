@@ -50,12 +50,9 @@ The package supports both shell and solid element analyses for wind turbine blad
    ==================================================  =============================================================================================================================================================================================================================================================================
    Class                                               Description
    ==================================================  =============================================================================================================================================================================================================================================================================
-   :class:`~opensg.mesh.blade.ShellBladeMesh`         Class to generate shell-based blade mesh models from YAML files, including methods to access/add/remove/modify mesh components and generate segment meshes.
-   :class:`~opensg.mesh.blade.SolidBladeMesh`         Class to generate solid-based blade mesh models from YAML files, supporting 3D finite element analysis of blade structures.
    :class:`~opensg.mesh.segment.ShellSegmentMesh`     Class to define individual shell-based blade segments for efficient segment-by-segment analysis without requiring the full blade mesh.
    :class:`~opensg.mesh.segment.SolidSegmentMesh`     Class to define individual solid-based blade segments for 3D structural analysis of blade segments.
-   :class:`~opensg.mesh.blade.ShellBladeSegmentMesh`  Class to define shell-based blade segments (legacy interface - use ShellSegmentMesh for new code).
-   :class:`~opensg.mesh.blade.SolidBladeSegmentMesh`  Class to define solid-based blade segments (legacy interface - use SolidSegmentMesh for new code).
+
    ==================================================  =============================================================================================================================================================================================================================================================================
 
 Core computational modules
