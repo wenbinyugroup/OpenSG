@@ -30,6 +30,6 @@ works on the Mechanics of Structure Genome (MSG) theory.
 
    citing_opensg
    contributing
-   license
+   ../license
    glossary
    reference 
