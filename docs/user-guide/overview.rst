@@ -27,6 +27,7 @@ Applications
 ------------
 
 OpenSG is designed for:
+
 - Wind turbine blade structural design
 - Composite material analysis
 - Blade optimization studies
