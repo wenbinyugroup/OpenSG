@@ -8,12 +8,12 @@ All examples are available in the ``examples/`` directory of the OpenSG reposito
 
 Current examples include:
 
-* run_shell_analysis.py: This example demonstrates how to use the OpenSG package to compute the stiffness matrix for shell blade segments.
+* ``run_shell_analysis.py`` : This example demonstrates how to use the OpenSG package to compute the stiffness matrix for shell blade segments.
 
-* run_solid_analysis.py: This example demonstrates how to use the OpenSG package to compute the stiffness matrix for solid blade segments.
+* ``run_solid_analysis.py`` : This example demonstrates how to use the OpenSG package to compute the stiffness matrix for solid blade segments.
 
-* generate_shell_segments.py: This example demonstrates how to use the OpenSG package 
-preprocess the shell blade mesh data to individual segment meshes.
+* ``generate_shell_segments.py`` : This example demonstrates how to use the OpenSG package 
+  to preprocess the shell blade mesh data to individual segment meshes.
 
 
 Running the Examples
@@ -25,6 +25,11 @@ To run the examples, first ensure OpenSG is properly installed:
 
    cd OpenSG/
    conda activate opensg_env
+
+Then navigate to the examples directory and use python to run the example:
+
+.. code-block:: bash
+
    cd examples/
    python run_shell_analysis.py
 

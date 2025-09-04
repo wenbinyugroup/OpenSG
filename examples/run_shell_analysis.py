@@ -18,12 +18,14 @@ import time
 from opensg.mesh.segment import ShellSegmentMesh
 
 # Generate all segments from blade data
-blade_mesh_file = Path("data", "bar_urc_shell_mesh.yaml")
+blade_mesh_file = Path("..", "data", "shell_blade", "bar_urc_shell_mesh.yaml")
+outputs_folder = Path("outputs")
+segment_folder = outputs_folder / "segments_all"
 
 print("\nGenerating all segments...")
 opensg.io.generate_segment_shell_mesh_files(
     blade_mesh_file, 
-    segment_folder="data/segments_all/"
+    segment_folder=segment_folder
 )
 
 segment_stiffness_matrices = []
@@ -32,7 +34,7 @@ compute_times = []
 
 # Process segments (adjust range based on desired segments)
 for i in range(3):
-    segment_file = Path("segments_all", f"{blade_mesh_file.stem}_segment_{i+1}.yaml")
+    segment_file = Path(segment_folder, f"{blade_mesh_file.stem}_segment_{i+1}.yaml")
     
     # Initialize segment mesh with segment file
     segment_mesh = ShellSegmentMesh(segment_file)
@@ -49,6 +51,6 @@ for i in range(3):
 
 # Combine segment matrices and save
 combined_stiffness_matrices = np.concat(segment_stiffness_matrices)
-np.savetxt('stiffness_shell.txt', combined_stiffness_matrices, fmt='%d')
+np.savetxt(outputs_folder / 'stiffness_shell.txt', combined_stiffness_matrices, fmt='%d')
 print(f"Saved {len(segment_stiffness_matrices)} segment stiffness matrices to stiffness_shell.txt")
 print(f"Matrix shape: {combined_stiffness_matrices.shape}")
