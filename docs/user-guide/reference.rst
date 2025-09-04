@@ -19,7 +19,7 @@
 
     <div>
 
-.. bibliography::
+.. bibliography:: references.bib
 
 
 .. raw:: latex
