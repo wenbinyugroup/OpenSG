@@ -16,15 +16,16 @@ import time
 from opensg.mesh.segment import SolidSegmentMesh
 from opensg.core.solid import compute_stiffness
 
-segments_folder = Path("data", "bar_urc_npl_2_ar_10")
+segments_folder = Path("..", "data", "solid_blade")
+outputs_folder = Path("outputs")
 
 segment_stiffness_matrices = []
 boundary_stiffness_matrices = []
 compute_times = []
 
-# Process segments (adjust range based on desired segments)
-for i in range(3):
-    segment_file = Path(segments_folder, f"bar_urc_npl_2_ar_10-segment_{i}.yaml")
+# Process segments (Limited to two segments as solid mesh files are very large)
+for i in [2, 12]:
+    segment_file = Path(segments_folder, f"bar_urc_npl_1_ar_5-segment_{i}.yaml")
     
     print(f"Processing segment {i}...")
     

@@ -14,6 +14,8 @@ import numpy as np
 from pathlib import Path
 from os.path import join
 
+outputs_folder = Path("outputs")
+
 print("OpenSG Segment Mesh Workflow Example")
 print("=" * 50)
 
@@ -27,7 +29,7 @@ print(f"Using blade mesh file: {blade_mesh_file}")
 print("\nGenerating all segments...")
 opensg.io.generate_segment_shell_mesh_files(
     blade_mesh_file, 
-    segment_folder="segments_all/"
+    segment_folder=outputs_folder / "segments_all"
 )
 
 all_segment_files = list(Path("segments_all").glob("*.yaml"))
@@ -44,7 +46,7 @@ print(f"Generating segments with indices: {specific_indices}")
 opensg.io.generate_segment_shell_mesh_files(
     blade_mesh_file, 
     segment_list=specific_indices,
-    segment_folder="segments_specific/"
+    segment_folder=outputs_folder / "segments_specific"
 )
 
 specific_segment_files = list(Path("segments_specific").glob("*.yaml"))
