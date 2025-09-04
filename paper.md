@@ -52,7 +52,7 @@ TODO (Ernesto)
 
 TODO (Akshat) 
 
-NOTE: As a placeholder, I pulled in the text from `theory.rst`
+NOTE: As a placeholder, I pulled in the text from `theory.rst`, but this should be rewritten to be a simple summary and avoid details. JOSS papers typically don't include extensive theoretical content.
 
 ## Beam Structures
 
