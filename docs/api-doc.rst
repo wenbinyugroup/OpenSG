@@ -4,7 +4,7 @@
 API documentation
 =================
 
-.. automodule:: OpenSG
+.. automodule:: opensg
     :no-members:
     :no-undoc-members:
     :no-inherited-members:
