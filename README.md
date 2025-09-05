@@ -7,7 +7,7 @@ OpenSG evaluates the homogenization using the mathematical building block of str
 
 ## Features
 
-TODO
+- 
 
 ## Installation
 
