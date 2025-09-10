@@ -42,17 +42,13 @@ OpenSG is an open-source platform for multiscale structural mechanics using FEni
 
 Being a micromechanics code, OpenSG is useful for incorporating micro- and mesoscale features into other analysis programs via homogenization and dehomogenization. Homogenization is the process of obtaining homogenized structural properties whereas, dehomogenization is recovering the local stress and displacement fields. The homogenization and dehomogenization take place over the user-defined domain called the Structure Gene (SG). The SG serves as the mathematical building block to define the heterogeneity and anisotropy. It can be meshed with either 1D line elements, 2D quadrilateral or triangular elements, or 3D hexahedron or tetrahedron elements. The SG can then undergo homogenization to obtain structural properties in terms of Cauchy continuum model, plate/shell model, or beam model, providing accurate, fast, and precise analysis for complex structural profiles like wind turbine blades. Thus, enabling the research community to leverage the advantages of MSG theory for generating complex models for specific applications. 
 
-A typical example would be to create a 3D SG with hexahedron elements to provied the Timoshenko beam properties needed for Gxbeam [@gxbeam] or BeamDyn [@beamdyn].
+# Usage
+A typical example would be to create a 3D SG with hexahedron elements to provied the Timoshenko beam properties needed for Gxbeam [@gxbeam] or BeamDyn [@beamdyn].  ...TODO
 
 # Statement of need
 
-The MSG theory was first implemented in SwiftComp [@swiftcomp], a commercial code. It offers unification of the following codes: VAMUCH for unit cells of materials [@vamuch], VAPAS [@vapas] for plates and shells, and VABS [@cesnik1997vabs] for beams. In addition to replicating the core of SwiftComp's capabilities [@opensg], the MSG theory has been extended in OpenSG to allow for aperiodic beam SGs made of either shell [@opensg_prismatic_shell_to_beam; @opensg_RM_shell] or sold [@opensg_tapered_solid] elements. This is particularly useful for modeling nonprismatic structures and for accounting for 3D phenomenon, such as panel buckling. Some examples of nonprismatic structures are airplane wings, propellers, offshore jacketed structures, wind blades, tapered tubes and rods, non prismatic bridges. Without this capability, the next best approach is to approximate the blade with a series of cross sections (e.g. @feil2020). Beam models have traditionally been incapable of directly accounting for nonprismatic beams also of obtainig any panel-buckling results. The prior state-of-the-art has required a seirs of prismatic 
+The MSG theory was first implemented in SwiftComp [@swiftcomp], a commercial code. It offers unification of the following codes: VAMUCH for unit cells of materials [@vamuch], VAPAS [@vapas] for plates and shells, and VABS [@cesnik1997vabs] for beams. In addition to replicating the core of SwiftComp's capabilities [@opensg], OpenSG extends the MSG theory to allow for aperiodic beam SGs made of either shell [@opensg_prismatic_shell_to_beam; @opensg_RM_shell] or sold [@opensg_tapered_solid] elements. This is particularly useful for modeling nonprismatic structures and for accounting for 3D phenomenon, such as panel buckling. Some examples of nonprismatic structures are airplane wings, propellers, offshore jacketed structures, wind blades, tapered tubes and rods, non prismatic bridges. 
 
-wind turbine blades since they are made of composites and since they contain no periodic SGs.  Since the cross sections are 2D, no phenomenon with spanwise variation can be accounted for. This is important in places where there are geometric discontinuities such as the blade root, or the introduction of the webs or the presence of ply-drops. Since the SGs can be meshed with either 3D shell segments. 
-
-SwiftComp allowed forremoved the prismatic beam beamVABS is restricted to processing 2D SGs
-
-"A Statement of need section that clearly illustrates the research purpose of the software and places it in the context of related work."
 
 # Theoretical Framework
 
@@ -106,5 +102,5 @@ For 3D heterogeneous structures, such as metamaterials, OpenSG performs general 
 TODO Acknowledgement of any financial support.
 
 # References 
-1. Yu, W. (2019). Simplified formulation of mechanics of structure genome. AIAA Journal, 57(10), 4201-4209.
+
 
