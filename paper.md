@@ -1,5 +1,4 @@
 ---
-title: 'OpenSG: Open Source Structural Analysis for Wind Turbine Blades'
 title: 'OpenSG: A FEniCS-Based Implementation of Mechanics of Structure Gene with Empahsis on Aperiodic Beams'
 
 tags:
@@ -32,18 +31,11 @@ bibliography: paper.bib
 
 ---
 
-# JOSS paper
-
-"JOSS welcomes submissions from broadly diverse research areas. For this reason, we require that authors include in the paper some sentences that explain the software functionality and domain of use to a non-specialist reader. We also require that authors explain the research applications of the software. The paper should be between 250-1000 words. Authors submitting papers significantly longer than 1000 words may be asked to reduce the length of their paper."
-
 # Summary
 
 OpenSG is an open-source platform for multiscale structural mechanics using FEniCS backend which implements the Mechanics of Structure Genome (MSG) theory [@yu2019]. This unified and revolutionary theory provides a rigorous and systematic approach to modeling advanced structures featuring general anisotropy and heterogeneity, including beams, plates, shells, and continuum structures.
 
 Being a micromechanics code, OpenSG is useful for incorporating micro- and mesoscale features into other analysis programs via homogenization and dehomogenization. Homogenization is the process of obtaining homogenized structural properties whereas, dehomogenization is recovering the local stress and displacement fields. The homogenization and dehomogenization take place over the user-defined domain called the Structure Gene (SG). The SG serves as the mathematical building block to define the heterogeneity and anisotropy. It can be meshed with either 1D line elements, 2D quadrilateral or triangular elements, or 3D hexahedron or tetrahedron elements. The SG can then undergo homogenization to obtain structural properties in terms of Cauchy continuum model, plate/shell model, or beam model, providing accurate, fast, and precise analysis for complex structural profiles like wind turbine blades. Thus, enabling the research community to leverage the advantages of MSG theory for generating complex models for specific applications. 
-
-# Usage
-A typical example would be to create a 3D SG with hexahedron elements to provied the Timoshenko beam properties needed for Gxbeam [@gxbeam] or BeamDyn [@beamdyn].  ...TODO
 
 # Statement of need
 
