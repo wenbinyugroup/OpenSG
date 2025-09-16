@@ -1,5 +1,7 @@
 ---
 title: 'OpenSG: Open Source Structural Analysis for Wind Turbine Blades'
+title: 'OpenSG: A FEniCS-Based Implementation of Mechanics of Structure Gene with Empahsis on Aperiodic Beams'
+
 tags:
   - Python
   - wind energy
@@ -9,14 +11,14 @@ tags:
   - blade design
 authors:
   - name: Kirk Bonney
-    orcid: 0000-0000-0000-0000
+    orcid: 0009-0006-2383-1634
     corresponding: true
     affiliation: 1
   - name: Akshat Bagla
     orcid: 0000-0000-0000-0000
     affiliation: 2
   - name: Ernesto Camarena
-    orcid: 0000-0000-0000-0000
+    orcid: 0000-0001-7835-6689
     affiliation: 1
 
 affiliations:
@@ -36,17 +38,17 @@ bibliography: paper.bib
 
 # Summary
 
-OpenSG is an open source platform for multiscale structural analysis using FEniCS backend which implements the Mechanics of Structure Genome (MSG) theory. This unified and revolutionary multiscale structure mechanics theory provides a rigorous and systematic approach to modeling advanced structures featuring general anisotropy and heterogeneity, including beams, plates, shells, and 3D structures.
+OpenSG is an open-source platform for multiscale structural mechanics using FEniCS backend which implements the Mechanics of Structure Genome (MSG) theory [@yu2019]. This unified and revolutionary theory provides a rigorous and systematic approach to modeling advanced structures featuring general anisotropy and heterogeneity, including beams, plates, shells, and continuum structures.
 
-OpenSG uses Structure Gene (SG) as the mathematical building block to define heterogeneity and anisotropy of structures, such as laminated composite plates with 1D SG (heterogeneity in one direction), prismatic beams with 2D SG, and aperiodic beams with 3D SG. The platform has capabilities to obtain structural homogenized properties in terms of Cauchy continuum (3D) model, plate/shell model, or beam model, providing accurate, fast, and precise analysis for complex structural profiles like wind turbine blades.
+Being a micromechanics code, OpenSG is useful for incorporating micro- and mesoscale features into other analysis programs via homogenization and dehomogenization. Homogenization is the process of obtaining homogenized structural properties whereas, dehomogenization is recovering the local stress and displacement fields. The homogenization and dehomogenization take place over the user-defined domain called the Structure Gene (SG). The SG serves as the mathematical building block to define the heterogeneity and anisotropy. It can be meshed with either 1D line elements, 2D quadrilateral or triangular elements, or 3D hexahedron or tetrahedron elements. The SG can then undergo homogenization to obtain structural properties in terms of Cauchy continuum model, plate/shell model, or beam model, providing accurate, fast, and precise analysis for complex structural profiles like wind turbine blades. Thus, enabling the research community to leverage the advantages of MSG theory for generating complex models for specific applications. 
 
-The software evaluates homogenization using mathematical building blocks of structure (SG) in one, two, or three dimensions. It has the capability to generate local stress and displacement fields (dehomogenization) based on user-defined input loads, enabling the research community to leverage the advantages of MSG theory for generating complex models for specific applications. 
+# Usage
+A typical example would be to create a 3D SG with hexahedron elements to provied the Timoshenko beam properties needed for Gxbeam [@gxbeam] or BeamDyn [@beamdyn].  ...TODO
 
 # Statement of need
 
-TODO (Ernesto)
+The MSG theory was first implemented in SwiftComp [@swiftcomp], a commercial code. It offers unification of the following codes: VAMUCH for unit cells of materials [@vamuch], VAPAS [@vapas] for plates and shells, and VABS [@cesnik1997vabs] for beams. In addition to replicating the core of SwiftComp's capabilities [@opensg], OpenSG extends the MSG theory to allow for aperiodic beam SGs made of either shell [@opensg_prismatic_shell_to_beam; @opensg_RM_shell] or sold [@opensg_tapered_solid] elements. This is particularly useful for modeling nonprismatic structures and for accounting for 3D phenomenon, such as panel buckling. Some examples of nonprismatic structures are airplane wings, propellers, offshore jacketed structures, wind blades, tapered tubes and rods, non prismatic bridges. 
 
-"A Statement of need section that clearly illustrates the research purpose of the software and places it in the context of related work."
 
 # Theoretical Framework
 
@@ -69,7 +71,7 @@ For shell structures, OpenSG computes two-step homogenization including: (a) Cla
 
 OpenSG uses local coordinate reference frames with elemental direction cosine matrices provided in input YAML files, considering all three Euler angle rotations in the local elemental frame. The global beam reference frame *xyz* aligns with the BeamDyn coordinate system having the z-axis along the beam reference line. The local elemental reference frame *123* is aligned such that the normal direction *e₃* points inward toward the beam reference line.
 
-For shell structures, the local curvilinear frame *123* considers the normal to shell element *e₃* in the inward direction, *e₁* points along the global beam axis, and *e₂* follows the right-hand rule. OpenSG considers the outer-mold layer (OML) as the shell-reference surface, with the layup proceeding along the positive *e₃* direction.
+For shell structures, the local curvilinear frame *123* considers the normal to shell element *e₃* in the inward direction, *e₁* points along the global beam axis, and *e₂* follows the right-hand rule. OpenSG considers the outer-mold-line (OML) as the shell-reference surface, with the layup proceeding along the positive *e₃* direction.
 
 For aperiodic 3D SG, the boundaries are mapped geometrically from 3D SG to perform MSG separately for obtaining unknown fluctuating displacements at boundary nodes. For instance, 3D SG (shell elements) would map 1D SG (line elements) boundary meshes at both aperiodic ends transferring the corresponding material layup and orientation information. This operation is automatically taken care by OpenSG and user gets the advantage to have Timoshenko beam stiffness at boundaries in addition to that of 3D SG.
 
@@ -100,4 +102,5 @@ For 3D heterogeneous structures, such as metamaterials, OpenSG performs general 
 TODO Acknowledgement of any financial support.
 
 # References 
-TODO Add References
+
+
