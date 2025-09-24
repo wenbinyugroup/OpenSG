@@ -36,7 +36,7 @@ bibliography: paper.bib
 
 # Summary
 
-OpenSG is an open-source platform for multiscale structural mechanics built with a FEniCSx [fenicsx] backend. It implements the Mechanics of Structure Genome (MSG) theory [@yu2019], a unified and rigorous framework for modeling advanced structures with general anisotropy and heterogeneity, including beams, plates, shells, and continuum structures.
+OpenSG is an open-source platform for multiscale structural mechanics built with a FEniCSx [@fenicsx] backend. It implements the Mechanics of Structure Genome (MSG) theory [@yu2019], a unified and rigorous framework for modeling advanced structures with general anisotropy and heterogeneity, including beams, plates, shells, and continuum structures.
 
 As a micromechanics code, OpenSG is incorporates micro and mesoscale features into other analysis programs through homogenization and dehomogenization. Homogenization is the process of obtaining homogenized structural properties whereas, dehomogenization is recovering the local stress and displacement fields. These operations are performed over a user-defined domain called called the Structure Gene (SG). The SG serves as the mathematical building block to define the heterogeneity and anisotropy. It can be meshed with either 1D line elements, 2D quadrilateral or triangular elements, or 3D hexahedron or tetrahedron elements. Homogenization can be used to produce structural properties in terms of Cauchy continuum model, plate/shell model, or beam model, providing accurate, fast, and precise analysis for complex structural profiles like wind turbine blades. In this way, OpenSG provides the research community with a flexible and powerful framework to leverage the advantages of MSG theory for generating complex models. 
 
