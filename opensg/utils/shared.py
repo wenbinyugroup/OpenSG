@@ -51,7 +51,7 @@ def compute_nullspace(V, ABD=False):
     coordinate direction). The basis vectors are orthonormalized using the 
     DOLFINx linear algebra utilities to ensure numerical stability.
     """
-# Get geometric dim
+    # Get geometric dim
 
     gdim = 3
 

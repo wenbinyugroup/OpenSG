@@ -66,26 +66,19 @@ pygments_style = 'sphinx'
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 
-html_theme = 'pydata_sphinx_theme'
+html_theme = 'sphinx_rtd_theme'
 
-# Theme options for PyData Sphinx Theme
+# Theme options for ReadTheDocs theme
 html_theme_options = {
-    "show_toc_level": 2,
-    "navbar_align": "content",
-    "navbar_persistent": ["search-button"],
-    "primary_sidebar_end": [],  # Remove ads for cleaner appearance
-    "secondary_sidebar_items": ["page-toc"],
-    "use_edit_page_button": False,
-    "show_prev_next": True,
-    "navigation_with_keys": True,
-    "collapse_navigation": False,
-    "navigation_depth": 4,
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+    'navigation_depth': 4,
+    'includehidden': True,
+    'titles_only': True
 }
 
-# Configure sidebar content
-html_sidebars = {
-    "**": ["sidebar-nav-bs"]  # Simplified sidebar for consistency
-}
+# Configure sidebar content (default for ReadTheDocs theme)
+# html_sidebars can be left to defaults for sphinx_rtd_theme
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
