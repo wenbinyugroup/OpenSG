@@ -38,7 +38,9 @@ This will download all LFS-tracked files so they are available locally.
 Installation
 ------------
 
-To install OpenSG and create an environment where the code runs correctly, please execute the following steps:
+To install OpenSG and create an environment where the code runs correctly, is is recommended to 
+use the `environment.yml` file to create the environment via conda. If you are unfamiliar with conda, 
+please refer to the `conda documentation <https://docs.conda.io/projects/conda/en/latest/user-guide/getting-started.html>`_.
 
 1. Download the OpenSG repository::
 

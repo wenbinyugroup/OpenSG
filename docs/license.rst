@@ -2,13 +2,13 @@
 
 
 MIT License
------------
+===========
 
 .. literalinclude:: ../LICENSE
    :language: text
 
 Sandia National Laboratories Funding Statement
-----------------------------------------------
+-----------------------------------------------
 
 Sandia National Laboratories is a multimission laboratory managed and operated by 
 National Technology and Engineering Solutions of Sandia, LLC., a wholly owned subsidiary 
