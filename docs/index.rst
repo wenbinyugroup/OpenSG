@@ -63,6 +63,7 @@ OpenSG is designed for:
    framework
    input
    theory
+   reference 
 
 .. toctree::
    :maxdepth: 1
@@ -71,15 +72,8 @@ OpenSG is designed for:
 
    citing_opensg
    contributing
-   ../license
+   license
    glossary
-   reference 
-
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-   
-   api-doc
 
 Indices and tables
 ==================
