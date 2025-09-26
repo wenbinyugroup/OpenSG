@@ -1,44 +1,62 @@
 .. _home:
 
-OpenSG
-======
+Overview
+========
 
-OpenSG is an open source platform for multiscale structural analysis using FEniCS backend which works on the Mechanics of Structure Genome (MSG) 
-theory. OpenSG has capabilties to obtain the structural homogenized properties in terms of either of Cauchy continuum (3D) model, 
-plate/shell model or beam model. The obtained homogenized structural properties are accurate, fast and precise for complex structural 
-profile like wind blades. 
+OpenSG is a general-purpose software for multiscale modeling of structures and materials. It allows you to efficiently and accurately 
+bridge microscale details at the macroscale. It is powered by the Mechanics of Structure Genome (MSG) theory and has been implemented
+with FEniCS.
 
-OpenSG evaluates the homogenization using the mathematical building block of structure, called Structure Gene (SG), 
-which can be of one, two or three dimension. It has the capability to generate local stress and displacement field 
-(dehomogenization) of the structure based on user defined input load. OpenSG gives the research community to 
-leverage the advantages of MSG theory for generating complex models based on the specific applications. 
+The first step in using OpenSG is deciding the fidelity-level of your target structural analysis. Are you targeting a beam model in GXBeam 
+or BeamDyn? Are you targeting a solid model of a printed circuit board ANSYS? OpenSG supports all three types of structural finite element models, 
+namely Beam, Shell, and Solid models. 
+
+The structure gene (SG) is defined as the mathematical building block of a structure. So the next step is identifying the SGs in your structure and what 
+level of fidelity you will use to mesh it. It can be meshed with either 1D line elements, 2D Quad/Tri elements, or 3D Hex/Tet elements. 
+
+Then the Key Features of OpenSG can utilized. 
 
 Key Features
 ------------
 
-- **Shell Element Analysis**: Support for shell-based blade modeling with composite layup definitions
-- **Solid Element Analysis**: 3D volumetric analysis capabilities for detailed structural assessment
-- **Timoshenko Beam Theory**: Implementation of advanced beam theory for accurate blade modeling
-- **Composite Material Support**: Comprehensive material property definitions for wind blade composites
-- **Segment-Based Workflow**: Ability to work with individual blade segments
-- **Finite Element Integration**: Built on DOLFINx for robust finite element analysis
+1. Homogenization:
+The MSG framework calculates the effective material, shell, or beam properties of complex structures by analyzing the SGs. This is known as homogenization. 
+2. Structural Analysis:
+These effective properties are then used in a global structural analysis (e.g., Abaqus shell model, BeamDyn beam model, ANSYS solid model) to determine the overall structural response. 
+3. Dehomogenization (Optional):
+Finally, the global results are used in a dehomogenization step to calculate the local stress and strain fields within the complex structure. 
+4. Panel buckling (Optional): 
+OpenSG has been designed to use dehomogenization results to solve eigen value buckling problems.  
+
+
+
+OpenSG Capabilities
+-------------------
+
+
+.. _blade-tree:
+.. figure:: /_static/images/capabilities.png
+
+   OpenSG capabilities
 
 Applications
 ------------
 
-OpenSG is designed for:
+- Tapered laminated composite beams such as wind blades
+- Composite material and structural analysis
+- Propellers
+- Metal lattice structures (Eiffel Tower for example)
+- Airplane wings
+- Propellers
+- Offshore jacketed structures
+- Long tapered tube
+- Non prismatic bridges
+- Non prismatic beams or columns
+- Unit cells of metals, composites or foams
+- Laminates, sandwich structures, or corrugated structures
+- And more
 
-- Wind turbine blade structural design
-- Composite material analysis
-- Blade optimization studies
-- Research and development in wind energy
-- Educational purposes in structural engineering
 
-
-.. TODO
-    - Motivation for OpenSG
-    - Novelty of OpenSG
-    - Capabilities of OpenSG
 
 .. toctree::
    :maxdepth: 1
