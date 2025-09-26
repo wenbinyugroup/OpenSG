@@ -1,9 +1,14 @@
-# OpenSG: Open Source Structural Analysis for Wind Turbine Blades
+[Documentation](https://wenbinyugroup.github.io/OpenSG/).
 
-OpenSG is an open source platform for multiscale structural analysis using FEniCS backend which works on the Mechanics of Structure Genome (MSG) 
-theory. OpenSG has capabilties to obtain the structural homogenized properties in terms of either of Cauchy continuum (3D) model, plate/shell model or beam model. The obtained homogenized structural properties are accurate, fast and precise for complex structural profile like wind blades. 
+# OpenSG: Multiscale Structural Analysis using FEniCS
 
-OpenSG evaluates the homogenization using the mathematical building block of structure, called Structure Gene (SG), which can be of one, two or three dimension. It has the capability to generate local stress and displacement field (dehomogenization) of the structure based on user defined input load. OpenSG gives the research community to leverage the advantages of MSG theory for generating complex models based on the specific applications. 
+This repository houses OpenSG, a Python module built for performing multiscale structural analysis using Python. It is an open-source implementation of the Mechanics of Structure Genome (MSG) with FEniCS. It contains core objects to obtain the structural homogenized properties in terms of either of Cauchy continuum (3D) model, plate/shell model or beam model. It also has the capability to generate local stress and displacement field (dehomogenization) of the structure based on input loads from other analysis software.
+
+
+## Part of the WETO Stack
+OpenSG is primarily developed with the support of the U.S. Department of Energy and is part of the [WETO Software Stack](https://nrel.github.io/WETOStack). For more information and other integrated modeling software, see:
+- [Portfolio Overview](https://nrel.github.io/WETOStack/portfolio_analysis/overview.html)
+- [Entry Guide](https://nrel.github.io/WETOStack/_static/entry_guide/index.html)
 
 ## Features
 
