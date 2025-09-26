@@ -20,13 +20,13 @@ Key Features
 ------------
 
 1. Homogenization:
-The MSG framework calculates the effective material, shell, or beam properties of complex structures by analyzing the SGs. This is known as homogenization. 
+   The MSG framework calculates the effective material, shell, or beam properties of complex structures by analyzing the SGs. This is known as homogenization. 
 2. Structural Analysis:
-These effective properties are then used in a global structural analysis (e.g., Abaqus shell model, BeamDyn beam model, ANSYS solid model) to determine the overall structural response. 
+   These effective properties are then used in a global structural analysis (e.g., Abaqus shell model, BeamDyn beam model, ANSYS solid model) to determine the overall structural response. 
 3. Dehomogenization (Optional):
-Finally, the global results are used in a dehomogenization step to calculate the local stress and strain fields within the complex structure. 
+   Finally, the global results are used in a dehomogenization step to calculate the local stress and strain fields within the complex structure. 
 4. Panel buckling (Optional): 
-OpenSG has been designed to use dehomogenization results to solve eigen value buckling problems.  
+   OpenSG has been designed to use dehomogenization results to solve eigen value buckling problems.  
 
 
 
@@ -35,7 +35,7 @@ OpenSG Capabilities
 
 
 .. _blade-tree:
-.. figure:: /_static/images/capabilities.png
+.. figure:: /_static/capabilities.png
 
    OpenSG capabilities
 
