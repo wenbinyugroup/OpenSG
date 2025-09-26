@@ -16,24 +16,6 @@ To download OpenSG using `git <https://git-scm.com/>`_, type the following in a 
     git clone https://github.com/wenbinyugroup/opensg
 
 
-Fetching Large Files (Git LFS)
-------------------------------
-
-Some files in the OpenSG repository are stored using 
-`Git LFS (Large File Storage) <https://git-lfs.com/>`_. 
-If you want these large files (such as datasets or models), 
-you need to install Git LFS and fetch them explicitly.
-
-1. Install Git LFS (only once per system)::
-
-    git lfs install
-
-2. After cloning the repository, fetch the large files::
-
-    cd opensg
-    git lfs pull
-
-This will download all LFS-tracked files so they are available locally.
 
 Installation
 ------------

@@ -31,8 +31,8 @@ Basic Structure
      # ... more nodes
    
    elements:
-     - [node1, node2, node3, node4]  # Element connectivity (quad/tri)
-     - [node5, node6, node7, node8]
+     - [node_1, node_2, node_3, node_4]  # Element connectivity (quad/tri)
+     - [node_5, node_6, node_7, node_8]
      # ... more elements
    
    # Material definitions
@@ -48,7 +48,7 @@ Basic Structure
    sets:
      element:
        - name: "segment_0_layup_0"
-         elements: [1, 2, 3, 4]  # Element IDs for this layup
+         elements: [element_1, element_1, ..., element_n]  # Element IDs for this layup
        # ... more element sets
    
    # Layup definitions
