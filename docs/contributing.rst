@@ -193,3 +193,47 @@ need the following code to capture its functionality in the auto api documentati
       :show-inheritance:
 
 This will automatically capture all functions (internal and external) in ``new_file.py``.
+
+Building the Documentation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To build the documentation locally for testing and development:
+
+1. **Install documentation dependencies**:
+
+   .. code-block:: bash
+
+      pip install -r docs/requirements.txt
+
+2. **Navigate to the docs directory**:
+
+   .. code-block:: bash
+
+      cd docs/
+
+3. **Build the HTML documentation**:
+
+   .. code-block:: bash
+
+      make html
+
+   This will generate the documentation in the ``_build/html/`` directory.
+
+4. **View the documentation**:
+
+   Open ``_build/html/index.html`` in your web browser to view the generated documentation.
+
+5. **Clean previous builds** (if needed):
+
+   .. code-block:: bash
+
+      make clean
+
+**Adding Tutorials**
+
+To add new Jupyter notebook tutorials:
+
+1. Place your ``.ipynb`` file in the ``examples/`` directory
+2. Add a notebook link to ``docs/tutorials/`` directory following the format of the other notebooks.
+3. Add the notebook reference to ``docs/tutorials.rst`` in the appropriate ``.. toctree::`` section
+4. Rebuild the documentation to verify the tutorial appears correctly

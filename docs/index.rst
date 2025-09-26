@@ -72,6 +72,7 @@ Applications
    installation
    getting-started
    examples
+   tutorials
 
 .. toctree::
    :maxdepth: 1
