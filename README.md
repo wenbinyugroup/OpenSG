@@ -1,9 +1,10 @@
-[Documentation](https://wenbinyugroup.github.io/OpenSG/).
+[Documentation](https://wenbinyugroup.github.io/OpenSG/)
 
 # OpenSG: Multiscale Structural Analysis using FEniCS
 
 This repository houses OpenSG, a Python module built for performing multiscale structural analysis using Python. It is an open-source implementation of the Mechanics of Structure Genome (MSG) with FEniCS. It contains core objects to obtain the structural homogenized properties in terms of either of Cauchy continuum (3D) model, plate/shell model or beam model. It also has the capability to generate local stress and displacement field (dehomogenization) of the structure based on input loads from other analysis software.
 
+![](docs/_static/pyNuMAD_overview.png)
 
 ## Part of the WETO Stack
 OpenSG is primarily developed with the support of the U.S. Department of Energy and is part of the [WETO Software Stack](https://nrel.github.io/WETOStack). For more information and other integrated modeling software, see:
