@@ -16,8 +16,8 @@ level of fidelity you will use to mesh it. It can be meshed with either 1D line 
 
 Then the Key Features of OpenSG can utilized. 
 
-Key Features
-------------
+Key Features and Capabilities
+-----------------------------
 
 1. Homogenization:
    The MSG framework calculates the effective material, shell, or beam properties of complex structures by analyzing the SGs. This is known as homogenization. 
@@ -30,26 +30,24 @@ Key Features
 
 
 
-OpenSG Capabilities
--------------------
-
 
 .. _blade-tree:
 .. figure:: /_static/capabilities.png
 
-   OpenSG capabilities
+   OpenSG capabilities.
 
 Applications
 ------------
 
 - Tapered laminated composite beams such as wind blades
 - Composite material and structural analysis
+- Additively manufactured parts
 - Propellers
-- Metal lattice structures (Eiffel Tower for example)
+- Metal lattice structures (Eiffel Tower or additively manufactured lattice structures for example)
 - Airplane wings
 - Propellers
 - Offshore jacketed structures
-- Long tapered tube
+- Long tapered tubes
 - Non prismatic bridges
 - Non prismatic beams or columns
 - Unit cells of metals, composites or foams
