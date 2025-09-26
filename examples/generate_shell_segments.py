@@ -49,7 +49,7 @@ opensg.io.generate_segment_shell_mesh_files(
     segment_folder=outputs_folder / "segments_specific"
 )
 
-specific_segment_files = list(Path("segments_specific").glob("*.yaml"))
+specific_segment_files = list(Path("outputs/segments_specific").glob("*.yaml"))
 
 print(f"Generated {len(specific_segment_files)} specific segment files:")
 for i, file_path in enumerate(specific_segment_files):
