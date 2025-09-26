@@ -54,6 +54,7 @@ OpenSG is designed for:
    installation
    getting-started
    examples
+   tutorials
 
 .. toctree::
    :maxdepth: 1
