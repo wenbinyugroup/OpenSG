@@ -11,3 +11,4 @@ import opensg.utils.eigenvalue_solver as eigenvalue_solver
 import opensg.utils.shell as shell
 import opensg.utils.solid as solid
 import opensg.utils.shared as shared
+import opensg.utils.beamdyn_trans as beamdyn_trans
