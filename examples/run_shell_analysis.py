@@ -26,29 +26,95 @@ opensg.io.generate_segment_shell_mesh_files(
     segment_folder="data/segments_all/"
 )
 
-segment_stiffness_matrices = []
-boundary_stiffness_matrices = []
+np.set_printoptions(precision=4)
+left_timo, right_timo, taper_timo = [],[],[]
 compute_times = []
+left_origin, right_origin, taper_origin = [],[],[]
+left_mass, right_mass, taper_mass = [],[],[]
+blade_length=100
 
 # Process segments (adjust range based on desired segments)
 for i in range(3):
     segment_file = Path("segments_all", f"{blade_mesh_file.stem}_segment_{i+1}.yaml")
     
-    # Initialize segment mesh with segment file
+    # Generate mesh for current segment
     segment_mesh = ShellSegmentMesh(segment_file)
-    
-    # Compute ABD matrices for the segment
-    ABD = segment_mesh.compute_ABD()
 
+
+    left_origin.append(segment_mesh.left_submesh["origin"]/blade_length)
+    right_origin.append(segment_mesh.right_submesh["origin"]/blade_length)
+   # taper_origin.append(segment_mesh.meshdata["origin"]/blade_length)
+           
+    # Compute ABD matrices for the segment
+    ABD, mass = segment_mesh.compute_ABD()
+    left_mass.append(utils.get_mass_shell(segment_mesh.left_submesh, mass))
+    right_mass.append(utils.get_mass_shell(segment_mesh.right_submesh, mass))
+  #  taper_mass.append(utils.get_mass_shell(segment_mesh.meshdata, mass, Taper=True))   
+    
+    print('\n Left mass \n',left_mass[int(segment)])
+    print('\n Right mass \n',right_mass[int(segment)])
+  #  print('\n Taper mass \n',taper_mass[int(segment)])
+    
     # Compute stiffness matrices using both beam theories
-    timo_segment_stiffness, eb_segment_stiffness, l_timo_stiffness, r_timo_stiffness = segment_mesh.compute_stiffness(ABD)
+    taper_stiffness, l_timo_stiffness, r_timo_stiffness = segment_mesh.compute_stiffness(ABD, Taper=False)
 
     # Store results
-    segment_stiffness_matrices.append(timo_segment_stiffness)
-    boundary_stiffness_matrices.append(l_timo_stiffness)
+    print('\n Left timo \n',l_timo_stiffness)
+    print('\n Right timo \n',r_timo_stiffness)
+   # print('\n Taper timo \n',taper_stiffness)
+    
+    
+    left_timo.append(l_timo_stiffness)
+    right_timo.append(r_timo_stiffness) 
+  #  taper_timo.append(taper_stiffness)
 
-# Combine segment matrices and save
-combined_stiffness_matrices = np.concat(segment_stiffness_matrices)
-np.savetxt('stiffness_shell.txt', combined_stiffness_matrices, fmt='%d')
-print(f"Saved {len(segment_stiffness_matrices)} segment stiffness matrices to stiffness_shell.txt")
-print(f"Matrix shape: {combined_stiffness_matrices.shape}")
+    compute_times.append(time.time()-tic) 
+    print('Time Taken',str(time.time()-tic))
+
+print('\nleft_origin')
+print(left_origin)
+
+print('\nright_origin')
+print(right_origin)
+
+print('\ntaper_origin')
+print(taper_origin)
+#Append tip to left boundary values
+left_timo.append(right_timo[-1])
+left_origin.append(right_origin[-1])
+left_mass.append(right_mass[-1])
+print('\n\nleft_origin ###############')
+print(left_origin)
+
+#Prepend root to right boundary values
+right_timo.insert(0,left_timo[0])
+right_origin.insert(0,left_origin[0])
+right_mass.insert(0,left_mass[0])
+print('\n\nright_origin ###############')
+print(right_origin)
+
+# #Prepend root to segment values
+#taper_timo.insert(0,left_timo[0])
+#taper_origin.insert(0,left_origin[0])
+#taper_mass.insert(0,left_mass[0])
+#print('\n\ntaper_origin ###############')
+#print(taper_origin)
+
+#Append tip to segment values
+#taper_timo.append(right_timo[-1])
+#taper_origin.append(right_origin[-1])
+#taper_mass.append(right_mass[-1])
+
+left_timo=np.array(left_timo)
+right_timo=np.array(right_timo)
+#taper_timo=np.array(taper_timo)
+
+left_mass=np.array(left_mass)
+right_mass=np.array(right_mass)
+#taper_mass=np.array(taper_mass)
+
+print('Total Time for Wind Blade (in sec)', np.sum(compute_times))   
+
+opensg.utils.shared.write_beamdyn_files(right_timo, right_mass, right_origin,'bar_shell_right_52_20251004')
+opensg.utils.shared.write_beamdyn_files(left_timo, left_mass, left_origin,'bar_shell_left_52_20251004')
+#opensg.utils.shared.write_beamdyn_files(taper_timo, taper_mass, taper_origin,'bar_shell_segment_52_20251004')
