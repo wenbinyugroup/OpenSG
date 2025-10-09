@@ -1,5 +1,3 @@
-[Documentation](https://wenbinyugroup.github.io/OpenSG/)
-
 # OpenSG: Multiscale Structural Analysis using FEniCS
 
 This repository houses OpenSG, a Python module built for performing multiscale structural analysis using Python. It is an open-source implementation of the Mechanics of Structure Genome (MSG) with FEniCS. It contains core objects to obtain the structural homogenized properties in terms of either of Cauchy continuum (3D) model, plate/shell model or beam model. It also has the capability to generate local stress and displacement field (dehomogenization) of the structure based on input loads from other analysis software.
@@ -11,10 +9,6 @@ OpenSG is primarily developed with the support of the U.S. Department of Energy 
 - [Portfolio Overview](https://nrel.github.io/WETOStack/portfolio_analysis/overview.html)
 - [Entry Guide](https://nrel.github.io/WETOStack/_static/entry_guide/index.html)
 
-## Features
-
-- 
-
 ## Installation
 
 ```bash
@@ -23,6 +17,12 @@ cd OpenSG
 conda env create --file environment.yml
 conda activate opensg_env
 ```
+## Support
+
+For support and questions, please:
+- Check the [documentation](https://wenbinyugroup.github.io/OpenSG/)
+- Open an [issue](https://github.com/wenbinyugroup/OpenSG/issues)
+- Join our [discussion forum](https://github.com/wenbinyugroup/OpenSG/discussions)
 
 ## Package Structure
 
@@ -50,14 +50,6 @@ opensg/
 ├── tests/          # Test suite
 ```
 
-## Documentation
-
-For detailed documentation, please visit [wenbinyugroup.github.io/OpenSG/](https://wenbinyugroup.github.io/OpenSG/).
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -69,10 +61,3 @@ Sandia National Laboratories is a multimission laboratory managed and operated b
 ## Citation
 
 TBD
-
-## Support
-
-For support and questions, please:
-- Check the [documentation](https://wenbinyugroup.github.io/OpenSG/)
-- Open an [issue](https://github.com/wenbinyugroup/OpenSG/issues)
-- Join our [discussion forum](https://github.com/wenbinyugroup/OpenSG/discussions)
