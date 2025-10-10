@@ -10,7 +10,7 @@ used throughout opensg documentation and code.
 Terminology
 -----------
 
-ABD Matrix: A 6x6 matrix used in classical lamination theory to relate generalized forces and moments to generalized strains and curvatures. The matrix has the structure [[A, B], [B, D]] where A is the membrane stiffness, B is the coupling stiffness, and D is the bending stiffness.
+ABD Matrix: A 6x6 matrix used in classical lamination theory to relate generalized forces and moments to generalized strains and curvatures. The matrix has the structure [[A, B], [B, D]] where A is the 3x3 membrane stiffness, B is the 3x3 coupling stiffness, and D is the 3x3 bending stiffness.
 
 Boundary Condition: A condition imposed on facets or boundaries of a mesh, 
 such as Dirichlet boundary conditions (specifying function values on the boundary) 
@@ -41,7 +41,7 @@ Frame: Local coordinate system defined at each point in the mesh, typically cons
 
 Gamma Functions: Mathematical operators (gamma_h, gamma_e, gamma_l, gamma_d) used in MSG formulations to relate displacement fields to strain measures for different beam theories.
 
-Homogenization: The process of computing effective structural properties (stiffness matrices, mass properties) from detailed 3D finite element analysis of representative cross-sections.
+Homogenization: The process of computing effective structural properties (stiffness matrices, mass properties) from either 1D, 2D, or 3D SGs.
 
 Layup: The sequence and orientation of composite layers (plies) that make up a laminated structure, including thickness, material, and fiber angle for each layer.
 
