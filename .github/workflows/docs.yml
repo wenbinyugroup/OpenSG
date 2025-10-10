@@ -30,6 +30,7 @@ jobs:
         shell: bash -l {0}
         run: |
           pip install -r docs/requirements.txt
+          sudo apt-get install -y pandoc
           
       - name: Build documentation
         shell: bash -l {0}

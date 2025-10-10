@@ -14,6 +14,7 @@ author = u'opensg Developers'
 version = __version__
 release = __version__
 
+
 # -- General configuration ---------------------------------------------------
 
 extensions = [
@@ -25,6 +26,8 @@ extensions = [
     # 'sphinx.ext.viewcode', # commenting out for now b/c bad render width
     'sphinx.ext.napoleon',
     'sphinxcontrib.bibtex',
+    'nbsphinx',
+    'nbsphinx_link'
 ]
 napoleon_use_rtype = False
 viewcode_import = True
@@ -41,7 +44,15 @@ language = "en"
 numfig = True
 
 autodoc_mock_imports = ["dolfinx", "basix", "ufl", "gmshio", "gmsh", "petsc4py", "scipy",
-                        "mpi4py", "numpy", "slepc4py", "meshio", "pyvista"]
+                        "mpi4py", "numpy", "slepc4py", "meshio", "pyvista", "dolfin"]
+
+# nbsphinx configuration
+nbsphinx_allow_errors = True
+nbsphinx_execute = 'never'  # Don't execute notebooks during build
+nbsphinx_kernel_name = 'python3'
+nbsphinx_timeout = 60
+nbsphinx_prolog = ""
+nbsphinx_epilog = ""
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -56,7 +67,7 @@ autosummary_generate_overwrite = True
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path .
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '_user']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '_user', '**.ipynb_checkpoints']
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
