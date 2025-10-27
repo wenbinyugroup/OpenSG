@@ -77,7 +77,7 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     e, V_l, dv, v_, x, dx = utils.local_boun(
         boundary_mesh, boundary_frame, boundary_subdomains
     )
-    boundary_null = shared_utils.compute_nullspace(V_l)
+    _,boundary_null = shared_utils.compute_nullspace(V_l)
     boundary_mesh.topology.create_connectivity(2, 2)
     V0, Dle, Dhe, D_ee, V1s = utils.initialize_array(V_l)
 
@@ -250,10 +250,10 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     Deff_srt[1:3, 3:6] = Y_tim.T[:, 1:4]
     Deff_srt[1:3, 0] = Y_tim.T[:, 0].flatten()
 
-    return np.around(D_eff), np.around(Deff_srt), V0, V1s
+    return np.around(Deff_srt), V0, V1s
 
 
-def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh):
+def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
     """Compute stiffness matrices for solid segments.
 
     Parameters
@@ -285,12 +285,15 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh):
     )
 
     # V0_l,V0_r=solve_boun(mesh_l,local_frame_1D(mesh_l),subdomains_l),solve_boun(mesh_r,local_frame_1D(mesh_l),subdomains_r)
-    D_effEB_l, Deff_l, V0_l, V1_l = core.compute_timo_boun(
+    Deff_l, V0_l, V1_l = core.compute_timo_boun(
         mat_param, l_submesh
     )
-    D_effEB_r, Deff_r, V0_r, V1_r = core.compute_timo_boun(
+    Deff_r, V0_r, V1_r = core.compute_timo_boun(
         mat_param, r_submesh
     )
+    if not Taper:
+        print('\n Computing Only Boundary Stiffness \n')
+        return [Deff_l,Deff_r], None, None
 
     # ***************** Wb Segment (surface mesh) computation begins************************
     e, V, dv, v_, x, dx = utils.local_boun(
@@ -317,6 +320,7 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh):
     )
 
     # bc applied
+    
     boundary_dofs = locate_dofs_topological(
         V,
         fdim,
@@ -519,7 +523,5 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh):
     Deff_srt[1:3, 1:3] = G_tim
     Deff_srt[1:3, 3:6] = Y_tim.T[:, 1:4]
     Deff_srt[1:3, 0] = Y_tim.T[:, 0].flatten()
-    print("Tapered Timo Stiffness: VABS Convention")
-    np.set_printoptions(precision=4)
-    print(np.around(Deff_srt))
+    
     return Deff_srt, V0, V1s
