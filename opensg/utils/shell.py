@@ -2,12 +2,10 @@ from mpi4py import MPI
 import numpy as np
 import dolfinx
 import basix
-from typing import Union
-from dolfinx.fem import form, petsc, Function, locate_dofs_topological
+from dolfinx.fem import form, Function, locate_dofs_topological, assemble_scalar
 from ufl import (
     TrialFunction,
     TestFunction,
-    rhs,
     as_tensor,
     dot,
     SpatialCoordinate,
@@ -17,15 +15,14 @@ from ufl import (
     Jacobian,
     sqrt,
     cross,
+    inner,
+    jump,
+    div,
+    avg
 )
 
-from petsc4py import PETSc
-from dolfinx.fem.petsc import assemble_matrix
-
-from mpi4py import MPI
+import petsc4py.PETSc
 import ufl
-from contextlib import ExitStack
-
 from opensg.utils.shared import local_frame_1D
 
 
@@ -47,10 +44,10 @@ def generate_boundary_markers(xmin, xmax):
     """
 
     def is_left_boundary(x):
-        return np.isclose(x[0], xmin)
+        return np.isclose(x[0], xmin,atol=0.05)
 
     def is_right_boundary(x):
-        return np.isclose(x[0], xmax)
+        return np.isclose(x[0], xmax,atol=0.05)
 
     return is_left_boundary, is_right_boundary
 
@@ -297,11 +294,7 @@ def gamma_l(e, x, w):
     ufl.Tensor
         6-component vector representing the strain measures
     """
-    y1, y2, y3 = (
-        x[2],
-        x[0],
-        x[1],
-    )  # In MSG-Shell formulations, y1 should be the beam axis & (y2,y3) as cross-sectional coordinates)
+  # In MSG-Shell formulations, y1 should be the beam axis & (y2,y3) as cross-sectional coordinates)
     # In mesh data, z coordinates are
     k11, k12, k21, k22, k13, k23 = deri(e)
     x11, x21, x31 = (
@@ -319,7 +312,6 @@ def gamma_l(e, x, w):
     d2 = [x12, x22, x32]
     d3 = [y1, y2, y3]
     dd1, dd2, dd3 = as_vector(d1), as_vector(d2), as_vector(d3)
-    # wd=[w[i].dx(0) for i in range(3)] # dx(0) is for w'
 
     # Gamma_l*w' column matrix     (w' defined by same function space as test/trail function
     #                                are basis functions which are same for both w and w')
@@ -373,9 +365,7 @@ def gamma_e(e, x):
         local_grad(e[1], x[2]),
     )
     y1, y2, y3 = local_grad(e[2], x[0]), local_grad(e[2], x[1]), local_grad(e[2], x[2])
-    d1 = [x11, x21, x31]
-    d2 = [x12, x22, x32]
-    d3 = [y1, y2, y3]
+
     Rn = x[1] * (x11 * x32 + x12 * x31) - x[2] * (x11 * x22 + x12 * x21)
 
     E41 = -k11 * (x11**2 - y1**2) - k12 * x11 * x12
@@ -452,41 +442,6 @@ def gamma_e(e, x):
     )
 
 
-def gamma_d(e, x):
-    """Compute the gamma_d operator for MSG-Shell formulations.
-
-    This function computes the gamma_d operator. It represents additional
-    strain measures needed for the Timoshenko model.
-
-    Parameters
-    ----------
-    e : tuple
-        Local frame vectors (e1, e2, e3)
-    x : ufl.SpatialCoordinate
-        Spatial coordinates
-
-    Returns
-    -------
-    ufl.Tensor
-        6x4 matrix representing additional strain measures
-    """
-    x11, x21, x31 = (
-        local_grad(e[0], x[0]),
-        local_grad(e[0], x[1]),
-        local_grad(e[0], x[2]),
-    )
-    x12, x22, x32 = (
-        local_grad(e[1], x[0]),
-        local_grad(e[1], x[1]),
-        local_grad(e[1], x[2]),
-    )
-    y1, y2, y3 = local_grad(e[2], x[0]), local_grad(e[2], x[1]), local_grad(e[2], x[2])
-    O = ufl.as_vector((0, 0, 0, 0))
-    R = ufl.as_vector((-y1, -y3 * x[1] + y2 * x[2], -x[2] * y1, x[1] * y1))
-    ret_val = as_tensor([O, O, O, x11 * x11 * R, x12 * x12 * R, 2 * x11 * x12 * R])
-    return ret_val
-
-
 def local_boun(mesh_l, frame, subdomains_l):
     """Set up function spaces and measures for boundary analysis.
 
@@ -514,23 +469,23 @@ def local_boun(mesh_l, frame, subdomains_l):
         - dx: measure
     """
     V_l = dolfinx.fem.functionspace(
-        mesh_l, basix.ufl.element("CG", mesh_l.topology.cell_name(), 2, shape=(3,))
+        mesh_l, basix.ufl.element("S", mesh_l.topology.cell_name(), 2, shape=(3,))
     )
     le1, le2, le3 = frame
     e1l, e2l, e3l = Function(V_l), Function(V_l), Function(V_l)
 
     fexpr1 = dolfinx.fem.Expression(
-        le1, V_l.element.interpolation_points(), comm=MPI.COMM_WORLD
+        le1, V_l.element.interpolation_points, comm=MPI.COMM_WORLD
     )
     e1l.interpolate(fexpr1)
 
     fexpr2 = dolfinx.fem.Expression(
-        le2, V_l.element.interpolation_points(), comm=MPI.COMM_WORLD
+        le2, V_l.element.interpolation_points, comm=MPI.COMM_WORLD
     )
     e2l.interpolate(fexpr2)
 
     fexpr3 = dolfinx.fem.Expression(
-        le3, V_l.element.interpolation_points(), comm=MPI.COMM_WORLD
+        le3, V_l.element.interpolation_points, comm=MPI.COMM_WORLD
     )
     e3l.interpolate(fexpr3)
 
@@ -575,72 +530,6 @@ def local_boun(mesh_l, frame, subdomains_l):
 #     A_l.assemble()
 #     A_l.setNullSpace(nullspace_l)
 #     return A_l
-
-
-def solve_eb_boundary(ABD, meshdata):
-    """Solve the Euler-Bernoulli beam problem on a boundary.
-
-    This function solves the Euler-Bernoulli beam equations on a
-    boundary region using the provided ABD matrices.
-
-    Parameters
-    ----------
-    ABD : list
-        List of ABD matrices for each material
-    meshdata : dict
-        Dictionary containing mesh data for the boundary
-
-    Returns
-    -------
-    tuple
-        Contains:
-        - D_eff: effective stiffness matrix
-        - V0: fluctuation functions
-    """
-
-    # assert len(ABD) == nphases
-    nphases = len(ABD)
-
-    mesh = meshdata["mesh"]
-    # frame = meshdata["frame"]
-    frame = local_frame_1D(mesh)
-    subdomains = meshdata["subdomains"]
-    nullspace = meshdata["nullspace"]
-    # For applying bc, we only require solved fluctuating functions (V0) as input to bc.
-    e, V, dv, v_, x, dx = local_boun(mesh, frame, subdomains)
-    mesh.topology.create_connectivity(1, 1)
-    V0 = initialize_array(V)[0]
-    A = A_mat(ABD, e, x, dx, compute_nullspace(V), v_, dv, nphases)
-    for p in range(4):
-        Eps = gamma_e(e, x)[:, p]
-        F2 = sum(
-            [
-                dot(dot(as_tensor(ABD[i]), Eps), gamma_h_abd(e, x, v_)) * dx(i)
-                for i in range(nphases)
-            ]
-        )
-        r_he = form(rhs(F2))
-        F = petsc.assemble_vector(r_he)
-        F.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
-        nullspace.remove(F)
-        w = solve_ksp(A, F, V)
-        V0[:, p] = w.x.array[:]
-    return V0
-
-
-# NOTE: different definition between timo and eb scripts
-# def initialize_array(V_l):
-#     xxx = 3*len(np.arange(*V_l.dofmap.index_map.local_range))  # total dofs
-#     V0 = np.zeros((xxx,4))
-#     Dle = np.zeros((xxx,4))
-#     Dhe = np.zeros((xxx,4))
-#     Dhd = np.zeros((xxx,4))
-#     Dld = np.zeros((xxx,4))
-#     D_ed = np.zeros((4,4))
-#     D_dd = np.zeros((4,4))
-#     D_ee = np.zeros((4,4))
-#     V1s = np.zeros((xxx,4))
-#     return V0,Dle,Dhe,Dhd,Dld,D_ed,D_dd,D_ee,V1s
 
 
 def initialize_array(V):
@@ -733,134 +622,126 @@ def tangential_projection(u, n):
     """
     return (ufl.Identity(u.ufl_shape[0]) - ufl.outer(n, n)) * u
 
+def deri_constraint(dv, v_, x,V,mesh,penalty):
+    """Compute derivative constraints for boundary conditions.
 
-def facet_vector_approximation(
-    V: dolfinx.fem.FunctionSpace,
-    mt: Union[dolfinx.mesh.MeshTags, None] = None,
-    mt_id: Union[int, None] = None,
-    tangent: bool = False,
-    interior: bool = False,
-    jit_options: Union[dict, None] = None,
-    form_compiler_options: Union[dict, None] = None,
-) -> dolfinx.fem.Function:
-    jit_options = jit_options if jit_options is not None else {}
-    form_compiler_options = (
-        form_compiler_options if form_compiler_options is not None else {}
+    This function computes constraints on derivatives that are
+    needed for proper boundary condition enforcement.
+
+    Parameters
+    ----------
+    dvl : ufl.Coefficient
+        Trial function
+    v_l : ufl.Coefficient
+        Test function
+    mesh : dolfinx.mesh.Mesh
+        Mesh object
+    nh : float
+        Constraint parameter
+
+    Returns
+    -------
+    ufl.Form
+        Form representing the derivative constraints
+    """
+    u = Function(V)
+    n = ufl.FacetNormal(mesh)
+    u.interpolate(lambda x: (x[0], x[1],x[2]))
+    
+    t1 = tangential_projection(u, n) 
+    t2= cross(t1,n) 
+    h = ufl.CellDiameter(mesh)
+    h_avg = (h("+") + h("-")) / 2.0
+    dS = Measure("dS")(domain=mesh)
+    c2=1e-3  # known 
+  #  penalty=1e9  # max stiffness terms
+    alpha=(10*penalty)/h_avg**2
+
+    nn1=-inner(avg(div(grad(dv))), jump(grad(v_), n))*dS \
+              - inner(jump(grad(dv), n), avg(div(grad(v_))))*dS \
+              + (alpha)*inner(jump(grad(dv),n), jump(grad(v_),n))*dS
+              
+    tt1=- inner(avg(div(grad(dv))), jump(grad(v_), t1))*dS \
+              - inner(jump(grad(dv), t1), avg(div(grad(v_))))*dS \
+              + (alpha)*inner(jump(grad(dv),t1), jump(grad(v_),t1))*dS
+  #  tt2=- inner(avg(div(grad(dv))), jump(grad(v_), t2))*dS \
+  #            - inner(jump(grad(dv), t2), avg(div(grad(v_))))*dS \
+  #            + (alpha)*inner(jump(grad(dv),t2), jump(grad(v_),t2))*dS    
+    
+    # Define Hessian (second derivatives)
+    H_v = grad(grad(v_))
+    H_dv = grad(grad(dv))
+    
+    # Mixed derivative component: d²w/dn dt1
+   # d2v_dn_dt1 = dot(n, dot(H_v,t1))  # Equivalent to n ⋅ H_v ⋅ t1
+   # d2dv_dn_dt1 = dot(n, dot(H_dv,t1))
+    
+   # nt1 =  (alpha)* inner(jump(d2dv_dn_dt1), jump(d2v_dn_dt1)) * dS
+    
+    # Mixed derivative component: d²w/dn dt2
+  #  d2v_dn_dt2 = dot(n, dot(H_v,t2))  # Equivalent to n ⋅ H_v ⋅ t1
+  #  d2dv_dn_dt2 = dot(n, dot(H_dv,t2))
+    
+  #  nt2 =  (alpha)* inner(jump(d2dv_dn_dt2), jump(d2v_dn_dt2)) * dS
+    
+    # Mixed derivative component: d²w/dt1 dt2
+  #  d2v_dt1_dt2 = dot(t1, dot(H_v,t2))  # Equivalent to t1 ⋅ H_v ⋅ t2
+ #   d2dv_dt1_dt2 = dot(t1, dot(H_dv,t2))
+    
+ #   t1t2 = (alpha)* inner(jump(d2dv_dt1_dt2), jump(d2v_dt1_dt2)) * dS
+    
+    # Mixed derivative component: d²w/dt1 dt1
+    d2v_dt1_dt1 = dot(t1, dot(H_v,t1))  # Equivalent to n ⋅ H_v ⋅ t1
+    d2dv_dt1_dt1 = dot(t1, dot(H_dv,t1))
+    t1t1 = (alpha)* inner(jump(d2dv_dt1_dt1), jump(d2v_dt1_dt1)) * dS
+    
+    # Mixed derivative component: d²w/dn dn
+    d2v_dn_dn = dot(n, dot(H_v,n))  # Equivalent to n ⋅ H_v ⋅ t1
+    d2dv_dn_dn = dot(n, dot(H_dv,n))
+    
+    nn2 =  (alpha)* inner(jump(d2dv_dn_dn), jump(d2v_dn_dn)) * dS
+    
+    # Mixed derivative component: d²w/dt2 dt2
+  #  d2v_dt2_dt2 = dot(t2, dot(H_v,t2))  # Equivalent to n ⋅ H_v ⋅ t1
+   # d2dv_dt2_dt2 = dot(t2, dot(H_dv,t2))
+    
+  #  t2t2 =  (alpha)* inner(jump(d2dv_dt2_dt2), jump(d2v_dt2_dt2)) * dS
+    if mesh.topology.dim==1:
+        return nn1
+    else:
+        return nn1+tt1+c2*(nn2+t1t1)
+
+def get_mass_shell(meshdata, mass, Taper=False):
+    nphases=max(meshdata["subdomains"].values)+1
+    x, dx = (
+        ufl.SpatialCoordinate(meshdata["mesh"]),
+        ufl.Measure("dx")(
+            domain=meshdata["mesh"], subdomain_data=meshdata["subdomains"]
+        ),
     )
-
-    comm = V.mesh.comm  # MPI Communicator
-    n = ufl.FacetNormal(V.mesh)  # UFL representation of mesh facet normal
-    u, v = ufl.TrialFunction(V), ufl.TestFunction(V)  # Trial and test functions
-
-    # Create interior facet integral measure
-    dS = (
-        ufl.dS(domain=V.mesh)
-        if mt is None
-        else ufl.dS(domain=V.mesh, subdomain_data=mt, subdomain_id=mt_id)
-    )
-
-    # If tangent==True, the right-hand side of the problem should be a tangential projection of the facet normal vector.
-
-    c = dolfinx.fem.Constant(
-        V.mesh, (1.0, 1.0, 1.0)
-    )  # Vector to tangentially project the facet normal vectors on
-
-    a = (ufl.inner(u("+"), v("+")) + ufl.inner(u("-"), v("-"))) * dS
-    L = (
-        ufl.inner(tangential_projection(c, n("+")), v("+")) * dS
-        + ufl.inner(tangential_projection(c, n("-")), v("-")) * dS
-    )
-    # If tangent==false the right-hand side is simply the facet normal vector.
-    a = (ufl.inner(u("+"), v("+")) + ufl.inner(u("-"), v("-"))) * dS
-    L = (ufl.inner(n("+"), v("+")) + ufl.inner(n("-"), v("-"))) * dS
-
-    # Find all boundary dofs, which are the dofs where we want to solve for the facet vector approximation.
-    # Start by assembling test functions integrated over the boundary integral measure.
-    ones = dolfinx.fem.Constant(
-        V.mesh, dolfinx.default_scalar_type((1,) * V.mesh.geometry.dim)
-    )  # A vector of ones
-
-    local_val = dolfinx.fem.form((ufl.dot(ones, v("+")) + ufl.dot(ones, v("-"))) * dS)
-    local_vec = dolfinx.fem.assemble_vector(local_val)
-
-    # For the dofs that do not lie on the boundary of the mesh the assembled vector has value zero.
-    # Extract these dofs and use them to deactivate the corresponding block in the linear system we will solve.
-    bdry_dofs_zero_val = np.flatnonzero(np.isclose(local_vec.array, 0))
-    deac_blocks = np.unique(bdry_dofs_zero_val // V.dofmap.bs).astype(np.int32)
-
-    # Create sparsity pattern by manipulating the blocks to be deactivated and set
-    # a zero Dirichlet boundary condition for these dofs.
-    bilinear_form = dolfinx.fem.form(
-        a, jit_options=jit_options, form_compiler_options=form_compiler_options
-    )
-    pattern = dolfinx.fem.create_sparsity_pattern(bilinear_form)
-    pattern.insert_diagonal(deac_blocks)
-    pattern.finalize()
-    u_0 = dolfinx.fem.Function(V)
-    u_0.x.array[:] = 0
-    bc_deac = dolfinx.fem.dirichletbc(u_0, deac_blocks)
-
-    # Create the matrix
-    A = dolfinx.cpp.la.petsc.create_matrix(comm, pattern)
-    A.zeroEntries()
-
-    # Assemble the matrix with all entries
-    form_coeffs = dolfinx.cpp.fem.pack_coefficients(bilinear_form._cpp_object)
-    form_consts = dolfinx.cpp.fem.pack_constants(bilinear_form._cpp_object)
-    dolfinx.fem.petsc.assemble_matrix(
-        A, bilinear_form, constants=form_consts, coeffs=form_coeffs, bcs=[bc_deac]
-    )
-
-    # Insert the diagonal with the deactivated blocks.
-    if bilinear_form.function_spaces[0] is bilinear_form.function_spaces[1]:
-        A.assemblyBegin(PETSc.Mat.AssemblyType.FLUSH)
-        A.assemblyEnd(PETSc.Mat.AssemblyType.FLUSH)
-        dolfinx.cpp.fem.petsc.insert_diagonal(
-            A=A,
-            V=bilinear_form.function_spaces[0],
-            bcs=[bc_deac._cpp_object],
-            diagonal=1.0,
-        )
-    A.assemble()
-
-    # Assemble the linear form and the right-hand side vector.
-    linear_form = dolfinx.fem.form(
-        L, jit_options=jit_options, form_compiler_options=form_compiler_options
-    )
-    b = dolfinx.fem.petsc.assemble_vector(linear_form)
-
-    # Apply lifting to the right-hand side vector and set boundary conditions.
-    dolfinx.fem.petsc.apply_lifting(b, [bilinear_form], [[bc_deac]])
-    b.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
-    dolfinx.fem.petsc.set_bc(b, [bc_deac])
-
-    # Setup a linear solver using the Conjugate Gradient method.
-    solver = PETSc.KSP().create(MPI.COMM_WORLD)
-    solver.setType("cg")
-    solver.rtol = 1e-8
-    solver.setOperators(A)
-
-    # Solve the linear system and perform ghost update.
-    nh = dolfinx.fem.Function(V)  # Function for the facet vector approximation
-    solver.solve(b, nh.x.petsc_vec)
-    nh.x.petsc_vec.ghostUpdate(
-        addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD
-    )
-
-    # Normalize the vectors to get the unit facet normal/tangent vector.
-    nh_norm = ufl.sqrt(ufl.inner(nh, nh))  # Norm of facet vector
-    cond_norm = ufl.conditional(
-        ufl.gt(nh_norm, 1e-10), nh_norm, 1.0
-    )  # Avoid division by zero
-    nh_norm_vec = ufl.as_vector(
-        (nh[0] / cond_norm, nh[1] / cond_norm, nh[2] / cond_norm)
-    )
-
-    nh_normalized = dolfinx.fem.Expression(
-        nh_norm_vec, V.element.interpolation_points()
-    )
-
-    n_out = dolfinx.fem.Function(V)
-    n_out.interpolate(nh_normalized)
-
-    return n_out
+    x2,x3=x[1],x[2]
+    mu,mx3,i22=mass     
+    
+    M11=assemble_scalar(form(sum([mu[i]*dx(i) for i in range(nphases)])))
+    M15=assemble_scalar(form(sum([(mx3[i]+x3*mu[i])*dx(i) for i in range(nphases)])))
+    M16=assemble_scalar(form(sum([-x2*mu[i]*dx(i) for i in range(nphases)])))
+    
+    M44=assemble_scalar(form(sum([(i22[i]+x3*mx3[i]+mu[i]*x2**2-x3*(-mx3[i]-x3*mu[i]))*dx(i) 
+                                  for i in range(nphases)])))
+    
+    M55=assemble_scalar(form(sum([(i22[i]+x3*mx3[i]+x3*(mx3[i]+x3*mu[i]))*dx(i)
+                                  for i in range(nphases)])))
+    M66=assemble_scalar(form(sum([mu[i]*(x2**2) *dx(i) for i in range(nphases)])))
+    
+    M56=assemble_scalar(form(sum([-x2*(mx3[i]+x3*mu[i])*dx(i) for i in range(nphases)])))
+    L=1
+    if Taper:
+        coord=meshdata["mesh"].geometry.x
+        L = max(coord[:, 0]) - min(coord[:, 0])
+        
+    return (1/L)*np.array([(M11,   0,   0,     0,   M15,    M16),
+                       (0,   M11, 0,  -M15,    0,       0),
+                       (0,   0,  M11,  -M16,   0,       0),
+                       (0, -M15,-M16,  M44,     0,       0),
+                       (M15,  0,  0,    0,   M55,     M56),
+                       (M16,  0,  0,    0,   M56,     M66)])

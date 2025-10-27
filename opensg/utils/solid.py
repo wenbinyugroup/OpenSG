@@ -19,7 +19,8 @@ from ufl import (
     Measure,
     as_vector,
 )
-import petsc4py.PETSc
+import ufl
+#import petsc4py.PETSc
 from petsc4py import PETSc
 from slepc4py import SLEPc
 
@@ -154,7 +155,6 @@ def stress_output(mat_param, mesh, stress_3D, points):
     # print(cells)
     return stress_3D.eval(points_on_proc, cells)
 
-
 def CC(mat_param):
     CC = []
     for i in range(len(mat_param)):
@@ -168,58 +168,19 @@ def CC(mat_param):
         CC.append(np.linalg.inv(S))
     return CC
 
-
-def epsilon(u):
-    """Compute strain tensor from displacement field.
-    
-    Parameters
-    ----------
-    u : dolfinx.fem.Function
-        Displacement field
-        
-    Returns
-    -------
-    ufl.Expr
-        Strain tensor
-    """
-    E1 = as_vector(
-        [
-            u[0].dx(0),
-            u[1].dx(1),
-            u[2].dx(2),
-            (u[1].dx(2) + u[2].dx(1)),
-            (u[0].dx(2) + u[2].dx(0)),
-            (u[0].dx(1) + u[1].dx(0)),
-        ]
+def get_mass_solid(meshdata, density, Taper=False):  # Mass matrix
+    nphases=max(meshdata["subdomains"].values)+1
+    x, dx = (
+        ufl.SpatialCoordinate(meshdata["mesh"]),
+        ufl.Measure("dx")(
+            domain=meshdata["mesh"], subdomain_data=meshdata["subdomains"]
+        ),
     )
-    return as_tensor(
-        [
-            (E1[0], 0.5 * E1[5], 0.5 * E1[4]),
-            (0.5 * E1[5], E1[1], 0.5 * E1[3]),
-            (0.5 * E1[4], 0.5 * E1[3], E1[2]),
-        ]
-    ), E1
-
-
-def sigma(u, i, CC):  # v is strain variable (ufl)
-    s1 = dot(as_tensor(CC[i]), epsilon(u)[1])
-    return as_tensor(
-        [(s1[0], s1[5], s1[4]), (s1[5], s1[1], s1[3]), (s1[4], s1[3], s1[2])]
-    ), s1
-
-
-def sigma_prestress(i, CC, strain_3D):
-    s_pre = dot(as_tensor(CC[i]), strain_3D)
-    return as_tensor(
-        [
-            (s_pre[0], s_pre[5], s_pre[4]),
-            (s_pre[5], s_pre[1], s_pre[3]),
-            (s_pre[4], s_pre[3], s_pre[2]),
-        ]
-    ), s_pre
-
-
-def get_mass_solid(x, dx, density, nphases):  # Mass matrix
+    coord=meshdata["mesh"].geometry.x
+    L=1
+    if Taper:
+        L = max(coord[:, 0]) - min(coord[:, 0])
+        
     mu = assemble_scalar(form(sum([density[i] * dx(i) for i in range(nphases)])))
     xm2 = (1 / mu) * assemble_scalar(
         form(sum([x[1] * density[i] * dx(i) for i in range(nphases)]))
@@ -236,7 +197,7 @@ def get_mass_solid(x, dx, density, nphases):  # Mass matrix
     i23 = assemble_scalar(
         form(sum([x[1] * x[2] * density[i] * dx(i) for i in range(nphases)]))
     )
-    return np.array(
+    return (1/L)*np.array(
         [
             (mu, 0, 0, 0, mu * xm3, -mu * xm2),
             (0, mu, 0, -mu * xm3, 0, 0),
@@ -317,17 +278,17 @@ def local_boun(mesh, frame, subdomains):
     e1l, e2l, e3l = Function(V), Function(V), Function(V)
 
     fexpr1 = dolfinx.fem.Expression(
-        le1, V.element.interpolation_points(), comm=MPI.COMM_WORLD
+        le1, V.element.interpolation_points, comm=MPI.COMM_WORLD
     )
     e1l.interpolate(fexpr1)
 
     fexpr2 = dolfinx.fem.Expression(
-        le2, V.element.interpolation_points(), comm=MPI.COMM_WORLD
+        le2, V.element.interpolation_points, comm=MPI.COMM_WORLD
     )
     e2l.interpolate(fexpr2)
 
     fexpr3 = dolfinx.fem.Expression(
-        le3, V.element.interpolation_points(), comm=MPI.COMM_WORLD
+        le3, V.element.interpolation_points, comm=MPI.COMM_WORLD
     )
     e3l.interpolate(fexpr3)
 
@@ -526,3 +487,27 @@ def solve_GEP_shiftinvert(
     # EPS.view()
     EPS.solve()
     return EPS
+
+def eigen_eps(u):
+    """Compute strain tensor from displacement field.
+    
+    Parameters
+    ----------
+    u : dolfinx.fem.Function
+        Displacement field
+        
+    Returns
+    -------
+    ufl.Expr
+        Strain Vector
+    """
+    eps=as_vector([
+        u[0].dx(0),
+        u[1].dx(1),
+        u[2].dx(2),
+        (u[1].dx(2)+u[2].dx(1)),
+        (u[0].dx(2)+u[2].dx(0)),
+        (u[0].dx(1)+u[1].dx(0))
+        ])
+    return eps
+
