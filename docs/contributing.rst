@@ -96,6 +96,25 @@ Developer Installation
 
 The standard installation method will install the package in editable mode, so no additional steps are required.
 
+Running the Test Suite
+-----------------------
+
+To run the test suite locally:
+
+1. **Install pytest** (if not already installed):
+
+   .. code-block:: bash
+
+      pip install pytest
+
+2. **Run the test suite**:
+
+   .. code-block:: bash
+
+      pytest opensg/tests/
+
+This will run all tests in the ``opensg/tests/`` directory, matching the same process used in the continuous integration workflow.
+
 Documentation
 -------------
 
