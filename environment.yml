@@ -1,4 +1,4 @@
-name: opensg_env_v8
+name: opensg_env
 channels:
   - conda-forge
 dependencies:
