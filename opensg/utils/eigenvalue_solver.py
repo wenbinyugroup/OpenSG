@@ -17,21 +17,21 @@ def print0(string: str):
 def monitor_EPS_short(
     EPS: SLEPc.EPS, it: int, nconv: int, eig: list, err: list, it_skip: int
 ):
-    """Concise monitor for EPS.solve().
-    
+    """
+    Concise monitor for EPS.solve().
     Parameters
     ----------
-    EPS : SLEPc.EPS
+    eps
         Eigenvalue Problem Solver class.
-    it : int
-        Current iteration number.
-    nconv : int
-        Number of converged eigenvalue.
-    eig : list
-        Eigenvalues
-    err : list
-        Computed errors.
-    it_skip : int
+    it
+       Current iteration number.
+    nconv
+       Number of converged eigenvalue.
+    eig
+       Eigenvalues
+    err
+       Computed errors.
+    it_skip
         Iteration skip.
     """
     if it == 1:
@@ -73,19 +73,16 @@ def EPS_get_spectrum(
     EPS: SLEPc.EPS, V: FunctionSpace
 ) -> Tuple[List[complex], List[PETSc.Vec], List[PETSc.Vec]]:
     """Retrieve eigenvalues and eigenfunctions from SLEPc EPS object.
-    
     Parameters
     ----------
-    EPS : SLEPc.EPS
-        The SLEPc solver
-    V : FunctionSpace
-        The function space
-        
+    EPS
+       The SLEPc solver
+    V
+       The function space
     Returns
     -------
-    tuple
         Tuple consisting of: List of complex converted eigenvalues,
-        lists of converted eigenvectors (real part) and (imaginary part)
+         lists of converted eigenvectors (real part) and (imaginary part)
     """
     # Get results in lists
     eigval = list()
@@ -108,85 +105,86 @@ def EPS_get_spectrum(
 def solve_GEP_shiftinvert(
     A: PETSc.Mat,
     B: PETSc.Mat,
-    problem_type: SLEPc.EPS.ProblemType = SLEPc.EPS.ProblemType.GHIEP,
+    problem_type: SLEPc.EPS.ProblemType = SLEPc.EPS.ProblemType.GHEP,
     solver: SLEPc.EPS.Type = SLEPc.EPS.Type.KRYLOVSCHUR,
-    nev: int = 10,
-    tol: float = 1e-7,
+    nev: int = 2,
+    tol: float = 1e-6,
     max_it: int = 1000,
-    target: float = 1.0,
-    shift: float = 0.0,
+    target: float = 5,
+    shift: float = 1,
 ) -> SLEPc.EPS:
-    """Solve generalized eigenvalue problem A*x=lambda*B*x using shift-and-invert as spectral transform method.
-     
+    """
+     Solve generalized eigenvalue problem A*x=lambda*B*x using shift-and-invert
+     as spectral transform method.
      Parameters
      ----------
-     A : PETSc.Mat
-         The matrix A
-     B : PETSc.Mat
-         The matrix B
-     problem_type : SLEPc.EPS.ProblemType
-         The problem type, for options see: https://bit.ly/3gM5pth
-     solver : SLEPc.EPS.Type
-         Solver type, for options see: https://bit.ly/35LDcMG
-     nev : int
+     A
+        The matrix A
+     B
+        The matrix B
+     problem_type
+        The problem type, for options see: https://bit.ly/3gM5pth
+    solver:
+        Solver type, for options see: https://bit.ly/35LDcMG
+     nev
          Number of requested eigenvalues.
-     tol : float
-         Tolerance for slepc solver
-     max_it : int
-         Maximum number of iterations.
-     target : float
-         Target eigenvalue. Also used for sorting.
-     shift : float
-         Shift 'sigma' used in shift-and-invert.
-         
+     tol
+        Tolerance for slepc solver
+     max_it
+        Maximum number of iterations.
+     target
+        Target eigenvalue. Also used for sorting.
+     shift
+        Shift 'sigma' used in shift-and-invert.
+    interval
+        A tuple (min_val, max_val) to restrict the search to a specific
+        interval on the real axis. To search for only positive eigenvalues,
+        you could use `interval=(1e-9, PETSc.DECIMAL_MAX)`.
+        This feature is supported by solvers like KRYLOVSCHUR.
      Returns
      -------
-     SLEPc.EPS
+     EPS
         The SLEPc solver
-     """
+    """
 
     # Build an Eigenvalue Problem Solver object
     EPS = SLEPc.EPS()
     EPS.create(comm=MPI.COMM_WORLD)
     EPS.setOperators(A, B)
-    # deflation_vector = PETSc.Vec().createSeq(A.getLocalSize())
-    # deflation_vector.set(1.0)
-    # EPS.setDeflationSpace(deflation_vector)
-
-    # Set initial vector (example: random vector)
-    initial_vector = PETSc.Vec().createSeq(A.getLocalSize())
-    initial_vector.setRandom()
-    EPS.setInitialSpace(initial_vector)
     EPS.setProblemType(problem_type)
+    
     # set the number of eigenvalues requested
-    EPS.setDimensions(nev=nev)
+    EPS.setDimensions(nev=nev, ncv=25)
     # Set solver
     EPS.setType(solver)
     # set eigenvalues of interest
-    EPS.setWhichEigenpairs(SLEPc.EPS.Which.TARGET_MAGNITUDE)
-    EPS.setTarget(target)  # sorting
+    EPS.setWhichEigenpairs(SLEPc.EPS.Which.LARGEST_REAL)
+   # EPS.setTarget(target)  # sorting
+  #  EPS.setInterval(1e-3, 1e3)
+
     # set tolerance and max iterations
     EPS.setTolerances(tol=tol, max_it=max_it)
     # Set up shift-and-invert
     # Only work if 'whichEigenpairs' is 'TARGET_XX'
+    # Restrict the computed eigenvalues to a specific interval.
+    # This is the key change to filter for only positive eigenvalues.
+    
+    #
     ST = EPS.getST()
-    ST.setType(SLEPc.ST.Type.SINVERT)
-    ST.setShift(shift)
-    # ST.getKSP().setType("preonly")
-    # ST.getKSP().getPC().setType("lu")
-    # ST.getKSP().getPC().setFactorSolverType("mumps")
+  #  ST.setType(SLEPc.ST.Type.SINVERT)
+   # ST.setShift(shift)
+
+    
+    ST.getKSP().setType("preonly")
+    ST.getKSP().getPC().setType("lu")
+    ST.getKSP().getPC().setFactorSolverType("mumps")
     EPS.setST(ST)
     # set monitor
-    it_skip = 1
-    EPS.setMonitor(
-        lambda eps, it, nconv, eig, err: monitor_EPS_short(
-            eps, it, nconv, eig, err, it_skip
-        )
-    )
+  #  it_skip = 1
+
     # parse command line options
     EPS.setFromOptions()
     # Display all options (including those of ST object)
-    EPS.view()
+  #  EPS.view()
     EPS.solve()
-    EPS_print_results(EPS)
     return EPS
