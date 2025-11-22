@@ -2,14 +2,6 @@ import numpy as np
 import time
 from opensg.mesh.segment import ShellSegmentMesh
 
-left_timo,right_timo, taper_timo=[],[],[]
-left_mass,right_mass, taper_mass=[],[],[]
-blade_length = 100
-left_origin,right_origin, taper_origin=[],[],[] 
-eig=[]
-time_seg=[]
-
-
 # Process segments (adjust range based on desired segments)
 for segment in np.linspace(0,28,29): # np.linspace(start segment, end segment, (end_segment-start segment+1))
     file_name='data/Shell_3D_Taper/BAR_URC_numEl_52_segment_'
