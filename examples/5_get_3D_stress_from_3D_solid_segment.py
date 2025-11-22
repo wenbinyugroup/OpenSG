@@ -26,7 +26,7 @@ print('\n Taper Stiffness \n', timo[0])
 strain_m,u_loc=stress_recov.local_strain(timo,beam_out,segid,meshdata) 
 
 # Local stress (quadrature points) and local stress(elemental nodes)
-stress_m_quad, coord_quad, stress_m_node, coord_node=stress_recov.stress_eval(material_parameters, meshdata, strain_m)
+stress_m_quad, coord_quad, stress_m, coord_node=stress_recov.stress_eval(material_parameters, meshdata, strain_m)
 
 
 # Eigenvalue
@@ -38,3 +38,14 @@ eigen= stress_recov.eigen_solve(material_parameters,
                                     u_loc)    
 print('Computed Eigenvalue:', eigen)
 print('\n Time Taken: 2D yaml',str(time.time()-tic))
+
+from dolfinx import io
+filename = "SG_mesh.xdmf"
+stress_m.name = "Stress" # Set a name for Paraview
+#strain_m.name = "Strain" # Set a name for Paraview
+#u_loc.name = "Displacement" # Set a name for Paraview
+
+with io.XDMFFile(meshdata['mesh'].comm, filename, "a") as xdmf:
+    
+    xdmf.write_function(stress_m, 0.0)
+  #  xdmf.write_function(strain_m, 0.0)

@@ -20,7 +20,7 @@ import mpi4py.MPI as MPI
 import numpy as np
 from contextlib import ExitStack
 
-def xmdf_convert(mesh, subdomains):
+def xmdf_convert(mesh, subdomains,filename):
     # Set the names for reading later
 
     mesh.name = "Grid"
@@ -32,7 +32,7 @@ def xmdf_convert(mesh, subdomains):
     
     # --- Write the mesh to XDMF in PARALLEL ---
     # Each process will now write its OWN PIECE to the file.
-    with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "SG_mesh.xdmf", "w") as xdmf:
+    with dolfinx.io.XDMFFile(MPI.COMM_WORLD, filename+".xdmf", "w") as xdmf:
         # This is now a parallel write operation
         xdmf.write_mesh(mesh)
         

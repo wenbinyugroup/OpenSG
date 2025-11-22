@@ -170,7 +170,8 @@ class ShellSegmentMesh:
     #        mode="w", suffix=".msh", delete=False
     #    ) as temp_msh:
       #      msh_filename = temp_msh.name
-        msh_filename='shell_section.msh'
+        filename='shell_segment'
+        msh_filename=filename+'.msh'
         # Generate the mesh file content
         self.generate_mesh_file(msh_filename)
         
@@ -181,7 +182,7 @@ class ShellSegmentMesh:
             msh_filename, MPI.COMM_WORLD, 0, gdim=3
             )
         self.mesh, self.subdomains, self.boundaries = meshdata[0:3]
-        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains)
+        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains,filename)
         self.original_cell_index = (
             self.mesh.topology.original_cell_index
         )  # Original cell Index from mesh file
@@ -717,7 +718,8 @@ class ShellBounMesh:
     #        mode="w", suffix=".msh", delete=False
     #    ) as temp_msh:
       #      msh_filename = temp_msh.name
-        msh_filename='1Dshell.msh'
+        filename='shell_cross_section'
+        msh_filename=filename+'.msh'
         # Generate the mesh file content
         self.generate_mesh_file(msh_filename)
         
@@ -728,7 +730,7 @@ class ShellBounMesh:
             msh_filename, MPI.COMM_WORLD, 0, gdim=3
         )
         self.mesh, self.subdomains, self.boundaries = meshdata[0:3]
-        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains)
+        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains,filename)
         self.original_cell_index = (
             self.mesh.topology.original_cell_index
         )  # Original cell Index from mesh file
@@ -1009,7 +1011,8 @@ class SolidSegmentMesh:
       #  with tempfile.NamedTemporaryFile(
       #      mode="w", suffix=".msh", delete=False
       #  ) as temp_msh:
-        msh_filename = 'Taper3D.msh'
+        filename='solid_segment'
+        msh_filename = filename+'.msh'
 
         # Generate the mesh file content
         self.generate_mesh_file(msh_filename)
@@ -1021,7 +1024,7 @@ class SolidSegmentMesh:
             msh_filename, MPI.COMM_WORLD, 0, gdim=3
         )
         self.mesh, self.subdomains, self.boundaries = meshdata[0:3]
-        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains)
+        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains,filename)
         self.original_cell_index = self.mesh.topology.original_cell_index
 
         # Create layup ID mapping (same as SolidSegmentMesh.__init__)
@@ -1523,7 +1526,8 @@ class SolidBounMesh:
         #    mode="w", suffix=".msh", delete=False
        # ) as temp_msh:
        #     msh_filename = temp_msh.name
-        msh_filename='2Dboun.msh'
+        filename='solid_cross_section'
+        msh_filename=filename+'.msh'
         # Generate the mesh file content
         self.generate_mesh_file(msh_filename)
         
@@ -1534,7 +1538,7 @@ class SolidBounMesh:
             msh_filename, MPI.COMM_WORLD, 0, gdim=3
         )
         self.mesh, self.subdomains, self.boundaries = meshdata[0:3]
-        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains)
+        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains,filename)
         self.original_cell_index = self.mesh.topology.original_cell_index
 
         # Create layup ID mapping (same as SolidSegmentMesh.__init__)
