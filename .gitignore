@@ -183,3 +183,10 @@ venv/
 # Examples
 examples/segments_all/
 examples/segments_specific/
+
+*.msh
+*.h5
+*.xdmf
+
+# Mac files
+*.DS_Store

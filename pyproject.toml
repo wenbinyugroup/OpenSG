@@ -16,20 +16,6 @@ authors = [
 
 requires-python = ">=3.11"
 
-dependencies = [
-    "numpy>=1.20.0",
-    "scipy>=1.7.0",
-    "fenics-dolfinx>=0.9.0",
-    "fenics-basix>=0.9.0",
-    "fenics-ufl",
-    "fenics-ffcx>=0.9.0",
-    "mpi4py>=3.0.0",
-    "petsc4py>=3.18.0",
-    "pyyaml>=5.4.0",
-    "meshio",
-    "gmsh",
-]
-
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
