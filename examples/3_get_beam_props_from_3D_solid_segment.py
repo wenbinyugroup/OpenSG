@@ -5,7 +5,7 @@ from opensg.core.solid import compute_stiffness
 tic = time.time()
 
 # Read 3D yaml
-mesh_yaml='data/Solid_3DSG/bar_urc_npl_1_ar_5-segment_4.yaml'
+mesh_yaml='data/Solid_3DSG/bar_urc_npl_1_ar_5-segment_0.yaml'
 segment_mesh = SolidSegmentMesh(mesh_yaml)
 
 # Extract material parameters and mesh data
