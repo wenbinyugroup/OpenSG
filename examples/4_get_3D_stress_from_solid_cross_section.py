@@ -22,8 +22,18 @@ timo=compute_timo_boun(material_parameters, meshdata)
 strain_m,u_loc=stress_recov.local_strain(timo,beam_out,segid,meshdata) 
 
 # Local stress (quadrature points) and local stress(elemental nodes)
-stress_m_quad, coord_quad, stress_m_node, coord_node=stress_recov.stress_eval(material_parameters, meshdata, strain_m)
-print('\n Time Taken:',str(time.time()-tic))
+stress_m_quad, coord_quad, stress_m, coord_node=stress_recov.stress_eval(material_parameters, meshdata, strain_m)
 
-# To do
-# Add .vtk or .tt file output for u_loc,strain_loc, stress_loc at quad points,nodes, both
+# To do- resolve xmdf multiblock (color in paraview)
+from dolfinx import io
+filename = "SG_mesh.xdmf"
+stress_m.name = "Stress" # Set a name for Paraview
+#strain_m.name = "Strain" # Set a name for Paraview
+#u_loc.name = "Displacement" # Set a name for Paraview
+
+with io.XDMFFile(meshdata['mesh'].comm, filename, "a") as xdmf:
+    
+    xdmf.write_function(stress_m, 0.0)
+  #  xdmf.write_function(strain_m, 0.0)
+ 
+print('\n Time Taken:',str(time.time()-tic))
