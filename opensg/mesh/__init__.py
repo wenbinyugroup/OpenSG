@@ -9,10 +9,14 @@ This module contains classes and functions for:
 from opensg.mesh.segment import (
     ShellSegmentMesh,
     SolidSegmentMesh,
+    ShellBounMesh,
+    SolidBounMesh,
 )
 
 
 __all__ = [
     "ShellSegmentMesh",
     "SolidSegmentMesh",
+    "ShellBounMesh",
+    "SolidBounMesh",
 ]
