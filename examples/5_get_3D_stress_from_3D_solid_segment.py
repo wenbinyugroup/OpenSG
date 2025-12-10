@@ -37,7 +37,7 @@ eigen= stress_recov.eigen_solve(material_parameters,
                                     strain_m,
                                     u_loc)    
 print('Computed Eigenvalue:', eigen)
-print('\n Time Taken: 2D yaml',str(time.time()-tic))
+print('\n Time Taken: 3D yaml',str(time.time()-tic))
 
 from dolfinx import io
 filename = "SG_mesh.xdmf"
