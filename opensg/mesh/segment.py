@@ -77,7 +77,7 @@ class ShellSegmentMesh:
         if create_1D:
             segid=segment_yaml_file.removesuffix('.yaml').split('_')[-1]
             self.path_name='1Dshell_'+str(segid)+'.yaml'
-            self._create_1Dyaml(end)
+            self._create_1Dyaml(False)
             if end:
                 self.path_name='1Dshell_'+str(int(segid)+1)+'.yaml'
                 self._create_1Dyaml(end)
@@ -170,7 +170,7 @@ class ShellSegmentMesh:
     #        mode="w", suffix=".msh", delete=False
     #    ) as temp_msh:
       #      msh_filename = temp_msh.name
-        filename='shell_segment'
+        filename='SG_mesh'
         msh_filename=filename+'.msh'
         # Generate the mesh file content
         self.generate_mesh_file(msh_filename)
@@ -182,7 +182,7 @@ class ShellSegmentMesh:
             msh_filename, MPI.COMM_WORLD, 0, gdim=3
             )
         self.mesh, self.subdomains, self.boundaries = meshdata[0:3]
-        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains,filename)
+        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains)
         self.original_cell_index = (
             self.mesh.topology.original_cell_index
         )  # Original cell Index from mesh file
@@ -718,7 +718,7 @@ class ShellBounMesh:
     #        mode="w", suffix=".msh", delete=False
     #    ) as temp_msh:
       #      msh_filename = temp_msh.name
-        filename='shell_cross_section'
+        filename='SG_mesh'
         msh_filename=filename+'.msh'
         # Generate the mesh file content
         self.generate_mesh_file(msh_filename)
@@ -730,7 +730,7 @@ class ShellBounMesh:
             msh_filename, MPI.COMM_WORLD, 0, gdim=3
         )
         self.mesh, self.subdomains, self.boundaries = meshdata[0:3]
-        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains,filename)
+        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains)
         self.original_cell_index = (
             self.mesh.topology.original_cell_index
         )  # Original cell Index from mesh file
@@ -928,7 +928,7 @@ class SolidSegmentMesh:
         if create_2D:
             segid=segment_yaml_file.removesuffix('.yaml').split('_')[-1]
             self.path_name='2Dsolid_'+str(segid)+'.yaml'
-            self._create_2Dyaml(end)
+            self._create_2Dyaml(False)
             if end:
                 self.path_name='2Dsolid_'+str(int(segid)+1)+'.yaml'
                 self._create_2Dyaml(end)
@@ -1011,7 +1011,7 @@ class SolidSegmentMesh:
       #  with tempfile.NamedTemporaryFile(
       #      mode="w", suffix=".msh", delete=False
       #  ) as temp_msh:
-        filename='solid_segment'
+        filename='SG_mesh'
         msh_filename = filename+'.msh'
 
         # Generate the mesh file content
@@ -1024,7 +1024,7 @@ class SolidSegmentMesh:
             msh_filename, MPI.COMM_WORLD, 0, gdim=3
         )
         self.mesh, self.subdomains, self.boundaries = meshdata[0:3]
-        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains,filename)
+        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains)
         self.original_cell_index = self.mesh.topology.original_cell_index
 
         # Create layup ID mapping (same as SolidSegmentMesh.__init__)
@@ -1526,7 +1526,7 @@ class SolidBounMesh:
         #    mode="w", suffix=".msh", delete=False
        # ) as temp_msh:
        #     msh_filename = temp_msh.name
-        filename='solid_cross_section'
+        filename='SG_mesh'
         msh_filename=filename+'.msh'
         # Generate the mesh file content
         self.generate_mesh_file(msh_filename)
@@ -1538,7 +1538,7 @@ class SolidBounMesh:
             msh_filename, MPI.COMM_WORLD, 0, gdim=3
         )
         self.mesh, self.subdomains, self.boundaries = meshdata[0:3]
-        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains,filename)
+        opensg.utils.shared.xmdf_convert(self.mesh, self.subdomains)
         self.original_cell_index = self.mesh.topology.original_cell_index
 
         # Create layup ID mapping (same as SolidSegmentMesh.__init__)
