@@ -6,7 +6,7 @@ import opensg.core.stress_recov as stress_recov
 tic = time.time()
 
 file_name='data/Solid_3DSG/bar_urc_npl_1_ar_5-segment_' 
-beam_out=utils.beamdyn_trans.beam_reaction(file_name)
+beam_out=utils.beamdyn_trans.beam_reaction('data/bd_bar_urc.out')
 segid=0 # user defined
 # Read 3D yaml
 mesh_yaml=file_name+ str(segid) +'.yaml' 

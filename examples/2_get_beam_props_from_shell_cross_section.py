@@ -19,4 +19,3 @@ print('Cross-Section', 'Origin:', meshdata['origin'],'\n')
 print('1D mass \n', mass)
 print('1D Timo \n ', Deff_srt)
 print('\n Time Taken: 1D yaml',str(time.time()-tic))
-
