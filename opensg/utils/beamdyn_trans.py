@@ -134,7 +134,7 @@ def beam_reaction(file_name):
         List of beam force data for each segment, where each segment contains
         6 components (3 forces, 3 moments) with labels and values.
     """
-    data = np.loadtxt(file_name + ".out", delimiter=",", skiprows=1, dtype=str)
+    data = np.loadtxt(file_name, delimiter=",", skiprows=1, dtype=str)
     index = data[1].split()
     last_data = data[-1].split()
     pp = 7
