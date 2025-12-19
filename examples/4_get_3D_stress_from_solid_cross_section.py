@@ -7,8 +7,8 @@ import opensg.utils as utils
 tic = time.time()
 
 # Read 2D yaml 
-file_name='data/Solid_2DSG/2Dbar_urc_npl_1_ar_5-segment_' 
-beam_out=utils.beamdyn_trans.beam_reaction(file_name)
+file_name='data/Solid_2DSG/2Dsolid_' 
+beam_out=utils.beamdyn_trans.beam_reaction('data/bd_bar_urc.out')
 segid=5
 mesh_yaml=file_name+ str(segid) +'.yaml' 
 segment_mesh = SolidBounMesh(mesh_yaml)

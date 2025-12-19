@@ -6,7 +6,7 @@ import opensg.utils as utils
 left_timo, left_mass, left_origin=[],[],[]
 blade_length = 100
 
-for segment in np.linspace(0,28,29): # np.linspace(start segment, end segment, (end_segment-start segment+1))
+for segment in np.linspace(0,29,30): # np.linspace(start segment, end segment, (end_segment-start segment+1))
     file_name='data/Shell_1DSG/1Dshell_'
     segid=int(segment)
     tic = time.time()
