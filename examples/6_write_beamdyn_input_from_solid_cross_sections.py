@@ -9,10 +9,10 @@ left_timo, left_mass, left_origin=[],[],[]
 blade_length = 100
 
 for segment in np.linspace(0,28,29): # np.linspace(start segment, end segment, (end_segment-start segment+1))
-    file_name='data/Solid_2DSG/2Dbar_urc_npl_1_ar_5-segment_'
+    file_name='data/Solid_2DSG/2Dsolid_'
     segid=int(segment)
     tic = time.time()
- #   print('Boundary:',str(segid)," \n")
+
 
     # Read 2D yaml 
     mesh_yaml = file_name+ str(segid) +'.yaml' 
@@ -20,7 +20,8 @@ for segment in np.linspace(0,28,29): # np.linspace(start segment, end segment, (
 
     material_parameters, density = segment_mesh.material_database
     meshdata = segment_mesh.meshdata
-
+    print('-' * 50)
+    print(' \n Boundary:',str(segid), '       Origin:',float(meshdata["origin"])/blade_length, " \n")
     timo=compute_timo_boun(material_parameters, meshdata)
     left_mass.append(utils.solid.get_mass_solid(meshdata, density))
 
