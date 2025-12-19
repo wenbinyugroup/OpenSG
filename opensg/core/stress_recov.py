@@ -52,7 +52,7 @@ def local_strain(timo, beam_out, segment, meshdata):
     
     VV = dolfinx.fem.functionspace(
         meshdata["mesh"],
-        basix.ufl.element("DG", meshdata["mesh"].topology.cell_name(), 0, shape=(6,)),
+        basix.ufl.element("CG", meshdata["mesh"].topology.cell_name(), 1, shape=(6,)),
     )
 
     x, dx = (
@@ -69,10 +69,6 @@ def local_strain(timo, beam_out, segment, meshdata):
     FF = np.array(
         (rf[2], -rf[1], rf[0], rf[5], -rf[4], rf[3])
     )  # BeamDyn --> VABS convention
-    
-   # FF= np.array([32230.4005595904, -7663.907852209771, 251712.81004955297,
-    #               -55608.54410550957, -4170203.8641732424, -123224.93244239496])    
-   # print('VABS Reaction Force:',FF)
 
     Comp_srt = np.linalg.inv(Deff_srt)
     st=np.matmul(Comp_srt,FF) 
@@ -138,7 +134,7 @@ def local_strain(timo, beam_out, segment, meshdata):
     )  
     st_3D_b = st_Eb + st_Timo   # Beam Reference Frame
 
-    strain_mm=Function(VV)
+ #   strain_mm=Function(VV)
 
    # fexpr1 = dolfinx.fem.Expression(
    #     st_3D_b, VV.element.interpolation_points(), comm=MPI.COMM_WORLD
@@ -146,10 +142,10 @@ def local_strain(timo, beam_out, segment, meshdata):
    # strain_bb.interpolate(fexpr1)
     
     st_3D_m=(utils.Rsig(meshdata["frame"]).T)*st_3D_b # Material Reference Frame
-    fexpr1=dolfinx.fem.Expression(
-        st_3D_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
-        )
-    strain_mm.interpolate(fexpr1) 
+ #   fexpr1=dolfinx.fem.Expression(
+    #    st_3D_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
+    #    )
+  #  strain_mm.interpolate(fexpr1) 
 
     # Local Displacement
     rf=[beam_disp[int(segment)][k][1] for k in range(6)]
@@ -174,12 +170,17 @@ def local_strain(timo, beam_out, segment, meshdata):
     fexpr1=dolfinx.fem.Expression(
         u_local,V.element.interpolation_points(), comm=MPI.COMM_WORLD
         )
-    u_loc.interpolate(fexpr1) 
+    u_loc.interpolate(fexpr1)
+    
+    strain_m=Function(VV)
+    fexpr1=dolfinx.fem.Expression(
+        st_3D_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
+        )
+    strain_m.interpolate(fexpr1)
+    return strain_m,u_loc
 
-    return strain_mm,u_local
 
-
-def stress_eval(mat_param, meshdata, strain_mm):
+def stress_eval(mat_param, meshdata, strain_m):
 
     CC_ = utils.CC(mat_param)
     mesh=meshdata["mesh"]
@@ -187,14 +188,18 @@ def stress_eval(mat_param, meshdata, strain_mm):
         meshdata["mesh"],
         basix.ufl.element("DG", meshdata["mesh"].topology.cell_name(), 0, shape=(6,)),
     )
-    stress_mm=Function(VV)
+    stress_mm, strain_mm=Function(VV), Function(VV)
+    fexpr1=dolfinx.fem.Expression(
+        strain_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
+        )
+    strain_mm.interpolate(fexpr1) 
     for idx,el in enumerate(meshdata["subdomains"].values):
         stress_mm.x.array[6*idx:6*idx+6]=np.matmul(CC_[el],strain_mm.x.array[6*idx:6*idx+6])
         
    # q_el = basix.ufl.quadrature_element(mesh.basix_cell(), value_shape=(6,), degree=2, scheme="default")
     Q = dolfinx.fem.functionspace(
         mesh,
-        basix.ufl.element("CG", meshdata["mesh"].topology.cell_name(), 2, shape=(6,)),
+        basix.ufl.element("CG", meshdata["mesh"].topology.cell_name(), 1, shape=(6,)),
     )
   #  Q = dolfinx.fem.functionspace(mesh, q_el)
     q_elem = dolfinx.fem.Function(Q)
@@ -336,151 +341,3 @@ def eigen_solve(mat_param, meshdata, l_mesh, r_mesh, strain_mm, u_local):
         # Close the plotter to free memory
       #  pl.close()
     return 1 / (np.max(eigval)).real
-
-def local_strain2D(timo, rf, segment, meshdata):
-    """Recover local strain field from beam analysis results.
-
-    This function recovers the local 3D strain field within a blade segment
-    using the fluctuating functions from the homogenized beam analysis and
-    the applied beam forces.
-
-    Parameters
-    ----------
-    timo : list
-        Timoshenko analysis results containing [Deff_srt, V0, V1] where:
-        - Deff_srt: effective stiffness matrix
-        - V0: boundary fluctuating functions
-        - V1: volume fluctuating functions
-    beam_force : list
-        Beam force components [Fx, Fy, Fz, Mx, My, Mz] applied to the segment
-    segment : int
-        Segment index for identification
-    meshdata : dict
-        Dictionary containing mesh information including the 3D mesh object
-
-    Returns
-    -------
-    dolfinx.fem.Function
-        Function containing the recovered 3D strain field in the segment
-    """
-    Deff_srt, V0, V1 = timo
- #   beam_force,beam_disp=beam_out
-    V = dolfinx.fem.functionspace(
-        meshdata["mesh"],
-        basix.ufl.element("CG", meshdata["mesh"].topology.cell_name(), 1, shape=(3,)),
-    )
-    VV = dolfinx.fem.functionspace(
-        meshdata["mesh"],
-        basix.ufl.element("DG", meshdata["mesh"].topology.cell_name(), 1, shape=(6,)),
-    )
-
-    x, dx = (
-        ufl.SpatialCoordinate(meshdata["mesh"]),
-        ufl.Measure("dx")(
-            domain=meshdata["mesh"], subdomain_data=meshdata["subdomains"]
-        ),
-    )
-
-  #  print("Beam reaction Force")
-  #  for k in range(6):
-     #   print(beam_force[int(segment)][k][0], "     ", beam_force[int(segment)][k][1])
-    FF = np.array(
-        (rf[0], rf[1], rf[2], rf[3], rf[4], rf[5])
-    )  # BeamDyn --> VABS convention
-    print('VABS Reaction Force:',FF)
-
-    Comp_srt = np.linalg.inv(Deff_srt)
-    st=np.matmul(Comp_srt,FF) 
-    st_m=np.array((st[0],st[3],st[4],st[5]), dtype=np.float64)  
-    
-    # First Derivative
-    F_1d=np.matmul(Deff_srt,st)
-    R1=utils.recov(np.array((st[0]+1,st[1],st[2],st[3],st[4],st[5]), dtype=np.float64) )
-    F1= np.matmul(R1,F_1d)
-    st_Tim1=np.matmul(Comp_srt,F1)
-    st_cl1=np.array([st_Tim1[0],st_Tim1[3],st_Tim1[4],st_Tim1[5]])
-    gamma1=np.array([st_Tim1[1],st_Tim1[2]])
-    
-    # Second Derivative
-    R2=utils.recov(st_Tim1)
-    F2=np.matmul(R1,F1)+np.matmul(R2,F_1d)
-    st_Tim2=np.matmul(Comp_srt,F2)    
-    st_cl2=np.array([st_Tim2[0],st_Tim2[3],st_Tim2[4],st_Tim2[5]])
-    gamma2=np.array([st_Tim2[1],st_Tim2[2]])
-    
-    # Third Derivative
-    R3=utils.recov(st_Tim2)
-    F3=2*np.matmul(R2,F1)+np.matmul(R3,F_1d)+np.matmul(R1,F2)
-    st_Tim3=np.matmul(Comp_srt,F3)    
-    gamma3=np.array([st_Tim3[1],st_Tim3[2]])
-    
-    # Using Warping Function data (displacements)
-        
-    Q=np.array([(0,0),(0,0),(0,-1),(1,0)])
-    
-    st_m=st_m+np.matmul(Q,gamma1)
-    st_cl1=st_cl1+np.matmul(Q,gamma2)
-    st_cl2=st_cl2+np.matmul(Q,gamma3)
-
-    # Using Warping Function data (displacements)
-    a1 = np.matmul(V0, st_m)  # disp_fluctuations
-    a2 = np.matmul(V1, st_cl1)  # disp_fluctuation from srt
-    a3 = np.matmul(V1, st_cl2)
-    a4 = np.matmul(V0, st_cl1)
-
-    w_1 = dolfinx.fem.Function(V)  # disp_fluctuations
-    w1s_1 = dolfinx.fem.Function(V)  # disp_fluctuation from srt
-    w1s_2 = dolfinx.fem.Function(V)
-    w_2 = dolfinx.fem.Function(V)
-
-    for i in range(len(V0[:, 0])):
-        w_1.x.array[i], w1s_1.x.array[i], w1s_2.x.array[i], w_2.x.array[i] = (
-            a1[i],
-            a2[i],
-            a3[i],
-            a4[i],
-        )
-
-    # 3D strain recovery
-    st_Eb = utils.gamma_h(dx, w_1, dim=3) + ufl.dot(
-        utils.gamma_e(x), ufl.as_vector((st_m))
-    )  
-    st_Timo = (
-        utils.gamma_h(dx, w1s_1, dim=3) + utils.gamma_l(w_2) + utils.gamma_l(w1s_2)
-    )  
-    st_3D_b = st_Eb + st_Timo   # Beam Reference Frame
-
-    strain_mm,strain_bb=Function(VV), Function(VV)
-
-    fexpr1 = dolfinx.fem.Expression(
-        st_3D_b, VV.element.interpolation_points(), comm=MPI.COMM_WORLD
-    )
-    strain_bb.interpolate(fexpr1)
-    
-    st_3D_m=(utils.Rsig(meshdata["frame"]).T)*st_3D_b # Material Reference Frame
-    fexpr1=dolfinx.fem.Expression(
-        st_3D_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
-        )
-    strain_mm.interpolate(fexpr1) 
- 
-
-    return strain_mm,strain_bb, None
-
-def stressrecov2D(mat_param, meshdata, strain_mm,points):
-
-    CC_ = utils.CC(mat_param)
-    
-    VV = dolfinx.fem.functionspace(
-        meshdata["mesh"],
-        basix.ufl.element("CG", meshdata["mesh"].topology.cell_name(), 1, shape=(6,)),
-    )
-    
-    stress_mm=Function(VV)
-    for idx,el in enumerate(meshdata["subdomains"].values):
-        stress_mm.x.array[6*idx:6*idx+6]=np.matmul(CC_[el],strain_mm.x.array[6*idx:6*idx+6])
-  
-    stress_eval = utils.stress_output(mat_param, meshdata["mesh"], stress_mm, points)
-
-    return stress_eval 
-   # else:
-      #  return stress_mm

@@ -32,7 +32,7 @@ def xmdf_convert(mesh, subdomains):
     
     # --- Write the mesh to XDMF in PARALLEL ---
     # Each process will now write its OWN PIECE to the file.
-    with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "SG_solid.xdmf", "w") as xdmf:
+    with dolfinx.io.XDMFFile(MPI.COMM_WORLD,"SG_mesh.xdmf", "w") as xdmf:
         # This is now a parallel write operation
         xdmf.write_mesh(mesh)
         

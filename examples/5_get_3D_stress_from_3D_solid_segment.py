@@ -6,7 +6,7 @@ import opensg.core.stress_recov as stress_recov
 tic = time.time()
 
 file_name='data/Solid_3DSG/bar_urc_npl_1_ar_5-segment_' 
-beam_out=utils.beamdyn_trans.beam_reaction(file_name)
+beam_out=utils.beamdyn_trans.beam_reaction('data/bd_bar_urc.out')
 segid=0 # user defined
 # Read 3D yaml
 mesh_yaml=file_name+ str(segid) +'.yaml' 
@@ -26,7 +26,7 @@ print('\n Taper Stiffness \n', timo[0])
 strain_m,u_loc=stress_recov.local_strain(timo,beam_out,segid,meshdata) 
 
 # Local stress (quadrature points) and local stress(elemental nodes)
-stress_m_quad, coord_quad, stress_m_node, coord_node=stress_recov.stress_eval(material_parameters, meshdata, strain_m)
+stress_m_quad, coord_quad, stress_m, coord_node=stress_recov.stress_eval(material_parameters, meshdata, strain_m)
 
 
 # Eigenvalue
@@ -37,4 +37,15 @@ eigen= stress_recov.eigen_solve(material_parameters,
                                     strain_m,
                                     u_loc)    
 print('Computed Eigenvalue:', eigen)
-print('\n Time Taken: 2D yaml',str(time.time()-tic))
+print('\n Time Taken: 3D yaml',str(time.time()-tic))
+
+from dolfinx import io
+filename = "SG_mesh.xdmf"
+stress_m.name = "Stress" # Set a name for Paraview
+#strain_m.name = "Strain" # Set a name for Paraview
+#u_loc.name = "Displacement" # Set a name for Paraview
+
+with io.XDMFFile(meshdata['mesh'].comm, filename, "a") as xdmf:
+    
+    xdmf.write_function(stress_m, 0.0)
+  #  xdmf.write_function(strain_m, 0.0)

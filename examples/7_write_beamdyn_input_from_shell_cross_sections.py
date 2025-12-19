@@ -6,17 +6,17 @@ import opensg.utils as utils
 left_timo, left_mass, left_origin=[],[],[]
 blade_length = 100
 
-for segment in np.linspace(0,28,29): # np.linspace(start segment, end segment, (end_segment-start segment+1))
-    file_name='data/Shell_1DSG/1D_v8/1Dshell_'
+for segment in np.linspace(0,29,30): # np.linspace(start segment, end segment, (end_segment-start segment+1))
+    file_name='data/Shell_1DSG/1Dshell_'
     segid=int(segment)
     tic = time.time()
-    print('Boundary:',str(segid)," \n")
 
     # Read 1D yaml 
     mesh_yaml = file_name+ str(int(segment)) +'.yaml' 
     segment_mesh = ShellBounMesh(mesh_yaml)
     meshdata=segment_mesh.meshdata
-    
+    print('-' * 50)
+    print(' \n Boundary:',str(segid), '       Origin:',float(meshdata["origin"])/blade_length, " \n")
     ABD, mass = segment_mesh.compute_ABD()
     Deff_srt,_,_= segment_mesh.compute_timo(ABD)
     print('1D Timo \n ', Deff_srt)
