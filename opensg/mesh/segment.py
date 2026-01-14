@@ -1201,7 +1201,7 @@ class SolidSegmentMesh:
 
             for i, xx in enumerate(boundary_entity_map):
                 # assign subdomain
-                idx = int(np.where(cell_of_facet_mesh.array == xx)[0] / el_facets)
+                idx = int((np.where(cell_of_facet_mesh.array == xx)[0] / el_facets)[0])
                 boundary_subdomains.append(self.subdomains.values[idx])
                 boun_element_map.append(idx)
                 # assign orientation
