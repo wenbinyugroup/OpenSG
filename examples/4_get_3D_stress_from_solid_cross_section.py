@@ -37,3 +37,4 @@ with io.XDMFFile(meshdata['mesh'].comm, filename, "a") as xdmf:
   #  xdmf.write_function(strain_m, 0.0)
  
 print('\n Time Taken:',str(time.time()-tic))
+print('xdmf file written- stress distribution at nodal points')
