@@ -13,7 +13,6 @@ for segment in np.linspace(0,28,29): # np.linspace(start segment, end segment, (
     segid=int(segment)
     tic = time.time()
 
-
     # Read 2D yaml 
     mesh_yaml = file_name+ str(segid) +'.yaml' 
     segment_mesh = SolidBounMesh(mesh_yaml)
@@ -34,6 +33,6 @@ for segment in np.linspace(0,28,29): # np.linspace(start segment, end segment, (
     print('Origin', left_origin[segid])
 left_timo=np.array(left_timo)
 left_mass=np.array(left_mass)
-utils.shared.write_beamdyn_files(np.array(left_timo), np.array(left_mass), left_origin,'2Dyaml_npl1ar5_20251121')
+utils.shared.write_beamdyn_files(np.array(left_timo), np.array(left_mass), left_origin,'2Dyaml_npl1ar5_20260313')
 
 
