@@ -10,12 +10,13 @@ taper_mass, taper_origin, taper_timo=[], [], []
 file_name='data/Solid_3DSG/bar_urc_npl_1_ar_5-segment_' 
 beam_out=utils.beamdyn_trans.beam_reaction('data/Solid_3DSG/bd_bar_urc.out')
 
-for segment in np.linspace(0,28,29): # np.linspace(start segment, end segment, (end_segment-start segment+1))
+for segment in np.linspace(0,27,28): # np.linspace(start segment, end segment, (end_segment-start segment+1))
     segid=int(segment)
     # Read 3D yaml
     mesh_yaml=file_name+ str(segid) +'.yaml' 
     segment_mesh = SolidSegmentMesh(mesh_yaml)
-    print('\nSegment Origin:', segment_mesh.meshdata["origin"])
+    print('-' * 50)
+    print(' \n Segment:' ,str(segid), '       Origin:', segment_mesh.meshdata["origin"])
     
     # Extract material parameters and mesh data
     material_parameters, density = segment_mesh.material_database
