@@ -20,15 +20,16 @@ for segment in np.linspace(0,29,30): # np.linspace(start segment, end segment, (
     ABD, mass = segment_mesh.compute_ABD()
     Deff_srt,_,_= segment_mesh.compute_timo(ABD)
     print('1D Timo \n ', Deff_srt)
+    
+    left_timo.append(Deff_srt) 
     left_mass.append(utils.shell.get_mass_shell(meshdata, mass))
     print('1D mass \n', left_mass[int(segment)])
-
     left_origin.append(float(meshdata["origin"])/blade_length)  
 
     print('\n Time Taken: 1D yaml',str(time.time()-tic))
     
 
-utils.shared.write_beamdyn_files(np.array(left_timo), np.array(left_mass), left_origin,'1Dyaml_npl1ar5_20251120')
+utils.shared.write_beamdyn_files(np.array(left_timo), np.array(left_mass), left_origin,'1Dyaml_npl1ar5_20260313')
 
 
 

@@ -4,6 +4,7 @@ from opensg.mesh.segment import  SolidBounMesh
 from opensg.core.solid import  compute_timo_boun
 import opensg.core.stress_recov as stress_recov
 import opensg.utils as utils
+from dolfinx import io
 tic = time.time()
 
 # Read 2D yaml 
@@ -25,7 +26,6 @@ strain_m,u_loc=stress_recov.local_strain(timo,beam_out,segid,meshdata)
 stress_m_quad, coord_quad, stress_m, coord_node=stress_recov.stress_eval(material_parameters, meshdata, strain_m)
 
 # To do- resolve xmdf multiblock (color in paraview)
-from dolfinx import io
 filename = "SG_mesh.xdmf"
 stress_m.name = "Stress" # Set a name for Paraview
 #strain_m.name = "Strain" # Set a name for Paraview

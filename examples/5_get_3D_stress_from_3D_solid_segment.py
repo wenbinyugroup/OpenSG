@@ -29,7 +29,7 @@ strain_m,u_loc=stress_recov.local_strain(timo,beam_out,segid,meshdata)
 stress_m_quad, coord_quad, stress_m, coord_node=stress_recov.stress_eval(material_parameters, meshdata, strain_m)
 
 
-# Eigenvalue
+# Eigenvalue (Buckling load factor)
 eigen= stress_recov.eigen_solve(material_parameters,
                                     meshdata,
                                     l_submesh,
@@ -41,11 +41,12 @@ print('\n Time Taken: 3D yaml',str(time.time()-tic))
 
 from dolfinx import io
 filename = "SG_mesh.xdmf"
-stress_m.name = "Stress" # Set a name for Paraview
-#strain_m.name = "Strain" # Set a name for Paraview
-#u_loc.name = "Displacement" # Set a name for Paraview
+stress_m.name = "Stress" # 
+#strain_m.name = "Strain" # To obtain local strain 
+#u_loc.name = "Displacement" # To obtain local displacement
 
 with io.XDMFFile(meshdata['mesh'].comm, filename, "a") as xdmf:
     
     xdmf.write_function(stress_m, 0.0)
-  #  xdmf.write_function(strain_m, 0.0)
+  #  xdmf.write_function(strain_m, 0.0) 
+print('xdmf file written- stress distribution at nodal points')

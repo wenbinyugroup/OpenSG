@@ -14,6 +14,7 @@ dependencies:
   - fenics-ufl=2024.1.0
   - fenics-ffcx=0.8.0
   - mpich 
+  - libglu  # <-- This replaces the apt-get libglu1-mesa command for google collab
   - pip
   - pip:
     - gmsh
