@@ -14,21 +14,15 @@ Current examples include:
 
 * ``3_get_beam_props_from_3D_solid_segment.py`` : Obtain Timoshenko beam stiffness and mass matrix for solid tapered 3D solid segment from a realistic wind blade.
 
-* ``4_get_3D_stress_from_solid_cross_section.py`` : Perform dehomogenization of solid cross-section using structural responses and return a .vtk file where local stress, strain and displacement can 
-be obtain over the SG domain. 
+* ``4_get_3D_stress_from_solid_cross_section.py`` : Perform dehomogenization of solid cross-section using structural responses and return a .vtk file where local stress, strain and displacement can be obtained over the SG domain.
 
-* ``5_get_3D_stress_from_3D_solid_segment.py`` : Perform dehomogenization of solid 3D tapered segment using structural responses and return a .vtk file where local stress, strain and displacement can 
-be obtain over the SG domain. The example obtains the critical buckling values based on the obtained local stress field. 
+* ``5_get_3D_stress_from_3D_solid_segment.py`` : Perform dehomogenization of solid 3D tapered segment using structural responses and return a .vtk file where local stress, strain and displacement can be obtained over the SG domain. The example obtains the critical buckling values based on the obtained local stress field.
 
-* ``6_write_beamdyn_input_from_solid_cross_sections.py`` : Write beamdyn input file by computing the Timoshenko beam stiffness and mass matrix of all stations seperately using solid cross-sections (given), and write in 
-beamdyn input file format. The output would be a .inp file.
+* ``6_write_beamdyn_input_from_solid_cross_sections.py`` : Write beamdyn input file by computing the Timoshenko beam stiffness and mass matrix of all stations separately using solid cross-sections (given), and write in beamdyn input file format. The output would be a .inp file.
 
-* ``7_write_beamdyn_input_from_shell_cross_sections.py`` : Write beamdyn input file by computing the Timoshenko beam stiffness and mass matrix of all stations seperately 
-using shell cross-sections (given), and write in beamdyn input file format. The output would be a .inp file.
+* ``7_write_beamdyn_input_from_shell_cross_sections.py`` : Write beamdyn input file by computing the Timoshenko beam stiffness and mass matrix of all stations separately using shell cross-sections (given), and write in beamdyn input file format. The output would be a .inp file.
 
-* ``8_write_beamdyn_input_from_3D_solid_segments.py`` : Write beamdyn input file by computing the Timoshenko beam stiffness and mass matrix of all stations seperately 
-using solid 3D tapered segment (given), and write in beamdyn input file format. The origin is taken as midpoint of the 3D SG over the beam reference line. 
-The output would be a .inp file.
+* ``8_write_beamdyn_input_from_3D_solid_segments.py`` : Write beamdyn input file by computing the Timoshenko beam stiffness and mass matrix of all stations separately using solid 3D tapered segment (given), and write in beamdyn input file format. The origin is taken as midpoint of the 3D SG over the beam reference line. The output would be a .inp file.
 
 The next two examples shows the helper function capability for input data from a pyNumAD realistic full blade mesh. These two examples take 3D blade segemnts mesh, and compute
 the shell cross-section mesh (1D yaml) for shell wind blade segment and similarly, solid cross-section mesh (2D yaml) for a solid wind blade segment. It precisely uses the

@@ -413,38 +413,34 @@ def solve_GEP_shiftinvert(
     shift: float = 1,
 ) -> SLEPc.EPS:
     """
-     Solve generalized eigenvalue problem A*x=lambda*B*x using shift-and-invert
-     as spectral transform method.
-     Parameters
-     ----------
-     A
-        The matrix A
-     B
-        The matrix B
-     problem_type
+    Solve generalized eigenvalue problem A*x=lambda*B*x using shift-and-invert
+    as spectral transform method.
+
+    Parameters
+    ----------
+    A
+        The matrix A.
+    B
+        The matrix B.
+    problem_type
         The problem type, for options see: https://bit.ly/3gM5pth
-    solver:
+    solver
         Solver type, for options see: https://bit.ly/35LDcMG
-     nev
-         Number of requested eigenvalues.
-     tol
-        Tolerance for slepc solver
-     max_it
+    nev
+        Number of requested eigenvalues.
+    tol
+        Tolerance for slepc solver.
+    max_it
         Maximum number of iterations.
-     target
+    target
         Target eigenvalue. Also used for sorting.
-     shift
+    shift
         Shift 'sigma' used in shift-and-invert.
-    interval
-        A tuple (min_val, max_val) to restrict the search to a specific
-        interval on the real axis. To search for only positive eigenvalues,
-        you could use `interval=(1e-9, PETSc.DECIMAL_MAX)`.
-        This feature is supported by solvers like KRYLOVSCHUR.
-    
+
     Returns
     -------
-    EPS
-    The SLEPc solver
+    SLEPc.EPS
+        The configured and solved SLEPc EPS object.
     """
 
     # Build an Eigenvalue Problem Solver object

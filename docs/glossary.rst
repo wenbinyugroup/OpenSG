@@ -274,9 +274,9 @@ Variable Name Conventions
     Bilinear weak form for WB mesh - a(dv,v_)
 
 ``F2``
-    Linear weak form for WB mesh - F2(v_)
-    
-    * Can compare with weak form to solve as a(dv,v\_) w = F2(v\_), where w.vector[ndofs_WBmesh,1] is unknown dofs value stored in V0[ndofs_WBmesh,4]
+    Linear weak form for WB mesh - ``F2(v_)``
+
+    * Can compare with weak form to solve as ``a(dv,v_) w = F2(v_)``, where ``w.vector[ndofs_WBmesh,1]`` is unknown dofs value stored in ``V0[ndofs_WBmesh,4]``
 
 ``F``
     [ndofs_WBmesh,1] - Global Assembled Right hand vector for EB case
