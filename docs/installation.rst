@@ -1,58 +1,45 @@
-.. _intallation:
-
-Installation 
-============
-
-Download opensg
-----------------
-
-The OpenSG source code is hosted on the `opensg GitHub repository <https://github.com/wenbinyugroup/opensg>`_. 
-OpenSG users are recommended to clone the Github repository.
-Cloning the repository allows users to easily pull the latest updates to the opensg source code.
-These updates may improve the code's speed, accuracy and add additional functionality or advanced features.
-
-To download OpenSG using `git <https://git-scm.com/>`_, type the following in a git interface:: 
-
-    git clone https://github.com/wenbinyugroup/opensg
-
-
+.. _installation:
 
 Installation
-------------
+============
 
-To install OpenSG and create an environment where the code runs correctly, is is recommended to 
-use the `environment.yml` file to create the environment via conda. If you are unfamiliar with conda, 
-please refer to the `conda documentation <https://docs.conda.io/projects/conda/en/latest/user-guide/getting-started.html>`_.
+OpenSG requires `DOLFINx (FEniCSx) <https://github.com/fenics/dolfinx>`_, which has non-Python
+dependencies and is not available as a standalone pip package. The recommended installation path is via conda,
+which handles all system-level dependencies automatically.
 
-1. Download the OpenSG repository::
+Conda (recommended)
+--------------------
 
-    git clone https://github.com/wenbinyugroup/opensg
+If you are unfamiliar with conda, refer to the
+`conda documentation <https://docs.conda.io/projects/conda/en/latest/user-guide/getting-started.html>`_.
 
-2. Create the conda environment named `opensg_env` using the `environment.yml` file::
+1. Clone the OpenSG repository::
+
+    git clone https://github.com/wenbinyugroup/OpenSG
+    cd OpenSG
+
+2. Create and activate the conda environment::
 
     conda env create -f environment.yml
-
-3. Activate the environment::
-
     conda activate opensg_env
+
+The ``environment.yml`` file installs DOLFINx, PETSc, and all other required dependencies.
 
 .. note::
 
-   On some systems, there is a bug where `gmsh` must be installed through pip, rather than conda, to interface with `dolfinx` correctly.
-   If this bug occurs for you please run the following commands::
+   On some systems, ``gmsh`` must be installed via pip rather than conda to interface correctly with DOLFINx.
+   If you encounter gmsh-related errors, run::
 
        conda remove gmsh
        pip install gmsh
 
+pip (advanced)
+--------------
 
-Troubleshooting
----------------
+A pip-based install is possible but requires DOLFINx and its non-Python dependencies to already be present on
+your system. OpenSG itself can then be installed in editable mode::
 
-If you encounter issues during installation:
+    pip install -e .
 
-1. **Environment Issues**: Make sure you're using the correct conda environment
-2. **Dependencies**: Check that all required packages are installed correctly
-3. **GMSH Issues**: Try the pip installation method for gmsh if conda installation fails
-4. **DOLFINx Compatibility**: Ensure you have a compatible version of DOLFINx installed
-
-For additional help, please check the :ref:`contributing<contributing>` page or create an issue on the GitHub repository. 
+For additional instructions on installing DOLFINx, see the
+`DOLFINx installation documentation <https://github.com/fenics/dolfinx>`_.

@@ -4,19 +4,26 @@ This repository houses OpenSG, a Python module built for performing multiscale s
 
 ![](docs/_static/capabilities.png)
 
+## Statement of Need
+
+Existing MSG implementations (SwiftComp, VABS) are commercial and closed-source, and open-source alternatives (BECAS, PreComp) are limited to beam cross-section models and do not implement MSG. OpenSG is the first open-source MSG implementation supporting aperiodic beam, shell, plate, and solid formulations within a single FEniCSx-based framework.
+
 ## Part of the WETO Stack
-OpenSG is primarily developed with the support of the U.S. Department of Energy and is part of the [WETO Software Stack](https://nrel.github.io/WETOStack). For more information and other integrated modeling software, see:
-- [Portfolio Overview](https://nrel.github.io/WETOStack/portfolio_analysis/overview.html)
-- [Entry Guide](https://nrel.github.io/WETOStack/_static/entry_guide/index.html)
+OpenSG is primarily developed with the support of the U.S. Department of Energy and is part of the [WETO Software Stack](https://github.com/NatLabRockies/WETOStack). For more information and other integrated modeling software, see:
+- [Portfolio Overview](https://natlabrockies.github.io/WETOStack/portfolio_analysis/overview.html)
 
 ## Installation
+
+Conda is the recommended installation path, as OpenSG depends on [DOLFINx (FEniCSx)](https://github.com/fenics/dolfinx) which has dependencies that are not pip-installable.
 
 ```bash
 git clone https://github.com/wenbinyugroup/OpenSG.git
 cd OpenSG
-conda env create --file environment.yml
+conda env create -f environment.yml
 conda activate opensg_env
 ```
+
+For a pip-based installation route, first install DOLFINx following the [FEniCSx installation instructions](https://github.com/fenics/dolfinx), then install OpenSG with `pip install -e .`. See the [full installation docs](https://wenbinyugroup.github.io/OpenSG/installation.html) for details.
 ## Support
 
 For support and questions, please:
@@ -35,7 +42,6 @@ opensg/
 │   └── stress_recov.py # Stress recovery utilities
 ├── mesh/           # Mesh handling
 │   ├── __init__.py
-│   ├── blade.py    # Deprecated classes for mesh management.
 │   └── segment.py  # ShellSegmentMesh and SolidSegmentMesh classes for mesh management
 ├── io/             # Input/output operations
 │   ├── __init__.py

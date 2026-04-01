@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opensg"
-version = "0.1.0"
+version = "1.0.0"
 description = "Open Source Structural Analysis for Wind Turbine Blades"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -16,10 +16,26 @@ authors = [
 
 requires-python = ">=3.11"
 
+# NOTE: fenics packages require conda or manual C++ dependency installation.
+# See https://github.com/fenics/dolfinx for installation instructions.
+dependencies = [
+  "numpy",
+  "scipy",
+  "mpi4py",
+  "petsc4py",
+  "meshio",
+  "PyYAML",
+  "gmsh",
+  "fenics-dolfinx==0.8.0",
+  "fenics-basix==0.8.0",
+  "fenics-ufl==2024.1.0",
+  "fenics-ffcx==0.8.0",
+]
+
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: BSD License",
+  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
@@ -36,9 +52,12 @@ dev = [
 ]
 docs = [
     "sphinx>=8.0.0",
-    "pydata-sphinx-theme>=0.16.0",
+    "sphinx-rtd-theme",
     "sphinxcontrib-bibtex",
     "numpydoc>=1.1.0",
+    "nbsphinx",
+    "nbsphinx-link",
+    "docutils>=0.20,<0.21",
 ]
 
 [project.urls]

@@ -1,10 +1,10 @@
-# Add the parent directory to Python path to find opensg package
 import os
 import sys
+from importlib.metadata import version as _pkg_version
+
 sys.path.insert(0, os.path.abspath('..'))
 
-# from opensg import __version__
-__version__ = "0.0.1"
+__version__ = _pkg_version("opensg")
 
 # -- Project information -----------------------------------------------------
 project = u'opensg'
@@ -36,7 +36,7 @@ numpydoc_show_inherited_class_members = False
 numpydoc_class_members_toctree = False
 autodoc_member_order = 'bysource'
 autoclass_content = 'both'
-bibtex_bibfiles = ['user-guide/references.bib']
+bibtex_bibfiles = ['references.bib']
 templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
