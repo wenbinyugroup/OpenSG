@@ -164,4 +164,3 @@ If you need help with contributing:
 ## License
 
 By contributing to OpenSG, you agree that your contributions will be licensed under the [MIT License](LICENSE).
-js
