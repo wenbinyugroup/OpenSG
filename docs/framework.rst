@@ -107,6 +107,7 @@ Current OpenSG limitations include:
 - No iterative solver option is currently available, which limits scalability for very large problems.
 - Dehomogenization is currently only implemented for solid element SGs via :mod:`~opensg.core.stress_recov`. Shell element stress recovery is not yet supported.
 - Current framework focuses primarily on wind turbine blades.
+- OpenSG requires dolfinx version 0.8.0 and is not compatible with newer versions of dolfinx.
 
 .. _future_work:
 
