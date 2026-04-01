@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opensg"
-version = "0.1.0"
+version = "1.0.0"
 description = "Open Source Structural Analysis for Wind Turbine Blades"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -19,7 +19,7 @@ requires-python = ">=3.11"
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: BSD License",
+  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
