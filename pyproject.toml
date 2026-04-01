@@ -16,6 +16,22 @@ authors = [
 
 requires-python = ">=3.11"
 
+# NOTE: fenics packages require conda or manual C++ dependency installation.
+# See https://github.com/fenics/dolfinx for installation instructions.
+dependencies = [
+  "numpy",
+  "scipy",
+  "mpi4py",
+  "petsc4py",
+  "meshio",
+  "PyYAML",
+  "gmsh",
+  "fenics-dolfinx==0.8.0",
+  "fenics-basix==0.8.0",
+  "fenics-ufl==2024.1.0",
+  "fenics-ffcx==0.8.0",
+]
+
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
