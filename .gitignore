@@ -190,3 +190,8 @@ examples/outputs/*
 
 # Mac files
 *.DS_Store
+
+# Windows files
+*:Zone.Identifier
+*:Zone.Identifier:*
+*:sec.endpointdlp:*
