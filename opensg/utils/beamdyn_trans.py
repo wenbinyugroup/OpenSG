@@ -75,7 +75,7 @@ def trsf_sixbysix(M, T):
         Transformation Matrix
         
     Returns
-    ----------
+    -------
     res : np.ndarray
         Transformed 6x6 matrix
     """
@@ -94,15 +94,15 @@ def transform_beam_matrices(beam_stiff, beam_inertia):
     """
     Transform 6x6 beam stiffness and inertia matrices to a new reference frame.
 
-    Parameters:
+    Parameters
     ----------
     beam_stiff : np.ndarray
         6x6 stiffness matrix
     beam_inertia : np.ndarray
         6x6 inertia matrix
 
-    Returns:
-    ----------
+    Returns
+    -------
     beam_stiff_tr : np.ndarray
         Transformed 6x6 stiffness matrix
     beam_inertia_tr : np.ndarray

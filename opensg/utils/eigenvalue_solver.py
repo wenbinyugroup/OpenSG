@@ -19,18 +19,19 @@ def monitor_EPS_short(
 ):
     """
     Concise monitor for EPS.solve().
+
     Parameters
     ----------
     eps
         Eigenvalue Problem Solver class.
     it
-       Current iteration number.
+        Current iteration number.
     nconv
-       Number of converged eigenvalue.
+        Number of converged eigenvalue.
     eig
-       Eigenvalues
+        Eigenvalues.
     err
-       Computed errors.
+        Computed errors.
     it_skip
         Iteration skip.
     """
@@ -73,16 +74,18 @@ def EPS_get_spectrum(
     EPS: SLEPc.EPS, V: FunctionSpace
 ) -> Tuple[List[complex], List[PETSc.Vec], List[PETSc.Vec]]:
     """Retrieve eigenvalues and eigenfunctions from SLEPc EPS object.
+
     Parameters
     ----------
     EPS
-       The SLEPc solver
+        The SLEPc solver.
     V
-       The function space
+        The function space.
+
     Returns
     -------
-        Tuple consisting of: List of complex converted eigenvalues,
-         lists of converted eigenvectors (real part) and (imaginary part)
+    tuple
+        List of complex eigenvalues, list of real eigenvectors, list of imaginary eigenvectors.
     """
     # Get results in lists
     eigval = list()
@@ -114,37 +117,34 @@ def solve_GEP_shiftinvert(
     shift: float = 1,
 ) -> SLEPc.EPS:
     """
-     Solve generalized eigenvalue problem A*x=lambda*B*x using shift-and-invert
-     as spectral transform method.
-     Parameters
-     ----------
-     A
-        The matrix A
-     B
-        The matrix B
-     problem_type
+    Solve generalized eigenvalue problem A*x=lambda*B*x using shift-and-invert
+    as spectral transform method.
+
+    Parameters
+    ----------
+    A
+        The matrix A.
+    B
+        The matrix B.
+    problem_type
         The problem type, for options see: https://bit.ly/3gM5pth
-    solver:
+    solver
         Solver type, for options see: https://bit.ly/35LDcMG
-     nev
-         Number of requested eigenvalues.
-     tol
-        Tolerance for slepc solver
-     max_it
+    nev
+        Number of requested eigenvalues.
+    tol
+        Tolerance for slepc solver.
+    max_it
         Maximum number of iterations.
-     target
+    target
         Target eigenvalue. Also used for sorting.
-     shift
+    shift
         Shift 'sigma' used in shift-and-invert.
-    interval
-        A tuple (min_val, max_val) to restrict the search to a specific
-        interval on the real axis. To search for only positive eigenvalues,
-        you could use `interval=(1e-9, PETSc.DECIMAL_MAX)`.
-        This feature is supported by solvers like KRYLOVSCHUR.
-     Returns
-     -------
-     EPS
-        The SLEPc solver
+
+    Returns
+    -------
+    SLEPc.EPS
+        The configured and solved SLEPc EPS object.
     """
 
     # Build an Eigenvalue Problem Solver object
