@@ -97,19 +97,27 @@ These are organized by analysis type and listed below:
    Contains eigenvalue solver utilities for advanced analysis including buckling and modal analysis capabilities.
 
 .. _limitations:
-   
+
 Limitations
 -----------
+
 Current OpenSG limitations include:
 
-TODO
+- Stiffness matrices are currently dense, which can be a memory and performance bottleneck for large or highly refined SGs.
+- No iterative solver option is currently available, which limits scalability for very large problems.
+- Dehomogenization is currently only implemented for solid element SGs via :mod:`~opensg.core.stress_recov`. Shell element stress recovery is not yet supported.
+- Current framework focuses primarily on wind turbine blades.
 
 .. _future_work:
 
 Future work
 -----------
 
-TODO
+Potential improvements and extensions include:
 
-
-
+- Transitio to sparse matrix representations to improve memory usage and speed for large SGs.
+- Add iterative solver options as an alternative to direct solvers for large-scale problems.
+- Extend dehomogenization to shell element SGs.
+- Add examples that demonstrate piping OpenSG outputs into downstream codes such as OpenFAST.
+- Extend OpenSG framework to other structures.
+- Add support for GPU acceleration using the GPU capabilities of PETSc and FEniCSx as they mature.
