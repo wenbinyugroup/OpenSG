@@ -52,9 +52,12 @@ dev = [
 ]
 docs = [
     "sphinx>=8.0.0",
-    "pydata-sphinx-theme>=0.16.0",
+    "sphinx-rtd-theme",
     "sphinxcontrib-bibtex",
     "numpydoc>=1.1.0",
+    "nbsphinx",
+    "nbsphinx-link",
+    "docutils>=0.20,<0.21",
 ]
 
 [project.urls]
