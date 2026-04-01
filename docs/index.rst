@@ -45,7 +45,6 @@ Applications
 - Propellers
 - Metal lattice structures (Eiffel Tower or additively manufactured lattice structures for example)
 - Airplane wings
-- Propellers
 - Offshore jacketed structures
 - Long tapered tubes
 - Non prismatic bridges
@@ -76,11 +75,12 @@ Applications
    :maxdepth: 1
    :hidden:
    :caption: Usage
-   
+
    framework
    input
    theory
-   reference 
+   reference
+   api-doc
 
 .. toctree::
    :maxdepth: 1
@@ -91,6 +91,7 @@ Applications
    contributing
    license
    glossary
+   release-notes
 
 Indices and tables
 ==================
