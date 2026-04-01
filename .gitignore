@@ -181,8 +181,8 @@ venv/
 # Project specific files
 
 # Examples
-examples/segments_all/
-examples/segments_specific/
+examples/outputs/*
+
 
 *.msh
 *.h5
