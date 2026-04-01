@@ -181,8 +181,8 @@ venv/
 # Project specific files
 
 # Examples
-examples/segments_all/
-examples/segments_specific/
+examples/outputs/*
+
 
 *.msh
 *.h5
@@ -190,3 +190,8 @@ examples/segments_specific/
 
 # Mac files
 *.DS_Store
+
+# Windows files
+*:Zone.Identifier
+*:Zone.Identifier:*
+*:sec.endpointdlp:*

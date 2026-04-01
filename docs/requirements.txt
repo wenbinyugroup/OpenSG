@@ -1,5 +1,6 @@
 sphinx>=8.0.0
 sphinx-rtd-theme
 sphinxcontrib-bibtex
-nbsphinx 
+nbsphinx
 nbsphinx-link
+docutils>=0.20,<0.21
