@@ -29,8 +29,8 @@ class TestSolid(unittest.TestCase):
         r_submesh = segment_mesh.right_submesh
 
         # Compute stiffness matrices
-        timo_seg_stiffness, V0, V1s = compute_stiffness(
-            material_parameters, meshdata, l_submesh, r_submesh
+        timo_seg_stiffness, V0, V1s, _, _ = compute_stiffness(
+            material_parameters, meshdata, l_submesh, r_submesh, Taper=True
         )
 
         # Validate results against baseline (if baselines exist)
@@ -106,8 +106,8 @@ def run_solid_workflow():
     r_submesh = segment_mesh.right_submesh
 
     # Compute stiffness matrices
-    timo_seg_stiffness, V0, V1s = compute_stiffness(
-        material_parameters, meshdata, l_submesh, r_submesh
+    timo_seg_stiffness, V0, V1s, _, _ = compute_stiffness(
+        material_parameters, meshdata, l_submesh, r_submesh, Taper=True
     )
 
     np.savetxt(
