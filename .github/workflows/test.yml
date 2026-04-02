@@ -35,4 +35,4 @@ jobs:
         run: |
           python -c "import opensg"
           pip install pytest
-          pytest opensg/tests/
+          pytest tests/
