@@ -1,17 +1,10 @@
 import unittest
-from os.path import abspath, dirname, join
-from pathlib import Path
 import numpy as np
-import opensg
 from opensg.mesh.segment import ShellSegmentMesh
 import filecmp
-import shutil
 import os
-
-testdir = dirname(abspath(str(__file__)))
-root_dir = Path(join(testdir, "..", ".."))
-data_dir = Path(join(root_dir, "data"))
-validation_data_dir = Path(join(testdir, "validation_data"))
+from os.path import join
+from tests import data_dir, validation_data_dir
 
 class TestShell(unittest.TestCase):
     def setUp(self):
@@ -19,7 +12,7 @@ class TestShell(unittest.TestCase):
 
     def test_baseline_validation(self):
         """Test against baseline results for a segment"""
-        segment_file = data_dir / "shell_blade" / "bar_urc_shell_mesh_segment_2.yaml"
+        segment_file = data_dir / "Shell_3D_Taper" / "BAR_URC_numEl_52_segment_2.yaml"
 
         segment_mesh = ShellSegmentMesh(str(segment_file))
 
@@ -89,13 +82,7 @@ def run_workflow():
     """This function regenerates the test results. Use this if updates to the code have
     changed the expected outputs and these new outputs are what should be tested against.
     """
-    mesh_yaml = join(data_dir, "shell_blade", "bar_urc_shell_mesh.yaml")
-
-    opensg.io.generate_segment_shell_mesh_files(
-        mesh_yaml, segment_folder=data_dir, segment_list=[2]
-    )
-
-    segment_file = data_dir / "bar_urc_shell_mesh_segment_2.yaml"
+    segment_file = data_dir / "Shell_3D_Taper" / "BAR_URC_numEl_52_segment_2.yaml"
 
     segment_mesh = ShellSegmentMesh(str(segment_file))
 

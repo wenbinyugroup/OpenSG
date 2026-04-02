@@ -1,18 +1,11 @@
 import unittest
-from os.path import abspath, dirname, join
-from pathlib import Path
 import numpy as np
 import opensg
 from opensg.mesh.segment import SolidSegmentMesh
 from opensg.core.solid import compute_stiffness
 import filecmp
-import shutil
 import os
-
-testdir = dirname(abspath(str(__file__)))
-root_dir = Path(join(testdir, "..", ".."))
-data_dir = Path(join(root_dir, "data"))
-validation_data_dir = Path(join(testdir, "validation_data"))
+from tests import data_dir, validation_data_dir
 
 
 class TestSolid(unittest.TestCase):
@@ -21,7 +14,7 @@ class TestSolid(unittest.TestCase):
 
     def test_solid_baseline_validation(self):
         """Test against baseline results for a solid segment"""
-        segment_file = data_dir / "solid_blade" / "bar_urc_npl_1_ar_5-segment_2.yaml"
+        segment_file = data_dir / "Solid_3DSG" / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
         segment_mesh = SolidSegmentMesh(segment_file)
 
@@ -72,7 +65,7 @@ class TestSolid(unittest.TestCase):
 
     def test_solid_mesh_file_generation(self):
         """Test that solid mesh file generation works correctly"""
-        segment_file = data_dir / "solid_blade" / "bar_urc_npl_1_ar_5-segment_2.yaml"
+        segment_file = data_dir / "Solid_3DSG" / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
         segment_mesh = SolidSegmentMesh(str(segment_file))
 
@@ -100,7 +93,7 @@ def run_solid_workflow():
     changed the expected outputs and these new outputs are what should be tested against.
     """
 
-    segment_file = data_dir / "solid_blade" / "bar_urc_npl_1_ar_5-segment_2.yaml"
+    segment_file = data_dir / "Solid_3DSG" / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
     segment_mesh = SolidSegmentMesh(str(segment_file))
 
