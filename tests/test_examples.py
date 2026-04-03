@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-# import pytest
+import pytest
 from os import listdir
 from os.path import isfile, join
 from subprocess import call
@@ -10,8 +10,8 @@ from tests import root_dir
 examples_dir = str(root_dir / "examples")
 
 
+@pytest.mark.time_consuming
 class TestExamples(unittest.TestCase):
-    # @pytest.mark.time_consuming
     def test_examples_run(self):
         cwd = os.getcwd()
         os.chdir(examples_dir)
