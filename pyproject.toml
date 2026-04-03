@@ -67,3 +67,9 @@ Documentation = "https://wenbinyugroup.github.io/OpenSG/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["opensg"]
+
+[tool.pytest.ini_options]
+markers = [
+    "time_consuming: marks tests as long-running (deselect with '-m \"not time_consuming\"')",
+]
+addopts = "-m 'not time_consuming'"
