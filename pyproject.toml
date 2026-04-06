@@ -72,4 +72,3 @@ packages = ["opensg"]
 markers = [
     "time_consuming: marks tests as long-running (deselect with '-m \"not time_consuming\"')",
 ]
-addopts = "-m 'not time_consuming'"

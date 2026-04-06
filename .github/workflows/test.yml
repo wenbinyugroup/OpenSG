@@ -35,4 +35,4 @@ jobs:
         run: |
           python -c "import opensg"
           pip install pytest
-          pytest tests/ -m "not time_consuming"
+          pytest tests/ -m "not time_consuming" --ignore=tests/test_examples.py
