@@ -346,7 +346,7 @@ class ShellSegmentMesh:
             boundary_subdomains, boun_element_map = [],  []
             for i, xx in enumerate(boundary_entity_map):
                 # assign subdomain
-                idx = int(np.where(cell_of_facet_mesh.array == xx)[0] / 4)
+                idx = int(np.where(cell_of_facet_mesh.array == xx)[0][0] / 4)
                 boundary_subdomains.append(self.subdomains.values[idx])
                 boun_element_map.append(idx)
                 El1.x.array[3*i],El1.x.array[3*i+1],El1.x.array[3*i+2]=1,0,0 #EE1.x.array[3*idx+j]
