@@ -78,8 +78,6 @@ def run_solid_workflow():
 
     segment_mesh = SolidSegmentMesh(str(segment_file))
 
-    segment_mesh.generate_mesh_file(validation_data_dir / "test_solid_segment.msh")
-
     # Extract material parameters and mesh data
     material_parameters, density = segment_mesh.material_database
     meshdata = segment_mesh.meshdata
