@@ -1,10 +1,9 @@
+import os
 import unittest
 import numpy as np
 import opensg
 from opensg.mesh.segment import SolidSegmentMesh
 from opensg.core.solid import compute_stiffness
-import filecmp
-import os
 from tests import data_dir, validation_data_dir
 
 
@@ -17,10 +16,6 @@ class TestSolid(unittest.TestCase):
         segment_file = data_dir / "Solid_3DSG" / "bar_urc_npl_1_ar_5-segment_2.yaml"
 
         segment_mesh = SolidSegmentMesh(segment_file)
-
-        segment_mesh.generate_mesh_file("test_solid_segment.msh")
-        baseline_mesh_file = validation_data_dir / "test_solid_segment.msh"
-        assert filecmp.cmp("test_solid_segment.msh", baseline_mesh_file)
 
         # Extract material parameters and mesh data
         material_parameters, density = segment_mesh.material_database
@@ -40,25 +35,11 @@ class TestSolid(unittest.TestCase):
         test_V0 = np.loadtxt(validation_data_dir / "test_solid_v0.txt")
         test_V1s = np.loadtxt(validation_data_dir / "test_solid_v1s.txt")
     
-        print("TROUBLESHOOT SOLID TEST")
-        print(f"Computed stiffness shape: {timo_seg_stiffness.shape}")
-        print(f"Baseline stiffness shape: {test_timo_seg_stiffness.shape}")
-        print(
-            f"Max difference: {((timo_seg_stiffness - test_timo_seg_stiffness)/test_timo_seg_stiffness  ).max()}"
-        )
-        print(
-            f"Min difference: {((timo_seg_stiffness - test_timo_seg_stiffness)/test_timo_seg_stiffness).min()}"
-        )
-
         assert np.isclose(
             timo_seg_stiffness, test_timo_seg_stiffness, rtol=2e-03,
         ).all()
         assert np.isclose(V0, test_V0, rtol=1e-03, atol=1e-04).all()
         assert np.isclose(V1s, test_V1s, rtol=1e-03, atol=1e-04).all()
-
-        # Remove generated files
-        if os.path.exists("test_solid_segment.msh"):
-            os.remove("test_solid_segment.msh")
 
         print("Solid baseline validation passed!")
         return

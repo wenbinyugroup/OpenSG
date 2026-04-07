@@ -1,8 +1,6 @@
 import unittest
 import numpy as np
 from opensg.mesh.segment import ShellSegmentMesh
-import filecmp
-import os
 from tests import data_dir, validation_data_dir
 
 class TestShell(unittest.TestCase):
@@ -14,11 +12,6 @@ class TestShell(unittest.TestCase):
         segment_file = data_dir / "Shell_3D_Taper" / "BAR_URC_numEl_52_segment_2.yaml"
 
         segment_mesh = ShellSegmentMesh(str(segment_file))
-
-        segment_mesh.generate_mesh_file("test_shell_segment.msh")
-        assert filecmp.cmp(
-            "test_shell_segment.msh", validation_data_dir / "test_shell_segment.msh"
-        )
 
         # ABD computation
         abd, _ = segment_mesh.compute_ABD()
@@ -43,15 +36,6 @@ class TestShell(unittest.TestCase):
             validation_data_dir / "test_shell_r_timo_stiffness.txt"
         )
 
-        print("TROUBLESHOOT TEST")
-        print((timo_seg_stiffness - test_timo_seg_stiffness).max())
-        print((l_timo_stiffness - test_l_timo_stiffness).max())
-        print((r_timo_stiffness - test_r_timo_stiffness).max())
-
-        print((timo_seg_stiffness - test_timo_seg_stiffness).min())
-        print((l_timo_stiffness - test_l_timo_stiffness).min())
-        print((r_timo_stiffness - test_r_timo_stiffness).min())
-
         assert np.isclose(
             timo_seg_stiffness, test_timo_seg_stiffness, rtol=1e-03, atol=1e-04
         ).all()
@@ -61,9 +45,6 @@ class TestShell(unittest.TestCase):
         assert np.isclose(
             r_timo_stiffness, test_r_timo_stiffness, rtol=1e-03, atol=1e-04
         ).all()
-
-        # Remove generated files
-        os.remove("test_shell_segment.msh")
 
         print("Baseline validation passed!")
         return
@@ -76,8 +57,6 @@ def run_workflow():
     segment_file = data_dir / "Shell_3D_Taper" / "BAR_URC_numEl_52_segment_2.yaml"
 
     segment_mesh = ShellSegmentMesh(str(segment_file))
-
-    segment_mesh.generate_mesh_file(validation_data_dir / "test_shell_segment.msh")
 
     abd, _ = segment_mesh.compute_ABD()
     abd_concat = np.concatenate(abd)

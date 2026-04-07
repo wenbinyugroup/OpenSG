@@ -318,11 +318,12 @@ class ShellSegmentMesh:
             "origin":float(x_max)
         }
         
-        # Build tree before coordinate shift so it matches the boundary submesh coordinates
-        parent_tree = dolfinx.geometry.bb_tree(self.mesh, self.mesh.topology.dim, padding=1e-10)
-
         pp[:,0]=pp[:,0]-mean
         self.origin= mean
+
+        # Build facet-to-cell connectivity for direct parent cell lookup
+        self.mesh.topology.create_connectivity(self.fdim, self.mesh.topology.dim)
+        parent_facet_to_cell = self.mesh.topology.connectivity(self.fdim, self.mesh.topology.dim)
 
         # Generate subdomains for boundaries
         def _build_boundary_subdomains(boundary_meshdata):
@@ -344,18 +345,10 @@ class ShellSegmentMesh:
                 boundary_mesh, self.fdim, boundary_marker
             )
 
-            boundary_mesh.topology.create_connectivity(boundary_mesh.topology.dim, 0)
-            b_cell_to_vertex = boundary_mesh.topology.connectivity(boundary_mesh.topology.dim, 0)
-
             boundary_subdomains, boun_element_map = [],  []
             for i, xx in enumerate(boundary_entity_map):
-                # Find parent cell by midpoint of boundary cell (geometry-based, platform-independent)
-                verts = b_cell_to_vertex.links(i)
-                midpoint = boundary_mesh.geometry.x[verts].mean(axis=0)
-                collisions = dolfinx.geometry.compute_collisions_points(
-                    parent_tree, midpoint.reshape(1, 3)
-                )
-                idx = int(collisions.links(0)[0])
+                # xx is the parent facet index; a boundary facet belongs to exactly one parent cell
+                idx = int(parent_facet_to_cell.links(xx)[0])
                 boundary_subdomains.append(self.subdomains.values[idx])
                 boun_element_map.append(idx)
                 El1.x.array[3*i],El1.x.array[3*i+1],El1.x.array[3*i+2]=1,0,0 #EE1.x.array[3*idx+j]
