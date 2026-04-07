@@ -24,8 +24,7 @@ jobs:
       - name: Set up environment
         uses: conda-incubator/setup-miniconda@v3
         with:
-          environment-file: environment.yml
-          # python-version: "3.9" # setup-miniconda seems to ignore this setting.
+          environment-file: environment.lock.yml
           auto-activate-base: false
       - name: Check environmnet
         run: |
