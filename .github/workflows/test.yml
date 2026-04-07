@@ -24,7 +24,7 @@ jobs:
       - name: Set up environment
         uses: conda-incubator/setup-miniconda@v3
         with:
-          environment-file: environment.lock.yml
+          environment-file: environment.yml
           auto-activate-base: false
       - name: Check environmnet
         run: |

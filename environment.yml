@@ -2,7 +2,7 @@ name: opensg_env
 channels:
   - conda-forge
 dependencies:
-  - python
+  - python=3.11
   - numpy
   - scipy
   - mpi4py
@@ -13,9 +13,9 @@ dependencies:
   - fenics-basix=0.8.0
   - fenics-ufl=2024.1.0
   - fenics-ffcx=0.8.0
-  - mpich 
+  - mpich
   - libglu  # <-- This replaces the apt-get libglu1-mesa command for google collab
   - pip
   - pip:
-    - gmsh
+    - gmsh==4.15.0
     - -e .
