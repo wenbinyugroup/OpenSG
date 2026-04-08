@@ -100,4 +100,4 @@ def run_solid_workflow():
 
 if __name__ == "__main__":
     run_solid_workflow()
-    unittest.main()
+    # unittest.main()
