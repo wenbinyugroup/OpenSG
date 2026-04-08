@@ -21,17 +21,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libopengl0 libgl1-mesa-dri libglu1-mesa-dev
 
-      - name: Set up environment
+      - name: Set up Miniconda
         uses: conda-incubator/setup-miniconda@v3
         with:
-          environment-file: environment.yml
           auto-activate-base: false
-      - name: Check environmnet
+          miniconda-version: "latest"
+
+      - name: Create environment from lock file
         run: |
-          conda info
-          conda list
+          conda create --name test --file conda-linux-64.lock -y
+          conda run -n test pip install gmsh==4.15.0
+          conda run -n test pip install -e .
+
+      - name: Check environment
+        run: |
+          conda run -n test conda list
+
       - name: Run tests
         run: |
-          python -c "import opensg"
-          pip install pytest
-          pytest tests/ -m "not time_consuming" --ignore=tests/test_examples.py
+          conda run -n test python -c "import opensg"
+          conda run -n test pip install pytest
+          conda run -n test pytest tests/ -m "not time_consuming" --ignore=tests/test_examples.py
