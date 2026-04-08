@@ -194,7 +194,27 @@ def local_frame_1D(mesh):
     e1 = as_vector([1, 0, 0])  # Right Lay up
     e3 = cross(e1, e2)
     e3 = e3 / sqrt(dot(e3, e3))
-    return e1, e2, e3
+    # Normalize global winding direction so element orientation is platform-independent.
+    # The shoelace sum (Σ y0*z1 - y1*z0) is positive for CCW winding. If negative,
+    # all elements have reversed vertex order and we flip the frame globally.
+    sign = _winding_sign(mesh)
+    return e1, sign * e2, sign * e3
+
+
+def _winding_sign(mesh):
+    """Return +1.0 if boundary mesh has CCW winding (y-z plane), -1.0 if CW."""
+    tdim = mesh.topology.dim
+    mesh.topology.create_connectivity(tdim, 0)
+    cell_to_vertex = mesh.topology.connectivity(tdim, 0)
+    coords = mesh.geometry.x
+    num_cells = mesh.topology.index_map(tdim).size_local
+    total = 0.0
+    for i in range(num_cells):
+        v = cell_to_vertex.links(i)
+        y0, z0 = float(coords[v[0], 1]), float(coords[v[0], 2])
+        y1, z1 = float(coords[v[1], 1]), float(coords[v[1], 2])
+        total += y0 * z1 - y1 * z0
+    return 1.0 if total >= 0.0 else -1.0
 
 def write_beamdyn_files(beam_stiff, beam_inertia, radial_stations,file_name_prepend):
     
