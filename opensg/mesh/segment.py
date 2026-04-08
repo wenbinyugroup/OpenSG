@@ -352,7 +352,7 @@ class ShellSegmentMesh:
                 cells_for_facet = parent_facet_to_cell.links(xx)
                 idx = int(cells_for_facet[0])
                 if i < 3:
-                    print(f"DEBUG boun cell {i}: parent facet {xx}, cells {list(cells_for_facet)}, idx {idx}, subdomain {self.subdomains.values[idx]}")
+                    print(f"DEBUG boun cell {i}: parent facet {xx}, cells {list(cells_for_facet)}, idx {idx}, subdomain {self.subdomains.values[idx]}, EE2={self.EE2.x.array[3*idx:3*idx+3]}, N={self.N.x.array[3*idx:3*idx+3]}")
                 boundary_subdomains.append(self.subdomains.values[idx])
                 boun_element_map.append(idx)
                 El1.x.array[3*i],El1.x.array[3*i+1],El1.x.array[3*i+2]=1,0,0 #EE1.x.array[3*idx+j]
