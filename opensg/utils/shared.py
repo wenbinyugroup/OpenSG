@@ -175,12 +175,8 @@ def local_frame_1D(mesh):
     This function computes an orthonormal frame (e1, e2, e3) at each point
     of a 1D curved mesh, where:
     - e1 is aligned with the global x-axis
-    - e2 is the tangent vector (consistently directed CCW around the boundary)
+    - e2 is the tangent vector
     - e3 is computed to complete the right-handed system
-
-    The frame is made platform-independent by walking the mesh chain connectivity
-    to assign a consistent traversal direction to each element, regardless of
-    how dolfinx ordered the vertices within each element when building the submesh.
 
     Parameters
     ----------
@@ -194,79 +190,11 @@ def local_frame_1D(mesh):
     """
     t = Jacobian(mesh)
     t1 = as_vector([t[0, 0], t[1, 0], t[2, 0]])
-    e2_raw = t1 / sqrt(dot(t1, t1))
+    e2 = t1 / sqrt(dot(t1, t1))
     e1 = as_vector([1, 0, 0])  # Right Lay up
-    e3_raw = cross(e1, e2_raw)
-    e3_raw = e3_raw / sqrt(dot(e3_raw, e3_raw))
-
-    # Per-element sign to ensure consistent CCW tangent direction regardless
-    # of how create_submesh ordered the vertices within each element.
-    sign_fn = _consistent_element_signs(mesh)
-    return e1, sign_fn * e2_raw, sign_fn * e3_raw
-
-
-def _consistent_element_signs(mesh):
-    """Return a DG0 function of per-element signs (+1/-1) that orients each
-    element's tangent consistently CCW around the 1D boundary curve.
-
-    dolfinx's create_submesh can assign element vertices in arbitrary order,
-    flipping the Jacobian-based tangent for some elements. This function
-    walks the chain connectivity to detect and correct those flips.
-    """
-    tdim = mesh.topology.dim
-    mesh.topology.create_connectivity(tdim, 0)
-    mesh.topology.create_connectivity(0, tdim)
-    cell_to_vertex = mesh.topology.connectivity(tdim, 0)
-    vertex_to_cell = mesh.topology.connectivity(0, tdim)
-    coords = mesh.geometry.x
-    num_cells = mesh.topology.index_map(tdim).size_local
-
-    # Walk the chain starting from cell 0 in its default (v0→v1) direction.
-    # For each subsequent cell, check which vertex is shared with the current
-    # end; if the shared vertex is v[0] the element is forward (+1), otherwise
-    # the element is backward (-1) and we must flip the frame for that cell.
-    signs = np.ones(num_cells)
-    visited = np.zeros(num_cells, dtype=bool)
-    visited[0] = True
-    current_end = int(cell_to_vertex.links(0)[1])  # v1 of cell 0
-
-    for _ in range(num_cells - 1):
-        neighbors = vertex_to_cell.links(current_end)
-        next_cell = next((int(nc) for nc in neighbors if not visited[nc]), None)
-        if next_cell is None:
-            break
-        visited[next_cell] = True
-        v = cell_to_vertex.links(next_cell)
-        if int(v[0]) == current_end:
-            signs[next_cell] = 1.0
-            current_end = int(v[1])
-        else:
-            signs[next_cell] = -1.0
-            current_end = int(v[0])
-
-    # After establishing consistent chain direction, check overall orientation
-    # relative to the boundary centroid. If the chain traversal is CW, flip all.
-    centroid = np.mean(coords[:, 1:3], axis=0)
-    signed_area = 0.0
-    for i in range(num_cells):
-        v = cell_to_vertex.links(i)
-        y0 = float(coords[v[0], 1]) - centroid[0]
-        z0 = float(coords[v[0], 2]) - centroid[1]
-        y1 = float(coords[v[1], 1]) - centroid[0]
-        z1 = float(coords[v[1], 2]) - centroid[1]
-        if signs[i] > 0:
-            signed_area += y0 * z1 - y1 * z0
-        else:
-            signed_area += y1 * z0 - y0 * z1
-
-    if signed_area < 0:
-        signs = -signs
-
-    DG0 = dolfinx.fem.functionspace(mesh, ("DG", 0))
-    sign_fn = dolfinx.fem.Function(DG0)
-    sign_fn.x.array[:num_cells] = signs
-    sign_fn.x.scatter_forward()
-    return sign_fn
+    e3 = cross(e1, e2)
+    e3 = e3 / sqrt(dot(e3, e3))
+    return e1, e2, e3
 
 def write_beamdyn_files(beam_stiff, beam_inertia, radial_stations,file_name_prepend):
     

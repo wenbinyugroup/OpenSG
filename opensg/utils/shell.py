@@ -603,23 +603,22 @@ def dof_mapping_quad(V, v2a, V_l, w_ll, boundary_facets_left, entity_mapl):
     """
     deg = 2
     dof_S2L = []
-    full_coords = V.tabulate_dof_coordinates()
-    boun_coords = V_l.tabulate_dof_coordinates()
     for i, xx in enumerate(entity_mapl):
-        dofs = locate_dofs_topological(V, 1, np.array([xx]))
-        dofs_left = locate_dofs_topological(V_l, 1, np.array([boundary_facets_left[i]]))
+        # For a unique facet obtain dofs
+        dofs = locate_dofs_topological(
+            V, 1, np.array([xx])
+        )  # WB segment mesh facets dofs
+        dofs_left = locate_dofs_topological(
+            V_l, 1, np.array([boundary_facets_left[i]])
+        )  # Boundary mesh facets dofs
 
         for k in range(deg + 1):
             if dofs[k] not in dof_S2L:
                 dof_S2L.append(dofs[k])
-                # Match by physical coordinates so vertex ordering in the
-                # boundary submesh doesn't affect which DOF maps where.
-                fc = full_coords[dofs[k]]
-                for l in range(deg + 1):
-                    if np.allclose(fc, boun_coords[dofs_left[l]], atol=1e-10):
-                        for j in range(3):
-                            v2a.x.array[3 * dofs[k] + j] = w_ll[3 * dofs_left[l] + j]
-                        break
+                for j in range(3):
+                    v2a.x.array[3 * dofs[k] + j] = w_ll[
+                        3 * dofs_left[k] + j
+                    ]  # store boundary solution of fluctuating functions
     return v2a
 
 def tangential_projection(u, n):
