@@ -324,7 +324,6 @@ class ShellSegmentMesh:
         # Build facet-to-cell connectivity for direct parent cell lookup
         self.mesh.topology.create_connectivity(self.fdim, self.mesh.topology.dim)
         parent_facet_to_cell = self.mesh.topology.connectivity(self.fdim, self.mesh.topology.dim)
-        print(f"DEBUG subdomains unique values: {np.unique(self.subdomains.values)}, num_cells: {self.mesh.topology.index_map(self.tdim).size_local}")
 
         # Generate subdomains for boundaries
         def _build_boundary_subdomains(boundary_meshdata):
@@ -349,10 +348,7 @@ class ShellSegmentMesh:
             boundary_subdomains, boun_element_map = [],  []
             for i, xx in enumerate(boundary_entity_map):
                 # xx is the parent facet index; a boundary facet belongs to exactly one parent cell
-                cells_for_facet = parent_facet_to_cell.links(xx)
-                idx = int(cells_for_facet[0])
-                if i < 3:
-                    print(f"DEBUG boun cell {i}: parent facet {xx}, cells {list(cells_for_facet)}, idx {idx}, subdomain {self.subdomains.values[idx]}, EE2={self.EE2.x.array[3*idx:3*idx+3]}, N={self.N.x.array[3*idx:3*idx+3]}")
+                idx = int(parent_facet_to_cell.links(xx)[0])
                 boundary_subdomains.append(self.subdomains.values[idx])
                 boun_element_map.append(idx)
                 El1.x.array[3*i],El1.x.array[3*i+1],El1.x.array[3*i+2]=1,0,0 #EE1.x.array[3*idx+j]
