@@ -43,7 +43,7 @@ class ShellSegmentMesh:
         Processed database of material properties
     """
 
-    def __init__(self, segment_yaml_file, create_1D=False, end=False):
+    def __init__(self, segment_yaml_file, create_1D=False, end=False, output_dir=''):
         """Initialize a StandaloneSegmentMesh object from a YAML file.
 
         Parameters
@@ -75,11 +75,13 @@ class ShellSegmentMesh:
         self._build_boundary_submeshdata()
         
         if create_1D:
+            import os
             segid=segment_yaml_file.removesuffix('.yaml').split('_')[-1]
-            self.path_name='1Dshell_'+str(segid)+'.yaml'
+            prefix = output_dir + '/' if output_dir else ''
+            self.path_name=prefix+'1Dshell_'+str(segid)+'.yaml'
             self._create_1Dyaml(False)
             if end:
-                self.path_name='1Dshell_'+str(int(segid)+1)+'.yaml'
+                self.path_name=prefix+'1Dshell_'+str(int(segid)+1)+'.yaml'
                 self._create_1Dyaml(end)
     def _build_layup_database(self):
         """Build the layup database from the segment data.
@@ -890,7 +892,7 @@ class SolidSegmentMesh:
         List of material names
     """
 
-    def __init__(self, segment_yaml_file, create_2D=False,end=False):
+    def __init__(self, segment_yaml_file, create_2D=False, end=False, output_dir=''):
         """Initialize a StandaloneSolidSegmentMesh object from a YAML file.
 
         Parameters
@@ -927,10 +929,11 @@ class SolidSegmentMesh:
         
         if create_2D:
             segid=segment_yaml_file.removesuffix('.yaml').split('_')[-1]
-            self.path_name='2Dsolid_'+str(segid)+'.yaml'
+            prefix = output_dir + '/' if output_dir else ''
+            self.path_name=prefix+'2Dsolid_'+str(segid)+'.yaml'
             self._create_2Dyaml(False)
             if end:
-                self.path_name='2Dsolid_'+str(int(segid)+1)+'.yaml'
+                self.path_name=prefix+'2Dsolid_'+str(int(segid)+1)+'.yaml'
                 self._create_2Dyaml(end)
     
     def _generate_layup_id(self):
