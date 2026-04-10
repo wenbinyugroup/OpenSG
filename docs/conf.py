@@ -72,6 +72,17 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '_user', '**.ipynb_check
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
 
+
+def setup(app):
+    try:
+        from IPython.lib.lexers import IPython3Lexer
+
+        app.add_lexer('ipython3', IPython3Lexer)
+    except ImportError:
+        from pygments.lexers.python import PythonLexer
+
+        app.add_lexer('ipython3', PythonLexer)
+
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
