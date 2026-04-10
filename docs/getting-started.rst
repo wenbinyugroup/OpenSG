@@ -7,8 +7,7 @@ To start using OpenSG, open a Python console or IDE like Spyder and import the p
 
 	import opensg	
 
-OpenSG comes with a simple `getting started example <https://github.com/wenbinyugroup/OpenSG/blob/main/examples/run_shell_analysis.py>`_, 
-shown below, that uses `shell blade data <https://github.com/wenbinyugroup/OpenSG/tree/main/data/shell_blade>`_.
+OpenSG comes with a simple `getting started example <https://github.com/wenbinyugroup/OpenSG/blob/main/examples/2_get_beam_props_from_shell_cross_section.py>`_.
 
 This script shows how to use the OpenSG package to:
 
@@ -18,6 +17,6 @@ This script shows how to use the OpenSG package to:
 4. Compute ABD and stiffness matrices for each segment
 5. Save the results
 
-.. literalinclude:: ../examples/run_shell_analysis.py
+.. literalinclude:: ../examples/2_get_beam_props_from_shell_cross_section.py
 
 See :ref:`examples` for more information on downloading and running examples.
