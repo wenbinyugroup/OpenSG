@@ -42,7 +42,7 @@ OpenSG is a micromechanics code, which means it enables users to efficiently inc
 
 # Statement of need
 
-No existing open-source tool provides MSG theory for Timoshenko beam modeling of aperiodic solid SGs, and shell cross-sections with local buckling predictions. OpenSG fills this gap with an open-source MSG implementation [@opensg] that supports aperiodic beam SGs composed of shell [@opensg_prismatic_shell_to_beam; @opensg_RM_shell] or solid [@opensg_prismatic_shell_to_beam] elements. This is especially relevant for nonprismatic structures such as wind turbine blades, tapered rods, propellers, and aircraft wings where 3D phenomena like local panel buckling cannot be captured by beam-only approaches.
+No existing open-source tool provides MSG theory for Timoshenko beam modeling of aperiodic solid SGs, and shell cross-sections with local buckling predictions. OpenSG fills this gap with an open-source MSG implementation [@opensg, @Bagla2023] that supports aperiodic beam SGs composed of shell [@opensg_prismatic_shell_to_beam; @opensg_RM_shell] or solid [@opensg_prismatic_shell_to_beam] elements. This is especially relevant for nonprismatic structures such as wind turbine blades, tapered rods, propellers, and aircraft wings where 3D phenomena like local panel buckling cannot be captured by beam-only approaches.
 
 # State of the Field
 
