@@ -13,10 +13,11 @@ from mpi4py import MPI
 from slepc4py import SLEPc
 from dolfinx.fem import Function
 import opensg.utils.solid as utils
+from dolfinx import fem, default_scalar_type
 #from petsc4py import PETSc
 #import pyvista
 
-def local_strain(timo, beam_out, segment, meshdata):
+def local_strain(timo, beam_out, segment, meshdata, mat_param, FF=None):
     """Recover local strain field from beam analysis results.
 
     This function recovers the local 3D strain field within a blade segment
@@ -66,35 +67,48 @@ def local_strain(timo, beam_out, segment, meshdata):
   #  print("Beam reaction Force")
   #  for k in range(6):
      #   print(beam_force[int(segment)][k][0], "     ", beam_force[int(segment)][k][1])
-    FF = np.array(
-        (rf[2], -rf[1], rf[0], rf[5], -rf[4], rf[3])
-    )  # BeamDyn --> VABS convention
-
+    if FF is None:
+      FF = np.array(
+          (rf[2], -rf[1], rf[0], rf[5], -rf[4], rf[3])
+      )  # BeamDyn --> VABS convention
+   # FF = np.array(
+   #     (32230.4005595904, -7663.907852209771, 251712.81004955297, -55608.54410550957, -4170203.8641732424, -123224.93244239496)
+   #     )
+   # FF = np.array(( 0, 0, 100, 0, 0, 0))
     Comp_srt = np.linalg.inv(Deff_srt)
     st=np.matmul(Comp_srt,FF) 
-    st_m=np.array((st[0],st[3],st[4],st[5]), dtype=np.float64)  
-    
+    st_m=np.array((st[0],st[3],st[4],st[5]), dtype=np.float64) 
+   # st_m=np.array([0.01,0,0,0]) 
+    # Improved way to print for engineering clarity
+    labels = ['F1 (Axial)', 'F2 (Shear Y)', 'F3 (Shear Z)', 'M1 (Twist)', 'M2 (Bend Y)', 'M3 (Bend Z)']
+    print("--- Beam Resultant Forces (VABS Convention) ---")
+    for label, value in zip(labels, FF):
+        print(f"{label:12}: {value:>12.4e}")
     
     # First Derivative
     F_1d=np.matmul(Deff_srt,st)
-    R1=utils.recov(np.array((st[0]+1,st[1],st[2],st[3],st[4],st[5]), dtype=np.float64) )
+    st_linear = np.zeros(6, dtype=np.float64)
+    st_linear[0] = 1.0
+    R1 = utils.recov(st_linear)
+  #  R1=utils.recov(np.array((st[0]+1,st[1],st[2],st[3],st[4],st[5]), dtype=np.float64) )
     F1= np.matmul(R1,F_1d)
     st_Tim1=np.matmul(Comp_srt,F1)
     st_cl1=np.array([st_Tim1[0],st_Tim1[3],st_Tim1[4],st_Tim1[5]])
+
     gamma1=np.array([st_Tim1[1],st_Tim1[2]])
     
     
     # Second Derivative
-    R2=utils.recov(st_Tim1)
-    F2=np.matmul(R1,F1)+np.matmul(R2,F_1d)
+  #  R2=utils.recov(st_Tim1)
+    F2=np.matmul(R1,F1) #+np.matmul(R2,F_1d)
     st_Tim2=np.matmul(Comp_srt,F2)    
     st_cl2=np.array([st_Tim2[0],st_Tim2[3],st_Tim2[4],st_Tim2[5]])
     gamma2=np.array([st_Tim2[1],st_Tim2[2]])
     
     
     # Third Derivative
-    R3=utils.recov(st_Tim2)
-    F3=2*np.matmul(R2,F1)+np.matmul(R3,F_1d)+np.matmul(R1,F2)
+    #R3=utils.recov(st_Tim2)
+    F3=np.matmul(R1,F2)
     st_Tim3=np.matmul(Comp_srt,F3)    
     gamma3=np.array([st_Tim3[1],st_Tim3[2]])
     
@@ -133,92 +147,52 @@ def local_strain(timo, beam_out, segment, meshdata):
         utils.gamma_h(dx, w1s_1, dim=3) + utils.gamma_l(w_2) + utils.gamma_l(w1s_2)
     )  
     st_3D_b = st_Eb + st_Timo   # Beam Reference Frame
+    st_3D_m=ufl.dot((utils.Rsig(meshdata["frame"]).T),st_3D_b) # Material Reference Frame
 
- #   strain_mm=Function(VV)
-
-   # fexpr1 = dolfinx.fem.Expression(
-   #     st_3D_b, VV.element.interpolation_points(), comm=MPI.COMM_WORLD
-   # )
-   # strain_bb.interpolate(fexpr1)
+   # th1,th2,th3=0,0,0
+   # cs_coord=ufl.as_vector([0,x[1],x[2]])
     
-    st_3D_m=(utils.Rsig(meshdata["frame"]).T)*st_3D_b # Material Reference Frame
- #   fexpr1=dolfinx.fem.Expression(
-    #    st_3D_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
-    #    )
-  #  strain_mm.interpolate(fexpr1) 
-
-    # Local Displacement
-    rf=[beam_disp[int(segment)][k][1] for k in range(6)]
-
-   # for k in range(6):
-   #     print(beam_disp[int(segment)][k][0])          
-    FF=np.array((rf[2],-rf[1],rf[0],rf[5],-rf[4],rf[3])) # BeamDyn --> VABS convention 
-   # print('VABS Displacement:',FF)
+   # frame_g=ufl.as_tensor([(1,    -th3,    th2),
+  #                    (th3,   1,     -th1), 
+  #                   (-th2,  th1,      1)]) # transpose(C_Bb) is used in frame
     
-    
-    u_global=ufl.as_vector([FF[i] for i in range(3)])
-    th1,th2,th3=[FF[i] for i in range(3,6)]
-    
-    cs_coord=ufl.as_vector([0,x[1],x[2]])
-    
-    frame_g=ufl.as_tensor([(1,    -th3,    th2),
-                      (th3,   1,     -th1), 
-                     (-th2,  th1,      1)]) # transpose(C_Bb) is used in frame
-    
-    u_local=u_global +frame_g*(w_1+w1s_1+cs_coord)-cs_coord
+   # u_local=frame_g*(w_1+w1s_1+cs_coord)-cs_coord
+    u_local=w_1+w1s_1
     u_loc=Function(V)
     fexpr1=dolfinx.fem.Expression(
         u_local,V.element.interpolation_points(), comm=MPI.COMM_WORLD
         )
     u_loc.interpolate(fexpr1)
-    
-    strain_m=Function(VV)
-    fexpr1=dolfinx.fem.Expression(
-        st_3D_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
-        )
-    strain_m.interpolate(fexpr1)
-    return strain_m,u_loc
-
-
-def stress_eval(mat_param, meshdata, strain_m):
-
-    CC_ = utils.CC(mat_param)
     mesh=meshdata["mesh"]
-    VV = dolfinx.fem.functionspace(
-        meshdata["mesh"],
-        basix.ufl.element("DG", meshdata["mesh"].topology.cell_name(), 0, shape=(6,)),
-    )
-    stress_mm, strain_mm=Function(VV), Function(VV)
-    fexpr1=dolfinx.fem.Expression(
-        strain_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
-        )
-    strain_mm.interpolate(fexpr1) 
-    for idx,el in enumerate(meshdata["subdomains"].values):
-        stress_mm.x.array[6*idx:6*idx+6]=np.matmul(CC_[el],strain_mm.x.array[6*idx:6*idx+6])
-        
-   # q_el = basix.ufl.quadrature_element(mesh.basix_cell(), value_shape=(6,), degree=2, scheme="default")
-    Q = dolfinx.fem.functionspace(
-        mesh,
-        basix.ufl.element("CG", meshdata["mesh"].topology.cell_name(), 1, shape=(6,)),
-    )
-  #  Q = dolfinx.fem.functionspace(mesh, q_el)
-    q_elem = dolfinx.fem.Function(Q)
-     
-    u_expr = dolfinx.fem.Expression(stress_mm, Q.element.interpolation_points())
-    q_elem.interpolate(u_expr)
-    coord_elem=Q.tabulate_dof_coordinates()
-   # if points:
-      #  return utils.stress_output(mat_param, meshdata["mesh"], q, points)
+    # strain_m at guass points
+    CC_ = utils.CC(mat_param)
     q_el = basix.ufl.quadrature_element(mesh.basix_cell(), value_shape=(6,), degree=2, scheme="default")
     Q = dolfinx.fem.functionspace(mesh, q_el)
-    q_quad = dolfinx.fem.Function(Q)
-    u_expr = dolfinx.fem.Expression(stress_mm, Q.element.interpolation_points())
-    q_quad.interpolate(u_expr)
+    strain_quad=Function(Q)
+    fexpr1=dolfinx.fem.Expression(
+        st_3D_m,Q.element.interpolation_points(), comm=MPI.COMM_WORLD
+        )
+    strain_quad.interpolate(fexpr1) 
     coord_quad=Q.tabulate_dof_coordinates()
-    return q_quad, coord_quad, q_elem, coord_elem   
+
+    V_stiff=dolfinx.fem.functionspace(mesh, basix.ufl.element(
+            "DG", mesh.topology.cell_name(), 0, shape = (6,6 )))    
+
+    stiff=Function(V_stiff)
+    for i,subb in enumerate(meshdata["subdomains"].values):
+        stiff.x.array[36*i:36*i+36]=CC_[subb].flatten()  
+    stress_mm = ufl.dot(stiff, st_3D_m)
+
+    stress_quad = dolfinx.fem.Function(Q)
+    u_expr = dolfinx.fem.Expression(stress_mm, Q.element.interpolation_points())
+    stress_quad.interpolate(u_expr)
+
+    return st_3D_m,u_loc, strain_quad, stress_quad, coord_quad
+
+
     
-    
-def eigen_solve(mat_param, meshdata, l_mesh, r_mesh, strain_mm, u_local):
+     
+def eigen_solve(mat_param, meshdata, l_mesh, r_mesh, st_3D_m, u_local):
     mesh = meshdata["mesh"]
     dx = ufl.Measure("dx")(
         domain=mesh, subdomain_data=meshdata["subdomains"]
@@ -234,6 +208,11 @@ def eigen_solve(mat_param, meshdata, l_mesh, r_mesh, strain_mm, u_local):
         meshdata["mesh"],
         basix.ufl.element("CG", meshdata["mesh"].topology.cell_name(), 1, shape=(6,)),
     )
+    strain_mm=Function(VV)
+    fexpr1=dolfinx.fem.Expression(
+        st_3D_m,VV.element.interpolation_points(), comm=MPI.COMM_WORLD
+        )
+    strain_mm.interpolate(fexpr1)
     stress_mm=Function(VV)
     for idx,el in enumerate(meshdata["subdomains"].values):
         stress_mm.x.array[6*idx:6*idx+6]=np.matmul(CC[el],strain_mm.x.array[6*idx:6*idx+6])
@@ -244,11 +223,44 @@ def eigen_solve(mat_param, meshdata, l_mesh, r_mesh, strain_mm, u_local):
         u_local,V.element.interpolation_points(), comm=MPI.COMM_WORLD
         )
     u_loc.interpolate(fexpr1) 
-  #  u_L = np.array([0, 0, 0], dtype=dolfinx.default_scalar_type)
-    boundary_dofs = dolfinx.fem.locate_dofs_topological(
-        V, mesh.topology.dim - 1, np.concatenate((r_mesh["entity_map"], l_mesh["entity_map"]), axis=0)
-    )
-    
+    #u_L = np.array([0, 0, 0], dtype=dolfinx.default_scalar_type)
+    #boundary_dofs = dolfinx.fem.locate_dofs_topological(
+    #    V, mesh.topology.dim - 1, np.concatenate((r_mesh["entity_map"], l_mesh["entity_map"]), axis=0)
+    #)
+    #bcs = [dolfinx.fem.dirichletbc(u_loc, boundary_dofs)]
+
+    # ==========================================
+    # 1. LEFT BOUNDARY: Fully Fixed
+    # ==========================================
+    # Locate DOFs for the entire vector space V on the left facets
+    dofs_left = fem.locate_dofs_topological(V, mesh.topology.dim - 1, l_mesh["entity_map"])
+
+    # Option A: Fix to absolute zero [0, 0, 0]
+    u_L = np.array([0.0, 0.0, 0.0], dtype=default_scalar_type)
+    bc_left = fem.dirichletbc(u_L, dofs_left, V)
+
+    # Option B: If you intended to use your interpolated `u_loc` function as the fixed value:
+    #bc_left = fem.dirichletbc(u_loc, dofs_left)
+
+    # ==========================================
+    # 2. RIGHT BOUNDARY: Only u2 (y) and u3 (z) fixed
+    # ==========================================
+    # Locate DOFs specifically for the sub-spaces (index 1 for u2, index 2 for u3)
+    dofs_right_u2 = fem.locate_dofs_topological(V.sub(1), mesh.topology.dim - 1, r_mesh["entity_map"])
+    dofs_right_u3 = fem.locate_dofs_topological(V.sub(2), mesh.topology.dim - 1, r_mesh["entity_map"])
+
+    # Define a scalar zero for the individual components
+    zero_scalar = default_scalar_type(0.0)
+
+    # Create the boundary conditions for the specific sub-spaces
+    bc_right_u2 = fem.dirichletbc(zero_scalar, dofs_right_u2, V.sub(1))
+    bc_right_u3 = fem.dirichletbc(zero_scalar, dofs_right_u3, V.sub(2))
+
+    # ==========================================
+    # 3. MERGE BOUNDARY CONDITIONS
+    # ==========================================
+    # Combine all individual BCs into a single list to pass to your solver
+    bcs = [bc_left, bc_right_u2, bc_right_u3]
     # Linear Elasticity Bilinear Form
     a = sum(
         [
@@ -263,7 +275,6 @@ def eigen_solve(mat_param, meshdata, l_mesh, r_mesh, strain_mm, u_local):
         ]
     )
    
-    bcs = [dolfinx.fem.dirichletbc(u_loc, boundary_dofs)]
 
     # Stiffness matrix
     K = dolfinx.fem.petsc.assemble_matrix(dolfinx.fem.form(a), bcs=bcs)
@@ -341,3 +352,43 @@ def eigen_solve(mat_param, meshdata, l_mesh, r_mesh, strain_mm, u_local):
         # Close the plotter to free memory
       #  pl.close()
     return 1 / (np.max(eigval)).real
+
+
+def stress_eval(mat_param, meshdata, strain_m):
+    """Evaluate the material-frame 3D stress field from a recovered strain.
+
+    ``strain_m`` is the (UFL-expression) material-frame strain returned first by
+    :func:`local_strain`.  Returns the stress at quadrature points and at CG1
+    nodes (with coordinates) for visualisation / XDMF export.
+    """
+    CC_ = utils.CC(mat_param)
+    mesh = meshdata["mesh"]
+    VV = dolfinx.fem.functionspace(
+        meshdata["mesh"],
+        basix.ufl.element("DG", meshdata["mesh"].topology.cell_name(), 0, shape=(6,)),
+    )
+    stress_mm, strain_mm = Function(VV), Function(VV)
+    fexpr1 = dolfinx.fem.Expression(
+        strain_m, VV.element.interpolation_points(), comm=MPI.COMM_WORLD
+    )
+    strain_mm.interpolate(fexpr1)
+    for idx, el in enumerate(meshdata["subdomains"].values):
+        stress_mm.x.array[6 * idx:6 * idx + 6] = np.matmul(
+            CC_[el], strain_mm.x.array[6 * idx:6 * idx + 6])
+
+    Q = dolfinx.fem.functionspace(
+        mesh,
+        basix.ufl.element("CG", meshdata["mesh"].topology.cell_name(), 1, shape=(6,)),
+    )
+    q_elem = dolfinx.fem.Function(Q)
+    u_expr = dolfinx.fem.Expression(stress_mm, Q.element.interpolation_points())
+    q_elem.interpolate(u_expr)
+    coord_elem = Q.tabulate_dof_coordinates()
+
+    q_el = basix.ufl.quadrature_element(mesh.basix_cell(), value_shape=(6,), degree=2, scheme="default")
+    Q = dolfinx.fem.functionspace(mesh, q_el)
+    q_quad = dolfinx.fem.Function(Q)
+    u_expr = dolfinx.fem.Expression(stress_mm, Q.element.interpolation_points())
+    q_quad.interpolate(u_expr)
+    coord_quad = Q.tabulate_dof_coordinates()
+    return q_quad, coord_quad, q_elem, coord_elem

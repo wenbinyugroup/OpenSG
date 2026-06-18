@@ -26,7 +26,8 @@ timo = compute_stiffness(material_parameters, segment_mesh.meshdata,
 print('\n Taper Stiffness \n', timo[0])
 
 # Local strain and local displacement
-strain_m, u_loc = stress_recov.local_strain(timo, beam_out, segid, meshdata)
+strain_m, u_loc, strain_quad, stress_quad, coord_quad = stress_recov.local_strain(
+    timo, beam_out, segid, meshdata, material_parameters)
 
 # Local stress (quadrature points) and local stress(elemental nodes)
 stress_m_quad, coord_quad, stress_m, coord_node = stress_recov.stress_eval(material_parameters, meshdata, strain_m)

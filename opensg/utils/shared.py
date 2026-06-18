@@ -381,3 +381,72 @@ def beam_reaction(file_name):
             beam_seg_disp.append([index[sc],float(last_data[sc])])
         beam_disp.append(beam_seg_disp)
     return beam_force, beam_disp
+
+
+# --- MSG-TW addition: exact saddle-point (KKT) solve for the solid VAM null space ---
+import ufl
+import dolfinx.fem as fem
+import petsc4py.PETSc as PETSc
+from scipy.sparse import csr_matrix, vstack, hstack
+
+
+def solve_kkt(A_petsc, f_rhs, V, mesh, dx_measure, nphases):
+    """
+    Exact 6-constraint saddle-point solver for VAM.
+    Locks all 3 translations and 3 rotations to prevent any rigid body shifts.
+    """
+    ai, aj, av = A_petsc.getValuesCSR()
+    A_scipy = csr_matrix((av, aj, ai))
+    num_dofs = A_scipy.shape[0]
+
+    # 1. The Exact 6 Rigid Body Modes
+    y, z = ufl.SpatialCoordinate(mesh)[1], ufl.SpatialCoordinate(mesh)[2]
+    phi_modes = [
+        ufl.as_vector([1.0, 0.0, 0.0]), # 1. T1 (Axial Translation)
+        ufl.as_vector([0.0, 1.0, 0.0]), # 2. T2 (Y Translation)
+        ufl.as_vector([0.0, 0.0, 1.0]), # 3. T3 (Z Translation)
+        ufl.as_vector([0.0, -z,  y]),   # 4. R1 (Twist)
+    ]
+
+    C_mat = np.zeros((4, num_dofs))
+    v_test = ufl.TestFunction(V)
+    for i, phi in enumerate(phi_modes):
+        L_phi = fem.form(sum([ufl.dot(v_test, phi) * dx_measure(k) for k in range(nphases)]))
+        C_mat[i, :] = fem.assemble_vector(L_phi).array[:]
+
+    # 2. Assemble Augmented System (Scaled for stability)
+    scale = np.mean(np.abs(A_scipy.data))
+    C_scaled = C_mat * scale
+    KKT = vstack([
+        hstack([A_scipy, C_scaled.T]),
+        hstack([C_scaled, csr_matrix((4, 4))])
+    ]).tocsr()
+
+    # 3. Handle RHS
+    if hasattr(f_rhs, "array"):
+        b_w = f_rhs.array
+    else:
+        b_w = fem.assemble_vector(fem.form(f_rhs)).array
+
+    RHS = np.concatenate([b_w, np.zeros(4)])
+
+    # 4. Direct Solve
+    K_petsc = PETSc.Mat().createAIJ(size=KKT.shape, csr=(KKT.indptr, KKT.indices, KKT.data))
+    b_petsc = PETSc.Vec().createWithArray(RHS)
+    x_petsc = PETSc.Vec().createWithArray(np.zeros(RHS.shape))
+
+    ksp = PETSc.KSP().create(comm=mesh.comm)
+    ksp.setOperators(K_petsc)
+    ksp.setType("preonly")
+    pc = ksp.getPC()
+    pc.setType("lu")
+    pc.setFactorSolverType("mumps")
+    # getFactorMatrix() requires the solver to be set up first (PETSc API order)
+    ksp.setUp()
+    # Null pivot detection handles the singularity of the A-block
+    pc.getFactorMatrix().setMumpsIcntl(24, 1)
+
+    ksp.solve(b_petsc, x_petsc)
+
+    # Return ONLY the warping degrees of freedom, stripping the 6 multipliers
+    return x_petsc.array[:num_dofs]

@@ -77,7 +77,7 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     e, V_l, dv, v_, x, dx = utils.local_boun(
         boundary_mesh, boundary_frame, boundary_subdomains
     )
-    _,boundary_null = shared_utils.compute_nullspace(V_l)
+ #   _,boundary_null = shared_utils.compute_nullspace(V_l)
     boundary_mesh.topology.create_connectivity(2, 2)
     V0, Dle, Dhe, D_ee, V1s = utils.initialize_array(V_l)
 
@@ -95,7 +95,7 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     )
     A_l = assemble_matrix(form(F2))
     A_l.assemble()
-    A_l.setNullSpace(boundary_null)
+ #  A_l.setNullSpace(boundary_null)
 
     gamma_e = utils.gamma_e(x)
     for p in range(4):
@@ -114,11 +114,54 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
         F_l.ghostUpdate(
             addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
         )
-        boundary_null.remove(F_l)
+      #  boundary_null.remove(F_l)
         Dhe[:, p] = petsc.assemble_vector(r_he)[:]
-        w = shared_utils.solve_ksp(A_l, F_l, V_l)
-        V0[:, p] = w.x.array[:]
+        V0[:, p] = shared_utils.solve_kkt(A_l, F_l, V_l, boundary_mesh, dx, nphases)
+       # V0[:, p] = w.x.array[:]
 
+    # =========================================================================
+    # Apply Equation 85 Operator to Correct V0 and V1s
+    # =========================================================================
+    Dc_cols = []
+    gamma_c_exprs = [
+        v_[0],
+        v_[1],
+        v_[2],
+        v_[1].dx(2) - v_[2].dx(1)  
+    ]
+    
+    for expr in gamma_c_exprs:
+        # Dc matrix now built using the exact same high-degree quadrature
+        f_c = dolfinx.fem.form(sum(expr * dx(ii) for ii in range(nphases)))
+        vec_c = dolfinx.fem.assemble_vector(f_c)
+        Dc_cols.append(vec_c.array[:])
+    Dc = np.column_stack(Dc_cols)
+
+    # 2. Construct the Discretized Kernel Matrix Psi (Pure Analytical)
+    psi_funcs = [dolfinx.fem.Function(V_l) for _ in range(4)]
+    psi_funcs[0].interpolate(lambda x: np.vstack((np.ones_like(x[0]), np.zeros_like(x[0]), np.zeros_like(x[0])))) 
+    psi_funcs[1].interpolate(lambda x: np.vstack((np.zeros_like(x[0]), np.ones_like(x[0]), np.zeros_like(x[0])))) 
+    psi_funcs[2].interpolate(lambda x: np.vstack((np.zeros_like(x[0]), np.zeros_like(x[0]), np.ones_like(x[0])))) 
+    psi_funcs[3].interpolate(lambda x: np.vstack((np.zeros_like(x[0]), -x[2], x[1])))                                         
+    Psi = np.column_stack([func.x.array[:] for func in psi_funcs])
+
+
+   # Dc_T_Psi = np.dot(Dc.T, Psi)
+   # inv_Dc_T_Psi = np.linalg.inv(Dc_T_Psi)
+   # P_state = np.eye(V0.shape[0]) - np.linalg.multi_dot([Psi, inv_Dc_T_Psi, Dc.T])
+    Dc_T_Psi = np.dot(Dc.T, Psi)
+    inv_Dc_T_Psi = np.linalg.inv(Dc_T_Psi)
+    
+    # 2. Construct the full Equation 85 projection operator
+    # Note: \Delta in the paper represents the Identity matrix
+    num_dofs = V0.shape[0]
+    I_matrix = np.eye(num_dofs)
+    Eq85_Operator = I_matrix - np.linalg.multi_dot([Psi, inv_Dc_T_Psi, Dc.T])
+    
+    # 3. Apply the projection to the raw KKT solution (V0*)
+    V0 = np.dot(Eq85_Operator, V0)
+    # 2. Exact V0 State Projection
+   # V0 = np.dot(P_state, V0)
     V0_csr = csr_matrix(V0)
     D1 = V0_csr.T.dot(csr_matrix(-Dhe))
     for s in range(4):
@@ -196,15 +239,79 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     V0DllV0 = (V0_csr.T.dot(Dll)).dot(V0_csr)
 
     # V1s  ****Updated from previous version as for solving boundary V1s, we can directly use (A_l V1s=b),  and solve for V1s
-    b = (DhlTV0Dle - DhlV0).toarray()
+    b_unproj = (DhlV0 - DhlTV0Dle).toarray()
+   # print(f"Norm of Dhl: {np.linalg.norm(Dhl.toarray()):.4e}")
+  #  print(f"Norm of V0:  {np.linalg.norm(V0):.4e}")
+  #  print(f"Norm of Dle: {np.linalg.norm(Dle):.4e}")
+  #  print(f"Norm of Dhe: {np.linalg.norm(Dhe):.4e}")
+    # Insert this just before shared_utils.solve_kkt
+
+
+# If this mean magnitude is >> 1.0, your Dhl/Dle forms are likely missing a 
+# division by the integration measure or a Jacobian term.
+    # 5. Calculate internal algebraic projection components
+    Psi_T_Dc = np.dot(Psi.T, Dc)
+   # cond_num = np.linalg.cond(Psi_T_Dc)
+   # print(f"Condition number of (Psi^T * Dc): {cond_num:.2e}")
+    inv_Psi_T_Dc = np.linalg.inv(Psi_T_Dc)
+
+    tmp1 = np.dot(Psi.T, b_unproj)
+    tmp2 = np.dot(inv_Psi_T_Dc, tmp1)
+    tmp3 = np.dot(Dc, tmp2)
+    
+    b = tmp3 - b_unproj  
+   # print(f"RHS b vector max magnitude: {np.max(np.abs(b)):.4e}")
+  #  print(f"RHS b vector mean magnitude: {np.mean(np.abs(b)):.4e}")
+   # print(f"Norm of Dhl: {np.linalg.norm(Dhl.toarray()):.4e}")
+   # print(f"Norm of Dle: {np.linalg.norm(Dle):.4e}")
+   # print(f"Norm of DhlV0: {np.linalg.norm(DhlV0.toarray()):.4e}")
+   # print(f"Norm of DhlTV0Dle: {np.linalg.norm(DhlTV0Dle.toarray()):.4e}")
+    inv_Dc_T_Psi = inv_Psi_T_Dc.T
     for p in range(4):
         F = petsc4py.PETSc.Vec().createWithArray(b[:, p], comm=MPI.COMM_WORLD)
         F.ghostUpdate(
             addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
         )
-        boundary_null.remove(F)
-        w = shared_utils.solve_ksp(A_l, F, V_l)
-        V1s[:, p] = w.x.array[:]
+      #  boundary_null.remove(F)
+      #  V1s[:, p] = shared_utils.solve_kkt(A_l, F, V_l, boundary_mesh, dx, nphases)
+        # solve_kkt returns a valid PDE solution, but pinned in the Psi^T V = 0 frame
+        V1s_star = shared_utils.solve_kkt(A_l, F, V_l, boundary_mesh, dx, nphases)
+        
+        # --- FIX: Apply Eq. 85 State Projection to shift to Dc^T V = 0 frame ---
+        correction = np.dot(Psi, np.dot(inv_Dc_T_Psi, np.dot(Dc.T, V1s_star)))
+        V1s[:, p] = V1s_star - correction
+       # V1s[:, p] = w.x.array[:]
+    # =========================================================================
+    # Debug: Orthogonality & Null-Space Diagnostic Norms
+    # =========================================================================
+   # print("\n" + "="*50)
+   # print("   NULL-SPACE & PROJECTION DIAGNOSTIC NORMS")
+   # print("="*50)
+    
+    # 1. Load Orthogonality: Is the corrected RHS 'b' completely free of rigid body forces?
+    # Expected: ~ 1e-12 to 1e-16
+    #b_psi_norm = np.linalg.norm(np.dot(Psi.T, b))
+    #print(f"1. Load vs Kernel (||Psi^T * b||)       : {b_psi_norm:.4e}")
+
+    # 2. State Orthogonality: Does V0 strictly obey the VABS structural frame constraints?
+    # Expected: ~ 1e-12 to 1e-16
+    #V0_dc_norm = np.linalg.norm(np.dot(Dc.T, V0))
+    #print(f"2. V0 vs Constraint (||Dc^T * V0||)     : {V0_dc_norm:.4e}")
+
+    # 3. State Orthogonality: Does V1s strictly obey the VABS structural frame constraints?
+    # Expected: ~ 1e-12 to 1e-16
+   # V1s_dc_norm = np.linalg.norm(np.dot(Dc.T, V1s))
+    #print(f"3. V1s vs Constraint (||Dc^T * V1s||)   : {V1s_dc_norm:.4e}")
+
+    # 4. Matrix Integrity: Is Psi truly the null-space of the Stiffness Matrix E?
+    # Expected: ~ 1e-12 to 1e-16
+    #ai, aj, av = A_l.getValuesCSR()
+    #E_csr = csr_matrix((av, aj, ai))
+    #E_psi_norm = np.linalg.norm(E_csr.dot(Psi))
+    #print(f"4. Matrix Null-Space (||E * Psi||)      : {E_psi_norm:.4e}")
+    
+    #print("="*50 + "\n")
+    
 
     # Ainv
     Ainv = np.linalg.inv(D_eff).astype(np.float64)
@@ -453,7 +560,9 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
     V0DllV0 = (V0_csr.T.dot(Dll)).dot(V0_csr)
 
     # V1s
-    b = (DhlTV0Dle - DhlV0).toarray()
+  #  b = (DhlTV0Dle - DhlV0).toarray()
+    # 4. Extract raw unprojected vector b_unproj 
+    b= (DhlTV0Dle - DhlV0).toarray()
 
     # Assembly
     # For WB mesh (surface elements, for solving (A V1s = b), directly cannot be computed as we require dirichilet bc)
@@ -477,7 +586,7 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
         )
         apply_lifting(F, [a], [bc])
         set_bc(F, bc)
-        w = shared_utils.solve_ksp(A, F, V)
+        w  = shared_utils.solve_ksp(A, F, V)
         V1s[:, p] = w.x.array[:]
 
     # Ainv
@@ -523,5 +632,5 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
     Deff_srt[1:3, 1:3] = G_tim
     Deff_srt[1:3, 3:6] = Y_tim.T[:, 1:4]
     Deff_srt[1:3, 0] = Y_tim.T[:, 0].flatten()
-    
+
     return Deff_srt, V0, V1s, Deff_l, Deff_r

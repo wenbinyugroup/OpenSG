@@ -1089,10 +1089,10 @@ class SolidSegmentMesh:
                 orientations[ii][4],
             )  # e2
             EE3.x.array[3 * k], EE3.x.array[3 * k + 1], EE3.x.array[3 * k + 2] = (
-                orientations[ii][8],
-                orientations[ii][6],
-                orientations[ii][7],
-            )  # e3
+                -orientations[ii][8],
+                -orientations[ii][6],
+                -orientations[ii][7],
+            )  # e3  (inward through-thickness normal: MSG-TW orientation fix)
             EE1.x.array[3 * k], EE1.x.array[3 * k + 1], EE1.x.array[3 * k + 2] = (
                 orientations[ii][2],
                 orientations[ii][0],
