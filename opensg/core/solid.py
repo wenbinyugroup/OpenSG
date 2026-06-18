@@ -155,11 +155,11 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     # 2. Construct the full Equation 85 projection operator
     # Note: \Delta in the paper represents the Identity matrix
     num_dofs = V0.shape[0]
-    I_matrix = np.eye(num_dofs)
-    Eq85_Operator = I_matrix - np.linalg.multi_dot([Psi, inv_Dc_T_Psi, Dc.T])
+    # (no dense identity -- Eq.85 projection applied matrix-free below)
+    # P = I - Psi (Dc^T Psi)^-1 Dc^T  applied without forming the dense N x N operator:
     
     # 3. Apply the projection to the raw KKT solution (V0*)
-    V0 = np.dot(Eq85_Operator, V0)
+    V0 = V0 - np.dot(Psi, np.dot(inv_Dc_T_Psi, np.dot(Dc.T, V0)))
     # 2. Exact V0 State Projection
    # V0 = np.dot(P_state, V0)
     V0_csr = csr_matrix(V0)

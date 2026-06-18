@@ -1088,11 +1088,16 @@ class SolidSegmentMesh:
                 orientations[ii][3],
                 orientations[ii][4],
             )  # e2
+            # e3 = e1 x e2 (right-handed by construction; uses only the first
+            # 6 orientation terms e1,e2 -- the supplied e3 (terms 6-8) is ignored)
+            _e1 = np.array([orientations[ii][2], orientations[ii][0], orientations[ii][1]])
+            _e2 = np.array([orientations[ii][5], orientations[ii][3], orientations[ii][4]])
+            _e3 = np.cross(_e1, _e2)
             EE3.x.array[3 * k], EE3.x.array[3 * k + 1], EE3.x.array[3 * k + 2] = (
-                -orientations[ii][8],
-                -orientations[ii][6],
-                -orientations[ii][7],
-            )  # e3  (inward through-thickness normal: MSG-TW orientation fix)
+                _e3[0],
+                _e3[1],
+                _e3[2],
+            )  # e3
             EE1.x.array[3 * k], EE1.x.array[3 * k + 1], EE1.x.array[3 * k + 2] = (
                 orientations[ii][2],
                 orientations[ii][0],
@@ -1603,10 +1608,15 @@ class SolidBounMesh:
                 orientations[ii][3],
                 orientations[ii][4],
             )  # e2
+            # e3 = e1 x e2 (right-handed by construction; uses only the first
+            # 6 orientation terms e1,e2 -- the supplied e3 (terms 6-8) is ignored)
+            _e1 = np.array([orientations[ii][2], orientations[ii][0], orientations[ii][1]])
+            _e2 = np.array([orientations[ii][5], orientations[ii][3], orientations[ii][4]])
+            _e3 = np.cross(_e1, _e2)
             EE3.x.array[3 * k], EE3.x.array[3 * k + 1], EE3.x.array[3 * k + 2] = (
-                orientations[ii][8],
-                orientations[ii][6],
-                orientations[ii][7],
+                _e3[0],
+                _e3[1],
+                _e3[2],
             )  # e3
             EE1.x.array[3 * k], EE1.x.array[3 * k + 1], EE1.x.array[3 * k + 2] = (
                 orientations[ii][2],
