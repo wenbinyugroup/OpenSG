@@ -54,7 +54,8 @@ class ShellSegmentMesh:
 
         # Load segment data from YAML
         with open(segment_yaml_file, "r") as f:
-            segment_data = yaml.safe_load(f)
+            # libyaml C parser: ~10x faster than the pure-Python loader, identical result
+            segment_data = yaml.load(f, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
 
         # Extract data from YAML
         self.nodes = segment_data["nodes"]
@@ -613,7 +614,8 @@ class ShellBounMesh:
 
         # Load segment data from YAML
         with open(segment_yaml_file, "r") as f:
-            segment_data = yaml.safe_load(f)
+            # libyaml C parser: ~10x faster than the pure-Python loader, identical result
+            segment_data = yaml.load(f, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
 
         # Extract data from YAML
         self.nodes = segment_data["nodes"]
@@ -903,7 +905,8 @@ class SolidSegmentMesh:
 
         # Load segment data from YAML
         with open(segment_yaml_file, "r") as f:
-            segment_data = yaml.safe_load(f)
+            # libyaml C parser: ~10x faster than the pure-Python loader, identical result
+            segment_data = yaml.load(f, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
 
         # Extract data from YAML (same as SolidBladeMesh.__init__)
         self.nodes = segment_data["nodes"]
@@ -1434,7 +1437,8 @@ class SolidBounMesh:
 
         # Load segment data from YAML
         with open(segment_yaml_file, "r") as f:
-            segment_data = yaml.safe_load(f)
+            # libyaml C parser: ~10x faster than the pure-Python loader, identical result
+            segment_data = yaml.load(f, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
 
         # Extract data from YAML (same as SolidBladeMesh.__init__)
         self.nodes = segment_data["nodes"]

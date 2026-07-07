@@ -97,42 +97,50 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     A_l.assemble()
  #  A_l.setNullSpace(boundary_null)
 
+    # KKT operator is identical for all 8 boundary solves: factorize ONCE
+    kkt = shared_utils.kkt_context(A_l, V_l, boundary_mesh, dx, nphases)
+
+    # the 4 load columns share ONE compiled form via a 0/1 selector constant
+    # (same values as gamma_e[:, p]; avoids 4 distinct ffcx JIT compilations)
     gamma_e = utils.gamma_e(x)
+    ep = dolfinx.fem.Constant(boundary_mesh, np.zeros(4))
+    ge_p = dot(gamma_e, ep)
+    F2 = sum(
+        [
+            dot(
+                dot(utils.C(ii, boundary_frame, mat_param), ge_p),
+                utils.gamma_h(dx, v_, dim=2),
+            )
+            * dx(ii)
+            for ii in range(nphases)
+        ]
+    )
+    r_he = form(rhs(F2))
     for p in range(4):
-        F2 = sum(
-            [
-                dot(
-                    dot(utils.C(ii, boundary_frame, mat_param), gamma_e[:, p]),
-                    utils.gamma_h(dx, v_, dim=2),
-                )
-                * dx(ii)
-                for ii in range(nphases)
-            ]
-        )
-        r_he = form(rhs(F2))
+        ep.value[:] = 0.0
+        ep.value[p] = 1.0
         F_l = petsc.assemble_vector(r_he)
         F_l.ghostUpdate(
             addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
         )
       #  boundary_null.remove(F_l)
-        Dhe[:, p] = petsc.assemble_vector(r_he)[:]
-        V0[:, p] = shared_utils.solve_kkt(A_l, F_l, V_l, boundary_mesh, dx, nphases)
+        Dhe[:, p] = F_l.array[:]
+        V0[:, p] = shared_utils.solve_kkt_cached(kkt, F_l)
        # V0[:, p] = w.x.array[:]
 
     # =========================================================================
     # Apply Equation 85 Operator to Correct V0 and V1s
     # =========================================================================
     Dc_cols = []
-    gamma_c_exprs = [
-        v_[0],
-        v_[1],
-        v_[2],
-        v_[1].dx(2) - v_[2].dx(1)  
-    ]
-    
-    for expr in gamma_c_exprs:
-        # Dc matrix now built using the exact same high-degree quadrature
-        f_c = dolfinx.fem.form(sum(expr * dx(ii) for ii in range(nphases)))
+    # the 4 constraint columns from ONE compiled form via a selector constant
+    cc = dolfinx.fem.Constant(boundary_mesh, np.zeros(4))
+    gamma_c_expr = (cc[0] * v_[0] + cc[1] * v_[1] + cc[2] * v_[2]
+                    + cc[3] * (v_[1].dx(2) - v_[2].dx(1)))
+    # Dc matrix built using the exact same high-degree quadrature
+    f_c = dolfinx.fem.form(sum(gamma_c_expr * dx(ii) for ii in range(nphases)))
+    for j in range(4):
+        cc.value[:] = 0.0
+        cc.value[j] = 1.0
         vec_c = dolfinx.fem.assemble_vector(f_c)
         Dc_cols.append(vec_c.array[:])
     Dc = np.column_stack(Dc_cols)
@@ -164,21 +172,28 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
    # V0 = np.dot(P_state, V0)
     V0_csr = csr_matrix(V0)
     D1 = V0_csr.T.dot(csr_matrix(-Dhe))
-    for s in range(4):
-        for k in range(4):
-            f = dolfinx.fem.form(
-                sum(
-                    [
-                        dot(
-                            dot(gamma_e.T, utils.C(i, boundary_frame, mat_param)),
-                            gamma_e,
-                        )[s, k]
-                        * dx(i)
-                        for i in range(nphases)
-                    ]
+    # the 16 D_ee entries from ONE compiled form via two selector constants
+    es = dolfinx.fem.Constant(boundary_mesh, np.zeros(4))
+    ek = dolfinx.fem.Constant(boundary_mesh, np.zeros(4))
+    f_dee = dolfinx.fem.form(
+        sum(
+            [
+                dot(
+                    dot(utils.C(i, boundary_frame, mat_param), dot(gamma_e, ek)),
+                    dot(gamma_e, es),
                 )
-            )
-            D_ee[s, k] = dolfinx.fem.assemble_scalar(f)
+                * dx(i)
+                for i in range(nphases)
+            ]
+        )
+    )
+    for s in range(4):
+        es.value[:] = 0.0
+        es.value[s] = 1.0
+        for k in range(4):
+            ek.value[:] = 0.0
+            ek.value[k] = 1.0
+            D_ee[s, k] = dolfinx.fem.assemble_scalar(f_dee)
 
     D_eff = D_ee + D1  # Effective Stiffness Matrix (EB)
 
@@ -198,18 +213,21 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
     ai, aj, av = Dll.getValuesCSR()
     Dll = csr_matrix((av, aj, ai))
 
+    F1 = sum(
+        [
+            dot(
+                dot(utils.C(i, boundary_frame, mat_param), ge_p),
+                utils.gamma_l(v_),
+            )
+            * dx(i)
+            for i in range(nphases)
+        ]
+    )
+    f_dle = form(F1)
     for p in range(4):
-        F1 = sum(
-            [
-                dot(
-                    dot(utils.C(i, boundary_frame, mat_param), gamma_e[:, p]),
-                    utils.gamma_l(v_),
-                )
-                * dx(i)
-                for i in range(nphases)
-            ]
-        )
-        Dle[:, p] = petsc.assemble_vector(form(F1))[:]
+        ep.value[:] = 0.0
+        ep.value[p] = 1.0
+        Dle[:, p] = petsc.assemble_vector(f_dle)[:]
 
     F_dhl = sum(
         [
@@ -273,9 +291,9 @@ def compute_timo_boun(mat_param, boundary_submeshdata):
             addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
         )
       #  boundary_null.remove(F)
-      #  V1s[:, p] = shared_utils.solve_kkt(A_l, F, V_l, boundary_mesh, dx, nphases)
-        # solve_kkt returns a valid PDE solution, but pinned in the Psi^T V = 0 frame
-        V1s_star = shared_utils.solve_kkt(A_l, F, V_l, boundary_mesh, dx, nphases)
+        # solve_kkt returns a valid PDE solution, but pinned in the Psi^T V = 0 frame;
+        # back-substitution on the SAME factorized KKT operator as the V0 solves
+        V1s_star = shared_utils.solve_kkt_cached(kkt, F)
         
         # --- FIX: Apply Eq. 85 State Projection to shift to Dc^T V = 0 frame ---
         correction = np.dot(Psi, np.dot(inv_Dc_T_Psi, np.dot(Dc.T, V1s_star)))
@@ -439,6 +457,24 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
     A = assemble_matrix(a, [bc])  # Obtain coefficient matrix with BC applied: AA
     A.assemble()
 
+    # A is IDENTICAL for all 8 segment solves (4 x V0 + 4 x V1s): factorize ONCE
+    ksp = shared_utils.create_ksp(A)
+
+    # the 4 load columns share ONE compiled form via a 0/1 selector constant
+    ep = dolfinx.fem.Constant(meshdata["mesh"], np.zeros(4))
+    ge_p = dot(gamma_e, ep)
+    F2 = -sum(
+        [
+            dot(
+                dot(utils.C(i, meshdata["frame"], mat_param), ge_p),
+                utils.gamma_h(dx, v_, dim=3),
+            )
+            * dx(i)
+            for i in range(nphases)
+        ]
+    )
+    r_he = form(F2)
+
     # Assembly
     # Running for 4 different F vector. However, F has bc applied to it where, stored known values of v2a is provided for each loop (from boun solve).
 
@@ -453,18 +489,10 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
             V, v2a, V_r, V0_r[:, p], r_submesh["facets"], r_submesh["entity_map"]
         )
 
-        F2 = -sum(
-            [
-                dot(
-                    dot(utils.C(i, meshdata["frame"], mat_param), gamma_e[:, p]),
-                    utils.gamma_h(dx, v_, dim=3),
-                )
-                * dx(i)
-                for i in range(nphases)
-            ]
-        )
+        ep.value[:] = 0.0
+        ep.value[p] = 1.0
         bc = [dolfinx.fem.dirichletbc(v2a, boundary_dofs)]
-        F = petsc.assemble_vector(form(F2))
+        F = petsc.assemble_vector(r_he)
         Dhe[:, p] = F
 
         apply_lifting(
@@ -472,27 +500,34 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
         )  # apply bc to rhs vector (Dhe) based on known fluc solutions  C(i,frame,mat_param)
         set_bc(F, bc)
 
-        w = shared_utils.solve_ksp(A, F, V)
+        w = shared_utils.solve_cached(ksp, F, V)
         V0[:, p] = w.x.array[:]
 
     V0_csr = csr_matrix(V0)
     D1 = V0_csr.T.dot(csr_matrix(-Dhe)).astype(np.float64)
 
-    for s in range(4):
-        for k in range(4):
-            f = dolfinx.fem.form(
-                sum(
-                    [
-                        dot(
-                            dot(gamma_e.T, utils.C(i, meshdata["frame"], mat_param)),
-                            gamma_e,
-                        )[s, k]
-                        * dx(i)
-                        for i in range(nphases)
-                    ]
+    # the 16 D_ee entries from ONE compiled form via two selector constants
+    es = dolfinx.fem.Constant(meshdata["mesh"], np.zeros(4))
+    ek = dolfinx.fem.Constant(meshdata["mesh"], np.zeros(4))
+    f_dee = dolfinx.fem.form(
+        sum(
+            [
+                dot(
+                    dot(utils.C(i, meshdata["frame"], mat_param), dot(gamma_e, ek)),
+                    dot(gamma_e, es),
                 )
-            )
-            D_ee[s, k] = dolfinx.fem.assemble_scalar(f)
+                * dx(i)
+                for i in range(nphases)
+            ]
+        )
+    )
+    for s in range(4):
+        es.value[:] = 0.0
+        es.value[s] = 1.0
+        for k in range(4):
+            ek.value[:] = 0.0
+            ek.value[k] = 1.0
+            D_ee[s, k] = dolfinx.fem.assemble_scalar(f_dee)
     L = max(meshdata["mesh"].geometry.x[:, 0]) - min(meshdata["mesh"].geometry.x[:, 0])
     D_eff = (D_ee.astype(np.float64) + D1) / L
     D_eff = 0.5 * (D_eff + D_eff.T)
@@ -535,20 +570,21 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
     ai, aj, av = Dhl.getValuesCSR()
     Dhl = csr_matrix((av, aj, ai))
 
+    F1 = sum(
+        [
+            dot(
+                dot(utils.C(i, meshdata["frame"], mat_param), ge_p),
+                utils.gamma_l(v_),
+            )
+            * dx(i)
+            for i in range(nphases)
+        ]
+    )
+    f_dle = form(F1)
     for p in range(4):
-        F1 = sum(
-            [
-                dot(
-                    dot(
-                        utils.C(i, meshdata["frame"], mat_param), utils.gamma_e(x)[:, p]
-                    ),
-                    utils.gamma_l(v_),
-                )
-                * dx(i)
-                for i in range(nphases)
-            ]
-        )
-        Dle[:, p] = petsc.assemble_vector(form(F1))[:]
+        ep.value[:] = 0.0
+        ep.value[p] = 1.0
+        Dle[:, p] = petsc.assemble_vector(f_dle)[:]
 
     # DhlV0
     DhlV0 = Dhl.T.dot(V0_csr)
@@ -586,7 +622,7 @@ def compute_stiffness(mat_param, meshdata, l_submesh, r_submesh, Taper=False):
         )
         apply_lifting(F, [a], [bc])
         set_bc(F, bc)
-        w  = shared_utils.solve_ksp(A, F, V)
+        w = shared_utils.solve_cached(ksp, F, V)
         V1s[:, p] = w.x.array[:]
 
     # Ainv

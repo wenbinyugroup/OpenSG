@@ -450,3 +450,99 @@ def solve_kkt(A_petsc, f_rhs, V, mesh, dx_measure, nphases):
 
     # Return ONLY the warping degrees of freedom, stripping the 6 multipliers
     return x_petsc.array[:num_dofs]
+
+
+# --- Performance: reusable factorizations (identical solver options/results) ---
+
+
+def kkt_context(A_petsc, V, mesh, dx_measure, nphases):
+    """Build and factorize the 4-constraint KKT system of solve_kkt ONCE.
+
+    solve_kkt re-assembles the constraint rows, rebuilds the augmented matrix, and
+    re-runs the full MUMPS factorization on every call, although the operator is
+    identical across the 4 zeroth-order and 4 first-order load cases.  This context
+    holds the factorized KKT solver for reuse; solve_kkt_cached() then costs one
+    back-substitution per RHS.  Same matrix, same solver options -> same solution.
+    """
+    ai, aj, av = A_petsc.getValuesCSR()
+    A_scipy = csr_matrix((av, aj, ai))
+    num_dofs = A_scipy.shape[0]
+
+    # the 4 rigid modes assembled from ONE compiled form via a 0/1 selector
+    # constant (identical values; avoids 4 distinct ffcx JIT compilations)
+    y, z = ufl.SpatialCoordinate(mesh)[1], ufl.SpatialCoordinate(mesh)[2]
+    cm = fem.Constant(mesh, np.zeros(4))
+    phi = ufl.as_vector([cm[0], cm[1] - cm[3] * z, cm[2] + cm[3] * y])
+    v_test = ufl.TestFunction(V)
+    L_phi = fem.form(sum([ufl.dot(v_test, phi) * dx_measure(k) for k in range(nphases)]))
+    C_mat = np.zeros((4, num_dofs))
+    for i in range(4):
+        cm.value[:] = 0.0
+        cm.value[i] = 1.0
+        C_mat[i, :] = fem.assemble_vector(L_phi).array[:]
+
+    scale = np.mean(np.abs(A_scipy.data))
+    C_scaled = C_mat * scale
+    KKT = vstack([
+        hstack([A_scipy, C_scaled.T]),
+        hstack([C_scaled, csr_matrix((4, 4))])
+    ]).tocsr()
+
+    K_petsc = PETSc.Mat().createAIJ(size=KKT.shape, csr=(KKT.indptr, KKT.indices, KKT.data))
+    ksp = PETSc.KSP().create(comm=mesh.comm)
+    ksp.setOperators(K_petsc)
+    ksp.setType("preonly")
+    pc = ksp.getPC()
+    pc.setType("lu")
+    pc.setFactorSolverType("mumps")
+    ksp.setUp()
+    pc.getFactorMatrix().setMumpsIcntl(24, 1)
+    return {"ksp": ksp, "num_dofs": num_dofs}
+
+
+def solve_kkt_cached(ctx, f_rhs):
+    """One back-substitution on the factorized KKT context of kkt_context()."""
+    num_dofs = ctx["num_dofs"]
+    if hasattr(f_rhs, "array"):
+        b_w = f_rhs.array
+    else:
+        b_w = np.asarray(f_rhs)
+    RHS = np.concatenate([b_w, np.zeros(4)])
+    b_petsc = PETSc.Vec().createWithArray(RHS)
+    x_petsc = PETSc.Vec().createWithArray(np.zeros(RHS.shape))
+    ctx["ksp"].solve(b_petsc, x_petsc)
+    return x_petsc.array[:num_dofs]
+
+
+def create_ksp(A):
+    """The MUMPS LU solver of solve_ksp, factorized once for reuse across RHS.
+
+    solve_ksp builds and destroys a full factorization per call; the segment
+    solve applies it 8 times to the SAME operator.  Identical solver options.
+    """
+    ksp = petsc4py.PETSc.KSP()
+    ksp.create(comm=MPI.COMM_WORLD)
+    ksp.setOperators(A)
+    ksp.setType("preonly")
+    ksp.getPC().setType("lu")
+    ksp.getPC().setFactorSolverType("mumps")
+    ksp.getPC().setFactorSetUpSolverType()
+    mat = ksp.getPC().getFactorMatrix()
+    mat.setMumpsIcntl(icntl=24, ival=1)  # detect null pivots
+    mat.setMumpsIcntl(icntl=25, ival=0)  # do not compute null space again
+    mat.setMumpsIcntl(icntl=4, ival=1)
+    mat.setMumpsIcntl(icntl=14, ival=80)
+    mat.setMumpsIcntl(icntl=7, ival=7)
+    mat.setMumpsIcntl(icntl=1, ival=1e-6)
+    ksp.setFromOptions()
+    return ksp
+
+
+def solve_cached(ksp, F, V):
+    """Back-substitution with a create_ksp() factorization; matches solve_ksp output."""
+    w = Function(V)
+    ksp.solve(F, w.x.petsc_vec)
+    w.x.petsc_vec.ghostUpdate(
+        addv=petsc4py.PETSc.InsertMode.INSERT, mode=petsc4py.PETSc.ScatterMode.FORWARD
+    )
+    return w
