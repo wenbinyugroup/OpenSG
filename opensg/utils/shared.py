@@ -85,7 +85,7 @@ def compute_nullspace(V, ABD=False):
 
 
     index_map = V.dofmap.index_map
-    nullspace_basis = [dolfinx.la.create_petsc_vector(index_map, V.dofmap.index_map_bs) for i in range(6)]
+    nullspace_basis = [dolfinx.la.create_petsc_vector(index_map, V.dofmap.index_map_bs) for i in range(dim)]
     with ExitStack() as stack:
         vec_local = [stack.enter_context(xx.localForm()) for xx in nullspace_basis]
         basis = [np.asarray(xx) for xx in vec_local]
@@ -162,6 +162,11 @@ def solve_ksp(A, F, V):
     #     PETSc.Options().setValue("ksp_monitor", "")  # Equivalent to "ksp_monitor": None in petsc_options
     ksp.setFromOptions()
     ksp.solve(F, w.x.petsc_vec)  # Solve scaled system
+
+    # Factorization returns arbitrary soln if there is a nullspace; remove for stability
+    nullspace = A.getNullSpace()
+    if nullspace:
+        nullspace.remove(w.x.petsc_vec)
 
     w.x.petsc_vec.ghostUpdate(
         addv=petsc4py.PETSc.InsertMode.INSERT, mode=petsc4py.PETSc.ScatterMode.FORWARD

@@ -3,7 +3,6 @@ from mpi4py import MPI
 import numpy as np
 import dolfinx
 import basix
-import scipy
 
 from dolfinx.fem import (
     form,
@@ -591,24 +590,19 @@ def compute_timo_boun(ABD, boundary_submeshdata):
     # V0DllV0
     V0DllV0 = (V0_csr.T.dot(Dll)).dot(V0_csr)
 
-    # V1s  ****Updated from previous version as for solving boundary V1s, we can directly use (A_l V1s=b),  and solve for V1s
-    b = (DhlTV0Dle-DhlV0).toarray()
-  #  for i in range(4):
-     #   F_array = b[:,i]
-
-     #   n_array = nullspace_basis[i].array
-     #   F_array -= np.dot(F_array, n_array) * n_array
-        
-      #  F=petsc4py.PETSc.Vec().createWithArray(F_array,comm=MPI.COMM_WORLD)
-      #  F.ghostUpdate(addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE) 
-     #   w = shared_utils.solve_ksp(A_l, F, V_l)
-     #   V1s[:, i] = w.x.array[:]
-    
     # V1s
-    ai, aj, av=A_l.getValuesCSR()  
-    A_l=csr_matrix((av, aj, ai))
-    V1s=scipy.sparse.linalg.spsolve(A_l, b, permc_spec=None, use_umfpack=True)
-    V1s_csr=csr_matrix(V1s)   
+    # A_l is singular, so the RHS must be projected onto
+    # its range and the system solved with the nullspace-aware solver
+    b = (DhlTV0Dle-DhlV0).toarray()
+    for p in range(4):
+        F = petsc4py.PETSc.Vec().createWithArray(b[:, p], comm=MPI.COMM_WORLD)
+        F.ghostUpdate(
+            addv=petsc4py.PETSc.InsertMode.ADD, mode=petsc4py.PETSc.ScatterMode.REVERSE
+        )
+        null.remove(F)
+        w = shared_utils.solve_ksp(A_l, F, V_l)
+        V1s[:, p] = w.x.array[:]
+    V1s_csr=csr_matrix(V1s)
 
     # Ainv
     Ainv=np.linalg.inv(D_eff).astype(np.float64)
