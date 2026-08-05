@@ -28,8 +28,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # ALL VARIABLES USED IN THIS SCRIPT
 # ----------------------------------------------------------------------------
 # paths and input
-#   HERE        folder holding this script; every path is built from it
-#   DB          path to layup_db.yaml, the same single input abaqus_inp.py uses
+#   HERE        folder holding this script; the DB default is built from it
+#   DB          path to layup_db.yaml, the same single input abaqus_inp.py
+#               uses; an explicit .yaml argument on the command line wins
+#               (the helper lives in the package now, not beside the yaml)
 #   db          that YAML parsed into a dict
 #   p           shorthand for db["plate"], the plate/analysis block
 #   out         path of the deck written out, <DB stem>_3dfea.inp
@@ -69,7 +71,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # ----------------------------------------------------------------------------
 
 # ---- input -----------------------------------------------------------------
-DB = os.path.join(HERE, "layup_db.yaml")
+DB = next((a for a in sys.argv[1:]
+           if a.lower().endswith((".yaml", ".yml"))),
+          os.path.join(HERE, "layup_db.yaml"))
 db = yaml.safe_load(open(DB))
 p = db["plate"]
 A, B = float(p["a"]), float(p["b"])

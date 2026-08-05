@@ -45,7 +45,8 @@ ROOT = HERE
 while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
     ROOT = os.path.dirname(ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
-sys.path.insert(0, os.path.join(ROOT, "examples", "rm_plate", "static",
+sys.path.insert(0, os.path.join(ROOT, "examples", "OpenSG-solid",
+                                "CS_OpeNSG_exampels", "static",
                                 "garg" if FAMILY == "garg" else "yu2003"))
 
 from opensg_solid.rm_plate_1D.rm_homo import load_layup_db, homogenize_layup_db

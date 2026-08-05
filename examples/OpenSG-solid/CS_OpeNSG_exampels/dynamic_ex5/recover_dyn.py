@@ -60,7 +60,8 @@ ROOT = HERE
 while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
     ROOT = os.path.dirname(ROOT)
 sys.path.insert(0, os.path.join(ROOT, "src"))
-sys.path.insert(0, os.path.join(ROOT, "examples", "rm_plate", "static", "yu2003"))
+sys.path.insert(0, os.path.join(ROOT, "examples", "OpenSG-solid",
+                                "CS_OpeNSG_exampels", "static", "yu2003"))
 
 from opensg_solid.rm_plate_1D.segment_plate import read_plate_sg_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
