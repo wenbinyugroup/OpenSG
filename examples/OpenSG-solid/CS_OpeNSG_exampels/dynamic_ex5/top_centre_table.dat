@@ -1,0 +1,5 @@
+# OpenSG-RM (S8R) vs Abaqus 3-D FEA (C3D20), centre of the top surface (a/2, b/2, +h/2)
+# quantity          OpenSG-RM           3D-FEA   peak_err_%   RMS/peak_%
+sxx[MPa]         4.811634e+04     4.796200e+04         0.32         5.38
+syy[MPa]         5.059195e+03     5.134600e+03        -1.47         5.30
+w[m]             3.274128e+00     3.227406e+00         1.45         5.21

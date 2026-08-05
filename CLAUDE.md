@@ -36,7 +36,17 @@ core without restructuring it.
   `r["C_eff_EB"]`), `sg_dehom.py` (`plate_dehom_2d`, `export_gauss`,
   the beam recovery chain).  Every sg_* module carries an ALL-VARIABLES
   docstring block.  The OneDrive `Claude_code/Beam_solid.py` original
-  lives outside the repo.  Every homo run also writes `<base>_mesh.png`.
+  lives outside the repo.  Every homo run also writes `<base>_mesh.png`
+  (3-D: gmsh render with a display, exterior-face matplotlib fallback;
+  suppress with `plot=False`).
+  `plate_homo_2d(shear_refined=True)` (plate only) adds the RM
+  transverse-shear block: `r["G_msg"]` (2x2) / `r["ABDG"]` (8x8) via
+  the rm_plate_1D first-order warping ladder generalized to 1-D/2-D/3-D
+  SGs -- 1-D anchors digit-tight (iso nu=0 -> 5/6 at 8e-16, laminate
+  parity <= 2e-11), 2-D/3-D gated by laminate-as-strip equivalence
+  (h^2); in-plane-heterogeneous SGs lack an external reference yet.
+  `laminate_to_sg` (sg_mesh) is the 1-D unification route -- layup spec
+  -> sc dict, ply C's from rm_plate_1D (kept until full parity).
   Timings: `BENCHMARKS.md` at the repo root (RHC ~8-13 s per model).
 - The repo is installed editable (`pip install -e . --no-deps`), so
   `import rm_plate / opensg_solid` works everywhere — example scripts
@@ -72,6 +82,15 @@ core without restructuring it.
 - `.sc` type-2 material blocks are PRE-ROTATED ply C's; the
   `mat_override.yaml` route rebuilds from engineering constants + angles
   instead (the documented working SSDM run).
+- Beam dehom `epsilon_bar` is the beam STRAIN 6-vector: recovered
+  stresses integrate back to `K @ st` (ext/twist/bend closures 7e-4 to
+  9e-10 on RHC), BUT the PURE transverse-shear channel recovers zero
+  (Beam_solid's `Comp @ st` derivative seeding) -- drive the recovery
+  with load-consistent states (shear accompanied by its bending
+  gradient), or fix the seeding before trusting shear-only cases.
+- quad4/hex8 SG cells are gmsh/.sc-ordered on disk and permuted to the
+  basix tensor order at load (`sg_homo._to_basix_order`, strip-gated);
+  tri/tet/interval orders coincide.
 - Output conventions: `<base>_plate_ABD.out` (6×6 [N11 N22 N12 M11 M22
   M12]) / `<base>_beam_Timo.out` (6×6 [eps11 gam12 gam13 kap1 kap2
   kap3]) / `<base>_solid_C.out` (6×6),

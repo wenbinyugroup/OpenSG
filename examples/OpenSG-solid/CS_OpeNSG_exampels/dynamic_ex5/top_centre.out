@@ -1,0 +1,25 @@
+OpenSG-RM vs the 3-D FEA benchmark, at the CENTRE OF THE TOP SURFACE
+(a/2, b/2, +h/2) = (0.7620, 0.7620, +0.0762) m
+
+  shell : 400 S8R (8-node, 6 dof/node) + the homogenized 8x8 only,
+          no plies; dehomogenized to z = +h/2.  4 ip/element.
+  solid : 6400 C3D20 ply by ply, full 3x3x3.
+          Stress POSITION=NODES, 4 elements averaged (spread 0 MPa).
+
+                  OpenSG-RM          3-D FEA       diff    at t [ms]
+peak sxx [MPa]       48116.3445       47962.0000      0.32%         7.70
+peak syy [MPa]        5059.1954        5134.6000     -1.47%         7.70
+peak w [m]           3.2741           3.2274      1.45%        18.55
+
+RMS difference over the whole history, as % of that peak:
+  sxx      5.38%
+  syy      5.30%
+  w        5.21%
+
+the recovery's contribution to the deflection (what a bare shell
+node cannot give):
+  peak w at the reference surface       3.261379 m
+  peak warping w3(+h/2)              0.021011 m
+  i.e. of the top deflection            0.64%
+
+increments compared                       400
