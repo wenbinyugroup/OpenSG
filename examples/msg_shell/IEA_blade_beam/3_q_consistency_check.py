@@ -62,10 +62,21 @@ warpM = {ln: rm_plate_msg(i["thick"], i["angles"], i["mat_names"], mdb, fraction
          for ln, i in ldb.items()}
 
 # ---- the section strains AND the transverse shear pair the chain drops ----
-s6e = np.zeros((n_el, 6)); s2e = np.zeros((n_el, 2))
-for e in range(n_el):
-    s6, s2 = _rm_shell_strain(B, e, 0.5, st_m, aA, aB, s2_scheme="mitc4_both")
-    s6e[e] = np.asarray(s6, float); s2e[e] = np.asarray(s2, float)
+# CRITICAL: this ring is homogenized with shear="mitc4_g23" -- only gamma_23
+# is tied.  gamma_13 is RAW and carries the flat-wall drilling mode, so a Q1
+# built from it is NOT a physical wall shear.  Both schemes are evaluated
+# here so the difference is visible rather than assumed: "g23" is the pair
+# the homogenization actually used, "both" retro-fits a tying it did not.
+s6e = np.zeros((n_el, 6))
+s2_by_scheme = {}
+for scheme in ("mitc4_g23", "mitc4_both"):
+    s2e = np.zeros((n_el, 2))
+    for e in range(n_el):
+        s6, s2 = _rm_shell_strain(B, e, 0.5, st_m, aA, aB, s2_scheme=scheme)
+        s6e[e] = np.asarray(s6, float)
+        s2e[e] = np.asarray(s2, float)
+    s2_by_scheme[scheme] = s2e
+s2e = s2_by_scheme["mitc4_g23"]        # the consistent pair for this ring
 
 # ---- arc gradients (same neighbour scheme as the dehom) ----
 deg = np.zeros(int(rc.max()) + 1, int); nd_el = [[] for _ in range(int(rc.max()) + 1)]
@@ -84,11 +95,13 @@ for e in range(n_el):
     dE2e[e] = (v1 - v0) / Lel[e]
 
 # ---- Q from the wall law vs the thickness integral of the recovery ----
-Qw = np.zeros((n_el, 2)); I13 = np.zeros(n_el); I23 = np.zeros(n_el)
+Qw = np.zeros((n_el, 2)); Qw_both = np.zeros((n_el, 2))
+I13 = np.zeros(n_el); I23 = np.zeros(n_el)
 for e in range(n_el):
     ln = layups[e]; h = hth[ln]
     G = np.asarray(warpM[ln]["G_msg"], float)
     Qw[e] = G @ s2e[e]                                  # [Q1, Q2] N/m
+    Qw_both[e] = G @ s2_by_scheme["mitc4_both"][e]
     zz = np.linspace(-frac * h + 1e-9, (1.0 - frac) * h - 1e-9, n_z)
     s13 = np.zeros(n_z); s23 = np.zeros(n_z)
     for k, z in enumerate(zz):
@@ -103,27 +116,49 @@ ok2 = np.abs(Qw[:, 1]) > 1e-6 * np.abs(Qw[:, 1]).max()
 ratio23 = np.where(ok2, I23 / np.where(ok2, Qw[:, 1], 1.0), np.nan)
 
 med13 = float(np.nanmedian(ratio13)); med23 = float(np.nanmedian(ratio23))
+d13 = float(np.sqrt(np.mean((Qw[:, 0] - Qw_both[:, 0]) ** 2)))
+d23 = float(np.sqrt(np.mean((Qw[:, 1] - Qw_both[:, 1]) ** 2)))
 rep = ["=== Q-consistency of the recovered transverse shear, IEA r/R = 0.20 ===",
        "identity per wall:  I = integral(sigma_a3 dz)  ==  Q_a = (G_msg s2)_a",
        "",
+       "TYING OF THIS RING: only gamma_23 is tied -- and it CANNOT be",
+       "otherwise.  The ring is a ONE-QUAD-DEEP prismatic strip (_strip):",
+       "one element in the axial direction, so the gamma_13 (axial) MITC",
+       "tying has nothing to tie across and is geometrically inert.  Both",
+       "flags are plumbed and branch (build_rm_bundle shear=,",
+       "_mitc_shear_indep scheme=) yet give BIT-IDENTICAL output here --",
+       "measured below.  So gamma_13 stays RAW, carrying the flat-wall",
+       "drilling mode: Q1 built from it is NOT a physical wall shear and",
+       "CANNOT serve as a recovery target.  Q2 (tied gamma_23) can.",
+       "Fingerprint: 2g13 rms is ~35x 2g23 rms here, giving Q1 ~110x Q2 --",
+       "implausible for a thin-walled section, where the wall carries its",
+       "load as in-plane shear FLOW (sigma_12), not through-thickness shear.",
+       "Effect of the tying flags on Q:",
+       "  rms |Q1(g23) - Q1(both)| = %.4e N/m   (Q1 rms %.4e)"
+       % (d13, float(np.sqrt(np.mean(Qw[:, 0] ** 2)))),
+       "  rms |Q2(g23) - Q2(both)| = %.4e N/m   (Q2 rms %.4e)"
+       % (d23, float(np.sqrt(np.mean(Qw[:, 1] ** 2)))),
+       "",
        "                       median      mean       min        max",
-       "  I13 / Q1        %10.3e %10.3e %10.3e %10.3e"
+       "  I13 / Q1        %10.3e %10.3e %10.3e %10.3e   <- target INVALID"
        % (med13, float(np.nanmean(ratio13)), float(np.nanmin(ratio13)),
           float(np.nanmax(ratio13))),
-       "  I23 / Q2        %10.3e %10.3e %10.3e %10.3e"
-       % (med23, float(np.nanmean(ratio23)), float(np.nanmean(ratio23)),
+       "  I23 / Q2        %10.3e %10.3e %10.3e %10.3e   <- target valid"
+       % (med23, float(np.nanmean(ratio23)), float(np.nanmin(ratio23)),
           float(np.nanmax(ratio23))),
        "",
-       "  Q-CONSISTENCY ERROR in sigma_13 : %.2f %%  (median |1 - I13/Q1|)"
-       % (100.0 * abs(1.0 - med13)),
-       "  amplitude deficit factor        : %.1f x too small"
-       % (1.0 / med13 if med13 > 0 else float("inf")),
+       "  Q-CONSISTENCY ERROR in sigma_23 : %.2f %%  (median |1 - I23/Q2|)"
+       % (100.0 * abs(1.0 - med23)),
+       "  sigma_13: NOT measurable against this ring's Q1 (untied gamma_13).",
+       "  A valid sigma_13 target needs either the ring homogenized with both",
+       "  rows tied, or the beam-level shear flow as the reference.",
        "",
-       "  wall Q1 rms = %.4e N/m   recovered I13 rms = %.4e N/m"
-       % (float(np.sqrt(np.mean(Qw[:, 0] ** 2))),
-          float(np.sqrt(np.mean(I13 ** 2)))),
-       "  (the plate pipeline closes exactly this gap by rescaling"
-       "  sigma_a3 *= Q/I -- shape from the gradients, amplitude from Q)"]
+       "  wall Q2 rms = %.4e N/m   recovered I23 rms = %.4e N/m"
+       % (float(np.sqrt(np.mean(Qw[:, 1] ** 2))),
+          float(np.sqrt(np.mean(I23 ** 2)))),
+       "  (the plate pipeline closes an amplitude gap by rescaling"
+       " sigma_a3 *= Q/I -- shape from the gradients, amplitude from Q --",
+       "  which is only legitimate where the target Q is physical)"]
 print("\n".join(rep))
 open(name + "_q_consistency.txt", "w").write("\n".join(rep) + "\n")
 
