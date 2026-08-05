@@ -20,3 +20,6 @@ prof/
 *.egg-info/
 tests/output/
 tests/__pycache__/
+
+# reproducible bulk dehom dumps (regenerate with the example scripts)
+examples/msg_shell/IEA_blade_beam/*_dehom_v2.txt

@@ -82,12 +82,18 @@ core without restructuring it.
 - `.sc` type-2 material blocks are PRE-ROTATED ply C's; the
   `mat_override.yaml` route rebuilds from engineering constants + angles
   instead (the documented working SSDM run).
-- Beam dehom `epsilon_bar` is the beam STRAIN 6-vector: recovered
-  stresses integrate back to `K @ st` (ext/twist/bend closures 7e-4 to
-  9e-10 on RHC), BUT the PURE transverse-shear channel recovers zero
-  (Beam_solid's `Comp @ st` derivative seeding) -- drive the recovery
-  with load-consistent states (shear accompanied by its bending
-  gradient), or fix the seeding before trusting shear-only cases.
+- Beam dehom `epsilon_bar` is the beam STRAIN 6-vector; the recovery
+  chain is kept VERBATIM from Beam_solid.py (the WORKING reference --
+  its core computation is not to be modified).  Valid drivers = states
+  whose stress rides the CLASSICAL channels (extension/twist/bending +
+  combinations): closures `R = K @ st` at 7e-4 / 3e-7 / 9e-10 on RHC.
+  The transverse-shear entries `st[1], st[2]` are recovery-INERT: the
+  ladder is the VABS refined-theory product-rule chain, but its seed is
+  `Comp @ st` (compliance-scaled, ~1e-9 of the force state `K @ st`
+  the refined theory would use), so shear-only states recover ~zero
+  stress.  Documented deviation -- do not "fix" without the owner; the
+  pipe.sc VABS .SM benchmark is not in the repo or OneDrive Claude_code
+  to gate a change against.
 - quad4/hex8 SG cells are gmsh/.sc-ordered on disk and permuted to the
   basix tensor order at load (`sg_homo._to_basix_order`, strip-gated);
   tri/tet/interval orders coincide.
@@ -95,7 +101,10 @@ core without restructuring it.
   M12]) / `<base>_beam_Timo.out` (6×6 [eps11 gam12 gam13 kap1 kap2
   kap3]) / `<base>_solid_C.out` (6×6),
   `<base>_dehom.txt/.vtk` (Gauss cloud, SwiftComp order xx yy zz yz xz
-  xy), `<base>_mesh.png` (elements colored by material, no title).
+  xy), `<base>_dehom.SM/.EM/.U` (the OpenSG dehom files, rm_dehom
+  layout: printed order 11 22 33 12 13 23 via the SGIDX reorder on
+  write; `.U` = fluctuation-only displacement),
+  `<base>_mesh.png` (elements colored by material, no title).
 
 ## Working rules (the user's standing preferences)
 

@@ -1,0 +1,46 @@
+=== IEA-22 r/R = 0.20 : two-step RM shell->plate dehom vs VABS ===
+beam FF (VABS order) = [ 4.1927e+04  8.2674e+03  1.4673e+06  1.2191e+06 -6.0185e+07  3.0426e+05]
+Timo diag [EA GA2 GA3 GJ EI2 EI3] = [2.7661e+10 7.1861e+08 4.2174e+08 2.4376e+09 3.5144e+10 6.8130e+10]
+
+rms difference vs VABS [MPa]   WEB / SKIN:
+  s11   first   43.073 /    9.529   V2   43.073 /    9.529   (VABS rms   44.440 /   96.676)
+  s22   first    0.612 /    0.482   V2    0.612 /    0.482   (VABS rms    0.704 /    0.998)
+  s12   first    6.799 /    1.255   V2    6.798 /    1.255   (VABS rms   22.026 /    6.009)
+  s33   first    0.081 /    0.049   V2    0.081 /    0.049   (VABS rms    0.081 /    0.049)
+  s13   first    0.394 /    0.192   V2    0.394 /    0.192   (VABS rms    0.394 /    0.193)
+  s23   first    0.035 /    0.028   V2    0.035 /    0.028   (VABS rms    0.035 /    0.028)
+
+V2 payload -- what the second order changes [MPa]:
+  s11   rms  1.950e-04   max  3.511e-03   (first-order rms 8.851e+01, VABS rms 9.007e+01)
+  s22   rms  4.254e-04   max  7.057e-03   (first-order rms 9.443e-01, VABS rms 9.554e-01)
+  s12   rms  5.685e-03   max  1.196e-01   (first-order rms 1.068e+01, VABS rms 1.055e+01)
+  s33   rms  5.190e-05   max  9.679e-04   (first-order rms 3.581e-13, VABS rms 5.576e-02)
+  s13   rms  0.000e+00   max  0.000e+00   (first-order rms 6.306e-03, VABS rms 2.389e-01)
+  s23   rms  0.000e+00   max  0.000e+00   (first-order rms 1.500e-03, VABS rms 2.880e-02)
+
+=== through-thickness path: spar cap (top, elem 69) (40 pts, nearest VABS gauss 2.44 mm) ===
+rms difference vs VABS along the path [MPa]:
+  s11   first   38.355   V2   38.355   (VABS rms  285.457)
+  s22   first    1.125   V2    1.125   (VABS rms    1.831)
+  s12   first    0.265   V2    0.265   (VABS rms    1.474)
+  s33   first    0.012   V2    0.012   (VABS rms    0.012)
+  s13   first    0.014   V2    0.014   (VABS rms    0.023)
+  s23   first    0.008   V2    0.008   (VABS rms    0.008)
+
+=== through-thickness path: shear web (elem 265) (40 pts, nearest VABS gauss 2.43 mm) ===
+rms difference vs VABS along the path [MPa]:
+  s11   first    2.299   V2    2.299   (VABS rms    3.288)
+  s22   first    0.140   V2    0.140   (VABS rms    0.188)
+  s12   first    8.471   V2    8.471   (VABS rms   12.027)
+  s33   first    0.013   V2    0.013   (VABS rms    0.013)
+  s13   first    0.005   V2    0.005   (VABS rms    0.005)
+  s23   first    0.002   V2    0.002   (VABS rms    0.002)
+
+=== through-thickness path: cap-left junction (reference path) (15 pts, nearest VABS gauss 0.00 mm) ===
+rms difference vs VABS along the path [MPa]:
+  s11   first    1.265   V2    1.265   (VABS rms  286.837)
+  s22   first    0.026   V2    0.025   (VABS rms    1.670)
+  s12   first    0.070   V2    0.070   (VABS rms    1.372)
+  s33   first    0.016   V2    0.016   (VABS rms    0.016)
+  s13   first    0.011   V2    0.011   (VABS rms    0.023)
+  s23   first    0.008   V2    0.008   (VABS rms    0.007)

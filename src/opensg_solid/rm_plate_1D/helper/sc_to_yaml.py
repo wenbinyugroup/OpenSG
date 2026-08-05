@@ -22,11 +22,10 @@ Outputs:
     <base>.msh    gmsh v2.2 (the element-type mapping of fe_jax/sc_to_msh:
                   1D 2/3/4/5-node intervals, 2D tri/quad, 3D tet4/tet10)
 
-Run:  python sc_to_yaml.py input.sc [out_base]
-API:  sc = convert("input.sc", "out_base"); sc["dim"], sc["mat_id"], ...
+Use:  from opensg_solid.rm_plate_1D.helper.sc_to_yaml import convert
+      sc = convert("input.sc")      # writes input.yaml + input.msh
 """
 import os
-import sys
 
 import numpy as np
 import yaml
@@ -163,9 +162,3 @@ def convert(sc_path, out_base=None):
           % (sc["dim"], len(sc["nodes"]), len(sc["cells"]),
              len(sc["materials"]), out_base))
     return sc
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        sys.exit("usage: python sc_to_yaml.py input.sc [out_base]")
-    convert(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
