@@ -668,6 +668,154 @@ def msgrm_strain_at_depth(obj: Dict[str, Any],          # the rm_plate_msg resul
     return Gam, Sig, ang
 
 
+def msgrm_strain_at_depth_batch(obj: Dict[str, Any],       # rm_plate_msg result
+                                z_n: np.ndarray,           # (n,) depths
+                                E6_n: np.ndarray,          # (n,6) plate strains
+                                dE1_n=None, dE2_n=None,    # (n,6) first grads
+                                dE11_n=None, dE12_n=None,  # (n,6) second grads
+                                dE22_n=None,
+                                frame: str = "material"
+                                ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """VECTORIZED msgrm_strain_at_depth: n points of ONE laminate at once.
+
+    Same algebra as the scalar function, evaluated with array shape ops --
+    the point loop, the per-point element search and the per-point operator
+    builds all collapse into batched einsums.  Use it whenever many points
+    share a layup but sit at different depths (the shell -> plate dehom of a
+    ring: ~1e5 recovery points over a handful of layups).
+
+    In:  obj   the rm_plate_msg dict; z_n (n,) depths in the node_x origin;
+         E6_n (n,6) plate strains; dE1_n/dE2_n (n,6) first gradients (None ->
+         zero); dE11_n/dE12_n/dE22_n (n,6) second gradients (None -> zero,
+         which selects the Eq.-63 first-order recovery exactly as the scalar
+         call does); frame "material" (ply axes, default) | "plate"
+    Out: (Gam (n,6), Sig (n,6), ply_angle (n,)) -- identical to looping the
+         scalar function, to solver precision (gated in the test suite)."""
+    z_n = np.atleast_1d(np.asarray(z_n, float))
+    n = len(z_n)
+    zero_n = np.zeros((n, 6))
+    E6_n = np.asarray(E6_n, float).reshape(n, 6)
+    dE1, dE2 = (zero_n if a is None else np.asarray(a, float).reshape(n, 6)
+                for a in (dE1_n, dE2_n))
+    d11, d12, d22 = (zero_n if a is None else np.asarray(a, float).reshape(n, 6)
+                     for a in (dE11_n, dE12_n, dE22_n))
+    second = bool(np.any(d11) or np.any(d12) or np.any(d22))
+
+    node_x = np.asarray(obj["node_x"], float)
+    p = int(obj["elem_order"])
+    n_elem = len(obj["elem_layer"])
+    npn = p + 1
+    nodes_xi = np.linspace(-1.0, 1.0, npn)
+
+    # ---- locate every depth at once (the vector form of _locate) ----
+    e_n = np.clip(np.searchsorted(node_x[::p][1:], z_n, side="right"),
+                  0, n_elem - 1)
+    xl = node_x[p * e_n]
+    xr = node_x[p * e_n + p]
+    he = xr - xl
+    xi = np.clip(2.0 * (z_n - xl) / he - 1.0, -1.0, 1.0)
+    x_q = 0.5 * (xl + xr) + 0.5 * he * xi
+    dofs = (3 * p * e_n)[:, None] + np.arange(3 * npn)[None, :]   # (n, 3npn)
+
+    # ---- Lagrange values and derivatives at every xi ----
+    N = np.ones((n, npn))
+    for i in range(npn):
+        for j in range(npn):
+            if j != i:
+                N[:, i] *= (xi - nodes_xi[j]) / (nodes_xi[i] - nodes_xi[j])
+    dN = np.zeros((n, npn))
+    for i in range(npn):
+        s = np.zeros(n)
+        for j in range(npn):
+            if j == i:
+                continue
+            term = np.full(n, 1.0 / (nodes_xi[i] - nodes_xi[j]))
+            for m in range(npn):
+                if m == i or m == j:
+                    continue
+                term = term * ((xi - nodes_xi[m])
+                               / (nodes_xi[i] - nodes_xi[m]))
+            s += term
+        dN[:, i] = s
+    dNx = dN * (2.0 / he)[:, None]                 # the _plate_B scaling
+
+    # Per-ELEMENT warping blocks, built once and indexed by e_n: a 1-D take
+    # over n_elem small blocks instead of an (n, 3npn) fancy index per call.
+    _blk = {}
+
+    def _block(col):
+        B = _blk.get(col)
+        if B is None:
+            V = np.asarray(obj[col], float)
+            B = np.stack([V[3 * p * e: 3 * p * e + 3 * npn]
+                          for e in range(n_elem)])       # (n_elem, 3npn, ncol)
+            _blk[col] = B
+        return B
+
+    def warp(col, drv):
+        """(n, npn, 3) nodal warping of column `col` contracted with `drv`."""
+        V = _block(col)[e_n]                       # (n, 3npn, ncol)
+        return np.einsum("nkc,nc->nk", V, drv).reshape(n, npn, 3)
+
+    def chain(v1a, v1b, tilt_cols):
+        """w, g1, g2 of one V1 variant (raw = tilted, barD = detilted)."""
+        w = (warp("V0", E6_n) + warp(v1a, dE1) + warp(v1b, dE2)
+             + warp(tilt_cols[0], d11) + warp(tilt_cols[1], d12)
+             + warp(tilt_cols[2], d22))
+        g1 = warp("V0", dE1) + warp(v1a, d11) + warp(v1b, d12)
+        g2 = warp("V0", dE2) + warp(v1a, d12) + warp(v1b, d22)
+        return w, g1, g2
+
+    def strain(w, g1, g2):
+        """Gamma = Gamma_h w + Gamma_eps E6 + Gamma_l1 g1 + Gamma_l2 g2."""
+        G = np.zeros((n, 6))
+        G[:, 2] = np.einsum("nk,nk->n", dNx, w[:, :, 2])      # eps33 <- w3,3
+        G[:, 3] = np.einsum("nk,nk->n", dNx, w[:, :, 1])      # 2g23  <- w2,3
+        G[:, 4] = np.einsum("nk,nk->n", dNx, w[:, :, 0])      # 2g13  <- w1,3
+        G[:, 0] += np.einsum("nk,nk->n", N, g1[:, :, 0])      # eps11 <- w1,1
+        G[:, 4] += np.einsum("nk,nk->n", N, g1[:, :, 2])      # 2g13  <- w3,1
+        G[:, 5] += np.einsum("nk,nk->n", N, g1[:, :, 1])      # g12   <- w2,1
+        G[:, 1] += np.einsum("nk,nk->n", N, g2[:, :, 1])      # eps22 <- w2,2
+        G[:, 3] += np.einsum("nk,nk->n", N, g2[:, :, 2])      # 2g23  <- w3,2
+        G[:, 5] += np.einsum("nk,nk->n", N, g2[:, :, 0])      # g12   <- w1,2
+        G += E6_n @ _E0.T + x_q[:, None] * (E6_n @ _E1.T)     # Gamma_eps E6
+        return G
+
+    # detilted chain (in-plane rows) -- V11bar/V12bar in Gamma_h, barD in Gamma_l
+    w_d, g1_d, g2_d = chain("V11bar", "V12bar", ("V21", "V22", "V23"))
+    g1_d = (warp("V0", dE1) + warp("V11barD", d11) + warp("V12barD", d12))
+    g2_d = (warp("V0", dE2) + warp("V11barD", d12) + warp("V12barD", d22))
+    Gam = strain(w_d, g1_d, g2_d)
+
+    k_n = np.asarray(obj["elem_layer"])[e_n]
+    C = np.asarray(obj["C_layers"], float)[k_n]                # (n, 6, 6)
+    Sig = np.einsum("nij,nj->ni", C, Gam)
+
+    if second:
+        # ROW SPLIT: rows 33/23/13 come from the TILTED chain (see the scalar
+        # function and README sec. 4 -- the source/Gamma_l pairing that keeps
+        # the face tractions exact and the cross-ply interior sigma33 right)
+        w_t, g1_t, g2_t = chain("V11bar", "V12bar", ("V21t", "V22t", "V23t"))
+        Gam_t = strain(w_t, g1_t, g2_t)
+        Sig_t = np.einsum("nij,nj->ni", C, Gam_t)
+        Gam[:, 2:5] = Gam_t[:, 2:5]
+        Sig[:, 2:5] = Sig_t[:, 2:5]
+
+    ang = np.asarray(obj["angles"], float)[k_n]
+    if frame == "material":
+        th = np.deg2rad(ang)
+        c, s = np.cos(th), np.sin(th)
+        Rs = np.zeros((n, 6, 6)); Re = np.zeros((n, 6, 6))
+        for i, (cc, ss) in enumerate(zip(c, s)):
+            Rs[i] = rotation_6x6(-ang[i])
+            Re[i] = rotation_6x6(ang[i]).T
+        Sig = np.einsum("nij,nj->ni", Rs, Sig)
+        Gam = np.einsum("nij,nj->ni", Re, Gam)
+    elif frame != "plate":
+        raise ValueError("frame must be 'material' or 'plate', got %r" % (frame,))
+    return Gam, Sig, ang
+
+
 def msgrm_warping_at_depth(obj: Dict[str, Any], z: float, E6: np.ndarray,
                            dE1: Optional[np.ndarray] = None,
                            dE2: Optional[np.ndarray] = None,

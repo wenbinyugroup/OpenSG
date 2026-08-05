@@ -14,7 +14,7 @@ V2 payload -- what the second order changes [MPa]:
   s11   rms  1.950e-04   max  3.511e-03   (first-order rms 8.851e+01, VABS rms 9.007e+01)
   s22   rms  4.254e-04   max  7.057e-03   (first-order rms 9.443e-01, VABS rms 9.554e-01)
   s12   rms  5.685e-03   max  1.196e-01   (first-order rms 1.068e+01, VABS rms 1.055e+01)
-  s33   rms  5.190e-05   max  9.679e-04   (first-order rms 3.581e-13, VABS rms 5.576e-02)
+  s33   rms  5.190e-05   max  9.679e-04   (first-order rms 3.603e-13, VABS rms 5.576e-02)
   s13   rms  0.000e+00   max  0.000e+00   (first-order rms 6.306e-03, VABS rms 2.389e-01)
   s23   rms  0.000e+00   max  0.000e+00   (first-order rms 1.500e-03, VABS rms 2.880e-02)
 

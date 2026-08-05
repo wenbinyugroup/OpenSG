@@ -58,8 +58,8 @@ import matplotlib.pyplot as plt
 from opensg_shell import build_rm_bundle, _macro_fields, _rm_shell_strain
 from opensg_shell.segment_indep import quad_ops_indep
 from opensg_shell.fe_jax.msg_dehom import _macro_recovery
-from opensg_solid.rm_plate_1D.msg_rm_plate import (rm_plate_msg,
-                                                   msgrm_strain_at_depth)
+from opensg_solid.rm_plate_1D.msg_rm_plate import (
+    rm_plate_msg, msgrm_strain_at_depth, msgrm_strain_at_depth_batch)
 
 ############### User Input #################################
 name = "iea_s10"                     # IEA-22 station at r/R = 0.20
@@ -239,15 +239,36 @@ def recover(ip_el, ip_xi, ip_z, second):
 
 
 # ================= full section: first order vs V2 vs VABS =================
+# BATCHED: the recovery is grouped by layup and evaluated with
+# msgrm_strain_at_depth_batch (identical algebra to the scalar call, gated
+# to ~5e-15).  The per-point Python loop over ~1.7e5 points was the whole
+# runtime of this script; grouping collapses it to a handful of einsums.
 t1 = time.perf_counter()
 P = len(sm_xy)
+zP = zdg - zoff[elg]
+# per-point drivers: element strains, with the two contour-derivative rows
+# interpolated along the arc exactly as the scalar `recover` does
+s6P = s6mid[elg].copy()
+for row in (2, 5):
+    v0 = s6n[rc[elg, 0], row]; v1 = s6n[rc[elg, 1], row]
+    v0 = np.where(np.isfinite(v0), v0, s6mid[elg, row])
+    v1 = np.where(np.isfinite(v1), v1, s6mid[elg, row])
+    s6P[:, row] = (1.0 - xig) * v0 + xig * v1
 sM1 = np.zeros((P, 6)); sM2 = np.zeros((P, 6))
-for ip in range(P):
-    z = zdg[ip] - zoff[elg[ip]]
-    sM1[ip] = recover(elg[ip], xig[ip], z, False)
-    sM2[ip] = recover(elg[ip], xig[ip], z, True)
+lay_of_pt = np.array([layups[e] for e in elg])
+for ln in set(layups):
+    m = np.where(lay_of_pt == ln)[0]
+    if not len(m):
+        continue
+    _, S1, _ = msgrm_strain_at_depth_batch(warpM[ln], zP[m], s6P[m],
+                                           dE1e[elg[m]], dE2e[elg[m]])
+    _, S2, _ = msgrm_strain_at_depth_batch(warpM[ln], zP[m], s6P[m],
+                                           dE1e[elg[m]], dE2e[elg[m]],
+                                           dE11e[elg[m]], dE12e[elg[m]],
+                                           dE22e[elg[m]])
+    sM1[m] = S1; sM2[m] = S2
 sM1 /= 1e6; sM2 /= 1e6
-print("recovery at %d VABS gauss points, both orders: %.1f s"
+print("recovery at %d VABS gauss points, both orders: %.1f s (batched)"
       % (P, time.perf_counter() - t1))
 
 webp = is_web[elg]
