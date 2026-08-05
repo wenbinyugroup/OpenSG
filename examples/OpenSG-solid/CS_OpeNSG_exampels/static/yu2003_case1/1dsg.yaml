@@ -1,0 +1,32 @@
+sg: {type: plate_1d, elem_order: 4, n_per_layer: 1, reference_fraction: 0.5, thickness: 1.0,
+  n_ply: 2}
+nodes:
+- [-0.5]
+- [-0.375]
+- [-0.25]
+- [-0.125]
+- [0.0]
+- [0.125]
+- [0.25]
+- [0.375]
+- [0.5]
+elements:
+- [1, 2, 3, 4, 5]
+- [5, 6, 7, 8, 9]
+materials:
+- name: yu
+  density: 1.0
+  elastic:
+    E: [25000000.0, 1000000.0, 1000000.0]
+    G: [500000.0, 500000.0, 200000.0]
+    nu: [0.25, 0.25, 0.25]
+  full_name: Pagano-ratio graphite/epoxy, psi set (EL/ET = 25)
+sets:
+  element:
+  - name: ply_1
+    labels: [1]
+  - name: ply_2
+    labels: [2]
+sections:
+- {elementSet: ply_1, material: yu, angle: 15.0, thickness: 0.5}
+- {elementSet: ply_2, material: yu, angle: -15.0, thickness: 0.5}

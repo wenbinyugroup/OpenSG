@@ -1,0 +1,393 @@
+1
+
+   Abaqus 2024                                  Date 31-Jul-2026   Time 18:43:57
+   For use by PURDUE UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+
+
+                         The Abaqus Software is a product of:
+
+                           Dassault Systemes SIMULIA Corp.
+                           1301 Atwood Avenue, Suite 101W
+                              Johnston, RI 02919, USA
+ 
+
+
+                   The Abaqus Software is available only under license
+                   from Dassault Systemes or its subsidiary and may be
+                   used or reproduced only in accordance with the terms
+                   of such license.
+ 
+                          On machine arms2142pc3 
+                          you are authorized to run
+                          Abaqus/Standard until 31-Jan-2027
+
+                          Your site id is: 100000000002199 
+
+
+ 
+                    For assistance or any other information you may
+                    obtain contact information for your local office
+                    from the world wide web at:
+
+                      https://www.3ds.com/products-services/simulia/services-support/
+
+ 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+                *                                                         * 
+                *                   *****************                     * 
+                *                   *  N O T I C E  *                     * 
+                *                   *****************                     * 
+                *                                                         * 
+                *                                                         * 
+                *                       Abaqus 2024                       * 
+                *                                                         * 
+                *       BUILD ID: 2023_09_21-08.55.25 RELr426 190762      * 
+                *                                                         * 
+                *                                                         * 
+                *  Please make sure you are using                         * 
+                *  release Abaqus 2024 manuals                            * 
+                *  plus the notes accompanying this release.              * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+
+
+ 
+
+
+
+     PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   *******************************************************
+
+
+     END PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   ***********************************************************
+
+
+
+
+     OPTIONS BEING PROCESSED
+   ***************************
+
+
+  *HEADING
+          Cylindrical-bending strip, MSG-RM 8x8 general shell section                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+  *ELEMENT, TYPE=S4, ELSET=EALL
+  *ELSET, ELSET=EMID
+  *ELSET, ELSET=EEND
+  *SHELL GENERAL SECTION, ELSET=EALL
+  *SHELL GENERAL SECTION, ELSET=EALL
+  *TRANSVERSE SHEAR STIFFNESS
+  *BOUNDARY
+  *BOUNDARY
+  *EQUATION
+  *OUTPUT, FIELD
+  *ELEMENT OUTPUT
+  *OUTPUT, FIELD
+  *ELEMENT OUTPUT
+  *OUTPUT, FIELD
+  *ELEMENT OUTPUT
+  *STEP, NAME=SINELOAD
+  *OUTPUT, FIELD
+  *STEP, NAME=SINELOAD
+  *STEP, NAME=SINELOAD
+  *STATIC
+  *DLOAD
+  *OUTPUT, FIELD
+  *ELEMENT OUTPUT
+  *NODE OUTPUT
+  *NODE PRINT, NSET=NMID
+  *NODE PRINT, NSET=NROW0
+  *EL PRINT, ELSET=EMID
+  *EL PRINT, ELSET=EEND
+  *END STEP
+  *BOUNDARY
+  *STEP, NAME=SINELOAD
+  *STATIC
+  *END STEP
+
+
+
+                            P R O B L E M   S I Z E
+
+
+          NUMBER OF ELEMENTS IS                                   100
+          NUMBER OF NODES IS                                      202
+          NUMBER OF NODES DEFINED BY THE USER                     202
+          TOTAL NUMBER OF VARIABLES IN THE MODEL                 1212
+          (DEGREES OF FREEDOM PLUS MAX NO. OF ANY LAGRANGE MULTIPLIER
+           VARIABLES. INCLUDE *PRINT,SOLVE=YES TO GET THE ACTUAL NUMBER.)
+
+
+
+                              END OF USER INPUT PROCESSING
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =     0.20    
+       SYSTEM TIME (SEC)    =     0.10    
+       TOTAL CPU TIME (SEC) =     0.30    
+       WALLCLOCK TIME (SEC) =            0
+1
+
+   Abaqus 2024                                  Date 31-Jul-2026   Time 18:44:01
+   For use by PURDUE UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+     Cylindrical-bending strip, MSG-RM 8x8 general shell section                               STEP    1  INCREMENT    1
+                                                                                          TIME COMPLETED IN THIS STEP   0.00    
+
+
+                        S T E P       1     S T A T I C   A N A L Y S I S
+
+
+                                                                                          
+
+     AUTOMATIC TIME CONTROL WITH -
+          A SUGGESTED INITIAL TIME INCREMENT OF                 1.00    
+          AND A TOTAL TIME PERIOD OF                            1.00    
+          THE MINIMUM TIME INCREMENT ALLOWED IS                1.000E-05
+          THE MAXIMUM TIME INCREMENT ALLOWED IS                 1.00    
+
+     LINEAR EQUATION SOLVER TYPE         DIRECT SPARSE
+  
+                   M E M O R Y   E S T I M A T E
+  
+ PROCESS      FLOATING PT       MINIMUM MEMORY        MEMORY TO
+              OPERATIONS           REQUIRED          MINIMIZE I/O
+             PER ITERATION           (MB)               (MB)
+  
+     1          1.37E+05               17                 24
+  
+ NOTE:
+      (1) SINCE ABAQUS DOES NOT PRE-ALLOCATE MEMORY AND ONLY ALLOCATES MEMORY AS NEEDED DURING THE ANALYSIS,
+          THE MEMORY REQUIREMENT PRINTED HERE CAN ONLY BE VIEWED AS A GENERAL GUIDELINE BASED ON THE BEST
+          KNOWLEDGE AVAILABLE AT THE BEGINNING OF A STEP BEFORE THE SOLUTION PROCESS HAS BEGUN.
+      (2) THE ESTIMATE IS NORMALLY UPDATED AT THE BEGINNING OF EVERY STEP. IT IS THE MAXIMUM VALUE OF THE
+          ESTIMATE FROM THE CURRENT STEP TO THE LAST STEP OF THE ANALYSIS, WITH UNSYMMETRIC SOLUTION TAKEN
+          INTO ACCOUNT IF APPLICABLE. 
+      (3) SINCE THE ESTIMATE IS BASED ON THE ACTIVE DEGREES OF FREEDOM IN THE FIRST ITERATION OF THE 
+          CURRENT STEP, THE MEMORY ESTIMATE MIGHT BE SIGNIFICANTLY DIFFERENT THAN ACTUAL USAGE FOR 
+          PROBLEMS WITH SUBSTANTIAL CHANGES IN ACTIVE DEGREES OF FREEDOM BETWEEN STEPS (OR EVEN WITHIN
+          THE SAME STEP). EXAMPLES ARE: PROBLEMS WITH SIGNIFICANT CONTACT CHANGES, PROBLEMS WITH MODEL
+          CHANGE, PROBLEMS WITH BOTH STATIC STEP AND STEADY STATE DYNAMIC PROCEDURES WHERE ACOUSTIC 
+          ELEMENTS WILL ONLY BE ACTIVATED IN THE STEADY STATE DYNAMIC STEPS.
+      (4) FOR MULTI-PROCESS EXECUTION, THE ESTIMATED VALUE OF FLOATING POINT OPERATIONS FOR EACH PROCESS
+          IS BASED ON AN INITIAL SCHEDULING OF OPERATIONS AND MIGHT NOT REFLECT THE ACTUAL FLOATING 
+          POINT OPERATIONS COMPLETED ON EACH PROCESS. OPERATIONS ARE DYNAMICALLY BALANCED DURING EXECUTION, 
+          SO THE ACTUAL BALANCE OF OPERATIONS BETWEEN PROCESSES IS EXPECTED TO BE BETTER THAN THE ESTIMATE
+          PRINTED HERE.
+      (5) THE UPPER LIMIT OF MEMORY THAT CAN BE ALLOCATED BY ABAQUS WILL IN GENERAL DEPEND ON THE VALUE OF
+          THE "MEMORY" PARAMETER AND THE AMOUNT OF PHYSICAL MEMORY AVAILABLE ON THE MACHINE. PLEASE SEE
+          THE "ABAQUS ANALYSIS USER'S MANUAL" FOR MORE DETAILS. THE ACTUAL USAGE OF MEMORY AND OF DISK
+          SPACE FOR SCRATCH DATA WILL DEPEND ON THIS UPPER LIMIT AS WELL AS THE MEMORY REQUIRED TO MINIMIZE
+          I/O. IF THE MEMORY UPPER LIMIT IS GREATER THAN THE MEMORY REQUIRED TO MINIMIZE I/O, THEN THE ACTUAL
+          MEMORY USAGE WILL BE CLOSE TO THE ESTIMATED "MEMORY TO MINIMIZE I/O" VALUE, AND THE SCRATCH DISK
+          USAGE WILL BE CLOSE-TO-ZERO; OTHERWISE, THE ACTUAL MEMORY USED WILL BE CLOSE TO THE PREVIOUSLY
+          MENTIONED MEMORY LIMIT, AND THE SCRATCH DISK USAGE WILL BE ROUGHLY PROPORTIONAL TO THE DIFFERENCE
+          BETWEEN THE ESTIMATED "MEMORY TO MINIMIZE I/O" AND THE MEMORY UPPER LIMIT. HOWEVER ACCURATE
+          ESTIMATE OF THE SCRATCH DISK SPACE IS NOT POSSIBLE.
+      (6) USING "*RESTART, WRITE" CAN GENERATE A LARGE AMOUNT OF DATA WRITTEN IN THE WORK DIRECTORY.
+
+
+                                INCREMENT     1 SUMMARY
+
+
+ TIME INCREMENT COMPLETED   1.00    ,  FRACTION OF STEP COMPLETED   1.00    
+ STEP TIME COMPLETED        1.00    ,  TOTAL TIME COMPLETED         1.00    
+
+
+
+                                                  E L E M E N T   O U T P U T
+
+
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET EMID
+
+    ELEMENT  PT FOOT-       SF1         SF2         SF3         SF4         SF5         SF6         SM1         SM2         SM3         
+                NOTE 
+
+          50   1         7.8367E-13  6.1102E-14 -4.6127E-06  1.9998E-02  8.8862E-15   0.000       1.621      0.1201     -4.4001E-14
+          50   2         7.4839E-13  5.8308E-14 -4.6127E-06  1.9998E-02  8.8862E-15   0.000       1.621      0.1201     -4.1365E-14
+          50   3         8.0466E-13  6.9567E-14 -4.6127E-06  1.9998E-02  8.8862E-15   0.000       1.621      0.1201     -4.5363E-14
+          50   4         7.6701E-13  5.9768E-14 -4.6127E-06  1.9998E-02  8.8862E-15   0.000       1.621      0.1201     -4.2542E-14
+
+ MAXIMUM                8.0466E-13  6.9567E-14 -4.6127E-06  1.9998E-02  8.8862E-15   0.000       1.621      0.1201     -4.1365E-14
+ ELEMENT                       50          50          50          50          50          50          50          50          50 
+
+ MINIMUM                7.4839E-13  5.8308E-14 -4.6127E-06  1.9998E-02  8.8862E-15   0.000       1.621      0.1201     -4.5363E-14
+ ELEMENT                       50          50          50          50          50          50          50          50          50 
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE INTEGRATION POINTS FOR ELEMENT TYPE S4 AND ELEMENT SET EEND
+
+    ELEMENT  PT FOOT-       SF1         SF2         SF3         SF4         SF5         SF6         SM1         SM2         SM3         
+                NOTE 
+
+           1   1         9.9821E-13  7.4220E-14  1.4622E-04   1.273     -7.3145E-14   0.000      2.5460E-02  1.8861E-03 -3.4700E-15
+           1   2         9.9349E-13  7.3833E-14  1.4622E-04   1.273     -7.3145E-14   0.000      2.5460E-02  1.8861E-03 -2.9124E-15
+           1   3         9.9821E-13  7.4220E-14  1.4622E-04   1.273     -7.3145E-14   0.000      2.5460E-02  1.8861E-03 -3.4702E-15
+           1   4         9.9820E-13  7.4219E-14  1.4622E-04   1.273     -7.3145E-14   0.000      2.5460E-02  1.8861E-03 -3.4694E-15
+
+ MAXIMUM                9.9821E-13  7.4220E-14  1.4622E-04   1.273     -7.3145E-14   0.000      2.5460E-02  1.8861E-03 -2.9124E-15
+ ELEMENT                        1           1           1           1           1           1           1           1           1 
+
+ MINIMUM                9.9349E-13  7.3833E-14  1.4622E-04   1.273     -7.3145E-14   0.000      2.5460E-02  1.8861E-03 -3.4702E-15
+ ELEMENT                        1           1           1           1           1           1           1           1           1 
+  
+  
+  
+  
+                                       N O D E   O U T P U T
+  
+  
+  
+  
+   THE FOLLOWING TABLE IS PRINTED FOR NODES BELONGING TO NODE SET NMID
+  
+       NODE FOOT-  U1             U2             U3             UR1            UR2            UR3          
+            NOTE
+  
+       101      0.0000000E+00  1.7049258E-06  7.1454277E-06 -5.6005363E-20  0.0000000E+00  6.6941014E-07 
+
+ MAXIMUM          0.000      1.7049E-06  7.1454E-06 -5.6005E-20   0.000      6.6941E-07
+ AT NODE               101         101         101         101         101         101
+
+ MINIMUM          0.000      1.7049E-06  7.1454E-06 -5.6005E-20   0.000      6.6941E-07
+ AT NODE               101         101         101         101         101         101
+  
+  
+  
+   THE FOLLOWING TABLE IS PRINTED FOR NODES BELONGING TO NODE SET NROW0
+  
+       NODE FOOT-  U1             U2             U3             UR1            UR2            UR3          
+            NOTE
+  
+         1      0.0000000E+00  0.0000000E+00  0.0000000E+00  4.7253445E-19 -2.4204011E-06  1.0595579E-08 
+         3      0.0000000E+00  8.4764633E-10  2.2444340E-07  4.4130675E-19 -2.4192019E-06  2.1066653E-08 
+         5      0.0000000E+00  3.3706645E-09  4.4866521E-07  4.1132526E-19 -2.4156201E-06  4.2032761E-08 
+         7      0.0000000E+00  7.5728881E-09  6.7244424E-07  3.8249664E-19 -2.4096544E-06  6.2997060E-08 
+         9      0.0000000E+00  1.3450194E-08  8.9555965E-07  3.5634982E-19 -2.4013107E-06  8.3899337E-08 
+        11      0.0000000E+00  2.0996782E-08  1.1177912E-06  3.3138808E-19 -2.3905971E-06  1.0471882E-07 
+        13      0.0000000E+00  3.0205205E-08  1.3389197E-06  3.0709644E-19 -2.3775243E-06  1.2543495E-07 
+        15      0.0000000E+00  4.1066374E-08  1.5587268E-06  2.8359943E-19 -2.3621052E-06  1.4602730E-07 
+        17      0.0000000E+00  5.3569572E-08  1.7769957E-06  2.6131975E-19 -2.3443550E-06  1.6647553E-07 
+        19      0.0000000E+00  6.7702460E-08  1.9935109E-06  2.4036623E-19 -2.3242912E-06  1.8675948E-07 
+        21      0.0000000E+00  8.3451088E-08  2.2080587E-06  2.1997287E-19 -2.3019336E-06  2.0685911E-07 
+        23      0.0000000E+00  1.0079992E-07  2.4204274E-06  2.0169661E-19 -2.2773042E-06  2.2675460E-07 
+        25      0.0000000E+00  1.1973182E-07  2.6304074E-06  1.8710426E-19 -2.2504275E-06  2.4642631E-07 
+        27      0.0000000E+00  1.4022813E-07  2.8377916E-06  1.7288377E-19 -2.2213298E-06  2.6585483E-07 
+        29      0.0000000E+00  1.6226860E-07  3.0423752E-06  1.5918173E-19 -2.1900400E-06  2.8502098E-07 
+        31      0.0000000E+00  1.8583148E-07  3.2439564E-06  1.4638008E-19 -2.1565888E-06  3.0390584E-07 
+        33      0.0000000E+00  2.1089353E-07  3.4423361E-06  1.3429308E-19 -2.1210094E-06  3.2249079E-07 
+        35      0.0000000E+00  2.3743001E-07  3.6373187E-06  1.2336063E-19 -2.0833367E-06  3.4075749E-07 
+        37      0.0000000E+00  2.6541473E-07  3.8287117E-06  1.1344309E-19 -2.0436081E-06  3.5868789E-07 
+        39      0.0000000E+00  2.9482007E-07  4.0163262E-06  1.0421643E-19 -2.0018627E-06  3.7626431E-07 
+        41      0.0000000E+00  3.2561702E-07  4.1999771E-06  9.5507669E-20 -1.9581417E-06  3.9346941E-07 
+        43      0.0000000E+00  3.5777518E-07  4.3794831E-06  8.6761056E-20 -1.9124882E-06  4.1028620E-07 
+        45      0.0000000E+00  3.9126281E-07  4.5546671E-06  7.8927395E-20 -1.8649473E-06  4.2669808E-07 
+        47      0.0000000E+00  4.2604687E-07  4.7253562E-06  7.0309957E-20 -1.8155660E-06  4.4268887E-07 
+        49      0.0000000E+00  4.6209303E-07  4.8913819E-06  6.2531684E-20 -1.7643929E-06  4.5824277E-07 
+        51      0.0000000E+00  4.9936571E-07  5.0525804E-06  5.4509203E-20 -1.7114786E-06  4.7334445E-07 
+        53      0.0000000E+00  5.3782814E-07  5.2087927E-06  0.0000000E+00 -1.6568752E-06  4.8797899E-07 
+        55      0.0000000E+00  5.7744235E-07  5.3598645E-06  0.0000000E+00 -1.6006367E-06  5.0213196E-07 
+        57      0.0000000E+00  6.1816926E-07  5.5056467E-06  0.0000000E+00 -1.5428186E-06  5.1578938E-07 
+        59      0.0000000E+00  6.5996865E-07  5.6459956E-06  0.0000000E+00 -1.4834779E-06  5.2893778E-07 
+        61      0.0000000E+00  7.0279930E-07  5.7807725E-06  0.0000000E+00 -1.4226732E-06  5.4156418E-07 
+        63      0.0000000E+00  7.4661892E-07  5.9098445E-06  0.0000000E+00 -1.3604645E-06  5.5365612E-07 
+        65      0.0000000E+00  7.9138428E-07  6.0330842E-06  0.0000000E+00 -1.2969131E-06  5.6520168E-07 
+        67      0.0000000E+00  8.3705119E-07  6.1503700E-06  0.0000000E+00 -1.2320819E-06  5.7618944E-07 
+        69      0.0000000E+00  8.8357459E-07  6.2615861E-06  0.0000000E+00 -1.1660348E-06  5.8660858E-07 
+        71      0.0000000E+00  9.3090856E-07  6.3666227E-06  0.0000000E+00 -1.0988369E-06  5.9644880E-07 
+        73      0.0000000E+00  9.7900640E-07  6.4653763E-06  0.0000000E+00 -1.0305546E-06  6.0570040E-07 
+        75      0.0000000E+00  1.0278206E-06  6.5577494E-06  0.0000000E+00 -9.6125525E-07  6.1435425E-07 
+        77      0.0000000E+00  1.0773031E-06  6.6436507E-06  0.0000000E+00 -8.9100727E-07  6.2240181E-07 
+        79      0.0000000E+00  1.1274049E-06  6.7229955E-06  0.0000000E+00 -8.1987998E-07  6.2983513E-07 
+        81      0.0000000E+00  1.1780767E-06  6.7957056E-06  0.0000000E+00 -7.4794356E-07  6.3664688E-07 
+        83      0.0000000E+00  1.2292684E-06  6.8617091E-06  0.0000000E+00 -6.7526902E-07  6.4283033E-07 
+        85      0.0000000E+00  1.2809296E-06  6.9209410E-06  0.0000000E+00 -6.0192806E-07  6.4837939E-07 
+        87      0.0000000E+00  1.3330091E-06  6.9733427E-06  0.0000000E+00 -5.2799307E-07  6.5328858E-07 
+        89      0.0000000E+00  1.3854557E-06  7.0188626E-06  0.0000000E+00 -4.5353702E-07  6.5755305E-07 
+        91      0.0000000E+00  1.4382176E-06  7.0574556E-06  0.0000000E+00 -3.7863339E-07  6.6116859E-07 
+        93      0.0000000E+00  1.4912427E-06  7.0890839E-06  0.0000000E+00 -3.0335608E-07  6.6413164E-07 
+        95      0.0000000E+00  1.5444787E-06  7.1137161E-06  0.0000000E+00 -2.2777940E-07  6.6643927E-07 
+        97      0.0000000E+00  1.5978730E-06  7.1313279E-06  0.0000000E+00 -1.5197794E-07  6.6808921E-07 
+        99      0.0000000E+00  1.6513729E-06  7.1419019E-06  0.0000000E+00 -7.6026482E-08  6.6907983E-07 
+       101      0.0000000E+00  1.7049258E-06  7.1454277E-06 -5.6005363E-20  0.0000000E+00  6.6941014E-07 
+       103      0.0000000E+00  1.7584786E-06  7.1419019E-06 -5.8382328E-20  7.6026482E-08  6.6907983E-07 
+       105      0.0000000E+00  1.8119785E-06  7.1313279E-06 -6.0808022E-20  1.5197794E-07  6.6808921E-07 
+       107      0.0000000E+00  1.8653728E-06  7.1137161E-06 -6.3610605E-20  2.2777940E-07  6.6643927E-07 
+       109      0.0000000E+00  1.9186088E-06  7.0890839E-06 -6.5817080E-20  3.0335608E-07  6.6413164E-07 
+       111      0.0000000E+00  1.9716339E-06  7.0574556E-06 -6.7498514E-20  3.7863339E-07  6.6116859E-07 
+       113      0.0000000E+00  2.0243958E-06  7.0188626E-06 -6.9173297E-20  4.5353702E-07  6.5755305E-07 
+       115      0.0000000E+00  2.0768424E-06  6.9733427E-06 -7.1561684E-20  5.2799307E-07  6.5328858E-07 
+       117      0.0000000E+00  2.1289220E-06  6.9209410E-06 -7.4259704E-20  6.0192806E-07  6.4837939E-07 
+       119      0.0000000E+00  2.1805831E-06  6.8617091E-06 -7.6060872E-20  6.7526902E-07  6.4283033E-07 
+       121      0.0000000E+00  2.2317748E-06  6.7957056E-06 -7.8342775E-20  7.4794356E-07  6.3664688E-07 
+       123      0.0000000E+00  2.2824466E-06  6.7229955E-06 -7.9240468E-20  8.1987998E-07  6.2983513E-07 
+       125      0.0000000E+00  2.3325484E-06  6.6436507E-06 -8.1361297E-20  8.9100727E-07  6.2240181E-07 
+       127      0.0000000E+00  2.3820309E-06  6.5577494E-06 -8.2480222E-20  9.6125525E-07  6.1435425E-07 
+       129      0.0000000E+00  2.4308451E-06  6.4653763E-06 -8.3945814E-20  1.0305546E-06  6.0570040E-07 
+       131      0.0000000E+00  2.4789429E-06  6.3666227E-06 -8.4099702E-20  1.0988369E-06  5.9644880E-07 
+       133      0.0000000E+00  2.5262769E-06  6.2615861E-06 -8.4640181E-20  1.1660348E-06  5.8660858E-07 
+       135      0.0000000E+00  2.5728003E-06  6.1503700E-06 -8.3522091E-20  1.2320819E-06  5.7618944E-07 
+       137      0.0000000E+00  2.6184672E-06  6.0330842E-06 -8.3496820E-20  1.2969131E-06  5.6520168E-07 
+       139      0.0000000E+00  2.6632326E-06  5.9098445E-06 -8.4222973E-20  1.3604645E-06  5.5365612E-07 
+       141      0.0000000E+00  2.7070522E-06  5.7807725E-06 -8.5123888E-20  1.4226732E-06  5.4156418E-07 
+       143      0.0000000E+00  2.7498829E-06  5.6459956E-06 -8.6365890E-20  1.4834779E-06  5.2893778E-07 
+       145      0.0000000E+00  2.7916823E-06  5.5056467E-06 -8.6181396E-20  1.5428186E-06  5.1578938E-07 
+       147      0.0000000E+00  2.8324092E-06  5.3598645E-06 -8.6599544E-20  1.6006367E-06  5.0213196E-07 
+       149      0.0000000E+00  2.8720234E-06  5.2087927E-06 -8.6651539E-20  1.6568752E-06  4.8797899E-07 
+       151      0.0000000E+00  2.9104858E-06  5.0525804E-06 -8.7009522E-20  1.7114786E-06  4.7334445E-07 
+       153      0.0000000E+00  2.9477585E-06  4.8913819E-06 -8.5153240E-20  1.7643929E-06  4.5824277E-07 
+       155      0.0000000E+00  2.9838046E-06  4.7253562E-06 -8.3767128E-20  1.8155660E-06  4.4268887E-07 
+       157      0.0000000E+00  3.0185887E-06  4.5546671E-06 -8.4680925E-20  1.8649473E-06  4.2669808E-07 
+       159      0.0000000E+00  3.0520763E-06  4.3794831E-06 -8.5853661E-20  1.9124882E-06  4.1028620E-07 
+       161      0.0000000E+00  3.0842345E-06  4.1999771E-06 -8.4681055E-20  1.9581417E-06  3.9346941E-07 
+       163      0.0000000E+00  3.1150314E-06  4.0163262E-06 -8.4368388E-20  2.0018627E-06  3.7626431E-07 
+       165      0.0000000E+00  3.1444368E-06  3.8287117E-06 -8.9006720E-20  2.0436081E-06  3.5868789E-07 
+       167      0.0000000E+00  3.1724215E-06  3.6373187E-06 -9.4271664E-20  2.0833367E-06  3.4075749E-07 
+       169      0.0000000E+00  3.1989580E-06  3.4423361E-06 -9.9777637E-20  2.1210094E-06  3.2249079E-07 
+       171      0.0000000E+00  3.2240200E-06  3.2439564E-06 -1.0329606E-19  2.1565888E-06  3.0390584E-07 
+       173      0.0000000E+00  3.2475829E-06  3.0423752E-06 -1.0845244E-19  2.1900400E-06  2.8502098E-07 
+       175      0.0000000E+00  3.2696234E-06  2.8377916E-06 -1.1199923E-19  2.2213298E-06  2.6585483E-07 
+       177      0.0000000E+00  3.2901197E-06  2.6304074E-06 -1.1580758E-19  2.2504275E-06  2.4642631E-07 
+       179      0.0000000E+00  3.3090516E-06  2.4204274E-06 -1.1571038E-19  2.2773042E-06  2.2675460E-07 
+       181      0.0000000E+00  3.3264004E-06  2.2080587E-06 -1.1866614E-19  2.3019336E-06  2.0685911E-07 
+       183      0.0000000E+00  3.3421491E-06  1.9935109E-06 -1.2081037E-19  2.3242912E-06  1.8675948E-07 
+       185      0.0000000E+00  3.3562819E-06  1.7769957E-06 -1.2320869E-19  2.3443550E-06  1.6647553E-07 
+       187      0.0000000E+00  3.3687851E-06  1.5587268E-06 -1.2294131E-19  2.3621052E-06  1.4602730E-07 
+       189      0.0000000E+00  3.3796463E-06  1.3389197E-06 -1.2342968E-19  2.3775243E-06  1.2543495E-07 
+       191      0.0000000E+00  3.3888547E-06  1.1177912E-06 -1.2507169E-19  2.3905971E-06  1.0471882E-07 
+       193      0.0000000E+00  3.3964013E-06  8.9555965E-07 -1.2619250E-19  2.4013107E-06  8.3899337E-08 
+       195      1.5876352E-19  3.4022786E-06  6.7244424E-07 -1.2754258E-19  2.4096544E-06  6.2997060E-08 
+       197      1.5889685E-19  3.4064808E-06  4.4866521E-07 -1.2666649E-19  2.4156201E-06  4.2032761E-08 
+       199      1.5904656E-19  3.4090039E-06  2.2444340E-07 -1.2745243E-19  2.4192019E-06  2.1066653E-08 
+       201      1.5906213E-19  3.4098515E-06  0.0000000E+00 -1.2769294E-19  2.4204011E-06  1.0595579E-08 
+
+ MAXIMUM         1.5906E-19  3.4099E-06  7.1454E-06  4.7253E-19  2.4204E-06  6.6941E-07
+ AT NODE               201         201         101           1         201         101
+
+ MINIMUM          0.000       0.000       0.000     -1.2769E-19 -2.4204E-06  1.0596E-08
+ AT NODE                 1           1           1         201           1         201
+
+
+          THE ANALYSIS HAS BEEN COMPLETED
+
+
+
+                              ANALYSIS COMPLETE
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =     0.10    
+       SYSTEM TIME (SEC)    =     0.10    
+       TOTAL CPU TIME (SEC) =     0.20    
+       WALLCLOCK TIME (SEC) =            0

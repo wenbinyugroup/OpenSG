@@ -1,0 +1,95 @@
+sg: {type: plate_1d, elem_order: 4, n_per_layer: 1, reference_fraction: 0.5, thickness: 0.15239999999999998,
+  n_ply: 9}
+nodes:
+- [-0.07619999999999999]
+- [-0.07596187499999998]
+- [-0.07572374999999999]
+- [-0.07548562499999999]
+- [-0.0752475]
+- [-0.07500937499999999]
+- [-0.07477124999999998]
+- [-0.07453312499999999]
+- [-0.07429499999999999]
+- [-0.074056875]
+- [-0.07381874999999999]
+- [-0.073580625]
+- [-0.07334249999999999]
+- [-0.07310437499999999]
+- [-0.07286625]
+- [-0.07262812499999999]
+- [-0.07239]
+- [-0.03619499999999999]
+- [0.0]
+- [0.03619499999999999]
+- [0.07239000000000001]
+- [0.07262812500000002]
+- [0.07286625000000002]
+- [0.073104375]
+- [0.0733425]
+- [0.07358062500000001]
+- [0.07381874999999999]
+- [0.074056875]
+- [0.074295]
+- [0.074533125]
+- [0.07477125000000001]
+- [0.07500937499999999]
+- [0.0752475]
+- [0.075485625]
+- [0.07572374999999998]
+- [0.07596187499999998]
+- [0.07619999999999999]
+elements:
+- [1, 2, 3, 4, 5]
+- [5, 6, 7, 8, 9]
+- [9, 10, 11, 12, 13]
+- [13, 14, 15, 16, 17]
+- [17, 18, 19, 20, 21]
+- [21, 22, 23, 24, 25]
+- [25, 26, 27, 28, 29]
+- [29, 30, 31, 32, 33]
+- [33, 34, 35, 36, 37]
+materials:
+- name: ge
+  density: 1500.0
+  elastic:
+    E: [128000000000.0, 11000000000.0, 11000000000.0]
+    G: [4480000000.0, 4480000000.0, 1530000000.0]
+    nu: [0.25, 0.25, 0.25]
+  full_name: graphite/epoxy face ply
+- name: herex
+  density: 130.0
+  elastic:
+    E: [103630000.0, 103630000.0, 103630000.0]
+    G: [50000000.0, 50000000.0, 50000000.0]
+    nu: [0.32, 0.32, 0.32]
+  full_name: HEREX C70.130 PVC foam core
+sets:
+  element:
+  - name: ply_1
+    labels: [1]
+  - name: ply_2
+    labels: [2]
+  - name: ply_3
+    labels: [3]
+  - name: ply_4
+    labels: [4]
+  - name: ply_5
+    labels: [5]
+  - name: ply_6
+    labels: [6]
+  - name: ply_7
+    labels: [7]
+  - name: ply_8
+    labels: [8]
+  - name: ply_9
+    labels: [9]
+sections:
+- {elementSet: ply_1, material: ge, angle: 0.0, thickness: 0.0009525}
+- {elementSet: ply_2, material: ge, angle: 90.0, thickness: 0.0009525}
+- {elementSet: ply_3, material: ge, angle: 0.0, thickness: 0.0009525}
+- {elementSet: ply_4, material: ge, angle: 90.0, thickness: 0.0009525}
+- {elementSet: ply_5, material: herex, angle: 0.0, thickness: 0.14478}
+- {elementSet: ply_6, material: ge, angle: 90.0, thickness: 0.0009525}
+- {elementSet: ply_7, material: ge, angle: 0.0, thickness: 0.0009525}
+- {elementSet: ply_8, material: ge, angle: 90.0, thickness: 0.0009525}
+- {elementSet: ply_9, material: ge, angle: 0.0, thickness: 0.0009525}

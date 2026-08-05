@@ -1,0 +1,371 @@
+1
+
+   Abaqus 2024                                  Date 31-Jul-2026   Time 16:43:03
+   For use by PURDUE UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+
+
+                         The Abaqus Software is a product of:
+
+                           Dassault Systemes SIMULIA Corp.
+                           1301 Atwood Avenue, Suite 101W
+                              Johnston, RI 02919, USA
+ 
+
+
+                   The Abaqus Software is available only under license
+                   from Dassault Systemes or its subsidiary and may be
+                   used or reproduced only in accordance with the terms
+                   of such license.
+ 
+                          On machine arms2142pc3 
+                          you are authorized to run
+                          Abaqus/Standard until 31-Jan-2027
+
+                          Your site id is: 100000000002199 
+
+
+ 
+                    For assistance or any other information you may
+                    obtain contact information for your local office
+                    from the world wide web at:
+
+                      https://www.3ds.com/products-services/simulia/services-support/
+
+ 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+                *                                                         * 
+                *                   *****************                     * 
+                *                   *  N O T I C E  *                     * 
+                *                   *****************                     * 
+                *                                                         * 
+                *                                                         * 
+                *                       Abaqus 2024                       * 
+                *                                                         * 
+                *       BUILD ID: 2023_09_21-08.55.25 RELr426 190762      * 
+                *                                                         * 
+                *                                                         * 
+                *  Please make sure you are using                         * 
+                *  release Abaqus 2024 manuals                            * 
+                *  plus the notes accompanying this release.              * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+
+
+ 
+
+
+
+     PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   *******************************************************
+
+
+     END PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   ***********************************************************
+
+
+
+
+     OPTIONS BEING PROCESSED
+   ***************************
+
+
+  *HEADING
+          Cylindrical-bending SOLID benchmark strip (Yu-2003 sec.-6.2 analog)                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+  *ELEMENT, TYPE=C3D8I
+  *ELSET, ELSET=PLY1
+  *ELSET, ELSET=PLY2
+  *ELSET, ELSET=PLY3
+  *ELSET, ELSET=PLY4
+  *ELSET, ELSET=COL0
+  *ELSET, ELSET=COLM
+  *MATERIAL, NAME=YU
+  *ELASTIC, TYPE=ENGINEERING CONSTANTS
+  *ORIENTATION, NAME=OR1, SYSTEM=RECTANGULAR
+  *ORIENTATION, NAME=OR2, SYSTEM=RECTANGULAR
+  *ORIENTATION, NAME=OR3, SYSTEM=RECTANGULAR
+  *ORIENTATION, NAME=OR4, SYSTEM=RECTANGULAR
+  *SOLID SECTION, ELSET=PLY1, MATERIAL=YU, ORIENTATION=OR1
+  *SOLID SECTION, ELSET=PLY2, MATERIAL=YU, ORIENTATION=OR2
+  *SOLID SECTION, ELSET=PLY3, MATERIAL=YU, ORIENTATION=OR3
+  *SOLID SECTION, ELSET=PLY4, MATERIAL=YU, ORIENTATION=OR4
+  *SOLID SECTION, ELSET=PLY1, MATERIAL=YU, ORIENTATION=OR1
+  *SOLID SECTION, ELSET=PLY2, MATERIAL=YU, ORIENTATION=OR2
+  *SOLID SECTION, ELSET=PLY3, MATERIAL=YU, ORIENTATION=OR3
+  *SOLID SECTION, ELSET=PLY4, MATERIAL=YU, ORIENTATION=OR4
+  *BOUNDARY
+  *BOUNDARY
+  *EQUATION
+  *OUTPUT, FIELD
+  *ELEMENT OUTPUT
+  *OUTPUT, FIELD
+  *ELEMENT OUTPUT
+  *OUTPUT, FIELD
+  *ELEMENT OUTPUT
+  *STEP, NAME=SINELOAD
+  *OUTPUT, FIELD
+  *STEP, NAME=SINELOAD
+  *STEP, NAME=SINELOAD
+  *STATIC
+  *DLOAD
+  *OUTPUT, FIELD
+  *ELEMENT OUTPUT
+  *NODE OUTPUT
+  *NODE PRINT, NSET=NW
+  *EL PRINT, ELSET=COL0, POSITION=CENTROIDAL
+  *EL PRINT, ELSET=COLM, POSITION=CENTROIDAL
+  *END STEP
+  *BOUNDARY
+  *STEP, NAME=SINELOAD
+  *STATIC
+  *END STEP
+
+
+
+                            P R O B L E M   S I Z E
+
+
+          NUMBER OF ELEMENTS IS                                  6400
+          NUMBER OF NODES IS                                    45202
+          NUMBER OF NODES DEFINED BY THE USER                   13202
+          NUMBER OF INTERNAL NODES GENERATED BY THE PROGRAM     32000
+          TOTAL NUMBER OF VARIABLES IN THE MODEL               122806
+          (DEGREES OF FREEDOM PLUS MAX NO. OF ANY LAGRANGE MULTIPLIER
+           VARIABLES. INCLUDE *PRINT,SOLVE=YES TO GET THE ACTUAL NUMBER.)
+
+
+
+                              END OF USER INPUT PROCESSING
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =      1.4    
+       SYSTEM TIME (SEC)    =     0.10    
+       TOTAL CPU TIME (SEC) =      1.5    
+       WALLCLOCK TIME (SEC) =            1
+1
+
+   Abaqus 2024                                  Date 31-Jul-2026   Time 16:43:07
+   For use by PURDUE UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+     Cylindrical-bending SOLID benchmark strip (Yu-2003 sec.-6.2 analog)                       STEP    1  INCREMENT    1
+                                                                                          TIME COMPLETED IN THIS STEP   0.00    
+
+
+                        S T E P       1     S T A T I C   A N A L Y S I S
+
+
+                                                                                          
+
+     AUTOMATIC TIME CONTROL WITH -
+          A SUGGESTED INITIAL TIME INCREMENT OF                 1.00    
+          AND A TOTAL TIME PERIOD OF                            1.00    
+          THE MINIMUM TIME INCREMENT ALLOWED IS                1.000E-05
+          THE MAXIMUM TIME INCREMENT ALLOWED IS                 1.00    
+
+     LINEAR EQUATION SOLVER TYPE         DIRECT SPARSE
+  
+                   M E M O R Y   E S T I M A T E
+  
+ PROCESS      FLOATING PT       MINIMUM MEMORY        MEMORY TO
+              OPERATIONS           REQUIRED          MINIMIZE I/O
+             PER ITERATION           (MB)               (MB)
+  
+     1          2.32E+08               33                 65
+  
+ NOTE:
+      (1) SINCE ABAQUS DOES NOT PRE-ALLOCATE MEMORY AND ONLY ALLOCATES MEMORY AS NEEDED DURING THE ANALYSIS,
+          THE MEMORY REQUIREMENT PRINTED HERE CAN ONLY BE VIEWED AS A GENERAL GUIDELINE BASED ON THE BEST
+          KNOWLEDGE AVAILABLE AT THE BEGINNING OF A STEP BEFORE THE SOLUTION PROCESS HAS BEGUN.
+      (2) THE ESTIMATE IS NORMALLY UPDATED AT THE BEGINNING OF EVERY STEP. IT IS THE MAXIMUM VALUE OF THE
+          ESTIMATE FROM THE CURRENT STEP TO THE LAST STEP OF THE ANALYSIS, WITH UNSYMMETRIC SOLUTION TAKEN
+          INTO ACCOUNT IF APPLICABLE. 
+      (3) SINCE THE ESTIMATE IS BASED ON THE ACTIVE DEGREES OF FREEDOM IN THE FIRST ITERATION OF THE 
+          CURRENT STEP, THE MEMORY ESTIMATE MIGHT BE SIGNIFICANTLY DIFFERENT THAN ACTUAL USAGE FOR 
+          PROBLEMS WITH SUBSTANTIAL CHANGES IN ACTIVE DEGREES OF FREEDOM BETWEEN STEPS (OR EVEN WITHIN
+          THE SAME STEP). EXAMPLES ARE: PROBLEMS WITH SIGNIFICANT CONTACT CHANGES, PROBLEMS WITH MODEL
+          CHANGE, PROBLEMS WITH BOTH STATIC STEP AND STEADY STATE DYNAMIC PROCEDURES WHERE ACOUSTIC 
+          ELEMENTS WILL ONLY BE ACTIVATED IN THE STEADY STATE DYNAMIC STEPS.
+      (4) FOR MULTI-PROCESS EXECUTION, THE ESTIMATED VALUE OF FLOATING POINT OPERATIONS FOR EACH PROCESS
+          IS BASED ON AN INITIAL SCHEDULING OF OPERATIONS AND MIGHT NOT REFLECT THE ACTUAL FLOATING 
+          POINT OPERATIONS COMPLETED ON EACH PROCESS. OPERATIONS ARE DYNAMICALLY BALANCED DURING EXECUTION, 
+          SO THE ACTUAL BALANCE OF OPERATIONS BETWEEN PROCESSES IS EXPECTED TO BE BETTER THAN THE ESTIMATE
+          PRINTED HERE.
+      (5) THE UPPER LIMIT OF MEMORY THAT CAN BE ALLOCATED BY ABAQUS WILL IN GENERAL DEPEND ON THE VALUE OF
+          THE "MEMORY" PARAMETER AND THE AMOUNT OF PHYSICAL MEMORY AVAILABLE ON THE MACHINE. PLEASE SEE
+          THE "ABAQUS ANALYSIS USER'S MANUAL" FOR MORE DETAILS. THE ACTUAL USAGE OF MEMORY AND OF DISK
+          SPACE FOR SCRATCH DATA WILL DEPEND ON THIS UPPER LIMIT AS WELL AS THE MEMORY REQUIRED TO MINIMIZE
+          I/O. IF THE MEMORY UPPER LIMIT IS GREATER THAN THE MEMORY REQUIRED TO MINIMIZE I/O, THEN THE ACTUAL
+          MEMORY USAGE WILL BE CLOSE TO THE ESTIMATED "MEMORY TO MINIMIZE I/O" VALUE, AND THE SCRATCH DISK
+          USAGE WILL BE CLOSE-TO-ZERO; OTHERWISE, THE ACTUAL MEMORY USED WILL BE CLOSE TO THE PREVIOUSLY
+          MENTIONED MEMORY LIMIT, AND THE SCRATCH DISK USAGE WILL BE ROUGHLY PROPORTIONAL TO THE DIFFERENCE
+          BETWEEN THE ESTIMATED "MEMORY TO MINIMIZE I/O" AND THE MEMORY UPPER LIMIT. HOWEVER ACCURATE
+          ESTIMATE OF THE SCRATCH DISK SPACE IS NOT POSSIBLE.
+      (6) USING "*RESTART, WRITE" CAN GENERATE A LARGE AMOUNT OF DATA WRITTEN IN THE WORK DIRECTORY.
+
+
+                                INCREMENT     1 SUMMARY
+
+
+ TIME INCREMENT COMPLETED   1.00    ,  FRACTION OF STEP COMPLETED   1.00    
+ STEP TIME COMPLETED        1.00    ,  TOTAL TIME COMPLETED         1.00    
+
+
+
+                                                  E L E M E N T   O U T P U T
+
+
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE CENTROID OF THE ELEMENT FOR ELEMENT TYPE C3D8I AND ELEMENT 
+   SET COL0
+
+    ELEMENT  FOOT-   S11         S22         S33         S12         S13         S23         
+             NOTE 
+
+           1   OR -0.1526     -8.7154E-03 -4.8965E-03  6.8888E-03  0.1390     -1.0448E-02
+         161   OR -0.1305     -8.1714E-03 -4.8503E-03  6.3658E-03  0.3905     -3.0364E-02
+         321   OR -0.1104     -7.6462E-03 -4.7634E-03  5.8734E-03  0.6050     -4.8867E-02
+         481   OR -9.1967E-02 -7.1376E-03 -4.6418E-03  5.4078E-03  0.7857     -6.6023E-02
+         641   OR -7.4902E-02 -6.6437E-03 -4.4910E-03  4.9654E-03  0.9352     -8.1893E-02
+         801   OR -5.8976E-02 -6.1628E-03 -4.3162E-03  4.5427E-03   1.056     -9.6527E-02
+         961   OR -4.3957E-02 -5.6932E-03 -4.1222E-03  4.1365E-03   1.149     -0.1100
+        1121   OR -2.9625E-02 -5.2331E-03 -3.9135E-03  3.7438E-03   1.217     -0.1223
+        1281   OR -1.5770E-02 -4.7811E-03 -3.6945E-03  3.3617E-03   1.260     -0.1334
+        1441   OR -2.1883E-03 -4.3356E-03 -3.4693E-03  2.9874E-03   1.278     -0.1435
+        1601   OR -0.1138     -2.4691E-04 -3.2333E-03  1.6764E-04  0.8690       1.034
+        1761   OR -9.7798E-02 -2.0027E-04 -2.9733E-03  1.9714E-04   1.052       1.034
+        1921   OR -8.3189E-02 -1.6092E-04 -2.6850E-03  2.1002E-04   1.208       1.034
+        2081   OR -6.9793E-02 -1.2776E-04 -2.3726E-03  2.0878E-04   1.340       1.034
+        2241   OR -5.7414E-02 -9.9783E-05 -2.0400E-03  1.9570E-04   1.450       1.033
+        2401   OR -4.5874E-02 -7.6061E-05 -1.6909E-03  1.7290E-04   1.539       1.033
+        2561   OR -3.5003E-02 -5.5735E-05 -1.3285E-03  1.4232E-04   1.609       1.033
+        2721   OR -2.4643E-02 -3.7996E-05 -9.5604E-04  1.0581E-04   1.661       1.033
+        2881   OR -1.4643E-02 -2.2077E-05 -5.7644E-04  6.5139E-05   1.694       1.033
+        3041   OR -4.8574E-03 -7.2397E-06 -1.9261E-04  2.1987E-05   1.711       1.033
+        3201   OR  4.8574E-03  7.2397E-06  1.9261E-04 -2.1987E-05   1.711       1.033
+        3361   OR  1.4643E-02  2.2077E-05  5.7644E-04 -6.5139E-05   1.694       1.033
+        3521   OR  2.4643E-02  3.7996E-05  9.5604E-04 -1.0581E-04   1.661       1.033
+        3681   OR  3.5003E-02  5.5735E-05  1.3285E-03 -1.4232E-04   1.609       1.033
+        3841   OR  4.5874E-02  7.6061E-05  1.6909E-03 -1.7290E-04   1.539       1.033
+        4001   OR  5.7414E-02  9.9783E-05  2.0400E-03 -1.9570E-04   1.450       1.033
+        4161   OR  6.9793E-02  1.2776E-04  2.3726E-03 -2.0878E-04   1.340       1.034
+        4321   OR  8.3189E-02  1.6092E-04  2.6850E-03 -2.1002E-04   1.208       1.034
+        4481   OR  9.7798E-02  2.0027E-04  2.9733E-03 -1.9714E-04   1.052       1.034
+        4641   OR  0.1138      2.4691E-04  3.2333E-03 -1.6764E-04  0.8690       1.034
+        4801   OR  2.1883E-03  4.3356E-03  3.4693E-03 -2.9874E-03   1.278     -0.1435
+        4961   OR  1.5770E-02  4.7811E-03  3.6945E-03 -3.3617E-03   1.260     -0.1334
+        5121   OR  2.9625E-02  5.2331E-03  3.9135E-03 -3.7438E-03   1.217     -0.1223
+        5281   OR  4.3957E-02  5.6932E-03  4.1222E-03 -4.1365E-03   1.149     -0.1100
+        5441   OR  5.8976E-02  6.1628E-03  4.3162E-03 -4.5427E-03   1.056     -9.6527E-02
+        5601   OR  7.4902E-02  6.6437E-03  4.4910E-03 -4.9654E-03  0.9352     -8.1893E-02
+        5761   OR  9.1967E-02  7.1376E-03  4.6418E-03 -5.4078E-03  0.7857     -6.6023E-02
+        5921   OR  0.1104      7.6462E-03  4.7634E-03 -5.8734E-03  0.6050     -4.8867E-02
+        6081   OR  0.1305      8.1714E-03  4.8503E-03 -6.3658E-03  0.3905     -3.0364E-02
+        6241   OR  0.1526      8.7154E-03  4.8965E-03 -6.8888E-03  0.1390     -1.0448E-02
+
+ MAXIMUM          0.1526      8.7154E-03  4.8965E-03  6.8888E-03   1.711       1.034                                        
+ ELEMENT               6241        6241        6241           1        3201        1601                                     
+
+ MINIMUM         -0.1526     -8.7154E-03 -4.8965E-03 -6.8888E-03  0.1390     -0.1435                                        
+ ELEMENT                  1           1           1        6241           1        4801                                     
+
+ OR: *ORIENTATION USED FOR THIS ELEMENT
+
+
+
+   THE FOLLOWING TABLE IS PRINTED AT THE CENTROID OF THE ELEMENT FOR ELEMENT TYPE C3D8I AND ELEMENT 
+   SET COLM
+
+    ELEMENT  FOOT-   S11         S22         S33         S12         S13         S23         
+             NOTE 
+
+          81   OR  -15.54     -0.8877     -0.4987      0.7017     -1.3644E-03  1.0257E-04
+         241   OR  -13.30     -0.8323     -0.4940      0.6484     -3.8337E-03  2.9811E-04
+         401   OR  -11.25     -0.7788     -0.4852      0.5982     -5.9398E-03  4.7976E-04
+         561   OR  -9.367     -0.7270     -0.4728      0.5508     -7.7138E-03  6.4820E-04
+         721   OR  -7.629     -0.6767     -0.4574      0.5058     -9.1817E-03  8.0401E-04
+         881   OR  -6.007     -0.6277     -0.4396      0.4627     -1.0365E-02  9.4768E-04
+        1041   OR  -4.477     -0.5799     -0.4199      0.4213     -1.1282E-02  1.0796E-03
+        1201   OR  -3.018     -0.5330     -0.3986      0.3813     -1.1945E-02  1.2003E-03
+        1361   OR  -1.606     -0.4870     -0.3763      0.3424     -1.2366E-02  1.3098E-03
+        1521   OR -0.2229     -0.4416     -0.3534      0.3043     -1.2549E-02  1.4085E-03
+        1681   OR  -11.59     -2.5150E-02 -0.3293      1.7076E-02 -8.5320E-03 -1.0152E-02
+        1841   OR  -9.961     -2.0399E-02 -0.3028      2.0080E-02 -1.0327E-02 -1.0152E-02
+        2001   OR  -8.473     -1.6391E-02 -0.2735      2.1392E-02 -1.1862E-02 -1.0150E-02
+        2161   OR  -7.109     -1.3013E-02 -0.2417      2.1266E-02 -1.3159E-02 -1.0148E-02
+        2321   OR  -5.848     -1.0164E-02 -0.2078      1.9934E-02 -1.4238E-02 -1.0145E-02
+        2481   OR  -4.672     -7.7473E-03 -0.1722      1.7611E-02 -1.5113E-02 -1.0143E-02
+        2641   OR  -3.565     -5.6769E-03 -0.1353      1.4496E-02 -1.5798E-02 -1.0141E-02
+        2801   OR  -2.510     -3.8701E-03 -9.7378E-02  1.0778E-02 -1.6303E-02 -1.0139E-02
+        2961   OR  -1.491     -2.2487E-03 -5.8714E-02  6.6348E-03 -1.6636E-02 -1.0138E-02
+        3121   OR -0.4948     -7.3740E-04 -1.9619E-02  2.2395E-03 -1.6801E-02 -1.0138E-02
+        3281   OR  0.4948      7.3740E-04  1.9619E-02 -2.2395E-03 -1.6801E-02 -1.0138E-02
+        3441   OR   1.491      2.2487E-03  5.8714E-02 -6.6348E-03 -1.6636E-02 -1.0138E-02
+        3601   OR   2.510      3.8701E-03  9.7378E-02 -1.0778E-02 -1.6303E-02 -1.0139E-02
+        3761   OR   3.565      5.6769E-03  0.1353     -1.4496E-02 -1.5798E-02 -1.0141E-02
+        3921   OR   4.672      7.7473E-03  0.1722     -1.7611E-02 -1.5113E-02 -1.0143E-02
+        4081   OR   5.848      1.0164E-02  0.2078     -1.9934E-02 -1.4238E-02 -1.0145E-02
+        4241   OR   7.109      1.3013E-02  0.2417     -2.1266E-02 -1.3159E-02 -1.0148E-02
+        4401   OR   8.473      1.6391E-02  0.2735     -2.1392E-02 -1.1862E-02 -1.0150E-02
+        4561   OR   9.961      2.0399E-02  0.3028     -2.0080E-02 -1.0327E-02 -1.0152E-02
+        4721   OR   11.59      2.5150E-02  0.3293     -1.7076E-02 -8.5320E-03 -1.0152E-02
+        4881   OR  0.2229      0.4416      0.3534     -0.3043     -1.2549E-02  1.4085E-03
+        5041   OR   1.606      0.4870      0.3763     -0.3424     -1.2366E-02  1.3098E-03
+        5201   OR   3.018      0.5330      0.3986     -0.3813     -1.1945E-02  1.2003E-03
+        5361   OR   4.477      0.5799      0.4199     -0.4213     -1.1282E-02  1.0796E-03
+        5521   OR   6.007      0.6277      0.4396     -0.4627     -1.0365E-02  9.4768E-04
+        5681   OR   7.629      0.6767      0.4574     -0.5058     -9.1817E-03  8.0401E-04
+        5841   OR   9.367      0.7270      0.4728     -0.5508     -7.7138E-03  6.4820E-04
+        6001   OR   11.25      0.7788      0.4852     -0.5982     -5.9398E-03  4.7976E-04
+        6161   OR   13.30      0.8323      0.4940     -0.6484     -3.8337E-03  2.9811E-04
+        6321   OR   15.54      0.8877      0.4987     -0.7017     -1.3644E-03  1.0257E-04
+
+ MAXIMUM           15.54      0.8877      0.4987      0.7017     -1.3644E-03  1.4085E-03                                    
+ ELEMENT               6321        6321        6321          81          81        4881                                     
+
+ MINIMUM          -15.54     -0.8877     -0.4987     -0.7017     -1.6801E-02 -1.0152E-02                                    
+ ELEMENT                 81          81          81        6321        3281        1681                                     
+
+ OR: *ORIENTATION USED FOR THIS ELEMENT
+  
+  
+  
+  
+                                       N O D E   O U T P U T
+  
+  
+  
+  
+   THE FOLLOWING TABLE IS PRINTED FOR NODES BELONGING TO NODE SET NW
+  
+       NODE FOOT-  U1             U2             U3           
+            NOTE
+  
+        81      0.0000000E+00  0.0000000E+00  8.5013126E-06 
+
+ MAXIMUM          0.000       0.000      8.5013E-06
+ AT NODE                81          81          81
+
+ MINIMUM          0.000       0.000      8.5013E-06
+ AT NODE                81          81          81
+
+
+          THE ANALYSIS HAS BEEN COMPLETED
+
+
+
+                              ANALYSIS COMPLETE
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =      2.6    
+       SYSTEM TIME (SEC)    =     0.30    
+       TOTAL CPU TIME (SEC) =      2.9    
+       WALLCLOCK TIME (SEC) =            3

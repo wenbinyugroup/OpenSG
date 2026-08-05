@@ -1,0 +1,9 @@
+# Engineering-constant override for RHC_SW_2UC_45.sc (the working SSDM
+# values).  The .sc's own material blocks carry PRE-ROTATED ply C's; this
+# override rebuilds them from engineering constants + the per-material
+# angle instead (rotated in-code), which is the documented working run.
+material_param:                 # E1 E2 E3 G12 G13 G23 v12 v13 v23 [MPa]
+  - [108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30]     # ply +45
+  - [108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30]     # ply -45
+  - [69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30]  # core
+angles: [45, -45, 0]            # deg per material, 0 = no rotation

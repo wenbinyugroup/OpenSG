@@ -1,0 +1,8 @@
+Nayak Ex.5 sandwich, blast pulse -- OpenSG-RM vs Abaqus 3-D solid
+peak center w: RM 2.257794e+00 m at t=2.350 ms | solid 2.228919e+00 m at t=2.289 ms
+  peak-w difference RM vs solid: +1.30 %
+Abaqus FSDT (composite S8R) peak w: 2.258874e+00 m at t=2.350 ms (+1.34 % vs solid)
+profiles at RM increment 47 (t=2.350 ms), solid dump at t=2.189 ms
+sigma_33 top-face closure (CONSTITUTIVE recovery / applied q): 1.0000 (target 1; V2L face enforcement, fitted drivers)
+dynamic shear amplification Q_meas/Q_quasistatic: sc13(X)=0.994 sc23(Y)=0.994
+cost: RM 49.0 s vs solid 1135.0 s wallclock; RM 400 S8R (7686 dof) vs solid 6400 C3D20 (86499 dof)

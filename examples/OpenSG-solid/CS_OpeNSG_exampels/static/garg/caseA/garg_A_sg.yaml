@@ -1,0 +1,39 @@
+sg: {type: plate_1d, elem_order: 4, n_per_layer: 1, reference_fraction: 0.5, thickness: 0.1,
+  n_ply: 3}
+nodes:
+- [-0.05]
+- [-0.04166666666666667]
+- [-0.03333333333333334]
+- [-0.025]
+- [-0.01666666666666667]
+- [-0.008333333333333338]
+- [0.0]
+- [0.008333333333333331]
+- [0.016666666666666663]
+- [0.024999999999999994]
+- [0.03333333333333334]
+- [0.04166666666666667]
+- [0.05]
+elements:
+- [1, 2, 3, 4, 5]
+- [5, 6, 7, 8, 9]
+- [9, 10, 11, 12, 13]
+materials:
+- name: pagano
+  density: 1.0
+  elastic:
+    E: [25000000000.0, 1000000000.0, 1000000000.0]
+    G: [500000000.0, 500000000.0, 200000000.0]
+    nu: [0.25, 0.25, 0.25]
+sets:
+  element:
+  - name: ply_1
+    labels: [1]
+  - name: ply_2
+    labels: [2]
+  - name: ply_3
+    labels: [3]
+sections:
+- {elementSet: ply_1, material: pagano, angle: 0.0, thickness: 0.03333333333333333}
+- {elementSet: ply_2, material: pagano, angle: 90.0, thickness: 0.03333333333333333}
+- {elementSet: ply_3, material: pagano, angle: 0.0, thickness: 0.03333333333333333}

@@ -1,0 +1,41 @@
+﻿# layup_db.yaml -- garg_caseC: [0/core/0] sandwich, stiff faces 0.1h, soft
+# core 0.8h -- the FSDT-collapse case.  Materials verbatim from
+# examples/garg/garg_layups.py MATERIAL_DB; base h = 0.1 m, bench rescales.
+name: garg_caseC
+model: 1
+fraction: 0.5
+
+mesh:
+  n_per_layer: 1
+  elem_order: 4
+
+plate:
+  a: 1.0
+  b: 0.1
+  nx: 40
+  ny: 4
+  q0: 1.0e+4
+  static: true
+  load_mode: cyl
+  shell_element: S8R
+
+bench:
+  S: [4]                  # aspect ratio a/h (L/h = 4 only)
+materials:
+  face:
+    full_name: Garg sec.3 face lamina
+    E:  [131.0e+9, 10.34e+9, 10.34e+9]
+    G:  [6.205e+9, 6.205e+9, 3.0e+9]
+    nu: [0.22, 0.22, 0.22]
+    rho: 1.0
+  core:
+    full_name: Garg sec.3 soft core
+    E:  [0.5776e+9, 0.5776e+9, 0.5776e+9]
+    G:  [0.1079e+9, 0.1079e+9, 0.1079e+9]
+    nu: [0.0025, 0.0025, 0.0025]
+    rho: 1.0
+
+layup:                    # BOTTOM ply first; h = 0.1 m total
+  - {material: face, thickness: 0.01, angle: 0.0}
+  - {material: core, thickness: 0.08, angle: 0.0}
+  - {material: face, thickness: 0.01, angle: 0.0}

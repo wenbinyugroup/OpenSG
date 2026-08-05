@@ -1,0 +1,37 @@
+﻿# layup_db.yaml -- garg_caseA: [0/90/0] Pagano graphite/epoxy, equal thirds.
+# THE user input of the case (ex5-pipeline format).  Materials verbatim from
+# examples/garg/garg_layups.py MATERIAL_DB; base thickness h = 0.1 m (S = 10),
+# the benchmark rescales h = a/S for each aspect ratio in bench.S.
+name: garg_caseA
+model: 1                  # shear-refined 8x8 ABDG
+fraction: 0.5             # mid-surface reference
+
+mesh:
+  n_per_layer: 1
+  elem_order: 4           # 5-noded quartic per ply
+
+plate:                    # for abaqus_inp.py (static cylindrical bending)
+  a: 1.0                  # span along x [m]
+  b: 0.1                  # strip width along y [m] (plane strain: v = 0)
+  nx: 40
+  ny: 4
+  q0: 1.0e+4              # q0 sin(pi x / a) on the top face [Pa]
+  static: true            # *STATIC step (Pagano is a static benchmark)
+  load_mode: cyl          # single sine: q = q0 sin(pi x/a), no y factor
+  shell_element: S8R
+
+bench:
+  S: [4]                  # aspect ratio a/h of the comparison (L/h = 4 only)
+
+materials:
+  pagano:
+    full_name: Pagano 25:1 graphite/epoxy (ET = 1 GPa scale)
+    E:  [25.0e+9, 1.0e+9, 1.0e+9]
+    G:  [0.5e+9, 0.5e+9, 0.2e+9]
+    nu: [0.25, 0.25, 0.25]
+    rho: 1.0
+
+layup:                    # BOTTOM ply first; h = 0.1 m total
+  - {material: pagano, thickness: 0.0333333333333, angle:  0.0}
+  - {material: pagano, thickness: 0.0333333333333, angle: 90.0}
+  - {material: pagano, thickness: 0.0333333333333, angle:  0.0}

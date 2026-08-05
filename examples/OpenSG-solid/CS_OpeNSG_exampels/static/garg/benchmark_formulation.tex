@@ -1,0 +1,298 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{parskip}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries The Garg--Pagano benchmark from zero}\\[4pt]
+{\large Problem statement, statics, MSG-RM chain, FSDT--Whitney chain:\\
+every formulation and the code that generated every number}\\[4pt]
+{\small Repository: \code{OpenSG-TW}, branch \code{rm-xsec-dehom}, folder
+\code{examples/garg/}.  All equation numbers cite: Garg et al., Compos.\ Struct.\
+305 (2023) 116551; Whitney, J.\ Appl.\ Mech.\ 40 (1973) 302--304; Yu, Hodges \&
+Volovoi, Comput.\ Struct.\ 81 (2003) 439--454; Pagano, J.\ Compos.\ Mater.\ 3
+(1969) 398--411.}
+\end{center}
+
+\section{Step 0 --- the problem statement (Pagano / Garg)}
+
+A laminated strip, span $0 \le x \le a$ ($a = 1$~m), thickness $-h/2 \le z \le h/2$,
+infinite across the width (cylindrical bending: nothing varies with $y$, $\varepsilon_{22}=0$),
+simply supported, carrying a sinusoidal pressure on the top face only:
+\begin{equation}
+\sigma_{33}\!\left(x, +\tfrac h2\right) = q_0 \sin(px), \qquad p = \pi/a, \qquad q_0 = 10^4~\text{Pa}
+\end{equation}
+\begin{equation}
+\sigma_{33}\!\left(x,-\tfrac h2\right) = \sigma_{13}\!\left(x,\pm\tfrac h2\right) = 0,
+\qquad w = \sigma_{11} = 0 \ \text{at}\ x = 0, a
+\tag{Garg Eq.~21}
+\end{equation}
+with continuity of $(u, w, \sigma_{13}, \sigma_{33})$ at every ply interface (Garg Eq.~22).
+
+\textbf{The three laminate families} (\code{garg\_layups.py}; total thickness $h = a/S$):
+\begin{center}\small
+\begin{tabular}{llll}
+\toprule
+case & stack & material & aspect ratios $S=a/h$\\
+\midrule
+A & $[0/90/0]$, equal thirds & Pagano: $E_1{=}25, E_2{=}E_3{=}1$~GPa, & 10, 50\\
+  & & $G_{12}{=}G_{13}{=}0.5$, $G_{23}{=}0.2$~GPa, $\nu{=}0.25$ &\\
+B & $[0/90/90/0]$, quarters & AS4: $E_1{=}181, E_2{=}10.3$~GPa & 10, 50\\
+C & $[0/\text{core}/0]$, $0.1h/0.8h/0.1h$ & faces $E_1{=}131$~GPa; core $E{=}0.578$~GPa & 10, 50\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Harmonic families and stations.}  Every field is one harmonic:
+$\sigma_{11},\sigma_{22},\sigma_{33},w \sim \sin(px)$ (peak at $x=a/2$);
+$\sigma_{13},u \sim \cos(px)$ (peak at $x=0$).  Hence the through-thickness comparisons:
+$\sigma_{13}$ at $x=0$, $\sigma_{33}$ at $x=a/2$ --- the same stations Garg reports.
+
+\textbf{Reference surface}: the laminate \emph{mid-surface} in every chain
+(SG \code{fraction=0.5}; the exact solver's $z$ origin).
+
+\section{Step 1 --- statics of the resultants (shared input; NO material property)}
+
+Sectional equilibrium of a slice $[x, x+\mathrm dx]$:
+\begin{equation}
+\frac{\mathrm dQ_1}{\mathrm dx} = -q(x), \qquad
+\frac{\mathrm dM_{11}}{\mathrm dx} = Q_1(x)
+\end{equation}
+Integrating and applying the simple-support conditions $M_{11}(0)=M_{11}(a)=0$
+(which force both integration constants to zero since $\sin \pi = 0$):
+\begin{equation}
+\boxed{\;Q_1(x) = \frac{q_0}{p}\cos(px), \qquad M_{11}(x) = \frac{q_0}{p^2}\sin(px)\;}
+\end{equation}
+At the $\sigma_{13}$ station $x=0$: $Q_1 = q_0/p = 3183.10$~N/m (equal to the support
+reaction), $M_{11} = 0$.  The strip is statically determinate --- this same $Q_1$ is
+what an Abaqus plate solve returns (SF4 $=3182.44$, measured) and what integrating the
+exact stresses gives ($3183.04$): one statics value, three routes.
+
+\emph{Code}: \code{statics\_fsdt.py :: statics\_resultants(q0, a, x)} --- two lines
+implementing the boxed result.  Called in \code{pagano\_bench.py::run\_case}:
+\begin{verbatim}
+Q1, _ = statics_resultants(q0, a, 0.0)     # x = 0 : Q1 = q0/p
+FF_end = np.array([0, 0, 0, 0, 0, 0, Q1, 0])
+\end{verbatim}
+
+\section{Step 2 --- Chain I: MSG-RM}
+
+\subsection*{2a.  The 1-D structure gene from the layup}
+The plate SG is the wall discretised through its thickness: 5-noded (quartic) elements,
+one per ply, nodes from $-h/2$ to $+h/2$ (mid-surface reference).  Quartic is the
+degree that represents the whole warping ladder exactly per ply ($V_0$ quadratic,
+$V_1$ cubic, $V_2$ quartic).
+\emph{Code}: \code{opensg\_jax/fe\_jax/segment\_plate.py} (mesh generator);
+layups defined in \code{examples/garg/garg\_layups.py}.
+
+\subsection*{2b.  Homogenization: the 8$\times$8 plate law}
+One call per laminate:
+\begin{verbatim}
+r = rm_plate_msg(thk, ang, mats, MATERIAL_DB, fraction=0.5)
+\end{verbatim}
+\emph{Code}: \code{opensg\_jax/fe\_jax/msg\_rm\_plate.py}.  Internally (equation
+numbers = Yu 2003): assemble the SG matrices $E = \langle[\Gamma_h S]^TC[\Gamma_hS]\rangle$,
+$D_{h\epsilon}, D_{hl_a}, D_{l_al_b}, D_{l_a\epsilon}$ (Eq.~30); solve the constrained
+zeroth-order warping $EV_0 + D_{h\epsilon}\epsilon = H\psi\Lambda_0$ (Eq.~34, KKT) giving
+the classical stiffness $A = D_{\epsilon\epsilon} + \hat V_0^TD_{h\epsilon}$ (Eq.~40);
+solve the twelve first-order columns $EV_{1a} + \bar D_a = H\psi(\psi^T\bar D_a)$ with
+$\bar D_a = (D_{hl_a}-D_{hl_a}^T)\hat V_0 - D_{l_a\epsilon}$ (Eqs.~43--45); project the
+second-order energy onto the Reissner--Mindlin form by least squares over
+$X = G^{-1}$ and Yu's 24 relaxed constants (Eqs.~56--61) $\rightarrow$ the transverse
+shear stiffness $G$.  Returned: $\mathrm{ABDG} = [[A,B,0],[B,D,0],[0,0,G]]$ (8$\times$8)
+plus the warping fields $V_0, V_{11}, V_{12}$ used by the recovery.
+
+\subsection*{2c.  Resultants $\rightarrow$ plate strains (constitutive + one equilibrium step)}
+\begin{equation}
+\bm\epsilon = A_6^{-1}\,\mathrm{FF}[{:}6]
+\qquad\text{(here } \bm\epsilon = 0\text{: only } Q_1 \text{ acts at } x{=}0\text{)}
+\end{equation}
+\begin{equation}
+\boxed{\;\bm\epsilon_{,1} = A_6^{-1}\,[0,0,0,\,Q_1,\,0,0]^T\;}
+\qquad\text{(equilibrium } M_{11,1} = Q_1\text{)}
+\end{equation}
+The closure was validated against the oracle gradient taken from the exact solution:
+$\sigma_{13}$-profile difference $0.008\%$ ($S{=}10$) / $0.02\%$ ($S{=}4$).
+\begin{verbatim}
+S6      = np.linalg.inv(np.asarray(r["A6"]))
+E6_end  = S6 @ FF_end[:6]
+dE1_end = S6 @ np.array([0, 0, 0, Q1, 0, 0.0])
+\end{verbatim}
+
+\subsection*{2d.  Pointwise recovery (Yu Eqs.~63/66) and $\sigma_{33}$}
+The implemented recovery is the full SECOND-order formula (Eq.~66), carrying the
+$V_2$ warping blocks of Eq.~64 ($\bar V_{1a} = V_{1a} + \mathrm{kernel}\,c_a$ are the
+relaxed first-order columns of Eq.~58):
+\begin{align}
+\Gamma(z) ={}& \Gamma_h S\big(V_0\bm\epsilon + \bar V_{11}\bm\epsilon_{,1}
+ + \bar V_{12}\bm\epsilon_{,2}
+ + V_{21}\bm\epsilon_{,11} + V_{22}\bm\epsilon_{,12} + V_{23}\bm\epsilon_{,22}\big)
+ + \Gamma_\epsilon\bm\epsilon \notag\\
+ &+ \Gamma_{l_1}S\big(V_0\bm\epsilon + \bar V_{11}\bm\epsilon_{,1}
+ + \bar V_{12}\bm\epsilon_{,2}\big)_{,1}
+ + \Gamma_{l_2}S\big(V_0\bm\epsilon + \bar V_{11}\bm\epsilon_{,1}
+ + \bar V_{12}\bm\epsilon_{,2}\big)_{,2},
+\qquad \sigma(z) = C(z)\,\Gamma(z)
+\end{align}
+For THIS load case the $V_2$ terms carry exactly zero, for two independent reasons:
+(i) the constant-$Q$ statics state has $\bm\epsilon_{,11} = \bm\epsilon_{,12} =
+\bm\epsilon_{,22} = 0$ (the second gradients of the resultants vanish when $Q$ is
+constant), and (ii) for monoclinic laminates the $V_2$ contribution to
+$\sigma_{13},\sigma_{23}$ is identically zero by the parity ladder regardless of the
+load ($V_2$'s payload is $\sigma_{33}$, which enters here through the equilibrium
+integration below).  The code nevertheless evaluates the full formula
+(\code{msgrm\_strain\_at\_depth} accepts \code{dE11/dE12/dE22}).
+The $\sigma_{13}$ content is carried by $\bar V_{11}\bm\epsilon_{,1}$; the
+traction-free faces emerge naturally.  $\sigma_{33}$ by through-thickness equilibrium
+of the recovered amplitude (families $\sigma_{13}\sim\cos \Rightarrow
+\sigma_{33}\sim\sin$):
+\begin{equation}
+\hat\sigma_{33}(z) = \int_{-h/2}^{z} p\,\hat\sigma_{13}(z')\,\mathrm dz'
+\qquad\text{(lands on } q_0 \text{ at the top face in every case)}
+\end{equation}
+\emph{$\sigma_{33}$: equilibrium integration, and its relation to Yu's direct route.}
+Yu's 2003 recovery paper obtains $\sigma_{33}$ from the 3-D constitutive law applied
+to the recovered strain (``it is not necessary to use integration through the
+thickness of the 3-D equilibrium equations \dots''), which works because his
+implementation carries the LOAD COLUMNS forced by the surface traction (his Eqs.~29
+and 45: $V_1 = V_{11}\bm\epsilon_{,1} + V_{12}\bm\epsilon_{,2} + V_{1L}$).  Those
+columns were prototyped in the present core and validated on this benchmark (faces
+exact by construction; $\sigma_{33}$ $1.19\%$ at $S{=}10$, case A) and then REMOVED by
+decision: the through-thickness equilibrium integration used here,
+$\hat\sigma_{33}(z) = \int p\,\hat\sigma_{13}\,\mathrm dz'$ (the pointwise 3-D
+equilibrium $\sigma_{13,1}+\sigma_{33,3}=0$ applied to the recovered $\sigma_{13}$ ---
+no assumption), delivers equal or better accuracy for the pressure-loaded cases
+without extending the recovery interface, and for beam-resultant loading (the code's
+primary use) the load drivers vanish identically.  The two routes were measured
+asymptotically equivalent ($\sim0.1$-point agreement on the laminates); the working
+load-column implementation is preserved in the repository history (commits
+\code{d1b52ac}/\code{3e2f1d0}).
+\begin{verbatim}
+for i, z in enumerate(zc):
+    s13_m[i] = msgrm_strain_at_depth(r, z, E6_end, dE1_end, z6)[1][4]
+s33_m = cumtrapz(p * s13_m, zc)     # equilibrium integration
+\end{verbatim}
+\emph{Code}: recovery in \code{msg\_rm\_plate.py::msgrm\_strain\_at\_depth};
+driver loop in \code{pagano\_bench.py::run\_case}.
+
+\section{Step 3 --- Chain II: FSDT with the Whitney-1973 correction}
+
+Input: the same statics $Q_1 = q_0/p$.  Whitney's construction (his equation numbers):
+
+\textbf{(Eq.~1) The FSDT constitutive law.}
+$Q_1 = k_1^2 A_{55}\,\gamma$ with $A_{55} = \int C_{55}(z)\,\mathrm dz$ and $\gamma$
+\emph{constant} through the thickness (the FSDT kinematic assumption).
+
+\textbf{(Eq.~3) The bending-stress gradient} under constant shear (classical lamination;
+$\bar Q_{11}(z)$ = plane-stress reduced ply stiffness):
+\begin{equation}
+\frac{\partial\sigma_{11}}{\partial x}(z) = \bar Q_{11}(z)\,\frac{B_{11}-A_{11}z}{D}\,Q_1,
+\qquad (A_{11},B_{11},D_{11}) = \!\int\! \bar Q_{11}(1,z,z^2)\,\mathrm dz,\quad
+D = A_{11}D_{11}-B_{11}^2
+\end{equation}
+
+\textbf{(Eqs.~4--5) The equilibrium shear shape.}  Feeding Eq.~(3) into
+$\sigma_{11,1}+\sigma_{13,3}=0$ and integrating from the free bottom face:
+\begin{equation}
+\sigma_{13}(z) = \hat g(z)\,Q_1,\qquad
+\hat g(z) = \frac1D\int_{-h/2}^{z}\bar Q_{11}\,(B_{11}-A_{11}z')\,\mathrm dz'
+\end{equation}
+Provable and \emph{asserted in the code}: $\hat g(\pm h/2) = 0$ (both faces free) and
+$\int\hat g\,\mathrm dz = 1$ (the shape carries exactly $Q_1$; by parts,
+$(A_{11}D_{11}-B_{11}^2)/D = 1$).
+
+\textbf{(Eq.~7) The correction factor} --- equate the FSDT shear energy to the
+complementary energy of that shape:
+\begin{equation}
+\frac{Q_1^2}{2k_1^2A_{55}} = \frac12\int\frac{[\hat g(z)Q_1]^2}{C_{55}(z)}\,\mathrm dz
+\qquad\Longrightarrow\qquad
+\boxed{\;k_1^2 = \Big(A_{55}\int \hat g^2/C_{55}\,\mathrm dz\Big)^{-1}\;}
+\end{equation}
+Self-checks in the module: homogeneous $\rightarrow k_1^2 = 5/6$ exactly (Reissner);
+$[0/90/0]$ Pagano material $\rightarrow 0.5828$, the regime of Whitney's own 4-ply
+example ($0.5952$).
+
+\textbf{The standalone FSDT outputs} (what the $k$ is then used for):
+\begin{equation}
+\sigma_{13}(z) = C_{55}(z)\,\frac{Q_1}{k_1^2A_{55}} \quad\text{(layerwise-constant
+staircase)},\qquad \sigma_{33}\equiv 0,\qquad
+w\!\left(\tfrac a2\right) = \frac{q_0}{p^4D_{11}} + \frac{q_0}{p^2k_1^2A_{55}}
+\end{equation}
+Whitney uses the good shape $\hat g$ \emph{only} to calibrate the scalar $k$; the shape
+is then discarded --- which is why no $k$ can repair the staircase profile, and why his
+own validation (his Fig.~1) is deflection-only.
+
+\emph{Code}: \code{statics\_fsdt.py} --- \code{whitney\_k1sq} (exact per-ply moments
+$A_{11},B_{11},D_{11}$; cumulative integral for $\hat g$; the two assertions; Eq.~7) and
+\code{fsdt\_s13} (the staircase).  FSDT does not touch Abaqus, Pagano, or the MSG core.
+
+\section{Step 4 --- the reference: Pagano's exact solution (curves only)}
+
+The per-ply 3-D equations reduce, for one harmonic, to a $6\times6$ state-space system
+in $z$ with state $[u,v,w,\sigma_{13},\sigma_{23},\sigma_{33}]$, propagated by transfer
+matrices with interface continuity and the face tractions of the problem statement
+imposed exactly (boundary residual $\sim 10^{-15}$; resultant closure exact).
+Equivalent to Pagano's $f_i(y)$ construction (Garg Eqs.~23--24).
+\emph{Code}: \code{pagano\_exact.py} (entry point, families documented)
+$\rightarrow$ \code{examples/TW-paper/rm\_thickness/exact\_cyl.py} (the solver).
+The exact solution appears \emph{only} as the reference curves --- never as an input.
+
+\section{Step 5 --- the data map and results}
+
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule
+file & role & outputs \\
+\midrule
+\code{garg\_layups.py} & the three layups + material db & \code{case*/garg\_*\_sg.yaml,.png}\\
+\code{pagano\_exact.py} & exact reference & (curves in memory)\\
+\code{statics\_fsdt.py} & statics $Q_1$ + Whitney $k_1^2$ + staircase & (values in memory)\\
+\code{pagano\_bench.py} & orchestrator (MSG chain + plots + tables) & \code{pagano\_S*.dat,.png}, \code{rm\_8x8.out}\\
+\code{case*/7\_helper\_RM\_Pagano\_benchmark\{1,2,3\}.py} & per-case drivers & run everything above\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each \code{pagano\_S$\langle S\rangle$.dat} holds: the RM 8$\times$8, the statics FF,
+both shear-stiffness constructions ($G_{\rm Whitney}$, $G_{\rm MSG}$, $k_1^2$), the
+error summary, and the pointwise table $z$, $\sigma_{13}^{\rm MSG}$,
+$\sigma_{13}^{\rm exact}$, $\sigma_{13}^{\rm FSDT}$, $\sigma_{33}^{\rm MSG}$,
+$\sigma_{33}^{\rm exact}$.
+
+\textbf{Relative $L_2$ errors vs the exact solution} ($\sigma_{33}$ MSG = the DIRECT
+constitutive recovery via the load columns; the equilibrium-integration cross-check in
+parentheses):
+\begin{center}\small
+\begin{tabular}{lrrr}
+\toprule
+case / $S$ & $\sigma_{13}$ MSG & $\sigma_{13}$ FSDT & $\sigma_{33}$ MSG \\
+\midrule
+A\ \ 10  &  4.43\,\% & 107.1\,\% & 1.16\,\% \\
+A\ \ 50  &  0.18\,\% & 108.7\,\% & 0.048\,\% \\
+B\ \ 10  &  1.19\,\% &  91.9\,\% & 0.31\,\% \\
+B\ \ 50  &  0.041\,\% &  92.4\,\% & 0.010\,\% \\
+C\ \ 10  &  9.17\,\% & 5269\,\% & 0.82\,\% \\
+C\ \ 50  &  0.39\,\% & 5468\,\% & 0.034\,\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+($\sigma_{33}$ FSDT does not exist.  The aspect ratios are restricted to the PLATE-MODEL REGIME
+--- $S = 10$ (moderately thick) and $S = 50$ (thin) --- since at $S \le 5$ the
+first-order plate truncation itself dominates every plate theory and the comparison
+stops discriminating between them.  The FSDT numbers use the strict Whitney-1973
+$k_1^2$; the energy-correct $k$ \emph{worsens} the pointwise staircase relative to the
+naive $5/6$ --- $k$ repairs deflections, never shapes.)
+
+\textbf{Reproduce everything:}
+\begin{verbatim}
+python examples/garg/garg_layups.py                              # the three SGs
+python examples/garg/caseA/7_helper_RM_Pagano_benchmark1.py      # A: S = 4, 10, 100
+python examples/garg/caseB/7_helper_RM_Pagano_benchmark2.py      # B: S = 5, 10, 100
+python examples/garg/caseC/7_helper_RM_Pagano_benchmark3.py      # C: S = 4, 10, 100
+\end{verbatim}
+
+\end{document}

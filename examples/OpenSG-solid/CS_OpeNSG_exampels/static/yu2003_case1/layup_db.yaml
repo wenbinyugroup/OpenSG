@@ -1,0 +1,38 @@
+# layup_db.yaml -- yu2003_case1: [15/-15] antisymmetric angle ply, Yu-Hodges-
+# Volovoi C&S 81 (2003) sec. 6.1, L/h = 4.  PSI/INCH UNITS (the paper's);
+# p0 = 1 so every stress is already the paper's sigma/p0.  The load is the
+# SPLIT face load s3 = b3 = (p0/2) sin(px): net transverse q = p0 sin(px),
+# which is what the Abaqus deck applies; the split matters only in the dehom
+# load ladder.  Material verbatim from examples/yu2003/yu_layups.py.
+name: yu2003_case1
+model: 1
+fraction: 0.5
+
+mesh:
+  n_per_layer: 1
+  elem_order: 4
+
+plate:
+  a: 4.0                  # span L [in]
+  b: 0.4                  # strip width [in]
+  nx: 40
+  ny: 4
+  q0: 1.0                 # p0 [psi]; net q = p0 sin(pi x/L)
+  static: true
+  load_mode: cyl
+  shell_element: S8R
+
+bench:
+  S: [4]                  # the paper's single (deliberately thick) case
+
+materials:
+  yu:
+    full_name: Pagano-ratio graphite/epoxy, psi set (EL/ET = 25)
+    E:  [25.0e+6, 1.0e+6, 1.0e+6]
+    G:  [0.5e+6, 0.5e+6, 0.2e+6]
+    nu: [0.25, 0.25, 0.25]
+    rho: 1.0
+
+layup:                    # BOTTOM ply first; h = 1.0 in total
+  - {material: yu, thickness: 0.5, angle:  15.0}
+  - {material: yu, thickness: 0.5, angle: -15.0}

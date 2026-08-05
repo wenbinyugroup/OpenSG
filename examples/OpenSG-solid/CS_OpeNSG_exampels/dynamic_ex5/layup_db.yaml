@@ -1,0 +1,128 @@
+﻿# layup_db.yaml -- THE USER INPUT for 1d_sg.py.
+#
+# Everything the through-thickness 1-D SG needs lives here: which reference
+# surface, which materials (including their density), and the stacking
+# sequence.  1d_sg.py reads only this file, writes the SG mesh YAML + PNG,
+# and homogenizes it -- so a new laminate means editing THIS file, not code.
+#
+#   model: 0  ->  CLASSICAL: print the 6x6 ABD only
+#   model: 1  ->  SHEAR-REFINED: print the full 8x8 ABDG (ABD + the 2x2
+#                 MSG transverse-shear block)
+
+name: 1d_sg               # basename of the generated <name>.yaml and <name>.png
+model: 1                  # 0 = ABD only, 1 = ABD + transverse shear (8x8)
+V2: 1                     # dehom recovery order (DEFAULT ON per user):
+                          #   1 = Yu Eq. 66 second order (V21/V22/V23 strain
+                          #       columns) -- the DEFAULT: best through-
+                          #       thickness sigma33, machine-exact faces.
+                          #   0 = Yu Eq. 63 first order: marginally better
+                          #       in-plane FACE stress on thick sections
+                          #       (ex5 sigma_xx peak +0.32% at first order).
+                          # Validated (validate_v2.py, Pagano statics, after
+                          # the 2026-08-04 row-split fix): sigma33 with V2: 1
+                          # beats first order for EVERY stack -- homogeneous
+                          # 0.5-2.6%, [15/-15] 1.1%, [0/90/0] 1.2-5.6%,
+                          # Yu case3 0.8-4.3%, sandwich 0.1-16.7% -- with
+                          # machine-exact face tractions.  In-plane face
+                          # stress still prefers 0 (second order overshoots
+                          # it thick).  The V2L load ladder is active
+                          # regardless; homo (1d_sg.py) never needs V2.
+fraction: 0.5             # reference surface as a fraction of thickness:
+                          #   0 = bottom/OML face, 0.5 = mid-surface, 1 = top
+                          # The Abaqus S4 mesh sits on the mid-plane -> 0.5.
+
+mesh:
+  n_per_layer: 1          # SG elements per physical ply
+  elem_order: 4           # 4 = 5-noded quartic (exact for the warping ladder)
+
+# --- the plate, for abaqus_inp.py ------------------------------------------
+# Only what the deck needs: geometry, in-plane mesh, load and time.
+plate:
+  a: 1.524                # plate side in x [m]
+  b: 1.524                # plate side in y [m]
+  nx: 20                  # S4 elements along x
+  ny: 20                  # S4 elements along y
+  q0: 68.9476e6           # peak pressure [Pa], applied as q0 sin(pi x/a) sin(pi y/b)
+  dt: 5.0e-5              # fixed *DYNAMIC increment [s]
+  ttot: 0.02              # total time [s]
+  field_inc: 53           # increment of the FIRST deflection peak (t = 2.65
+                          # ms).  In `field` mode both generators stop the
+                          # step there and dump the WHOLE plate once, which is
+                          # the snapshot the 3-D field VTKs are built from.
+                          # The global peak (increment 374) is the same
+                          # amplitude to 0.02%, so the first one is
+                          # representative and 7x cheaper.
+  shell_element: S8R      # shell element for the OpenSG-RM deck:
+                          #   S8R    8-node quadratic THICK shell, 6 dof/node
+                          #          -- carries transverse shear, so the MSG
+                          #             2x2 block is actually used
+                          #   S4     4-node, 6 dof/node, also carries it
+                          #   S9R5   9-node quadratic THIN shell, 5 dof/node.
+                          #          DO NOT USE for this sandwich: Kirchhoff,
+                          #          prints no SF4/SF5, i.e. NO transverse
+                          #          shear, so *TRANSVERSE SHEAR STIFFNESS is
+                          #          accepted but inert.  Kept selectable only
+                          #          to demonstrate that.
+                          # (read only by abaqus_inp.py; may be overridden by
+                          #  a command-line argument for element studies)
+  element: C3D20          # solid element for the 3-D benchmark:
+                          #   C3D20   20-node quadratic, FULL 3x3x3 integration
+                          #   C3D20R  same element, reduced 2x2x2
+                          #   C3D8I   8-node linear + incompatible modes
+                          # (read only by abaqus_3dfea.py)
+
+# --- the general dehom input (rm_dehom_ff.py / abq2ff.py) -------------------
+# The station table + the APPLIED face loads.  The .ff table (x y N11 N22
+# N12 M11 M22 M12 Q1 Q2 [u1 u2 u3 wx wy], one row per station, ANY mesh:
+# a lattice gets exact tensor FD, any other cloud the meshfree MLS patch)
+# is what ANY solver hands the recovery -- abq2ff.py collects it from an
+# Abaqus field .dat, or the user writes it directly.
+# loads are INPUT (you know the pressure you applied), never solver output;
+# shapes are differentiated analytically with a, b from plate: above.
+dehom:
+  ff: Abaqus_results/ex5_shell_S8R_field.ff
+  loads:
+    top:                    # the ex5 double-sine pressure
+      q0: 68.9476e6         #   amplitude [Pa]
+      shape: sinsin         #   uniform | sin_x | sin_y | sinsin
+    bottom: none            # traction-free
+
+# --- materials -------------------------------------------------------------
+# E  = [E1, E2, E3]      G  = [G12, G13, G23]      nu = [nu12, nu13, nu23]
+# rho is the mass density [kg/m^3]; the section mass rho*h is summed from it.
+materials:
+  ge:
+    full_name: graphite/epoxy face ply
+    E:  [128.0e9, 11.0e9, 11.0e9]
+    G:  [4.48e9, 4.48e9, 1.53e9]
+    nu: [0.25, 0.25, 0.25]
+    rho: 1500.0
+  herex:
+    full_name: HEREX C70.130 PVC foam core
+    E:  [103.63e6, 103.63e6, 103.63e6]
+    G:  [50.0e6, 50.0e6, 50.0e6]
+    nu: [0.32, 0.32, 0.32]
+    rho: 130.0
+
+# --- stacking sequence, BOTTOM PLY FIRST -----------------------------------
+# Nayak Ex.5, (0/90/0/90/core)s.  The paper gives only ratios:
+#     2 h_f / h = 0.05  with 2 h_f = BOTH face sheets
+#   -> each of the eight GE plies = (0.05/8) h = 0.00625 h = 0.9525 mm
+#   -> core = the remaining 0.95 h                          = 144.78 mm
+# with h = 0.1524 m (6 in), the absolute thickness their Example 2 sets.
+#
+# `divisions` is read ONLY by abaqus_3dfea.py: how many solid elements to put
+# through that ply's thickness (default 1).  The thin face plies get one
+# element each; the 144.78 mm core is split 8 ways so the 3-D benchmark can
+# resolve the shear through it.  1d_sg.py ignores the key -- the SG's own
+# through-thickness discretisation is `mesh:` above.
+layup:
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: herex, thickness: 0.1447800, angle:  0.0, divisions: 8}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
