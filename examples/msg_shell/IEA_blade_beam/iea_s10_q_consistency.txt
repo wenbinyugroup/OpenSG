@@ -1,0 +1,12 @@
+=== Q-consistency of the recovered transverse shear, IEA r/R = 0.20 ===
+identity per wall:  I = integral(sigma_a3 dz)  ==  Q_a = (G_msg s2)_a
+
+                       median      mean       min        max
+  I13 / Q1         5.228e-01 -6.974e+00 -1.299e+03  2.260e+01
+  I23 / Q2         9.895e-01  1.096e+00  1.096e+00  1.194e+01
+
+  Q-CONSISTENCY ERROR in sigma_13 : 47.72 %  (median |1 - I13/Q1|)
+  amplitude deficit factor        : 1.9 x too small
+
+  wall Q1 rms = 9.9064e+02 N/m   recovered I13 rms = 1.2737e+02 N/m
+  (the plate pipeline closes exactly this gap by rescaling  sigma_a3 *= Q/I -- shape from the gradients, amplitude from Q)
