@@ -135,10 +135,23 @@ def solid_annulus_C3D(mat):
         for a in range(12):
             Dhe[cols[a]] += Fe[a]
         Dhh[np.ix_(cols, cols)] += Ke
+    # MSG constraints <w_i> = 0 as AREA integrals: lumped nodal area weights
+    # (sum of |detJ|*w_gauss shares); plus the area-weighted in-plane rotation.
+    wA = np.zeros(nn)
+    for q in quads:
+        Xq = xy[q]
+        for xi in (-gp, gp):
+            for et in (-gp, gp):
+                dN = 0.25 * np.array([[-(1 - et), -(1 - xi)], [(1 - et), -(1 + xi)],
+                                      [(1 + et), (1 + xi)], [-(1 + et), (1 - xi)]])
+                dJ = abs(np.linalg.det(Xq.T @ dN))
+                Nsh = 0.25 * np.array([(1 - xi) * (1 - et), (1 + xi) * (1 - et),
+                                       (1 + xi) * (1 + et), (1 - xi) * (1 + et)])
+                wA[q] += Nsh * dJ
     Cc = np.zeros((4, ndof))
     for n in range(nn):
-        Cc[0, 3 * n] = 1.0; Cc[1, 3 * n + 1] = 1.0; Cc[2, 3 * n + 2] = 1.0
-        Cc[3, 3 * n + 1] = -xy[n, 1]; Cc[3, 3 * n + 2] = xy[n, 0]
+        Cc[0, 3 * n] = wA[n]; Cc[1, 3 * n + 1] = wA[n]; Cc[2, 3 * n + 2] = wA[n]
+        Cc[3, 3 * n + 1] = -wA[n] * xy[n, 1]; Cc[3, 3 * n + 2] = wA[n] * xy[n, 0]
     A = np.zeros((ndof + 4, ndof + 4))
     A[:ndof, :ndof] = Dhh; A[:ndof, ndof:] = Cc.T; A[ndof:, :ndof] = Cc
     Rhs = np.zeros((ndof + 4, 6)); Rhs[:ndof] = -Dhe
