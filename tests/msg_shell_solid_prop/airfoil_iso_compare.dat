@@ -1,0 +1,3 @@
+# IEA r0.2 airfoil iso: shell vs solid; strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66  (1=beam axis, 2/3=cross-section axes)
+# term           C_shell          C_solid        pct
+  C11     8.25871592e+09   8.05071359e+09    +2.5837
