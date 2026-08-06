@@ -12,8 +12,13 @@ the Timoshenko ring, homogenized into classical 3-D elasticity.
 Gamma_h is EXACTLY the fluctuation operator already assembled by the Timoshenko code
 (segment_indep.quad_ops_indep_batch: BDh membrane/curvature rows, BGh shear rows,
 including the axial d/dy1 columns, which vanish on the axially-constant strip).
-Gamma_e is the document's 8x6 macro operator (Section 4, Eq. (17)); its rows are
-implemented verbatim in solid_macro_ops_batch below.  The drilling rotation om3 has
+Gamma_e is the document's 8x6 macro operator (Section 4); its rows are implemented
+verbatim in solid_macro_ops_batch below, with the three derivation-audited
+corrections (2026-08-06, confirmed by the author): the 2*eps12 off-diagonal buckets
+carry the pair-sum ONCE (see derivation_2eps12.pdf -- the outer 2 belongs to the
+diagonal entries only), and the 2*Gamma_23 buckets of the shear rows carry
+X21*C33 / X22*C33 (the page-6 expansion coefficients; the undeformed-state test and
+the 2-D solid reference both confirm).  The drilling rotation om3 has
 NO solid-strain term (the document's page-10 cancellation); its multiplied-through
 residual  g = C33*om3 + C31*om1 + C32*om2 - 1/2(X_i2 w_i;1 - X_i1 w_i;2) = 0  is the
 code's existing DR row with a ZERO macro column, enforced by the same element-constant
@@ -48,18 +53,18 @@ def solid_macro_ops_batch(Xe, e3e, xi, eta, cross, ax):
         np.stack([X12**2, X22**2, X32**2,
                   X32*X22, X32*X12, X12*X22], 1),
         np.stack([2*X11*X12, 2*X22*X21, 2*X31*X32,
-                  2*(X22*X31 + X32*X21), 2*(X12*X31 + X32*X11),
-                  2*(X12*X21 + X11*X22)], 1),
+                  X22*X31 + X32*X21, X12*X31 + X32*X11,
+                  X12*X21 + X11*X22], 1),
         np.stack([z, z, z, z, z, z], 1),                # K11: no solid-strain content
         np.stack([z, z, z, z, z, z], 1),                # K22
         np.stack([z, z, z, z, z, z], 1),                # K12+K21
     ], axis=1)
     BGe6 = np.stack([
         np.stack([C31*X11, C32*X21, C33*X31,
-                  X31*C32 + X11*C33, X31*C31 + X11*C33,
+                  X31*C32 + X21*C33, X31*C31 + X11*C33,
                   X21*C31 + X11*C32], 1),               # 2g13 row
         np.stack([C31*X12, C32*X22, C33*X32,
-                  X32*C32 + X12*C33, X32*C31 + X12*C33,
+                  X32*C32 + X22*C33, X32*C31 + X12*C33,
                   X22*C31 + X12*C32], 1),               # 2g23 row
     ], axis=1)
     return BDe6, BGe6, dA
