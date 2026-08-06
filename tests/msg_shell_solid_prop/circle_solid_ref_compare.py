@@ -164,15 +164,25 @@ for case in ("iso", "m45"):
     print("SOLID C3D:")
     for i in range(6):
         print("  " + " ".join("%13.5e" % C_so[i, j] for j in range(6)))
-    scale = max(np.max(np.abs(C_so)), 1.0)
-    print("\ndiagonals:")
-    print("  %-5s %15s %15s %12s" % ("mode", "shell", "solid", "shell-solid"))
+    # STANDING CONVENTION: neglect near-zero (numerically unresolved) terms;
+    # compare every RESOLVED term against the corresponding OpenSG solid-mesh
+    # value.  Resolved = |entry| > rtol * max|C| in either model.
+    rtol = 1e-8
+    thr = rtol * max(np.max(np.abs(C_sh)), np.max(np.abs(C_so)))
+    print("\nresolved terms (|C| > %.1e; near-zero terms neglected):" % thr)
+    print("  %-5s %15s %15s %10s" % ("term", "shell", "solid-mesh", "%diff"))
+    any_row = False
     for i in range(6):
-        print("  %-5s %15.6e %15.6e %12.4e"
-              % (LBL[i], C_sh[i, i], C_so[i, i], C_sh[i, i] - C_so[i, i]))
-    print("\nC11 axial:  shell %.6e   solid %.6e   diff %+.3f %%"
-          % (C_sh[0, 0], C_so[0, 0],
-             100.0 * (C_sh[0, 0] - C_so[0, 0]) / C_so[0, 0]))
+        for j in range(i, 6):
+            if abs(C_sh[i, j]) > thr or abs(C_so[i, j]) > thr:
+                any_row = True
+                ref = C_so[i, j]
+                dd = (100.0 * (C_sh[i, j] - ref) / ref if abs(ref) > thr
+                      else float("inf"))
+                print("  C%d%d   %15.6e %15.6e %+10.3f"
+                      % (i + 1, j + 1, C_sh[i, j], C_so[i, j], dd))
+    if not any_row:
+        print("  (none above threshold)")
     np.savetxt("circle_%s_solidref_C3D.out" % case, C_so, fmt="%16.8e",
                header="SOLID 2-D annulus SG reference. order " + GBAR_ORDER)
     dd = C_sh - C_so
