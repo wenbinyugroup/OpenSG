@@ -160,7 +160,7 @@ def solid_annulus_C3D(mat):
     return 0.5 * (Ceff + Ceff.T) / A_cell
 
 
-LBL = ["G11 ", "G22 ", "G33 ", "2G23", "2G13", "2G12"]
+LBL = ["C11", "C22", "C33", "C44", "C55", "C66"]
 _dat_rows = []
 for case in ("iso", "m45"):
     mat = cases[case]

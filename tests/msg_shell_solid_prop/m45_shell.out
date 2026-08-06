@@ -1,6 +1,6 @@
 # m45 circular tube, SHELL (1-D ring SG) cross-section, center reference
 # R=1 t=0.03 nc=144; ply E=[142,9.8,9.8]GPa G=[6,6,4.8]GPa nu=[0.30,0.30,0.42] at 45deg; cell area pi R^2 = 3.14159265
-# order [G11 G22 G33 2G23 2G13 2G12]  (1=beam axis, 2/3=cross-section axes)
+# order strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66  (1=beam axis, 2/3=cross-section axes)
 #
 # ---- C3D stiffness (6x6, Pa) ----
   1.25070251e+09   5.46415134e-06   9.86582880e-07   3.94823897e-06   1.31682235e-06  -4.01480235e-06

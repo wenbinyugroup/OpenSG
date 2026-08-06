@@ -90,7 +90,7 @@ def write_circle_yaml(path, mat):
         f.write("\n".join(lines) + "\n")
 
 
-LBL = ["G11 ", "G22 ", "G33 ", "2G23", "2G13", "2G12"]
+LBL = ["C11", "C22", "C33", "C44", "C55", "C66"]
 for case, mat in cases.items():
     yml = "circle_%s_shell.yaml" % case
     write_circle_yaml(yml, mat)

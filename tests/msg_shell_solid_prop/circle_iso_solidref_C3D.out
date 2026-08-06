@@ -1,4 +1,4 @@
-# SOLID 2-D annulus SG reference. order [G11 G22 G33 2G23 2G13 2G12]  (1=beam axis, 2/3=cross-section axes)
+# SOLID 2-D annulus SG reference. order strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66  (1=beam axis, 2/3=cross-section axes)
   4.19866743e+09  -7.89266304e-06   2.82314486e-05   1.37983233e-05   0.00000000e+00   0.00000000e+00
  -7.89266304e-06   1.29075397e-03   1.73335023e-04  -1.77303478e-05   0.00000000e+00   0.00000000e+00
   2.82314486e-05   1.73335023e-04   1.38182316e-03   5.40291833e-05   0.00000000e+00   0.00000000e+00

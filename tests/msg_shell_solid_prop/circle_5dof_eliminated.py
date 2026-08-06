@@ -123,11 +123,12 @@ for a, k in enumerate(KEYS):
     q = np.linalg.solve(A, rhs)[:nf]
     Cd[a] = (c0[k] + 2 * F[k] @ q + q @ K @ q) / A_cell
 
-print("\ncircle iso, order %s" % GBAR_ORDER)
-print("%-6s %15s %15s %15s" % ("mode", "5-dof eliminated", "6-dof multiplier",
+print("\ncircle iso, %s" % GBAR_ORDER)
+print("%-6s %15s %15s %15s" % ("term", "5-dof eliminated", "6-dof multiplier",
                                "analytical"))
 Bnd = build_solid_bundle("circle_iso_shell.yaml", cell_area=A_cell)
 C6d = np.asarray(Bnd["C3D"])
 ana = [2 * E * t / R, 0, 0, 0, 0, 0]
-for a, k in enumerate(KEYS):
-    print("%-6s %15.6e %15.6e %15.6e" % (k, Cd[a], C6d[a, a], ana[a]))
+CL = ["C11", "C22", "C33", "C44", "C55", "C66"]
+for a in range(6):
+    print("%-6s %15.6e %15.6e %15.6e" % (CL[a], Cd[a], C6d[a, a], ana[a]))

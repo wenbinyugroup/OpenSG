@@ -33,7 +33,8 @@ from .segment_indep import (assemble_segment_indep, assemble_constraint,
                             _surf_frame_batch, _tie_rows_batch, _shear_batch,
                             quad_ops_indep_batch, NDOF6)
 
-GBAR_ORDER = "[G11 G22 G33 2G23 2G13 2G12]  (1=beam axis, 2/3=cross-section axes)"
+GBAR_ORDER = ("strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66  "
+              "(1=beam axis, 2/3=cross-section axes)")
 
 
 def solid_macro_ops_batch(Xe, e3e, xi, eta, cross, ax):

@@ -1,4 +1,4 @@
-# m45 tube: SHELL vs SOLID cross-section (center ref); order [G11 G22 G33 2G23 2G13 2G12]  (1=beam axis, 2/3=cross-section axes)
+# m45 tube: SHELL vs SOLID cross-section (center ref); order strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66  (1=beam axis, 2/3=cross-section axes)
 # stiffness: all 21 upper-triangle terms; resolved = |C| > 1.25e+01 in either model ('~0' = below, pct vs solid where solid resolved)
 # term           C_shell          C_solid   pct_diff  resolved
   C11     1.25070251e+09   1.25050526e+09    +0.0158       yes

@@ -1,6 +1,6 @@
 # m45 circular tube, SOLID (2-D annulus SG, 144x4 quads) cross-section, center reference
 # R=1 t=0.03 nc=144; ply E=[142,9.8,9.8]GPa G=[6,6,4.8]GPa nu=[0.30,0.30,0.42] at 45deg; cell area pi R^2 = 3.14159265
-# order [G11 G22 G33 2G23 2G13 2G12]  (1=beam axis, 2/3=cross-section axes)
+# order strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66  (1=beam axis, 2/3=cross-section axes)
 #
 # ---- C3D stiffness (6x6, Pa) ----
   1.25050526e+09   1.94736282e-04   2.40043204e-04   5.13679289e-05   5.80315633e-08   5.62940845e-07
