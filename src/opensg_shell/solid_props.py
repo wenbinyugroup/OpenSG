@@ -59,13 +59,19 @@ def solid_macro_ops_batch(Xe, e3e, xi, eta, cross, ax):
         np.stack([z, z, z, z, z, z], 1),                # K22
         np.stack([z, z, z, z, z, z], 1),                # K12+K21
     ], axis=1)
+    # Shear rows: the array C3i*Xja is NOT symmetric, so the eb-consistent
+    # representation of the raw gamma-vector rows (for a symmetric macro state
+    # ub_i,j = G_ij) carries HALF the pair-sum on each 2G_ij column, diagonals
+    # single.  Full pair-sums double the drive and clash with the drilling-tied
+    # omega_3 under the axial-shear warping mechanism (see the axial-shear note:
+    # the mechanism u_total = rigid rotation about e3 must be zero-energy).
     BGe6 = np.stack([
         np.stack([C31*X11, C32*X21, C33*X31,
-                  X31*C32 + X21*C33, X31*C31 + X11*C33,
-                  X21*C31 + X11*C32], 1),               # 2g13 row
+                  0.5*(X31*C32 + X21*C33), 0.5*(X31*C31 + X11*C33),
+                  0.5*(X21*C31 + X11*C32)], 1),         # 2g13 row
         np.stack([C31*X12, C32*X22, C33*X32,
-                  X32*C32 + X22*C33, X32*C31 + X12*C33,
-                  X22*C31 + X12*C32], 1),               # 2g23 row
+                  0.5*(X32*C32 + X22*C33), 0.5*(X32*C31 + X12*C33),
+                  0.5*(X22*C31 + X12*C32)], 1),         # 2g23 row
     ], axis=1)
     return BDe6, BGe6, dA
 
