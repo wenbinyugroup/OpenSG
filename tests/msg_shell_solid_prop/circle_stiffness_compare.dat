@@ -1,0 +1,5 @@
+# circle tube R=1 t=0.03 nc=144, cell area pi R^2; order [G11 G22 G33 2G23 2G13 2G12]  (1=beam axis, 2/3=cross-section axes)
+# significant stiffness terms only (|C| > 1e-8*max|C|); reference = OpenSG solid-mesh (2-D annulus SG, 144x4 quads)
+# case   term           C_shell          C_solid   pct_diff
+  iso    C11     4.19966683e+09   4.19866743e+09    +0.0238
+  m45    C11     1.25070251e+09   1.25050526e+09    +0.0158

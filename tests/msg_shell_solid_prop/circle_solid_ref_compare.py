@@ -148,6 +148,7 @@ def solid_annulus_C3D(mat):
 
 
 LBL = ["G11 ", "G22 ", "G33 ", "2G23", "2G13", "2G12"]
+_dat_rows = []
 for case in ("iso", "m45"):
     mat = cases[case]
     B = build_solid_bundle("circle_%s_shell.yaml" % case, cell_area=A_cell)
@@ -181,6 +182,7 @@ for case in ("iso", "m45"):
                       else float("inf"))
                 print("  C%d%d   %15.6e %15.6e %+10.3f"
                       % (i + 1, j + 1, C_sh[i, j], C_so[i, j], dd))
+                _dat_rows.append((case, i + 1, j + 1, C_sh[i, j], ref, dd))
     if not any_row:
         print("  (none above threshold)")
     np.savetxt("circle_%s_solidref_C3D.out" % case, C_so, fmt="%16.8e",
@@ -188,5 +190,16 @@ for case in ("iso", "m45"):
     dd = C_sh - C_so
     np.savetxt("circle_%s_compare.out" % case, dd, fmt="%16.8e",
                header="C3D_shell - C3D_solidref. order " + GBAR_ORDER)
+with open("circle_stiffness_compare.dat", "w") as f:
+    f.write("# circle tube R=%g t=%g nc=%d, cell area pi R^2; order %s\n"
+            % (R, t, nc, GBAR_ORDER))
+    f.write("# significant stiffness terms only (|C| > 1e-8*max|C|); "
+            "reference = OpenSG solid-mesh (2-D annulus SG, %dx%d quads)\n"
+            % (nc, nt))
+    f.write("# %-6s %-5s %16s %16s %10s\n"
+            % ("case", "term", "C_shell", "C_solid", "pct_diff"))
+    for case, i, j, sh, so, dd in _dat_rows:
+        f.write("  %-6s C%d%d   %16.8e %16.8e %+10.4f\n" % (case, i, j, sh, so, dd))
 print("=" * 78)
+print("wrote circle_stiffness_compare.dat  (%d significant terms)" % len(_dat_rows))
 print("done.")
