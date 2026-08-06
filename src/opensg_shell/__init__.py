@@ -35,3 +35,5 @@ from .emit_abd import emit_station_abd, load_station_abd                   # noq
 from .fe_jax.strip_RM import rm_timoshenko_6x6                             # noqa: E402
 from .fe_jax.msg_rm_timo import timoshenko_rm                              # noqa: E402
 from .fe_jax.orient_plot import plot_orient, auto_emit                     # noqa: E402
+from .solid_props import (build_solid_bundle, ring_solid,                  # noqa: E402
+                          elastic_constants, GBAR_ORDER)
