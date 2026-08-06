@@ -1,0 +1,13 @@
+# IEA-22 r/R=0.2 airfoil solid 2-D SG, FULL materials, model=3
+# free SG (no in-plane cell periodicity) -> only the axial column
+# is membrane-resolved; relaxed constants are bending-scale residuals
+# const               value   status
+  E1 (GPa)          2.30072   membrane-resolved
+  E2 (GPa)     -6.80434e-13   relaxed (free SG)
+  E3 (GPa)      8.24143e-14   relaxed (free SG)
+  G23 (GPa)    -1.07703e-13   relaxed (free SG)
+  G13 (GPa)    -1.66231e-13   relaxed (free SG)
+  G12 (GPa)     3.57633e-12   relaxed (free SG)
+  nu12             0.115616   relaxed (free SG)
+  nu13              0.67149   relaxed (free SG)
+  nu23            -0.715929   relaxed (free SG)
