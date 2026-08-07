@@ -151,8 +151,8 @@ def ring_solid(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     ez = np.zeros(3); ez[ax] = 1.0
     nodes = np.vstack([rx, rx + h * ez])
     if periodic:
-        from .periodic_map import periodic_node_map
-        node_master, _ = periodic_node_map(rx[:, cross])
+        from .periodic_multiscale import periodic_node_map
+        node_master, _ = periodic_node_map(rx[:, cross], n_model=3)
     else:
         node_master = np.arange(m)
     dof_map = np.concatenate([node_master, node_master])
@@ -183,9 +183,14 @@ def ring_solid(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     A = np.zeros((naug + nk, naug + nk))
     A[:M, :M] = Dhh; A[:M, M:naug] = Gc.T; A[M:naug, :M] = Gc
     A[:M, naug:] = C6.T; A[naug:, :M] = C6
-    Alu = lu_factor(A)
     R0 = np.zeros((naug + nk, 6)); R0[:M] = -Dhe6         # zero macro drilling column
-    V0 = lu_solve(Alu, R0)[:naug]
+    # The kernel rows pin the rigid modes, but [Dhh; Gc] also has a null
+    # direction per node along the drilling rotation (om3 enters no strain row
+    # and the element-constant multipliers do not span it).  Those directions
+    # carry no load -- Dhe6 is orthogonal to them -- so the minimum-norm
+    # least-squares solution is the physical one, whereas an LU factorization
+    # of the rank-deficient KKT returns garbage (it produced a negative C44).
+    V0 = np.linalg.lstsq(A, R0, rcond=None)[0][:naug]
     Deff = Dee6 + V0[:M].T @ Dhe6
     Deff = 0.5 * (Deff + Deff.T)
     if return_fields:

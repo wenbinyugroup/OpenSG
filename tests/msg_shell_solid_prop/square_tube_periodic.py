@@ -23,7 +23,7 @@ import numpy as np
 
 from opensg_shell import build_solid_bundle, GBAR_ORDER
 from opensg_shell.solid_props import elastic_constants
-from opensg_shell.periodic_map import periodic_node_map
+from opensg_shell.periodic_multiscale import periodic_node_map
 
 ############### User Input #################################
 a_sq = 1.0               # centerline square side

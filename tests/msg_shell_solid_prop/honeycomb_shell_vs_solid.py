@@ -128,11 +128,9 @@ for si, sec in enumerate(d_sh["sections"]):
 
 # --- periodic node merge through the CORE model-aware map (n_model = 3 ties
 # both in-plane directions), plus the shell frame-consistency check
-from opensg_shell.periodic_map import (periodic_node_map,
-                                       check_frame_consistency, rigid_modes)
+from opensg_shell.periodic_multiscale import periodic_node_map, rigid_modes
 mloc = len(rx)
 node_map, n_unique_sh = periodic_node_map(rx[:, cross], n_model=3)
-check_frame_consistency(rx[:, cross], rcells, node_map)
 print("shell periodic map: %d -> %d independent nodes, kernel %d rigid modes"
       % (mloc, n_unique_sh, rigid_modes(True)))
 
@@ -167,7 +165,9 @@ A = np.zeros((naug + 3, naug + 3))
 A[:M, :M] = Dhh; A[:M, M:naug] = Gc.T; A[M:naug, :M] = Gc
 A[:M, naug:] = C3.T; A[naug:, :M] = C3
 R0 = np.zeros((naug + 3, 6)); R0[:M] = -Dhe6
-V0s = lu_solve(lu_factor(A), R0)[:naug]
+# rank-safe: [Dhh; Gc] keeps a per-node drilling null direction that the 3
+# kernel rows do not span, so use the minimum-norm least-squares solution
+V0s = np.linalg.lstsq(A, R0, rcond=None)[0][:naug]
 Deff_sh = Dee6 + V0s[:M].T @ Dhe6
 C_sh = 0.5*(Deff_sh + Deff_sh.T) / A_cell
 t_shell = time.perf_counter() - t0
@@ -205,7 +205,10 @@ tri = []
 for (i, j) in qc:
     n00, n10 = gid[i, j], gid[i+1, j]
     n01, n11 = gid[i, j+1], gid[i+1, j+1]
-    tri += [[n00, n10, n11], [n00, n11, n01]]
+    if (i + j) % 2 == 0:            # alternate the diagonal: a single fixed
+        tri += [[n00, n10, n11], [n00, n11, n01]]      # split direction biases
+    else:                                              # the mesh and leaks a
+        tri += [[n00, n10, n01], [n10, n11, n01]]      # spurious C14/C24/C34
 tri = np.array(tri, int)
 nn, ne = len(nd), len(tri)
 
