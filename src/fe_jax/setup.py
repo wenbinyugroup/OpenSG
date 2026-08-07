@@ -323,3 +323,113 @@ def transform_element_node_to_global_nosum(
     V, EN = assembly_map.shape
     v_g = jnp.zeros((V, U)).at[assembly_map.indices, ...].set(v_en, mode="drop")
     return v_g
+
+
+# ---------------------------------------------------------------------------
+# Periodic boundary conditions (verbatim from the installed fe_jax core).
+# Opposite bounding-box faces are paired: right -> left shifted by Lx,
+# top -> bottom by Ly (and front -> back by Lz in 3-D); the repeated
+# dof_map = dof_map[dof_map] resolves corner/edge chains.
+# ---------------------------------------------------------------------------
+from scipy.spatial.distance import cdist
+
+
+def periodic_map(points, tol=1e-6, ndof_per_node=3):
+    min_xyz = np.min(points, axis=0)
+    max_xyz = np.max(points, axis=0)
+    num_nodes = len(points)
+    dof_map = np.arange(num_nodes)
+    p = points.shape[1]
+    if p == 2:
+        left_points = np.isclose(points[:, 0], min_xyz[0], atol=1e-6).nonzero()[0]
+        right_points = np.isclose(points[:, 0], max_xyz[0], atol=1e-6).nonzero()[0]
+        bottom_points = np.isclose(points[:, 1], min_xyz[1], atol=1e-6).nonzero()[0]
+        top_points = np.isclose(points[:, 1], max_xyz[1], atol=1e-6).nonzero()[0]
+
+        Lx = max_xyz[0] - min_xyz[0]
+        Ly = max_xyz[1] - min_xyz[1]
+
+        def map_boundary(slaves, masters, shift_vec):
+            slave_pts = points[slaves]
+            master_pts = points[masters]
+            target_pos = slave_pts - shift_vec
+            dists = cdist(target_pos, master_pts)
+            nearest_idx = np.argmin(dists, axis=1)
+            min_dists = dists[np.arange(len(dists)), nearest_idx]
+
+            if not np.all(min_dists < tol):
+                raise ValueError("Geometric mismatch on periodic boundary")
+
+            dof_map[slaves] = masters[nearest_idx]
+
+        map_boundary(right_points, left_points, np.array([Lx, 0.0]))
+        map_boundary(top_points, bottom_points, np.array([0.0, Ly]))
+
+    elif p == 3:
+        left_points = np.isclose(points[:, 0], min_xyz[0], atol=1e-6).nonzero()[0]
+        right_points = np.isclose(points[:, 0], max_xyz[0], atol=1e-6).nonzero()[0]
+        bottom_points = np.isclose(points[:, 1], min_xyz[1], atol=1e-6).nonzero()[0]
+        top_points = np.isclose(points[:, 1], max_xyz[1], atol=1e-6).nonzero()[0]
+        back_points = np.isclose(points[:, 2], min_xyz[2], atol=1e-6).nonzero()[0]
+        front_points = np.isclose(points[:, 2], max_xyz[2], atol=1e-6).nonzero()[0]
+        num_nodes = len(points)
+        dof_map = np.arange(num_nodes)
+
+        Lx = max_xyz[0] - min_xyz[0]
+        Ly = max_xyz[1] - min_xyz[1]
+        Lz = max_xyz[2] - min_xyz[2]
+
+        def map_boundary(slaves, masters, shift_vec):
+            if len(slaves) == 0:
+                return
+
+            slave_pts = points[slaves]
+            master_pts = points[masters]
+            target_pos = slave_pts - shift_vec
+
+            dists = cdist(target_pos, master_pts)
+            nearest_idx = np.argmin(dists, axis=1)
+            min_dists = dists[np.arange(len(dists)), nearest_idx]
+
+            if not np.all(min_dists < tol):
+                raise ValueError(
+                    f"Geometric mismatch on periodic boundary with shift {shift_vec}")
+
+            dof_map[slaves] = masters[nearest_idx]
+
+        map_boundary(right_points, left_points, np.array([Lx, 0.0, 0.0]))
+        map_boundary(top_points, bottom_points, np.array([0.0, Ly, 0.0]))
+        map_boundary(front_points, back_points, np.array([0.0, 0.0, Lz]))
+
+    for _ in range(p):
+        dof_map = dof_map[dof_map]
+
+    node_periodic_map = jnp.array(dof_map)
+    master_nodes = node_periodic_map
+    dof_offsets = jnp.arange(ndof_per_node)
+    master_dof_indices = master_nodes[:, None] * ndof_per_node + dof_offsets[None, :]
+    return master_dof_indices.flatten()
+
+
+def dof_map_full(points, tol=1e-6, ndof_per_node=3):
+    dof_map_disp = periodic_map(points, tol)
+    lambda_indices = jnp.arange(len(dof_map_disp), 3*points.shape[0]+3)
+    return jnp.concatenate([dof_map_disp, lambda_indices])
+
+
+def mesh_to_periodic_sparse_assembly_map(V, cells, points, ndof_per_node=3,
+                                         tol=1e-6):
+    dof_map_np = np.array(dof_map_full(points, tol))
+    master_nodes = dof_map_np[:-3][::ndof_per_node] // ndof_per_node
+    master_nodes = master_nodes.astype(np.uint64)
+
+    periodic_cells = master_nodes[np.array(cells, dtype=np.uint64)]
+
+    return jnp.array(periodic_cells, dtype=jnp.int32), dof_map_np
+
+
+def periodic_node_map(points, tol=1e-6):
+    """Node-level master map (n_nodes,) from the core periodic_map -- the form
+    the shell ring SG needs, where a node carries 6 DOFs rather than 3."""
+    return np.asarray(periodic_map(np.asarray(points), tol,
+                                   ndof_per_node=1), dtype=int)

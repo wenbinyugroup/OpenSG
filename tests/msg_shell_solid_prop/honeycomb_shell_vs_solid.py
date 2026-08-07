@@ -126,20 +126,15 @@ for si, sec in enumerate(d_sh["sections"]):
     if _rr["G_msg"] is not None:
         G_by[si] = np.asarray(_rr["G_msg"])
 
-# --- periodic node merge: right end -> left end, top end -> bottom end
+# --- periodic node merge through the CORE model-aware map (n_model = 3 ties
+# both in-plane directions), plus the shell frame-consistency check
+from opensg_shell.periodic_map import (periodic_node_map,
+                                       check_frame_consistency, rigid_modes)
 mloc = len(rx)
-
-
-def find_node(pt):
-    i = np.argmin(np.linalg.norm(rx[:, cross] - np.asarray(pt), axis=1))
-    assert np.linalg.norm(rx[i, cross] - pt) < 1e-9
-    return i
-
-
-rep = np.arange(mloc)
-rep[find_node([L, c])] = find_node([0.0, c])
-rep[find_node([c, L])] = find_node([c, 0.0])
-_, node_map = np.unique(rep, return_inverse=True)
+node_map, n_unique_sh = periodic_node_map(rx[:, cross], n_model=3)
+check_frame_consistency(rx[:, cross], rcells, node_map)
+print("shell periodic map: %d -> %d independent nodes, kernel %d rigid modes"
+      % (mloc, n_unique_sh, rigid_modes(True)))
 
 # --- strip assembly (ring_solid with node_map merging + 3-mode kernel)
 h = float(np.mean(np.linalg.norm(rx[rcells[:, 1]] - rx[rcells[:, 0]], axis=1)))
@@ -242,23 +237,10 @@ K = np.zeros((ndof, ndof)); Dhe = np.zeros((ndof, 6))
 np.add.at(K, (gdof[:, :, None].repeat(9, 2), gdof[:, None, :].repeat(9, 1)), Ke)
 np.add.at(Dhe, gdof.ravel(), Fe.reshape(-1, 6))
 
-tol = 1e-9
-master = np.arange(nn)
-
-
-def pair(face_s, face_m, coord):
-    for s in face_s:
-        dd = np.abs(nd[face_m, coord] - nd[s, coord])
-        assert dd.min() < 1e-8, "no periodic partner"
-        master[s] = face_m[np.argmin(dd)]
-
-
-pair(np.where(np.abs(nd[:, 0]-L) < tol)[0],
-     np.where(np.abs(nd[:, 0]) < tol)[0], 1)
-pair(np.where(np.abs(nd[:, 1]-L) < tol)[0],
-     np.where(np.abs(nd[:, 1]) < tol)[0], 0)
-for _ in range(3):
-    master = master[master]
+# the SAME core map, 3 DOF/node (this is what opensg_solid.sg_homo feeds every
+# macro model: periodicity rides in the local->global assembly map)
+master, n_unique_so = periodic_node_map(nd, n_model=3)
+print("solid periodic map: %d -> %d independent nodes" % (nn, n_unique_so))
 uniq, inv = np.unique(master, return_inverse=True)
 nred = 3*len(uniq)
 T = np.zeros((ndof, nred))

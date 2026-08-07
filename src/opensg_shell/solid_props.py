@@ -123,14 +123,25 @@ def assemble_solid_macro(nodes, quads, subdom, e3s, D_by, G_by, cross, ax,
 
 
 def ring_solid(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
-               shear="mitc4_g23", lam_space="elem", return_fields=False):
+               shear="mitc4_g23", lam_space="elem", return_fields=False,
+               periodic=False):
     """Equivalent-solid homogenization of the ring SG.  Returns D_eff (6,6), the
     contour-integrated stiffness per unit axial length on GBAR_ORDER; with
     return_fields=True also the 6-column warping V0.
 
     Mirrors ring_indep: one-quad-deep prismatic strip, top row DOF-mapped onto the
     bottom, element-constant drilling Lagrange multipliers (zero macro column),
-    4-mode rigid kernel KKT, single V0 solve, D_eff = Dee + V0^T Dhe.  No V1."""
+    rigid-kernel KKT, single V0 solve, D_eff = Dee + V0^T Dhe.  No V1.
+
+    periodic=True additionally ties opposite bounding-box edges of the contour
+    through `periodic_map.shell_periodic_assembly_map` -- the shell analogue of
+    the solid side's mesh_to_periodic_sparse_assembly_map.  The tie rides in the
+    assembly map (element connectivity re-pointed at master nodes), so no
+    constraint rows are added, and the kernel drops the in-plane rotation,
+    keeping the 3 translations.  Without it an isolated cross-section is a FREE
+    SG, whose equivalent-solid stiffness is rank one by construction: every
+    macro strain except Gamma_11 is cancelled at zero energy by an affine
+    fluctuation, which only periodicity forbids."""
     from .fe_jax.msg_rm_timo import build_C_Psi
     from scipy.linalg import lu_factor, lu_solve
 
@@ -139,7 +150,12 @@ def ring_solid(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
         h = float(np.mean(np.linalg.norm(rx[rcells[:, 1]] - rx[rcells[:, 0]], axis=1)))
     ez = np.zeros(3); ez[ax] = 1.0
     nodes = np.vstack([rx, rx + h * ez])
-    dof_map = np.concatenate([np.arange(m), np.arange(m)])
+    if periodic:
+        from .periodic_map import periodic_node_map
+        node_master, _ = periodic_node_map(rx[:, cross])
+    else:
+        node_master = np.arange(m)
+    dof_map = np.concatenate([node_master, node_master])
     quads = np.array([[a, b, m + b, m + a] for a, b in rcells], dtype=int)
     e3q = np.asarray(re3)
 
@@ -155,16 +171,20 @@ def ring_solid(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
 
     M = Dhh.shape[0]; P = Gc.shape[0]
     C5, Psi5 = build_C_Psi(rx[:, cross], rcells, p=1)
-    C6 = np.zeros((4, M))
+    # rigid kernel: 3 translations + the in-plane rotation for a free SG; tying
+    # opposite edges removes the rotation, so a periodic cell carries only 3
+    nk = 3 if periodic else 4
+    C6 = np.zeros((nk, M))
     for n in range(m):
-        C6[:, 6 * n:6 * n + 5] = C5[:, 5 * n:5 * n + 5]
+        s = NDOF6 * node_master[n]
+        C6[:, s:s + 5] += C5[:nk, 5 * n:5 * n + 5]
 
     naug = M + P
-    A = np.zeros((naug + 4, naug + 4))
+    A = np.zeros((naug + nk, naug + nk))
     A[:M, :M] = Dhh; A[:M, M:naug] = Gc.T; A[M:naug, :M] = Gc
     A[:M, naug:] = C6.T; A[naug:, :M] = C6
     Alu = lu_factor(A)
-    R0 = np.zeros((naug + 4, 6)); R0[:M] = -Dhe6          # zero macro drilling column
+    R0 = np.zeros((naug + nk, 6)); R0[:M] = -Dhe6         # zero macro drilling column
     V0 = lu_solve(Alu, R0)[:naug]
     Deff = Dee6 + V0[:M].T @ Dhe6
     Deff = 0.5 * (Deff + Deff.T)
@@ -190,7 +210,7 @@ def elastic_constants(C3D):
 
 
 def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg",
-                       cell_area=None):
+                       cell_area=None, periodic=False):
     """Load the shell yaml exactly as build_rm_bundle does (same reference logic,
     same MSG wall transverse-shear upgrade), run ring_solid, and package:
 
@@ -218,7 +238,7 @@ def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg",
                 G_by[si] = np.asarray(_rr["G_msg"])
     Deff, V0 = ring_solid(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], G_by,
                           R["k22"], R["ax"], R["cross"], shear=shear,
-                          lam_space="elem", return_fields=True)
+                          lam_space="elem", return_fields=True, periodic=periodic)
     area_source = "user"
     if cell_area is None:
         from scipy.spatial import ConvexHull
