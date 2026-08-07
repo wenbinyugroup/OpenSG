@@ -1,0 +1,27 @@
+# square thin-walled section, equivalent 3-D solid properties
+# NEW = square_solid_new_architecture.out   (opensg_solid.sg_homo, n_model=3)
+# OLD = square_solid_old_architecture.out   (JAX_BICGoptimize single script, n_model=3)
+# same mesh, same material, unrotated ply; pct = 100*(new-old)/old
+# order [e11 e22 e33 2e23 2e13 2e12]; resolved terms only (|C| > 1e-06 * max|C|)
+# ---- stiffness terms (Pa) ----
+# term               new              old        pct
+  C11     1.42952901e+11   1.42952929e+11    -0.0000
+  C12     1.58817766e+09   1.58820358e+09    -0.0016
+  C13     1.58815972e+09   1.58818649e+09    -0.0017
+  C22     5.13927684e+09   5.13927778e+09    -0.0000
+  C23     1.54648702e+08   1.54668948e+08    -0.0131
+  C33     5.13921704e+09   5.13921827e+09    -0.0000
+  C44     9.64591558e+06   9.64624507e+06    -0.0034
+  C55     3.14483963e+09   3.14483951e+09    +0.0000
+  C66     3.14483389e+09   3.14483378e+09    +0.0000
+# ---- 9 effective constants ----
+# const              new              old        pct
+  E1      1.42000000e+11   1.42000000e+11    +0.0000
+  E2      5.11796756e+09   5.11796686e+09    +0.0000
+  E3      5.11790821e+09   5.11790757e+09    +0.0000
+  G23     9.64591556e+06   9.64624458e+06    -0.0034
+  G13     3.14483963e+09   3.14483951e+09    +0.0000
+  G12     3.14483389e+09   3.14483378e+09    +0.0000
+  nu12    3.00000000e-01   3.00003705e-01    -0.0012
+  nu13    3.00000000e-01   3.00003888e-01    -0.0013
+  nu23    2.67504869e-02   2.67543067e-02    -0.0143

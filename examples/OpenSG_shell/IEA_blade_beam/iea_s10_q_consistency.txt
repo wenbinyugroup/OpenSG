@@ -1,0 +1,42 @@
+=== Q-consistency of the recovered transverse shear, IEA r/R = 0.20 ===
+identity per wall:  I = integral(sigma_a3 dz)  ==  Q_a = (G_msg s2)_a
+
+TYING, AND WHY sigma_13 IS A CROSS-SECTION LIMIT, NOT A BUG:
+  cross-section (this ring)  : gamma_23 tied, gamma_13 UNTIED
+  surface quad element       : BOTH tied
+The ring is a ONE-QUAD-DEEP prismatic strip evaluated at eta = 0
+(_strip / _rm_shell_strain).  _mitc_shear_indep ties gamma_23 by
+interpolating in eta -- active -- and gamma_13 by interpolating in
+xi.  On a strip that is prismatic along xi the gamma_13 row is
+already linear there, so that interpolation REPRODUCES the raw row
+exactly: the tying is inert, which is why 'mitc4_g23' and
+'mitc4_both' give BIT-IDENTICAL output here (measured below) even
+though both flags are plumbed and branch.  On a genuine surface
+quad (the segment / 3-D SG elements) the row is not linear in xi
+and the tying does real work -- that is where a physical gamma_13
+lives.  Note the segment's recommended scheme is 'mitc4_wonly'
+(field-consistent partial tying); 'mitc4_both' is flagged in its
+own docstring as ablation-only because it aliases drilling shear.
+So here gamma_13 stays RAW, carrying the flat-wall drilling mode:
+Q1 built from it is NOT a physical wall shear and CANNOT serve as
+a recovery target.  Q2 (tied gamma_23) can.
+Fingerprint: 2g13 rms is ~35x 2g23 rms here, giving Q1 ~110x Q2 --
+implausible for a thin-walled section, where the wall carries its
+load as in-plane shear FLOW (sigma_12), not through-thickness shear.
+Effect of the tying flags on Q:
+  rms |Q1(g23) - Q1(both)| = 0.0000e+00 N/m   (Q1 rms 9.9064e+02)
+  rms |Q2(g23) - Q2(both)| = 0.0000e+00 N/m   (Q2 rms 8.9686e+00)
+
+                       median      mean       min        max
+  I13 / Q1         5.228e-01 -6.974e+00 -1.299e+03  2.260e+01   <- target INVALID
+  I23 / Q2         9.895e-01  1.096e+00 -1.217e+01  1.194e+01   <- target valid
+
+  Q-CONSISTENCY ERROR in sigma_23 : 1.05 %  (median |1 - I23/Q2|)
+  sigma_13: NOT measurable in a cross-section model -- gamma_13 is
+  untied by construction there (above).  A physical sigma_13 needs
+  the SURFACE-QUAD route (segment / 3-D SG, both rows tied), not a
+  rescale of this ring against its contaminated Q1.
+
+  wall Q2 rms = 8.9686e+00 N/m   recovered I23 rms = 8.3085e+00 N/m
+  (the plate pipeline closes an amplitude gap by rescaling sigma_a3 *= Q/I -- shape from the gradients, amplitude from Q --
+  which is only legitimate where the target Q is physical)
