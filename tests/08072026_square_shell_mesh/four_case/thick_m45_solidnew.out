@@ -1,0 +1,25 @@
+# ROUTE B -- msg_solid NEW architecture, opensg_solid.sg_homo.plate_homo_2d, n_model=3
+# case thick_m45 : cross lattice cell, L=1.000, t=0.1000 (t/L=0.1000), m45 ply -45.0 deg
+# mesh 4465 nodes / 8424 linear triangles, nt=18 through t, na=54 per arm
+# elem_rotation = elem_rotation_from_yaml(elementOrientations)
+# order [e11 e22 e33 2e23 2e13 2e12]
+# omega (meshed wall material area) = 0.1900000000 ; exact 2Lt-t^2 = 0.1900000000
+# normalized by the CELL area L^2 = 1.00000000 (C_eff*omega/L^2)
+# solve 4.65 s
+# ---- C_eff (6x6, Pa) ----
+  7.83598344e+09   2.81973362e+09   2.81973362e+09   2.11470082e+07   2.77262348e+09   2.77262348e+09
+  2.81973362e+09   3.96578993e+09   1.16542603e+08   1.14423550e+07   2.82306350e+07   2.75986386e+09
+  2.81973362e+09   1.16542603e+08   3.96578993e+09   1.14423550e+07   2.75986386e+09   2.82306350e+07
+  2.11470082e+07   1.14423550e+07   1.14423550e+07   1.56177114e+07   1.41794241e+07   1.41794241e+07
+  2.77262348e+09   2.82306350e+07   2.75986386e+09   1.41794241e+07   3.18447567e+09  -5.51928329e+06
+  2.77262348e+09   2.75986386e+09   2.82306350e+07   1.41794241e+07  -5.51928329e+06   3.18447567e+09
+# ---- 9 effective constants ----
+E1      2.81496733e+09
+E2      1.52325290e+09
+E3      1.52325290e+09
+G23     1.54865648e+07
+G13     1.05196447e+09
+G12     1.05196447e+09
+nu12    2.36898169e-01
+nu13    2.36898169e-01
+nu23    8.69987660e-03

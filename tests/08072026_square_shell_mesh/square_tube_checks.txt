@@ -1,0 +1,67 @@
+PreVABS .sg : /home/roger/a/bagla0/OpenSG-2.0/tests/08072026_square_shell_mesh/prevabs/square_tube.sg
+  nodes            = 3228
+  elements         = 5384
+  material phases  = 1
+  layup groups     = 1   (group -> material, theta3): g1 -> mat1, -45.0 deg
+  element shapes   = 3-node: 5384   (3 = linear triangle, 4 = linear quad)
+  theta1 (contour angle) unique values: [-90.   0.  90. 180.]
+  theta3 (fibre angle)   unique values: [-45.] deg
+
+AREA
+  meshed wall area                     = 0.120000000
+  analytical 4*a*t          (mitre, CENTER ref) = 0.120000000   rel err = +0.000e+00
+  analytical 4*a*t - 4*t^2  (mitre, OML ref)    = 0.116400000   rel err = +3.093e-02
+
+INVERTED / DEGENERATE ELEMENTS
+  signed areas: 5384 positive (CCW), 0 negative (CW), 0 zero
+  consistent winding = True  ->  inverted elements = 0
+  |area| min / max / mean = 1.3160e-05 / 3.0763e-05 / 2.2288e-05
+
+GEOMETRY / LAYUP REFERENCE
+  bbox x = [-0.515000, +0.515000]   y = [-0.515000, +0.515000]
+  outer half-side max(|x|,|y|) = 0.515000   (expected a/2 + t/2 = 0.515000)
+  inner half-side min(|x|,|y|) = 0.485000   (expected a/2 - t/2 = 0.485000)
+  mid half-side (mean of the two) = 0.500000   (expected a/2 = 0.500000)  -> CENTER reference
+
+CONNECTIVITY / CLOSURE
+  interior edges (shared by 2 elements) = 7540
+  boundary edges (shared by 1 element)  = 1072
+  non-manifold edges (>2 elements)      = 0
+  boundary loops = 2  (mean half-side: 0.4850, 0.5150)
+  every boundary node has exactly 2 boundary edges = True
+  -> section is CLOSED (single closed cell: 1 outer + 1 inner loop) = True
+
+MESH DENSITY (target ~4 elements through the wall)
+  element edge length  min/mean/max = 0.00596 / 0.00774 / 0.00897
+  t / mean edge length                       = 3.87
+  element ROWS through thickness
+    = n_elem / (2 * outer-loop edges) = 5384 / (2*536) = 5.02
+  elements clipped by a straight through-thickness line, top wall (15 lines):
+    min 6, median 10.0, max 10   (an unstructured triangulation clips ~2x
+     the row count because the triangles are not column-aligned)
+
+OpenSG 2-D solid YAML : /home/roger/a/bagla0/OpenSG-2.0/tests/08072026_square_shell_mesh/square_tube_2dsolid.yaml
+  top-level keys      = ['nodes', 'elements', 'sets', 'elementOrientations', 'materials']
+  nodes               = 3228
+  elements            = 5384
+  elementOrientations = 5384 rows x 9 components
+  element sets        = [('Material_1', 5384)]
+  materials           = ['Material_1']
+  one 9-component row per element = True
+
+  first 6 elementOrientations rows  [e1x e1y e1z | e2x e2y e2z | e3x e3y e3z] (x,y = section plane, z = beam axis):
+   elem 1   (centroid -0.5009 +0.5043, theta1=   0.00, theta3= -45.0)  e1=[-0.7071 -0.0000 +0.7071]  e2=[+0.7071 +0.0000 +0.7071]  e3=[-0.0000 +1.0000 +0.0000]
+   elem 2   (centroid +0.5009 +0.5043, theta1=   0.00, theta3= -45.0)  e1=[-0.7071 -0.0000 +0.7071]  e2=[+0.7071 +0.0000 +0.7071]  e3=[-0.0000 +1.0000 +0.0000]
+   elem 3   (centroid -0.4744 +0.5007, theta1=   0.00, theta3= -45.0)  e1=[-0.7071 -0.0000 +0.7071]  e2=[+0.7071 +0.0000 +0.7071]  e3=[-0.0000 +1.0000 +0.0000]
+   elem 4   (centroid -0.4706 +0.4896, theta1=   0.00, theta3= -45.0)  e1=[-0.7071 -0.0000 +0.7071]  e2=[+0.7071 +0.0000 +0.7071]  e3=[-0.0000 +1.0000 +0.0000]
+   elem 5   (centroid +0.5023 +0.5079, theta1=   0.00, theta3= -45.0)  e1=[-0.7071 -0.0000 +0.7071]  e2=[+0.7071 +0.0000 +0.7071]  e3=[-0.0000 +1.0000 +0.0000]
+   elem 6   (centroid -0.5022 +0.5078, theta1=   0.00, theta3= -45.0)  e1=[-0.7071 -0.0000 +0.7071]  e2=[+0.7071 +0.0000 +0.7071]  e3=[-0.0000 +1.0000 +0.0000]
+
+  frame orthonormality: max|e_i.e_i-1| = 0.00e+00, max|e_i.e_j| = 0.00e+00, max|e1 x e2 - e3| = 0.00e+00
+  e3 (ply normal) is purely in-plane: max|e3_z| = 0.00e+00
+  e1 out-of-plane (axial) component  = 0.7071 (uniform: True)
+  e2 out-of-plane (axial) component  = 0.7071
+  e3 . (centroid) sign: 5384 outward, 0 inward
+
+wrote /home/roger/a/bagla0/OpenSG-2.0/tests/08072026_square_shell_mesh/square_tube_mesh.png
+wrote /home/roger/a/bagla0/OpenSG-2.0/tests/08072026_square_shell_mesh/square_tube_orientation.png

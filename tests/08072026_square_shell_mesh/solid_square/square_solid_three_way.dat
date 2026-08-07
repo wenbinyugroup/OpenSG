@@ -1,0 +1,28 @@
+# square tube -- equivalent 3-D solid properties, three routes
+# msg_shell = 1-D shell SG (opensg_shell, periodic)
+# new solid = 2-D solid SG (opensg_solid n_model=3)
+# old solid = 2-D solid SG (JAX_BICGoptimize) -- the BENCHMARK
+# UNROTATED ply (0 deg): the only state the .sc route can express
+# all normalized by the wall material area 0.1200; order [e11 e22 e33 2e23 2e13 2e12]
+# ---- stiffness terms (Pa) ----
+# term          msg_shell        new solid        old solid shell/old   new/old
+  C11        1.428875e+11     1.429529e+11     1.429529e+11    0.9995    1.0000
+  C12        1.479188e+09     1.588178e+09     1.588204e+09    0.9314    1.0000
+  C13        1.479188e+09     1.588160e+09     1.588186e+09    0.9314    1.0000
+  C22        4.930625e+09     5.139277e+09     5.139278e+09    0.9594    1.0000
+  C23       -3.739063e-21     1.546487e+08     1.546689e+08   -0.0000    0.9999
+  C33        4.930625e+09     5.139217e+09     5.139218e+09    0.9594    1.0000
+  C44        2.236491e+06     9.645916e+06     9.646245e+06    0.2319    1.0000
+  C55        3.000000e+09     3.144840e+09     3.144840e+09    0.9539    1.0000
+  C66        3.000000e+09     3.144834e+09     3.144834e+09    0.9539    1.0000
+# ---- 9 effective constants ----
+# const         msg_shell        new solid        old solid shell/old   new/old
+  E1         1.420000e+11     1.420000e+11     1.420000e+11    1.0000    1.0000
+  E2         4.915265e+09     5.117968e+09     5.117967e+09    0.9604    1.0000
+  E3         4.915265e+09     5.117908e+09     5.117908e+09    0.9604    1.0000
+  G23        2.236491e+06     9.645916e+06     9.646245e+06    0.2319    1.0000
+  G13        3.000000e+09     3.144840e+09     3.144840e+09    0.9539    1.0000
+  G12        3.000000e+09     3.144834e+09     3.144834e+09    0.9539    1.0000
+  nu12       3.000000e-01     3.000000e-01     3.000037e-01    1.0000    1.0000
+  nu13       3.000000e-01     3.000000e-01     3.000039e-01    1.0000    1.0000
+  nu23      -3.115309e-03     2.675049e-02     2.675431e-02   -0.1164    0.9999

@@ -1,0 +1,28 @@
+<!--
+  Materials database for the square thin-walled tube cross section.
+
+  Unit system: SI  (length = m, stress/modulus = Pa, density = kg/m^3)
+
+  "m45" is the orthotropic ply used in the circle/tube off-axis tests.
+  The -45 deg fibre angle is NOT stored here: in PreVABS the ply angle lives
+  in the <layup> ( "<layer lamina=...>angle:nplies</layer>" ), so this lamina
+  is the un-rotated ply material + its thickness only.
+-->
+<materials>
+
+  <material name="m45" type="orthotropic">
+    <density>1600</density>
+    <elastic>
+      <e1>142.0e9</e1><e2>9.8e9</e2><e3>9.8e9</e3>
+      <g12>6.0e9</g12><g13>6.0e9</g13><g23>4.8e9</g23>
+      <nu12>0.30</nu12><nu13>0.30</nu13><nu23>0.42</nu23>
+    </elastic>
+  </material>
+
+  <!-- one single ply that spans the whole wall thickness t = 0.03 -->
+  <lamina name="la_m45">
+    <material>m45</material>
+    <thickness>0.03</thickness>
+  </lamina>
+
+</materials>

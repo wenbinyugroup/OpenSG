@@ -1,0 +1,6 @@
+# C44 mesh convergence, SOLID routes, thin_iso (t/L=0.0100), per cell area L^2=1.0000
+# exact slender limit 0.5*E/(1-nu^2)*(t/L)^3 = 3.84615385e+04 Pa
+# nt = elements through the wall thickness; na = elements per arm
+# nt   na       h_a/t   aspect     nodes      tris              C44  err_exact     d_prev              C11
+  18   594      0.083    1.500     45505     86184   3.92173734e+04    +1.965%      +nan%   1.53237506e+09
+  27   891      0.056    1.500    100576    193914   3.89849666e+04    +1.361%    -0.593%   1.53236603e+09

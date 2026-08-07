@@ -1,0 +1,23 @@
+# equivalent 3-D solid properties from the 1-D SHELL SG
+# msg_shell new architecture: opensg_shell.build_solid_bundle
+# PERIODIC 2-D SG (opposite face edges + corners tied through the
+# shell periodic assembly map) -- Rules/periodicity_in_solid_props.md
+# source: ../square_tube_1Dshell.yaml (square tube, midline a=1.00, t=0.030, center ref)
+# strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66  (1=beam axis, 2/3=cross-section axes) ; normalized by the wall material area 0.120000; solve 1.1 s
+# ---- C3D (6x6, Pa) ----
+  4.56663785e+10   1.68331892e+10   1.68331892e+10  -5.54579809e-16   2.01786558e-06   1.96967907e-06
+  1.68331892e+10   2.28331892e+10   4.48777459e-20   2.30751195e-06  -2.76927974e-14   1.57963212e-07
+  1.68331892e+10   4.48777459e-20   2.28331892e+10  -2.30751193e-06   7.76101868e-08   3.64627101e-15
+ -5.54579809e-16   2.30751195e-06  -2.30751193e-06   1.02865288e+07  -1.01780355e-04  -1.37857781e-05
+  2.01786558e-06  -2.76927974e-14   7.76101868e-08  -1.01780355e-04   1.83540016e+10   2.31598674e-05
+  1.96967907e-06   1.57963212e-07   3.64627101e-15  -1.37857781e-05   2.31598674e-05   1.83540016e+10
+# ---- 9 effective constants ----
+E1      2.08466954e+10
+E2      1.43128716e+10
+E3      1.43128716e+10
+G23     1.02865288e+07
+G13     1.83540016e+10
+G12     1.83540016e+10
+nu12    7.37224619e-01
+nu13    7.37224619e-01
+nu23   -3.73154954e-01

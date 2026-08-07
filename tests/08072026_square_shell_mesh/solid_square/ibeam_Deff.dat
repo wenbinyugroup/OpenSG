@@ -1,0 +1,15 @@
+# I-beam FINAL D_eff (relaxed): analytical vs msg_shell vs msg_solid, all periodic
+# I-beam b=0.50 h=1.00 t=0.030 iso E=7e+10 nu=0.30;  Lf=1.00 Lw=1.00
+# shell census 0.0600, solid omega 0.059100;  D44 frame: shell-an 1.661538e+06 (EIh=2t^3), solid-an 1.901074e+06 (EIh=(2t)^3, spacing h+t)
+# shell 96 elems 1.1 s;  solid 1692 tris 1.5 s
+# analytical D44 row uses the SHELL frame parameters; the solid frame value is in the header
+# term     analytical     shell num     an/sh     msg_solid     sh/so
+  D11     4.61538e+09   4.61538e+09    1.0000   4.57891e+09    1.0080
+  D12     6.92308e+08   6.92308e+08    1.0000   7.21079e+08    0.9601
+  D13     6.92308e+08   6.92308e+08    1.0000   7.51952e+08    0.9207
+  D22     2.30769e+09   2.30769e+09    1.0000   2.33108e+09    0.9900
+  D23     0.00000e+00  -7.93575e-18       inf   7.25200e+07   -0.0000
+  D33     2.30769e+09   2.30769e+09    1.0000   2.43399e+09    0.9481
+  D44     1.66154e+06   1.65542e+06    1.0037   2.69613e+06    0.6140
+  D55     8.07692e+08   8.07692e+08    1.0000   8.57119e+08    0.9423
+  D66     8.07692e+08   8.07692e+08    1.0000   8.18235e+08    0.9871

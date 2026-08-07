@@ -56,11 +56,18 @@ core without restructuring it.
   the YAML, the .sc conversion is the separate helper step):
   1 layup → plate props (1-D SG); 2 FF field → 3-D stress (.ff route);
   3/4 plate homo/dehom from the 2-D honeycomb RHC SG;
-  5/6 solid (n_model 3) homo/dehom — OPEN: the bundled SW_2UC_45.sc has
-  9 nonzero connectivity slots/element (convention unconfirmed);
   7/8 beam (n_model 1, Timoshenko/KKT) homo/dehom.
+  `_blocked_3D_solid_SG/` — the former 5/6 (solid, n_model 3), RETIRED
+  from the active list: no runnable 3-D SG (`SW_2UC_45.sc` has 9 nonzero
+  connectivity slots/element, not tet4/hex8/tet10). The engine path
+  itself is complete; see that folder's README to revive them.
   `CS_OpeNSG_exampels/static`, `dynamic_ex5` — the validated Pagano
   static suite and the Nayak transient benchmark (S8R vs C3D20).
+- `examples/msg_shell/` — the shell-cross-section → Timoshenko-beam route:
+  `1_get_beam_props_from_shell_cross_section`,
+  `2_get_beam_dehom_from_shell_cross_section`, and `IEA_blade_beam/`
+  (the IEA-22 r/R=0.2 benchmark at digit-for-digit OpenSG-TW parity, the
+  σ13 Q-consistency diagnostic, and the 51-station spanwise sweep).
 
 ## Load-bearing gotchas
 

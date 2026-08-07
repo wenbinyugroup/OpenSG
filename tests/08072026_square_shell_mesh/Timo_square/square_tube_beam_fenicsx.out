@@ -1,0 +1,16 @@
+# Timoshenko 6x6 beam stiffness (Pa-based SI) from the 2-D SOLID SG
+# source yaml : square_tube_2Dsolid.yaml (PreVABS square thin-walled tube,
+#               midline a=1.0, t=0.03, 3228 nodes, 5384 linear triangles,
+#               Material_1 orthotropic, single -45 deg ply baked into the
+#               elementOrientations frame)
+# engine      : OpenSG-FEniCSx  SolidBounMesh + core.solid.compute_timo_boun
+#               (dolfinx 0.8.0, conda env opensg_env_v8)
+# row/col order: [eps11  gam12  gam13  kappa1  kappa2  kappa3]
+#              = [ ext    sh2    sh3    twist   bend2   bend3 ]
+# diagonal     = [ EA     GA2    GA3    GJ      EI2     EI3   ]
+    2.50177129e+09    -2.20000000e+01     2.50000000e+01     5.24877057e+08    -2.30000000e+01    -2.00000000e+00
+   -2.20000000e+01     6.29261222e+08     1.01200000e+03     1.73000000e+02    -2.70925212e+08     3.03000000e+02
+    2.50000000e+01     1.01200000e+03     6.29261215e+08    -9.77000000e+02     1.52000000e+02    -2.70925151e+08
+    5.24877057e+08     1.73000000e+02    -9.77000000e+02     3.79746323e+08    -3.30000000e+01    -6.00000000e+01
+   -2.30000000e+01    -2.70925212e+08     1.52000000e+02    -3.30000000e+01     4.13764440e+08    -2.20000000e+01
+   -2.00000000e+00     3.03000000e+02    -2.70925151e+08    -6.00000000e+01    -2.20000000e+01     4.13764449e+08

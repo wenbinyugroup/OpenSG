@@ -1,0 +1,75 @@
+<!--
+  Square thin-walled tube  -  PreVABS 2-D cross-section input.
+
+  Unit system: SI (length m, modulus Pa, density kg/m^3).
+
+  GEOMETRY  (matches square_shell.msh / square_shell.xml in the parent folder)
+    wall MIDLINE  = square of side a = 1.0 centred on the origin,
+                    midline corners at (+-0.5, +-0.5)
+    wall thickness t = 0.03, uniform, ONE ply.
+
+  LAYUP REFERENCE = CENTER / mid-thickness.
+    PreVABS has no "center" layup direction - a layup is always built to one
+    side of its baseline.  So the baseline used here is the OUTER profile,
+    obtained by offsetting the required MIDLINE outward by t/2 = 0.015:
+        outer square side = a + t = 1.03,  corners at (+-0.515, +-0.515)
+    and the single 0.03-thick ply is then built INWARD, ending on the inner
+    square side a - t = 0.97 (corners +-0.485).  The laid-up wall is therefore
+    exactly centred on the (+-0.5, +-0.5) midline = CENTER reference.
+
+  BASELINE DIRECTION / LAYUP SIDE
+    the point list otl -> otr -> obr -> obl -> otl traverses the square
+    CLOCKWISE (negative signed area), so "right" of the travel direction
+    points INTO the section  ->  <layup direction="right">  builds inward.
+    (Identical convention to the shipped PreVABS ex_box example.)
+
+  MESH
+    mesh_size 0.0075 = t/4  ->  about 4 elements through the wall thickness
+    and ~0.0075 along the wall (finer than the 0.1 line-element spacing of
+    square_shell.msh, as allowed).
+-->
+
+<cross_section name="square_tube" format="1">
+
+  <include>
+    <material>materials</material>
+  </include>
+
+  <analysis>
+    <!-- 1 = Timoshenko (generalised) beam model -->
+    <model>1</model>
+  </analysis>
+
+  <general>
+    <mesh_size>0.0075</mesh_size>
+    <element_type>linear</element_type>
+  </general>
+
+  <baselines>
+    <!-- OUTER profile corners = midline offset outward by t/2 = 0.015 -->
+    <point name="otl">-0.515  0.515</point>   <!-- top    left  -->
+    <point name="otr"> 0.515  0.515</point>   <!-- top    right -->
+    <point name="obr"> 0.515 -0.515</point>   <!-- bottom right -->
+    <point name="obl">-0.515 -0.515</point>   <!-- bottom left  -->
+
+    <baseline name="bl_wall" type="straight">
+      <!-- first point repeated last -> closed contour -->
+      <points>otl,otr,obr,obl,otl</points>
+    </baseline>
+  </baselines>
+
+  <layups>
+    <!-- single ply, fibre angle -45 deg, 1 ply -->
+    <layup name="lyp_wall">
+      <layer lamina="la_m45">-45:1</layer>
+    </layup>
+  </layups>
+
+  <component name="wall">
+    <segment name="sg_wall">
+      <baseline>bl_wall</baseline>
+      <layup direction="right">lyp_wall</layup>
+    </segment>
+  </component>
+
+</cross_section>

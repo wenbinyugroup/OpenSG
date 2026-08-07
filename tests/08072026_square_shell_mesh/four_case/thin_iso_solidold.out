@@ -1,0 +1,26 @@
+# ROUTE C -- msg_solid OLD architecture, the single-script JAX_BICGoptimize driver (n_model=3)
+# source: thin_iso.sc (cross lattice cell, L=1.0, ISOTROPIC wall E=70 GPa nu=0.3)
+# a .sc carries ONE material id per element and this driver applies ONE fibre angle
+# per material, so per-element material FRAMES cannot be represented -- this route
+# can verify the isotropic cases only.
+# order [e11 e22 e33 2e23 2e13 2e12]
+# omega (meshed wall material area) = 0.0199000000
+# normalized by the CELL area L^2 = 1.00000000 (C_eff*omega/L^2)
+# solve 230.28 s
+# ---- C_eff (6x6, Pa) ----
+  1.53237560e+09   2.32292867e+08   2.32292804e+08   7.63545180e+01   0.00000000e+00   0.00000000e+00
+  2.32292867e+08   7.70488070e+08   3.82141629e+06   1.07023390e+02   0.00000000e+00   0.00000000e+00
+  2.32292804e+08   3.82141629e+06   7.70489142e+08   1.47501915e+02   0.00000000e+00   0.00000000e+00
+  7.63545180e+01   1.07023390e+02   1.47501915e+02   7.80995149e+04   0.00000000e+00   0.00000000e+00
+  0.00000000e+00   0.00000000e+00   0.00000000e+00   0.00000000e+00   2.70017980e+08  -1.07776605e-03
+  0.00000000e+00   0.00000000e+00   0.00000000e+00   0.00000000e+00  -1.07776605e-03   2.70017980e+08
+# ---- 9 effective constants ----
+E1      1.39300000e+09
+E2      7.33934544e+08
+E3      7.33935632e+08
+G23     7.80995149e+04
+G13     2.70017980e+08
+G12     2.70017980e+08
+nu12    3.00000029e-01
+nu13    2.99999528e-01
+nu23   -4.26939854e-02
