@@ -23,7 +23,15 @@ import numpy as np
 
 from opensg_shell import build_solid_bundle, GBAR_ORDER
 from opensg_shell.solid_props import elastic_constants
-from opensg_shell.periodic_multiscale import periodic_node_map
+from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+
+
+def node_master_map(pts, n_model=3, ndof=6):
+    """node -> reduced master id, straight from the sparse assembly map."""
+    rc, _ = mesh_to_periodic_sparse_assembly_map(
+        len(pts), np.arange(len(pts))[:, None], np.asarray(pts, float),
+        n_model, ndof)
+    return np.asarray(rc, int).ravel()
 
 ############### User Input #################################
 a_sq = 1.0               # centerline square side
@@ -83,24 +91,37 @@ def report_periodicity(pts, node_master, tag, tol=1e-6):
               % (len(corners), len(cm), cm))
     print("  total %d nodes -> %d independent" % (len(pts), len(np.unique(nm))))
 
-# ---------------- SHELL: closed square ring (center ref) --------------------
+# ---------------- SHELL: square-lattice cell (center ref) -------------------
+# The walls run THROUGH the cell (one along each axis, crossing at the centre),
+# so each is owned by exactly one cell.  Putting the walls on the cell boundary
+# instead (a closed ring) makes every wall shared with the neighbour: both
+# routes then integrate it twice, and the solid additionally bonds the two
+# neighbouring walls into one 2t-thick wall, which is what drove C44 apart.
 t0 = time.perf_counter()
-corners = [(-hs, -hs), (hs, -hs), (hs, hs), (-hs, hs)]
-pts, tans = [], []
-for k in range(4):
-    p0, p1 = np.array(corners[k]), np.array(corners[(k+1) % 4])
-    for i in range(nseg):
-        pts.append(p0 + (p1-p0)*i/nseg)
-        tans.append((p1-p0)/np.linalg.norm(p1-p0))
-pts = np.array(pts); m = len(pts)
+xs = np.linspace(0.0, a_sq, nseg+1)
+h_nodes = np.stack([xs, np.full(nseg+1, hs)], 1)          # wall along y2
+v_nodes = np.stack([np.full(nseg+1, hs), xs], 1)          # wall along y3
+ic = nseg//2                                              # shared centre node
+v_keep = [j for j in range(nseg+1) if j != ic]
+pts = np.vstack([h_nodes, v_nodes[v_keep]])
+vid, kk = {}, len(h_nodes)
+for j in range(nseg+1):
+    if j == ic:
+        vid[j] = ic
+    else:
+        vid[j] = kk; kk += 1
+cells_sh = ([[i, i+1] for i in range(nseg)]
+            + [[vid[j], vid[j+1]] for j in range(nseg)])
+tans = ([np.array([1.0, 0.0])]*nseg) + ([np.array([0.0, 1.0])]*nseg)
+m = len(pts)
 out = ["nodes:"]
 for x, y in pts:
     out.append("- [%.12f %.12f 0.00000000]" % (x, y))
 out.append("elements:")
-for i in range(m):
-    out.append("- [%d %d]" % (i+1, (i+1) % m + 1))
+for a_, b_ in cells_sh:
+    out.append("- [%d %d]" % (a_+1, b_+1))
 out.append("elementOrientations:")
-for i in range(m):
+for i in range(len(cells_sh)):
     tx, ty = tans[i]
     e3 = np.cross([0, 0, 1.0], [tx, ty, 0])
     out.append("- [0.0, 0.0, 1.0, %.9f, %.9f, 0.0, %.9f, %.9f, 0.0]"
@@ -112,12 +133,12 @@ out += ["sections:", "- type: shell", "  elementSet: layup_0", "  layup:",
         "    G: [%.6e, %.6e, %.6e]" % (G, G, G),
         "    nu: [%.6f, %.6f, %.6f]" % (nu, nu, nu),
         "sets:", "  element:", "  - name: layup_0", "    labels:"]
-out += ["    - %d" % (e+1) for e in range(m)]
+out += ["    - %d" % (e+1) for e in range(len(cells_sh))]
 out.append("reference: center")
 with open("square_tube_shell.yaml", "w") as f:
     f.write("\n".join(out) + "\n")
 
-nm_sh, nu_sh = periodic_node_map(pts, n_model=3)
+nm_sh = node_master_map(pts, n_model=3, ndof=6)
 report_periodicity(pts, nm_sh, "SHELL contour")
 C_sh = np.asarray(build_solid_bundle("square_tube_shell.yaml",
                                      cell_area=A_cell, periodic=True)["C3D"])
@@ -126,13 +147,14 @@ t_shell = time.perf_counter() - t0
 # ---------------- SOLID: square annulus, same core map ----------------------
 t1 = time.perf_counter()
 lo, hi = hs - t_w/2, hs + t_w/2
-xa = np.concatenate([np.linspace(-hi, -lo, nt+1),
-                     np.linspace(-lo, lo, na+1)[1:-1],
-                     np.linspace(lo, hi, nt+1)])
+xa = np.unique(np.concatenate([np.linspace(0.0, lo, na+1),
+                               np.linspace(lo, hi, nt+1),
+                               np.linspace(hi, a_sq, na+1)]))
 ng = len(xa)
 gid = -np.ones((ng, ng), int)
 qc = [(i, j) for i in range(ng-1) for j in range(ng-1)
-      if abs(0.5*(xa[i]+xa[i+1])) > lo or abs(0.5*(xa[j]+xa[j+1])) > lo]
+      if abs(0.5*(xa[i]+xa[i+1]) - hs) < t_w/2
+      or abs(0.5*(xa[j]+xa[j+1]) - hs) < t_w/2]
 nid = 0
 for (i, j) in qc:
     for di, dj in ((0, 0), (1, 0), (0, 1), (1, 1)):
@@ -182,7 +204,7 @@ np.add.at(K, (gdof[:, :, None].repeat(9, 2), gdof[:, None, :].repeat(9, 1)), Ke)
 np.add.at(Dhe, gdof.ravel(), Fe.reshape(-1, 6))
 
 # same core map, 3 DOF/node
-master, nu_so = periodic_node_map(nd, n_model=3)
+master = node_master_map(nd, n_model=3, ndof=3)
 report_periodicity(nd, master, "SOLID mesh")
 uniq, inv = np.unique(master, return_inverse=True)
 nred = 3*len(uniq)

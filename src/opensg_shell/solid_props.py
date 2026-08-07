@@ -151,8 +151,12 @@ def ring_solid(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     ez = np.zeros(3); ez[ax] = 1.0
     nodes = np.vstack([rx, rx + h * ez])
     if periodic:
-        from .periodic_multiscale import periodic_node_map
-        node_master, _ = periodic_node_map(rx[:, cross], n_model=3)
+        from .periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+        # feed one "cell" per node so the returned reduced connectivity IS the
+        # node -> master map the assemblers take as dof_map
+        rc, _ = mesh_to_periodic_sparse_assembly_map(
+            m, np.arange(m)[:, None], rx[:, cross], 3, NDOF6)
+        node_master = np.asarray(rc, int).ravel()
     else:
         node_master = np.arange(m)
     dof_map = np.concatenate([node_master, node_master])
