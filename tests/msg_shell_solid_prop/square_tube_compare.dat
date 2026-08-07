@@ -1,0 +1,4 @@
+# closed square tube: shell (center ref) vs solid; strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66  (1=beam axis, 2/3=cross-section axes)
+# analytical anchor (both routes): C11 = E*4at/a^2 = 8.400000e+09 Pa; mitred annulus area = 4at exactly
+# term           C_shell          C_solid        pct
+  C11     8.40000000e+09   8.40000000e+09    -0.0000
