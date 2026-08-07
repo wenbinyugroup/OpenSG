@@ -64,6 +64,8 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
     layup_db / material_db (reused from solve_tw_from_yaml -- geometry-independent, keyed
     by layup name).
     """
+    import time as _time
+    _t0 = _time.perf_counter()
     d = yaml.safe_load(open(shell_yaml))
     if ref is None:                                       # single source of truth: yaml records its ref
         ref = d.get("reference", "center")                # (set at 1-D-yaml creation; absent -> center)
@@ -89,6 +91,10 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
                                _mdb, fraction=frac)
             if _rr["G_msg"] is not None:
                 G_by[si] = np.asarray(_rr["G_msg"])
+    from .solid_props import write_abdg_out
+    import os as _os2
+    write_abdg_out(_os2.path.splitext(shell_yaml)[0] + "_ABDG.out",
+                   d["sections"], R["D_by"], G_by)
     C6, V0, V1 = ring_indep(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], G_by,
                             R["k22"], R["ax"], R["cross"], shear=shear, lam_space="elem",
                             return_fields=True)
@@ -111,6 +117,12 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
                              ref="mid" if ref == "center" else "oml")
     except Exception:
         pass
+    # OpenSG default: SwiftComp-format timed .out for the beam model too
+    from opensg_solid.sg_homo import write_sc_K
+    write_sc_K(_os2.path.splitext(shell_yaml)[0] + "_Timo.out", C6,
+               solve_time=_time.perf_counter() - _t0,
+               model="msg-shell beam model (Timoshenko 6x6,"
+                     " [ext sh2 sh3 twist bend2 bend3])", constants=False)
     return {"Timo": C6, "V0": np.asarray(V0), "V1": np.asarray(V1),
             "corners": R["rx"][:, R["cross"]], "red_cells": np.asarray(R["cells"]),
             "rx3": np.asarray(R["rx"]), "re3": np.asarray(R["re3"]), "k22": np.asarray(R["k22"]),

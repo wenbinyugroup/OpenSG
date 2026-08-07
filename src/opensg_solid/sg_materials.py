@@ -139,6 +139,32 @@ def rotate_C_with_matrix(C, R_flat):
     return K @ C @ K.T
 
 
+def elem_rotation_from_yaml(orientations):
+    """(E, 9) `elem_rotation` in the SOLVER's global order, from an OpenSG
+    yaml's `elementOrientations`.
+
+    THE CONVENTION GAP THIS CLOSES.  An OpenSG SG yaml stores each material
+    axis with its components ordered (y2, y3, axial) -- the two cross-section
+    coordinates first, the prismatic direction last -- because the yaml's node
+    rows are written the same way.  The solver indexes global axes as
+    (1, 2, 3) = (axial, y2, y3).  Every 3-vector therefore has to be cycled
+
+        [a, b, c]  ->  [c, a, b]
+
+    before it can be used as a direction-cosine matrix.  Feeding the yaml order
+    straight into `elem_rotation` points e1 along y3 instead of along the beam
+    axis: the run still completes and still looks plausible, but it silently
+    destroys the section's symmetry (a square tube comes out with EI2 != EI3)
+    and lands on the properties of a uniformly-rotated lamina.  The
+    OpenSG-FEniCSx solid reader applies the same cycle, as EE1 = (o2, o0, o1).
+
+    In:  (E, 9) or (E, 3, 3) rows [e1 | e2 | e3] in yaml component order.
+    Out: (E, 9) rows [e1 | e2 | e3] in solver component order.
+    """
+    o = np.asarray(orientations, float).reshape(-1, 3, 3)
+    return o[:, :, [2, 0, 1]].reshape(-1, 9)
+
+
 def get_heterogeneous_C_matrix(sc, material_param=None, angles=None,
                                elem_rotation=None):
     """Per-ELEMENT stiffness tables for the beam/KKT path (Beam_solid.py's
@@ -147,8 +173,11 @@ def get_heterogeneous_C_matrix(sc, material_param=None, angles=None,
     angle rotation = build_material_C).
 
     In:  sc dict; material_param/angles as build_material_C;
-         elem_rotation (E, 9) flattened per-element DC matrices or None
-         (our parser does not produce them).
+         elem_rotation (E, 9) flattened per-element DC matrices or None.
+         The rows must be in the SOLVER's global order (axial, y2, y3) -- pass
+         a yaml's elementOrientations through elem_rotation_from_yaml first,
+         which cycles the components; see that docstring for what goes wrong
+         otherwise.  sc["mat_id"] is 1-BASED here.
     Out: (C_asm_e, C_mat_e) -- both (E, 6, 6): the ASSEMBLY stiffness
          (elem_rotation applied when given) and the pre-elem-rotation
          stiffness the recovery multiplies the element-frame strain by."""

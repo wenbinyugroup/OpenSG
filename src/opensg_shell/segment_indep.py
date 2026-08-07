@@ -220,14 +220,14 @@ def quad_ops_indep_batch(Xe, e3e, xi, eta, cross, ax):
         np.stack([x12 * y1, x12 * swept, x12 * y1 * x3, -x12 * y1 * x2], 1),
     ], axis=1)
 
-    # DOF blocks laid out (ne, row, node a, dof) -> reshape (ne, row, 24)
+    # ---- Gamma_h (fluctuation): DOF blocks (ne, row, node a, dof) -> (ne, row, 24)
     B = np.zeros((ne, 6, 4, NDOF6))
-    B[:, 0, :, 0:3] = D1[:, :, None] * xi1[:, None, :]
-    B[:, 1, :, 0:3] = D2[:, :, None] * xi2[:, None, :]
-    B[:, 2, :, 0:3] = D2[:, :, None] * xi1[:, None, :] + D1[:, :, None] * xi2[:, None, :]
-    B[:, 3, :, 3:6] = D1[:, :, None] * xi2[:, None, :]
-    B[:, 4, :, 3:6] = -D2[:, :, None] * xi1[:, None, :]
-    B[:, 5, :, 3:6] = D2[:, :, None] * xi2[:, None, :] - D1[:, :, None] * xi1[:, None, :]
+    B[:, 0, :, 0:3] = D1[:, :, None] * xi1[:, None, :]                      # eps11 = X_i1 w_i,1
+    B[:, 1, :, 0:3] = D2[:, :, None] * xi2[:, None, :]                      # eps22 = X_i2 w_i,2
+    B[:, 2, :, 0:3] = D2[:, :, None] * xi1[:, None, :] + D1[:, :, None] * xi2[:, None, :]   # 2eps12 = X_i1 w_i,2 + X_i2 w_i,1
+    B[:, 3, :, 3:6] = D1[:, :, None] * xi2[:, None, :]                      # K11 = X_i2 om_i,1
+    B[:, 4, :, 3:6] = -D2[:, :, None] * xi1[:, None, :]                     # K22 = -X_i1 om_i,2
+    B[:, 5, :, 3:6] = D2[:, :, None] * xi2[:, None, :] - D1[:, :, None] * xi1[:, None, :]   # K12+K21 = X_i2 om_i,2 - X_i1 om_i,1
     BDh = B.reshape(ne, 6, 24)
 
     Bl = np.zeros((ne, 6, 4, NDOF6))
@@ -240,10 +240,10 @@ def quad_ops_indep_batch(Xe, e3e, xi, eta, cross, ax):
     BDl = Bl.reshape(ne, 6, 24)
 
     Bg = np.zeros((ne, 2, 4, NDOF6))
-    Bg[:, 0, :, 0:3] = D1[:, :, None] * yv[:, None, :]
-    Bg[:, 1, :, 0:3] = D2[:, :, None] * yv[:, None, :]
-    Bg[:, 0, :, 3:6] = N[None, :, None] * xi2[:, None, :]
-    Bg[:, 1, :, 3:6] = N[None, :, None] * (-xi1)[:, None, :]
+    Bg[:, 0, :, 0:3] = D1[:, :, None] * yv[:, None, :]                      # 2g13 = C_3i w_i,1 ...
+    Bg[:, 1, :, 0:3] = D2[:, :, None] * yv[:, None, :]                      # 2g23 = C_3i w_i,2 ...
+    Bg[:, 0, :, 3:6] = N[None, :, None] * xi2[:, None, :]                   # ... + X_i2 om_i
+    Bg[:, 1, :, 3:6] = N[None, :, None] * (-xi1)[:, None, :]                # ... - X_i1 om_i
     BGh = Bg.reshape(ne, 2, 24)
 
     Bgl = np.zeros((ne, 2, 4, NDOF6))

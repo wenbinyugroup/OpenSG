@@ -452,12 +452,52 @@ def _to_basix_order(cells, n_sg, nn):
 
 
 # ------------------------------------------------------------- the public API
+def _knum(v):
+    m, e = ("%.7E" % v).split("E")
+    return "%19s" % ("%sE%s%03d" % (m, e[0], abs(int(e))))
+
+
+def write_sc_K(path, C, solve_time=None, model="", constants=True):
+    """Write a 6x6 effective stiffness in the SwiftComp .K format (as a .out
+    file): stiffness, compliance and orthotropic-approximated engineering
+    constants; OpenSG banner at the top, 'Time taken' at the bottom.  Units
+    follow the input; Voigt [11 22 33 23 13 12], engineering shears."""
+    C = np.asarray(C, float)
+    S = np.linalg.inv(C)
+    n = C.shape[0]
+    with open(path, "w") as f:
+        f.write(" OpenSG %s\n\n" % model)
+        f.write(" The Effective Stiffness Matrix\n"
+                " --------------------------------------------\n")
+        for i in range(n):
+            f.write("".join(_knum(C[i, j]) for j in range(n)) + "\n")
+        f.write("\n The Effective Compliance Matrix\n"
+                " --------------------------------------------\n")
+        for i in range(n):
+            f.write("".join(_knum(S[i, j]) for j in range(n)) + "\n")
+        if not constants:
+            if solve_time is not None:
+                f.write("\n Time taken: %.2f sec\n" % solve_time)
+            return
+        f.write("\n The Engineering Constants (Approximated as Orthotropic)\n"
+                " ----------------------------------------------------------\n")
+        for lbl, v in (("E1 ", 1/S[0, 0]), ("E2 ", 1/S[1, 1]),
+                       ("E3 ", 1/S[2, 2]), ("G12", 1/S[5, 5]),
+                       ("G13", 1/S[4, 4]), ("G23", 1/S[3, 3]),
+                       ("nu12", -S[0, 1]/S[0, 0]),
+                       ("nu13", -S[0, 2]/S[0, 0]),
+                       ("nu23", -S[1, 2]/S[1, 1])):
+            f.write("  %-4s=%s\n" % (lbl, _knum(v)))
+        if solve_time is not None:
+            f.write("\n Time taken: %.2f sec\n" % solve_time)
+
+
 def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     material_param=None,                # (n_mat, 9) override
                     angles: Optional[Sequence[float]] = None,   # deg/material
                     n_model: int = 2,                   # 1 beam, 2 plate, 3 3D
                     workdir: Optional[str] = None,      # where .yaml/.msh go
-                    elem_rotation=None,                 # (E, 9) DCs, beam only
+                    elem_rotation=None,                 # (E, 9) per-element DCs
                     solver: str = "direct",             # "direct" | "cg"
                     shear_refined: bool = False,        # + RM G 2x2 (n_model=2)
                     plot: bool = True                   # write <base>_mesh.png
@@ -471,7 +511,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     sc (the parsed .sc dict).  Everything the dehom needs rides along --
     homogenize once, recover as often as needed (the msg_rm_plate rule).
     n_model=1 routes through the Beam_solid KKT engine (n_sg >= 2);
-    elem_rotation is only consumed there (our parser yields none).
+    elem_rotation is consumed by every model (beam, plate and solid).
     solver: "direct" (default; one sparse factorization for all columns)
     or "cg" (the verbatim SSDM Chebyshev-CG pipeline) -- both produce
     the same digits, see _homo_direct.
@@ -487,6 +527,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         base = os.path.splitext(sc_path)[0]
         if workdir is not None:
             base = os.path.join(workdir, os.path.basename(base))
+    import time as _time
+    _t0 = _time.perf_counter()
     sc = load_sg_input(sc_path, base)
     n_sg = sc["dim"]
     if plot:
@@ -523,8 +565,14 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                               dphi_dxi_qnp, W_q, dof_map_np,
                               material_param, angles, elem_rotation)
 
-    C_m = build_material_C(sc, material_param, angles)
-    C_ess = C_m[cell_domain_ids]
+    # per-element material frames apply to the PLATE and SOLID models too, not
+    # just the beam route: dropping them here silently homogenized a section
+    # with per-wall frames as a single uniformly-rotated lamina (a square tube
+    # came out with C22 != C33, which its 90-degree symmetry forbids).
+    # elem_rotation rows must be in the solver's global order -- see
+    # sg_materials.elem_rotation_from_yaml.
+    C_ess, _ = get_heterogeneous_C_matrix(sc, material_param, angles,
+                                          elem_rotation)
 
     unique_dofs = jnp.unique(dof_map_np)
     n_unique = len(unique_dofs)
@@ -567,4 +615,13 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             ABDG[:6, :6] = lad["A6"]
             ABDG[6:, 6:] = lad["G_msg"]
             r["ABDG"] = ABDG
+    # every OpenSG run writes its timed .out by default (constants: 3-D only)
+    r["solve_time"] = _time.perf_counter() - _t0
+    _mdl = {1: "msg-solid beam model (Timoshenko 6x6)",
+            2: "msg-solid plate model (ABD)",
+            3: "msg-solid 3D elastic model"}.get(n_model, "msg-solid")
+    write_sc_K(base + ".out", np.asarray(r["C_eff"]),
+               solve_time=r["solve_time"],
+               model="%s, omega %.8g" % (_mdl, float(r["omega"])),
+               constants=(n_model == 3))
     return r
