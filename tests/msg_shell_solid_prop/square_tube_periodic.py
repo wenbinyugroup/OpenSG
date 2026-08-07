@@ -37,6 +37,52 @@ G = E/(2*(1+nu))
 A_cell = a_sq**2
 hs = a_sq/2
 
+
+def report_periodicity(pts, node_master, tag, tol=1e-6):
+    """Verify every one of the four bounding-box edges takes part in the tie:
+    each node on the max face must be a slave whose master is the node at the
+    same in-face coordinate on the min face, and all four corners must chain
+    down to a single master."""
+    pts = np.asarray(pts, float)
+    nm = np.asarray(node_master, int)
+    lo, hi = pts.min(0), pts.max(0)
+    names = {(0, 0): "left  (x=min)", (0, 1): "right (x=max)",
+             (1, 0): "bottom(y=min)", (1, 1): "top   (y=max)"}
+    print("\n[%s] periodicity report" % tag)
+    csize = np.bincount(nm)                      # nodes sharing each master
+    idx = {}
+    for d in (0, 1):
+        for s, val in ((0, lo[d]), (1, hi[d])):
+            e = np.where(np.abs(pts[:, d] - val) < tol)[0]
+            idx[(d, s)] = e
+            tied = int(np.sum(csize[nm[e]] > 1))
+            print("  %-14s %3d nodes, %3d tied to a partner%s"
+                  % (names[(d, s)], len(e), tied,
+                     "" if tied == len(e) else "   <-- %d LOOSE" % (len(e)-tied)))
+    # every max-face node must pair with a min-face node at the same in-face coord
+    for d in (0, 1):
+        o = 1 - d
+        maxf, minf = idx[(d, 1)], idx[(d, 0)]
+        unpaired = []
+        for s in maxf:
+            same = minf[np.abs(pts[minf, o] - pts[s, o]) < tol]
+            if len(same) == 0 or nm[s] != nm[same[0]]:
+                unpaired.append(s)
+        print("  dir %d: %d/%d max-face nodes tied to their min-face partner%s"
+              % (d, len(maxf) - len(unpaired), len(maxf),
+                 "" if not unpaired else "   UNPAIRED %s" % unpaired[:5]))
+    corners = []
+    for cx in (lo[0], hi[0]):
+        for cy in (lo[1], hi[1]):
+            k = np.argmin(np.abs(pts[:, 0]-cx) + np.abs(pts[:, 1]-cy))
+            if abs(pts[k, 0]-cx) < tol and abs(pts[k, 1]-cy) < tol:
+                corners.append(k)
+    if corners:
+        cm = sorted(set(int(nm[k]) for k in corners))
+        print("  corners: %d found -> %d distinct master(s) %s"
+              % (len(corners), len(cm), cm))
+    print("  total %d nodes -> %d independent" % (len(pts), len(np.unique(nm))))
+
 # ---------------- SHELL: closed square ring (center ref) --------------------
 t0 = time.perf_counter()
 corners = [(-hs, -hs), (hs, -hs), (hs, hs), (-hs, hs)]
@@ -72,7 +118,7 @@ with open("square_tube_shell.yaml", "w") as f:
     f.write("\n".join(out) + "\n")
 
 nm_sh, nu_sh = periodic_node_map(pts, n_model=3)
-print("shell periodic map (core): %d -> %d independent nodes" % (m, nu_sh))
+report_periodicity(pts, nm_sh, "SHELL contour")
 C_sh = np.asarray(build_solid_bundle("square_tube_shell.yaml",
                                      cell_area=A_cell, periodic=True)["C3D"])
 t_shell = time.perf_counter() - t0
@@ -100,7 +146,10 @@ for i in range(ng):
 tri = []
 for (i, j) in qc:
     n00, n10, n01, n11 = gid[i, j], gid[i+1, j], gid[i, j+1], gid[i+1, j+1]
-    tri += [[n00, n10, n11], [n00, n11, n01]]
+    if (i + j) % 2 == 0:            # alternate the diagonal; a single fixed
+        tri += [[n00, n10, n11], [n00, n11, n01]]      # split breaks the
+    else:                                              # tetragonal symmetry
+        tri += [[n00, n10, n01], [n10, n11, n01]]      # and leaks C14/C24/C34
 tri = np.array(tri, int)
 nn, ne = len(nd), len(tri)
 
@@ -134,7 +183,7 @@ np.add.at(Dhe, gdof.ravel(), Fe.reshape(-1, 6))
 
 # same core map, 3 DOF/node
 master, nu_so = periodic_node_map(nd, n_model=3)
-print("solid periodic map (core): %d -> %d independent nodes" % (nn, nu_so))
+report_periodicity(nd, master, "SOLID mesh")
 uniq, inv = np.unique(master, return_inverse=True)
 nred = 3*len(uniq)
 T = np.zeros((ndof, nred))
@@ -162,12 +211,10 @@ print("solid mesh: %d nodes, %d tris, A_mesh=%.6f (4at=%.6f)"
 # ---------------- comparison ------------------------------------------------
 def dump(path, tag, Cm, dt):
     cons, S = elastic_constants(Cm)
-    ev = np.linalg.eigvalsh(Cm)
     with open(path, "w") as f:
         f.write("# PERIODIC square tube a=%.2f t=%.3f iso E=%.3e nu=%.2f, %s\n"
                 % (a_sq, t_w, E, nu, tag))
         f.write("# %s; cell area=%.6f; solve %.1f s\n" % (GBAR_ORDER, A_cell, dt))
-        f.write("# eigenvalues: %s\n" % " ".join("%.4e" % v for v in ev))
         f.write("# ---- C3D (6x6, Pa) ----\n")
         for i in range(6):
             f.write(" ".join("%16.8e" % Cm[i, j] for j in range(6)) + "\n")
@@ -175,11 +222,11 @@ def dump(path, tag, Cm, dt):
         for kx in ("E1", "E2", "E3", "G23", "G13", "G12",
                    "nu12", "nu13", "nu23"):
             f.write("%-6s %16.8e\n" % (kx, cons[kx]))
-    return cons, ev
+    return cons
 
 
-cons_sh, ev_sh = dump("square_tube_per_shell.out", "SHELL 1-D ring", C_sh, t_shell)
-cons_so, ev_so = dump("square_tube_per_solid.out", "SOLID 2-D annulus", C_so, t_solid)
+cons_sh = dump("square_tube_per_shell.out", "SHELL 1-D ring", C_sh, t_shell)
+cons_so = dump("square_tube_per_solid.out", "SOLID 2-D annulus", C_so, t_solid)
 
 print("\nC3D shell (Pa):")
 for i in range(6):
@@ -187,8 +234,6 @@ for i in range(6):
 print("C3D solid (Pa):")
 for i in range(6):
     print("  " + " ".join("%12.4e" % C_so[i, j] for j in range(6)))
-print("\neigenvalues shell: %s" % " ".join("%.3e" % v for v in ev_sh))
-print("eigenvalues solid: %s" % " ".join("%.3e" % v for v in ev_so))
 
 thr = 1e-8*max(np.max(np.abs(C_sh)), np.max(np.abs(C_so)))
 print("\nresolved terms, shell vs solid:")
@@ -218,8 +263,6 @@ with open("square_tube_per_compare.dat", "w") as f:
     f.write("# fe_jax/periodic_multiscale.py map (n_model=3: x and y paired)\n")
     f.write("# a=%.3f t=%.3f E=%.3e nu=%.2f cell=%.4f; %s\n"
             % (a_sq, t_w, E, nu, A_cell, GBAR_ORDER))
-    f.write("# eigenvalues shell: %s\n" % " ".join("%.4e" % v for v in ev_sh))
-    f.write("# eigenvalues solid: %s\n" % " ".join("%.4e" % v for v in ev_so))
     f.write("# ---- resolved stiffness terms (Pa) ----\n")
     f.write("# %-5s %16s %16s %10s\n" % ("term", "C_shell", "C_solid", "pct"))
     f.write("\n".join(lines) + "\n")
