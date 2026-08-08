@@ -9,8 +9,10 @@ solid $6\times6$. OpenSG covers this from both sides:
 | **msg-solid** | 3-D solid SG (tets/hexes) | `opensg_solid.sg_homo.plate_homo_2d(..., n_model=3)` |
 | **msg-shell** | 3-D **shell** SG (a thin sheet meshed as shell elements) | `opensg_shell.shell_sg3d.shell_sg3d(...)` |
 
-Periodicity is the 3-D default in both: opposite **faces, edges and corners** are tied through
-the sparse periodic assembly map, so the cell needs no boundary conditions beyond the map itself.
+The solid route is periodic: opposite **faces, edges and corners** tied through the sparse
+periodic assembly map. The shell route takes a `boundary` argument — `"aperiodic"` (default:
+the boundary solution mapped onto the bounding-box nodes as Dirichlet data) or `"periodic"`
+(the same three-direction tie) — compared head-to-head below.
 
 ```{note}
 Runnable cases in this repository:
@@ -70,13 +72,38 @@ detected as **junction lines**; a smooth TPMS has none.
 ```python
 from opensg_shell.shell_sg3d import shell_sg3d
 
-r = shell_sg3d("schwarz_p_3Dshell.yaml")   # omega defaults to the SG surface area
+r = shell_sg3d("schwarz_p_3Dshell.yaml")                        # boundary="aperiodic" (default)
+r = shell_sg3d("schwarz_p_3Dshell.yaml", boundary="periodic")   # unit-cell benchmark mode
 r["C3D"], r["n_junction_edges"], r["solve_time"]
 ```
 
 The SG measure $\omega$ defaults to the **midsurface area** — the 3-D analogue of
 $\omega = \text{perimeter}$ for a plane-section shell SG — and can be overridden. The `.out`
 file is written per unit-cell volume so its moduli compare directly with a solid `.K`.
+
+### Boundary treatment: aperiodic vs periodic, same yaml
+
+`boundary="aperiodic"` is the boundary-solution treatment: for a unit cell the boundary
+solution is the macro (affine) field itself, so mapping it onto the boundary nodes prescribes
+zero **translational** warping fluctuation ($w_1=w_2=w_3=0$, Dirichlet) on every
+bounding-box-face node, rotations left natural. That forbids the affine fluctuations that make
+a *free* aperiodic SG rank-one, fixes the rigid modes (no Lagrange border), and is a kinematic
+upper bound. On the Schwarz-P yaml (720 boundary nodes of 13 536), per unit cell, MPa:
+
+| term | aperiodic | periodic | % | | aperiodic | periodic | % |
+|---|---|---|---|---|---|---|---|
+| | **t = 0.0365** | | | | **t = 0.1293** | | |
+| $C_{11}$ | 2375.9 | 2225.3 | +6.8 | | 9881.0 | 8916.8 | +10.8 |
+| $C_{12}$ | 1537.5 | 1564.9 | −1.8 | | 4921.1 | 5352.2 | −8.1 |
+| $C_{44}$ | 1078.3 | 1041.0 | +3.6 | | 4150.3 | 3961.6 | +4.8 |
+| solve | 72 s | 96 s | | | 71 s | 95 s | |
+
+The offset is the clamped-face boundary layer of a **single** cell — the expected kinematic
+bound, not an error in either path (clamping the rotations too would double it). Aperiodic is
+~25 % *faster*: the Dirichlet rows leave the factorization and there is no tie map or border.
+Use `boundary="periodic"` for anything benchmarked against SwiftComp `.K` or reported as the
+effective law of a periodic medium; the aperiodic default is for SGs that genuinely are not
+periodic. Full table: `examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG/boundary_compare.dat`.
 
 ### Shell versus solid on the same surface
 

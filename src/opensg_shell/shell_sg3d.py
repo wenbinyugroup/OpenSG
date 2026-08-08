@@ -1,5 +1,7 @@
 """3-D shell SG: equivalent solid properties of a shell-element structure
-gene that is PERIODIC IN ALL THREE directions (TPMS-class cells).
+gene (TPMS-class cells).  boundary="aperiodic" (default: boundary solution
+w = 0 mapped onto the bounding-box nodes) or "periodic" (all three
+directions tied).
 
 Reuses the msg_shell operators unchanged -- solid_fluct_ops_batch (Gamma_h),
 solid_macro_ops_batch (Gamma_e) and the per-element frames are geometry-
@@ -35,12 +37,41 @@ _G = 1.0/np.sqrt(3.0)
 _GPTS = [(-_G, -_G), (_G, -_G), (_G, _G), (-_G, _G)]
 
 
-def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg"):
-    """omega = the SG measure remaining in the model (SwiftComp-TW
-    convention): the midsurface SURFACE AREA, integrated from the mesh by
-    default -- the 3-D analog of the plane-section omega = perimeter.
-    Pass omega explicitly to override (e.g. the cell volume for a
-    per-unit-cell law)."""
+def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
+               boundary="aperiodic"):
+    """Equivalent 3-D solid stiffness of a 3-D shell SG.
+
+    boundary = "aperiodic" (default) or "periodic":
+      * "periodic"  -- warping fluctuation w periodic: opposite faces, edges
+        and corners tied through the sparse assembly map; rigid translations
+        removed by 3 area-weighted Lagrange rows.
+      * "aperiodic" -- the BOUNDARY-SOLUTION treatment: for a unit cell the
+        boundary solution is the macro (affine) field itself, and mapping it
+        onto the boundary nodes prescribes zero TRANSLATIONAL fluctuation
+        (w1 = w2 = w3 = 0, Dirichlet) on every node of the bounding-box
+        faces; the rotational DOFs stay natural (free).  Translations are
+        what the macro solid strain prescribes, and clamping them forbids
+        the affine fluctuations that make a FREE aperiodic SG rank-one
+        (see Rules/periodicity_in_solid_props.md) and fixes the rigid
+        modes -- no Lagrange border.  Clamping the ROTATIONS too would
+        over-stiffen the cut edges (measured: +12 %% -> +7 %% on C11 by
+        freeing them).  Kinematic (Dirichlet) homogenization is an upper
+        bound on one cell; it converges to "periodic" as the SG grows
+        (boundary layer ~ 1/N) -- that convergence is the acceptance check.
+
+    Variables
+    ---------
+    omega   : SG measure remaining in the model (SwiftComp-TW convention):
+              midsurface SURFACE AREA, integrated from the mesh by default
+              (3-D analog of the plane-section omega = perimeter); pass
+              explicitly to override (e.g. cell volume for a per-cell law)
+    De, Gm  : laminate 6x6 (center-ref) and transverse-shear 2x2
+    uniq,inv: master-node set and node->master map (identity if aperiodic)
+    K, Dhe, Dee : fluctuation/macro energy blocks of
+              2U = w^T K w + 2 w^T Dhe ebar + ebar^T Dee ebar
+    V0      : minimizing fluctuation per macro strain column ebar;
+              Deff = Dee + V0^T Dhe  (valid for both boundary treatments)
+    """
     t0 = time.perf_counter()
     d = _yaml.safe_load(open(yaml_path))
     row = lambda r: " ".join(str(x) for x in
@@ -76,11 +107,15 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg"):
             cnt[tuple(sorted((vs[k], vs[(k+1) % len(vs)])))] += 1
     n_junc_edges = sum(1 for v in cnt.values() if v > 2)
 
-    # periodic map on the FULL 3-D coordinates: all faces/edges/corners
-    rc, _ = mesh_to_periodic_sparse_assembly_map(nn, np.arange(nn)[:, None],
-                                                 nd, 3, NDOF6)
-    master = np.asarray(rc, int).ravel()
-    uniq, inv = np.unique(master, return_inverse=True)
+    if boundary == "periodic":
+        # periodic map on the FULL 3-D coordinates: all faces/edges/corners
+        rc, _ = mesh_to_periodic_sparse_assembly_map(nn,
+                                                     np.arange(nn)[:, None],
+                                                     nd, 3, NDOF6)
+        master = np.asarray(rc, int).ravel()
+        uniq, inv = np.unique(master, return_inverse=True)
+    else:                        # aperiodic: every node its own master
+        uniq = inv = np.arange(nn)
     ndof = NDOF6*len(uniq)
 
     Xe = nd[el]
@@ -110,18 +145,35 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg"):
                        (np.concatenate(rowsI), np.concatenate(colsJ))),
                       shape=(ndof, ndof))
 
-    # kernel: the 3 rigid translations, area-weighted Lagrange rows
-    wA = np.zeros(len(uniq))
-    _, _, _, dA0 = solid_fluct_ops_batch(Xe, e3, 0.0, 0.0, [1, 2], 0)
-    np.add.at(wA, inv[el].ravel(), np.repeat(dA0, 4))
-    Cc = sp.lil_matrix((3, ndof))
-    for k in range(3):
-        Cc[k, k::NDOF6] = wA
-    A = sp.bmat([[K, Cc.T], [Cc, None]], format="csc")
-    R = np.zeros((ndof + 3, 6))
-    R[:ndof] = -Dhe
-    lu = spla.splu(A)
-    V0 = np.column_stack([lu.solve(R[:, c]) for c in range(6)])[:ndof]
+    if boundary == "periodic":
+        # kernel: the 3 rigid translations, area-weighted Lagrange rows
+        wA = np.zeros(len(uniq))
+        _, _, _, dA0 = solid_fluct_ops_batch(Xe, e3, 0.0, 0.0, [1, 2], 0)
+        np.add.at(wA, inv[el].ravel(), np.repeat(dA0, 4))
+        Cc = sp.lil_matrix((3, ndof))
+        for k in range(3):
+            Cc[k, k::NDOF6] = wA
+        A = sp.bmat([[K, Cc.T], [Cc, None]], format="csc")
+        R = np.zeros((ndof + 3, 6))
+        R[:ndof] = -Dhe
+        lu = spla.splu(A)
+        V0 = np.column_stack([lu.solve(R[:, c]) for c in range(6)])[:ndof]
+        n_bnd = 0
+    else:
+        # boundary solution mapped to boundary nodes: zero translational
+        # fluctuation on the bounding-box faces (rotations stay natural);
+        # solve the free interior
+        box0, box1 = nd.min(0), nd.max(0)
+        tol = 1e-6*float(np.max(box1 - box0))
+        onb = ((np.abs(nd - box0) < tol) | (np.abs(nd - box1) < tol)).any(1)
+        bnodes = np.where(onb)[0]
+        n_bnd = len(bnodes)
+        bd = (NDOF6*bnodes[:, None] + np.arange(3)[None, :]).ravel()
+        free = np.setdiff1d(np.arange(ndof), bd)
+        lu = spla.splu(K[free][:, free].tocsc())
+        V0 = np.zeros((ndof, 6))
+        V0[free] = np.column_stack([lu.solve(-Dhe[free][:, c])
+                                    for c in range(6)])
     Deff = Dee + V0.T @ Dhe
     Deff = 0.5*(Deff + Deff.T)
     if omega is None:
@@ -135,11 +187,14 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg"):
     # moduli compare directly with solid .K files; the returned C3D keeps the
     # SG-measure (surface-area) convention
     V_cell = float(np.prod(nd.max(0) - nd.min(0)))
+    bc_txt = ("periodic in 3 dirs" if boundary == "periodic"
+              else "aperiodic: w=0 on %d boundary nodes" % n_bnd)
     write_sc_K(os.path.splitext(yaml_path)[0] + "_C3D.out", Deff/V_cell,
                solve_time=solve_time,
                model="msg-shell equivalent 3D solid (3-D shell SG, %d nodes,"
-                     " %d elems, %d junction edges, periodic in 3 dirs,"
+                     " %d elems, %d junction edges, %s,"
                      " per unit cell %.6g)"
-                     % (nn, ne, n_junc_edges, V_cell))
+                     % (nn, ne, n_junc_edges, bc_txt, V_cell))
     return {"C3D": C3D, "D_eff": Deff, "solve_time": solve_time,
-            "n_junction_edges": n_junc_edges, "ndof": ndof}
+            "n_junction_edges": n_junc_edges, "ndof": ndof,
+            "boundary": boundary, "n_boundary_nodes": n_bnd}

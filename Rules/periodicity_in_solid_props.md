@@ -1,4 +1,4 @@
-# Rule — solid properties are always computed on a PERIODIC SG
+# Rule — solid properties need a CONSTRAINED boundary: periodic, or Dirichlet
 
 **Applies to:** every route that homogenizes a structure gene to an equivalent
 3-D solid (`n_model = 3`) — the solid engines (`opensg_solid`, and the original
@@ -7,8 +7,14 @@ JAX_BICGoptimize single script) and **msg_shell** (`opensg_shell.solid_props`,
 
 ## The rule
 
-Periodicity is **always** part of getting solid properties. It is not optional
-and not a per-case choice:
+The boundary fluctuation must be constrained — a FREE boundary produces the
+rank-one theorem below. Two valid treatments exist:
+
+* **periodic** — opposite faces/edges/corners tied (this section);
+* **aperiodic** — the boundary-solution Dirichlet mode (section further down):
+  zero *translational* fluctuation on the bounding-box nodes.
+
+When periodicity is used, it is not partial and not per-direction:
 
 | SG | what is tied |
 |---|---|
@@ -56,11 +62,41 @@ Verified numerically: a fully filled square cell with free faces returns
 periodic faces returns the material's own isotropic stiffness exactly
 (`lambda + 2*mu`, `lambda`, `mu`).
 
+## The aperiodic (boundary-solution Dirichlet) mode
+
+`opensg_shell.shell_sg3d(yaml, boundary=...)` takes `"aperiodic"` (default) or
+`"periodic"`. Aperiodic maps the boundary solution — for a unit cell, the
+macro/affine field itself — onto the boundary nodes: zero **translational**
+fluctuation (`w1 = w2 = w3 = 0`, Dirichlet) on every bounding-box-face node,
+rotations left natural. This forbids the rank-one affine fields (they violate
+`w = 0` on the boundary) and fixes the rigid modes, so no Lagrange border is
+needed. Do **not** clamp the rotations too: that over-stiffens the cut edges
+(Schwarz-P C11 error grows from +6.8 % to +12.2 %).
+
+Character of the result (Schwarz-P TPMS shell, same yaml, same mesh):
+
+| t | normals | shears | couplings | time vs periodic |
+|---|---|---|---|---|
+| 0.0365 | +6.8 % | +3.6 % | −1.7 % | 72 s vs 96 s |
+| 0.1293 | +10.8 % | +4.8 % | −8.0 % | 71 s vs 95 s |
+
+Aperiodic is a **kinematic upper bound** on one cell (its error is a boundary
+layer at the clamped faces) and it is *faster* than periodic (the Dirichlet
+rows leave the factorization, and there is no tie map or Lagrange border).
+
+**Benchmarking:** digit-parity comparisons against SwiftComp `.K` and any
+unit-cell property you report as *the* effective stiffness still require
+`boundary="periodic"` — pass it explicitly. Aperiodic is the right treatment
+when the SG genuinely is not periodic (blade segments, cut-outs, one-off
+cells).
+
 ## Defaults in code
 
 `ring_solid(...)` and `build_solid_bundle(...)` take `periodic=True` by default.
-`periodic=False` is retained for diagnostics only (to demonstrate the rank-one
-theorem); do not use it for reported properties.
+`periodic=False` (free faces) is retained for diagnostics only (to demonstrate
+the rank-one theorem); do not use it for reported properties.
+`shell_sg3d(...)` takes `boundary="aperiodic"` by default (user convention);
+pass `boundary="periodic"` for unit-cell benchmarks.
 
 ## Choosing the cell — the one thing still on the user
 

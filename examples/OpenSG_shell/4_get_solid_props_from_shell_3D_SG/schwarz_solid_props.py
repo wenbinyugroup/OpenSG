@@ -1,6 +1,8 @@
 """msg_shell 3-D shell SG: equivalent solid properties of the Schwarz-P TPMS
-shell cell, periodic in all three directions (default).  Writes the timed
-.out (via shell_sg3d) and the mesh png.
+shell cell.  boundary="aperiodic" (default: boundary solution mapped onto
+the bounding-box nodes as Dirichlet data) or boundary="periodic" (all three
+directions tied) -- see compare_boundary_modes.py for the head-to-head.
+Writes the timed .out (via shell_sg3d) and the mesh png.
 
 Run (after make_schwarz_yaml.py):  python schwarz_solid_props.py"""
 import matplotlib
