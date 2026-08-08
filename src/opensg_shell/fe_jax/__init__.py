@@ -1,28 +1,17 @@
+"""opensg_shell.fe_jax -- the msg_* kernel subpackage (OpenSG-authored):
+
+    msg_materials.py        ABD / 6x6 stiffness tables, reference shifts
+    msg_transverse_shear.py wall transverse-shear G, 8x8 plate law
+    msg_mesh.py             1-D shell yaml mesh utilities
+    msg_rm.py, msg_rm_timo.py  RM operators + 5-DOF Timoshenko assembly
+    msg_solver.py           KKT solve, V1 RHS, Timoshenko finalization
+    msg_hermite.py          Hermite C1 KL (thin-walled) pipeline
+    msg_dehom.py            shell strain recovery + plate dehom
+    orient_plot.py          canonical e1/e2/e3 orientation figure
+"""
 import jax
 
 jax.config.update("jax_enable_x64", True)
-
-# Legacy FEniCSx-dependent modules (require flax, petsc4py, dolfinx)
-try:
-    from .np_types import *
-    from .basis_quadrature import *
-    from .fea import *
-    from .linear_elasticity import *
-    from .hyperelasticity import *
-    from .profiling import *
-    from .setup import *
-    from .utils import *
-    from .sc_to_msh import *
-    from .sparse_matrix import *
-    from .sparse_linear_solve import *
-    from .constraints import *
-    from .constraint_system import *
-    from .boundary_conditions import *
-    #from .periodic_dofmap import *
-    #from .multiscale import *
-    #from .fiber_mechanics import *
-except ImportError:
-    pass  # FEniCSx / flax not installed — MSG shell modules still available
 
 # MSG Shell Timoshenko beam homogenization (quadratic Lagrange elements)
 from .msg_materials import (

@@ -1,7 +1,7 @@
 """Canonical e1/e2/e3 orientation plotter for OpenSG shell/solid SG YAMLs.
 
-COMPULSORY DELIVERABLE: an orientation PNG is emitted on EVERY homogenization run (auto-emitted by
-strip_RM.rm_timoshenko_6x6 with orient=True, and by gradient_junction_kirchhoff). Two panels are drawn,
+COMPULSORY DELIVERABLE: an orientation PNG is emitted on EVERY homogenization run
+(auto_emit is called by the example drivers).  Two panels are drawn,
 the "Shell SG (1-D)" line mesh and the "Solid SG (2-D)" area mesh, with the per-element material axes:
   e2 = blue   (in-plane ply-flow direction)
   e3 = green  (wall normal; the OML->IML sign convention is documented on the RM theory page)
