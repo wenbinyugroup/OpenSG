@@ -67,7 +67,7 @@ IJ = [("C11", 0, 0), ("C22", 1, 1), ("C33", 2, 2), ("C12", 0, 1),
 for nm, i, j in IJ:
     a = C["Schwarz-P shell  t=0.0364"][i, j]
     b = C["Sample_2 solid (Schwarz-P)"][i, j]
-    c2 = C["Schwarz-P shell  t=0.1275"][i, j]
+    c2 = C["Schwarz-P shell  t=0.1293"][i, j]
     d = C["Sample_1 solid (Schwarz-P)"][i, j]
     rows.append("  %-6s %11.1f %11.1f %+8.2f | %11.1f %11.1f %+8.2f"
                 % (nm, a, b, 100*(a-b)/b, c2, d, 100*(c2-d)/d))
