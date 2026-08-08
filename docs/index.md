@@ -22,6 +22,13 @@ tutorials/solid_props_3d_sg
 
 ```{toctree}
 :maxdepth: 1
+:caption: Beam properties
+
+tutorials/taper_segment_aperiodic
+```
+
+```{toctree}
+:maxdepth: 1
 :caption: Theory & conventions
 
 theory
@@ -36,6 +43,7 @@ theory
 | Hierarchical square | Deo & Yu 2023 / SwiftComp | matches the paper's thin-walled column to ≤1 % |
 | Periodic cross cell, $C_{44}$ | closed form $\tfrac12 E'(t/L)^3$ | +0.01 % at $t/L = 0.0125$ |
 | Schwarz-P shell SG vs its own solid | SwiftComp-exact msg-solid | −3 % normals, −6 % shears, +0.3 % $\nu$ |
+| Aperiodic segment, prismatic tube (iso + ±45) | its own boundary ring $6\times6$ | identity to $\le 5\times10^{-5}$ rel |
 
 ## Working rules
 
