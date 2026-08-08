@@ -66262,7 +66262,7 @@ sections:
   elementSet: layup_0
   layup:
   - - alu
-    - 1.293300e-01
+    - 3.645700e-02
     - 0.0
 materials:
 - name: alu
