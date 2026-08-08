@@ -1,0 +1,1003 @@
+\chapter{Constitutive Relations Recovered by OpenSG}
+\label{ch:constitutive}
+
+Every OpenSG run answers the same question. Given a structure gene (SG) --- a
+one-dimensional through-thickness stack, a two-dimensional cross-section or
+cell, or a three-dimensional unit cell --- what is the constitutive law of the
+macroscopic model that replaces it? The SG problem is solved once, and its
+output is a small dense stiffness matrix relating \emph{generalized forces} to
+\emph{generalized strains}. This chapter lists every such law the code
+produces, the exact ordering of the strain and force components in each, the
+function that computes it, the input file you edit, the command you type, and
+the file the answer is written to.
+
+Two conventions hold throughout and are worth internalising before reading any
+matrix.
+
+\begin{itemize}
+\item \textbf{Units follow the input.} The single writer
+  \texttt{write\_sc\_K} performs no unit conversion, so an SG given in metres
+  with moduli in pascals returns N, N$\cdot$m and Pa, while an SG given in
+  millimetres with moduli in MPa returns the corresponding mixed units (N/mm,
+  N$\cdot$mm).
+\item \textbf{Shears are engineering shears.} Every off-diagonal strain
+  component carries the factor of two ($2\varepsilon_{12}$,
+  $2\bar\Gamma_{23}$, $2\gamma_{13}$), which is why each shear stiffness
+  appears once, not four times, in the quadratic strain energy.
+\end{itemize}
+
+\section{The \texttt{.out} contract}
+\label{sec:out-contract}
+
+Every homogenization in OpenSG-2.0 writes a timed text file in the SwiftComp
+\texttt{.K} layout through one function,
+\texttt{opensg\_solid.sg\_homo.write\_sc\_K}:
+
+\begin{lstlisting}[style=opensg,caption={The single output writer. Every law in this chapter is printed by this call.}]
+write_sc_K(path, C, solve_time=None, model="", constants=True, name="")
+\end{lstlisting}
+
+The file opens with an \verb| OpenSG <model>| banner, prints the effective
+stiffness $\mathbf C$, then its exact inverse $\mathbf S = \mathbf C^{-1}$ (the
+effective compliance), and closes with \verb| Time taken: <t> sec|. Numbers are
+written by the helper \texttt{\_knum}, a 19-character right-justified
+\verb|%.7E| mantissa with a signed three-digit exponent, which is exactly the
+SwiftComp \texttt{.K} column format.
+
+The \texttt{name} argument is the only thing that changes the matrix title, and
+it identifies which macro law you are looking at (Table~\ref{tab:outnames}).
+
+\begin{table}[htbp]
+\centering
+\caption{The \texttt{name} argument of \texttt{write\_sc\_K} and the title it
+prints. The title is the fastest way to tell which law an \texttt{.out} file
+holds.}
+\label{tab:outnames}
+\footnotesize
+\begin{tabular}{lll}
+\toprule
+\texttt{name} passed to \texttt{write\_sc\_K} & title printed in the \texttt{.out} & macro law \\
+\midrule
+\texttt{"Timoshenko"} & \texttt{The Effective Timoshenko Stiffness Matrix} & beam $6\times6$ \\
+\texttt{"Classical Plate"} & \texttt{The Effective Classical Plate Stiffness Matrix} & plate ABD $6\times6$ \\
+\texttt{"Reissner-Mindlin Plate"} & \texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix} & plate ABDG $8\times8$ \\
+\texttt{""} (omitted) & \texttt{The Effective Stiffness Matrix} & 3-D solid $6\times6$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Only the last of these also prints
+\verb| The Engineering Constants (Approximated as Orthotropic)|. That is the
+\texttt{constants=True} branch, and it is meaningful only for a
+three-dimensional elasticity law; the beam and plate calls pass
+\texttt{constants=False}.
+
+\section{Beam: the Timoshenko $6\times6$}
+\label{sec:timo}
+
+The beam macro model carries six generalized strains: one axial extension, two
+transverse shears, one twist and two bending curvatures. In code order --- the
+order stated in the module header of \texttt{src/opensg\_solid/sg\_homo.py} ---
+these are
+
+\begin{equation}
+\bar{\boldsymbol\epsilon} \;=\;
+\left\{\;\bar\epsilon_{11}\;\;\gamma_{12}\;\;\gamma_{13}\;\;
+\kappa_{1}\;\;\kappa_{2}\;\;\kappa_{3}\;\right\}^{\mathsf T},
+\end{equation}
+
+and the conjugate generalized forces are the axial force, the two transverse
+shear forces, the torque and the two bending moments --- the VABS ordering
+$\{F_1\;F_2\;F_3\;M_1\;M_2\;M_3\}$ in which the shipped blade load table
+\texttt{ff51\_rmc\_reform.dat} is written (its header reads
+\verb|# eta F1 F2 F3 M1 M2 M3 (RM CENTER-ref BeamDyn, VABS order)|). The law is
+
+\begin{equation}
+\begin{Bmatrix} F_1 \\ F_2 \\ F_3 \\ M_1 \\ M_2 \\ M_3 \end{Bmatrix}
+=
+\begin{bmatrix}
+S_{11} & S_{12} & S_{13} & S_{14} & S_{15} & S_{16} \\
+S_{12} & S_{22} & S_{23} & S_{24} & S_{25} & S_{26} \\
+S_{13} & S_{23} & S_{33} & S_{34} & S_{35} & S_{36} \\
+S_{14} & S_{24} & S_{34} & S_{44} & S_{45} & S_{46} \\
+S_{15} & S_{25} & S_{35} & S_{45} & S_{55} & S_{56} \\
+S_{16} & S_{26} & S_{36} & S_{46} & S_{56} & S_{66}
+\end{bmatrix}
+\begin{Bmatrix} \bar\epsilon_{11} \\ \gamma_{12} \\ \gamma_{13} \\
+\kappa_{1} \\ \kappa_{2} \\ \kappa_{3} \end{Bmatrix}.
+\label{eq:timo}
+\end{equation}
+
+The matrix is fully populated in general --- a composite blade section couples
+extension to bending and twist --- but its diagonal carries the familiar
+engineering meaning
+
+\begin{equation}
+\mathrm{diag}(\mathbf S) = \left[\;EA\;\;GA_2\;\;GA_3\;\;GJ\;\;EI_2\;\;EI_3\;\right],
+\label{eq:vabsdiag}
+\end{equation}
+
+which is how the drivers label their printout: the list
+\verb|LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]| appears verbatim in
+\texttt{examples/OpenSG\_shell/IEA\_blade\_beam/1\_homo\_beam\_props.py}. Read
+Eq.~\eqref{eq:vabsdiag} as a naming convention, not as a claim of
+decoupling. $S_{44}$ is the torsional stiffness only to the extent that the
+twist channel is uncoupled; when $S_{45}$ or $S_{46}$ is large, $GJ$ as
+conventionally understood is not $S_{44}$.
+
+\subsection{Running it on a shell cross-section}
+
+The msg-shell ring route homogenizes a cross-section contour with the
+constrained six-DOF shell element (independent drilling $\omega_3$ enforced by
+element-constant Lagrange multipliers, $\gamma_{23}$ tied by MITC) and takes
+its wall transverse shear from the MSG least-squares plate solution. The user
+edits one file, the one-dimensional shell SG YAML, which carries the contour
+nodes, the line elements, the per-element orientations, the layup sections, the
+materials and the \texttt{reference:} field. From
+\texttt{examples/OpenSG\_shell/IEA\_blade\_beam}:
+
+\begin{lstlisting}[style=shellst]
+python 1_homo_beam_props.py
+\end{lstlisting}
+
+The driver's user block is three lines long; only the station name changes:
+
+\begin{lstlisting}[style=opensg,caption={The complete user input of the shell beam driver. build\_rm\_bundle reads iea\_s10\_shell.yaml.}]
+name = "iea_s10"                  # IEA-22 station at r/R = 0.20
+B = build_rm_bundle(name + "_shell.yaml")
+C6 = np.asarray(B["Timo"])
+\end{lstlisting}
+
+\texttt{build\_rm\_bundle} writes two files by itself: the SwiftComp-layout
+\texttt{<yaml base>\_Timo.out} (here \texttt{iea\_s10\_shell\_Timo.out}) with
+banner \verb| OpenSG msg-shell beam model [ext sh2 sh3 twist bend2 bend3]| and
+title \texttt{The Effective Timoshenko Stiffness Matrix}, and the per-section
+wall law \texttt{<yaml base>\_ABDG.out} described in
+Section~\ref{sec:wallabdg}. The driver additionally saves the bare $6\times6$
+as \texttt{iea\_s10\_beam\_Timo.out} and the ring mesh figure
+\texttt{iea\_s10\_ring\_mesh.png}.
+
+For the IEA-22 blade station at $r/R = 0.20$ that $6\times6$ has the diagonal
+
+\begin{equation}
+\mathrm{diag}(\mathbf S) =
+\left[\,2.7661\times10^{10},\;7.1861\times10^{8},\;4.2174\times10^{8},\;
+2.4376\times10^{9},\;3.5144\times10^{10},\;6.8130\times10^{10}\,\right]
+\end{equation}
+
+in SI units, so $EA = 27.7$ GN, $EI_3 = 68.1$ GN$\cdot$m$^2$ edgewise against
+$EI_2 = 35.1$ GN$\cdot$m$^2$ flapwise, and $GJ = 2.44$ GN$\cdot$m$^2$. The
+largest off-diagonal terms in that file are $S_{15} = 1.66864\times10^{9}$ and
+$S_{16} = -2.07730\times10^{9}$ (extension--bending, i.e.\ the section
+reference axis is not the tension centre) and
+$S_{56} = -5.55712\times10^{9}$ (the two bending channels are not principal).
+Terms that should vanish by symmetry sit at $10^{-5}$ against diagonals of
+$10^{10}$, which is the numerical zero of this solve.
+
+\subsection{Running it on a solid cross-section}
+
+The msg-solid route runs the KKT beam driver: a zeroth-order $V_0$ solve under
+four rigid-body Lagrange constraints, then a first-order $V_{1s}$ solve reusing
+the same factorization, then the $6\times6$ reduction in
+\texttt{finalize\_v1\_and\_compute\_deff}. The entry point is
+\texttt{plate\_homo\_2d(..., n\_model=1)}, which requires \texttt{n\_sg >= 2}
+(a two- or three-dimensional solid SG). From
+\texttt{examples/OpenSG-solid/7\_get\_beam\_props\_from\_SG}:
+
+\begin{lstlisting}[style=shellst]
+python beam_homo_sg.py
+\end{lstlisting}
+
+\begin{lstlisting}[style=opensg,caption={The user block of beam\_homo\_sg.py. The material rows are (E1,E2,E3,G12,G13,G23,nu12,nu13,nu23) in MPa; angles rotates each material about the SG normal.}]
+n_model = 1                    # 1: Beam; 2: Plate; 3: 3D elastic
+name = "RHC_SW_2UC_45"         # reads <name>.yaml
+
+material_param = jnp.array([
+    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply +45
+    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply -45
+    (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
+angles = jnp.array([45.0, -45.0, 0.0])
+
+r = plate_homo_2d(name + ".yaml", material_param=material_param,
+                  angles=angles, n_model=n_model)
+\end{lstlisting}
+
+This writes \texttt{RHC\_SW\_2UC\_45.out} with banner
+\verb| OpenSG msg-solid beam model, omega 1| and the mesh figure
+\texttt{RHC\_SW\_2UC\_45\_mesh.png} (Figure~\ref{fig:rhcmesh}). Its diagonal is
+$[\,9.8993\times10^{6},\;1.9075\times10^{6},\;9.3619\times10^{5},\;
+2.9775\times10^{8},\;2.1896\times10^{9},\;9.2899\times10^{8}\,]$ in the input
+units (N and N$\cdot$mm$^2$, since the SG is in millimetres and the moduli in
+MPa).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.72\textwidth]{\FIGDIR/rhc_2dsg_mesh.png}
+\caption{The two-dimensional honeycomb SG \texttt{RHC\_SW\_2UC\_45}, the same
+mesh used by the beam ($n_{\mathrm{model}}=1$), plate ($2$) and solid ($3$)
+examples. Colours are the three material sets of the \texttt{.yaml}: the
+$+45$ and $-45$ composite plies of the cell walls and the isotropic
+face sheets.}
+\label{fig:rhcmesh}
+\end{figure}
+
+\subsection{The classical $4\times4$ that rides along}
+\label{sec:ceffeb}
+
+The Timoshenko reduction is built on top of a zeroth-order (Euler--Bernoulli)
+solve, and that intermediate law is a genuine classical beam stiffness in its
+own right. It drops the two transverse shears:
+
+\begin{equation}
+\begin{Bmatrix} F_1 \\ M_1 \\ M_2 \\ M_3 \end{Bmatrix}
+=
+\mathbf A_{\mathrm{EB}}
+\begin{Bmatrix} \bar\epsilon_{11} \\ \kappa_1 \\ \kappa_2 \\ \kappa_3 \end{Bmatrix},
+\qquad \mathbf A_{\mathrm{EB}} \in \mathbb R^{4\times4}.
+\end{equation}
+
+On the solid route it is returned as \texttt{r["C\_eff\_EB"]} alongside the
+Timoshenko \texttt{r["C\_eff"]}. In \texttt{\_beam\_homo\_kkt} it is formed as
+$\mathbf C_{\mathrm{eb}} = (D_{ee} + D_1^{V_0})/\omega$ immediately after the
+$V_0$ solve, before the first-order ladder runs, and it is then passed straight
+into \texttt{finalize\_v1\_and\_compute\_deff} as the $\mathbf A$ block of the
+Timoshenko transformation. It is not written to the \texttt{.out} --- the
+\texttt{.out} always carries the $6\times6$ --- so a driver that wants it must
+print it, as \texttt{beam\_homo\_sg.py} does.
+
+\subsection{Which routes produce the beam law}
+
+\begin{table}[htbp]
+\centering
+\caption{The three entry points that return a Timoshenko $6\times6$. The
+msg-solid entry point lives in \texttt{opensg\_solid.sg\_homo}, the two
+msg-shell ones in \texttt{opensg\_shell}.}
+\label{tab:beamroutes}
+\footnotesize
+\begin{tabular}{lll}
+\toprule
+route & entry point & SG input \\
+\midrule
+msg-solid beam & \texttt{plate\_homo\_2d(..., n\_model=1)} & 2-D or 3-D solid SG (\texttt{n\_sg >= 2}) \\
+msg-shell ring & \texttt{build\_rm\_bundle} (calls \texttt{ring\_indep}) & 1-D shell SG (cross-section contour) \\
+msg-shell segment & \texttt{segment\_timo\_from\_3dyaml} & 3-D shell segment YAML (tapered or prismatic) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The segment route replaces axial periodicity by Dirichlet data. Each end
+cross-section is extracted topologically by \texttt{sg\_mesh.extract}, solved on
+its own with \texttt{ring\_indep} to give that ring's $\mathbf C_6$, $V_0$ and
+$V_1$, and those warping fields are then imposed on the segment's boundary
+nodes; the segment energy is divided by the segment length
+$L_z$. It writes \texttt{<yaml base>\_Timo.out} with the same
+\texttt{Timoshenko} title and the banner
+\verb|msg-shell tapered/aperiodic segment (boundary V0/V1 Dirichlet, L=<Lz>)|.
+For a prismatic segment the result must reproduce the boundary ring's own
+$6\times6$; that identity is the standing verification of the route.
+
+\section{Plate: classical ABD $6\times6$ and Reissner--Mindlin ABDG $8\times8$}
+\label{sec:plate}
+
+\subsection{Classical (Kirchhoff--Love) plate law}
+
+The classical plate model pairs three membrane stress resultants and three
+moment resultants with three membrane strains and three curvatures:
+
+\begin{equation}
+\begin{Bmatrix} N_{11} \\ N_{22} \\ N_{12} \\ M_{11} \\ M_{22} \\ M_{12} \end{Bmatrix}
+=
+\begin{bmatrix} \mathbf A & \mathbf B \\[2pt] \mathbf B^{\mathsf T} & \mathbf D \end{bmatrix}
+\begin{Bmatrix} \varepsilon_{11} \\ \varepsilon_{22} \\ 2\varepsilon_{12} \\
+\kappa_{11} \\ \kappa_{22} \\ \kappa_{12} \end{Bmatrix},
+\qquad
+\mathbf A, \mathbf B, \mathbf D \in \mathbb R^{3\times3}.
+\label{eq:abd}
+\end{equation}
+
+The row order \verb|[N11 N22 N12 M11 M22 M12]| is stated in the module header
+of \texttt{src/opensg\_solid/sg\_homo.py} and echoed by the driver in
+\texttt{examples/OpenSG-solid/3\_get\_plate\_props\_from\_2D\_SG}. The
+$\mathbf B$ block is the extension--bending coupling; it vanishes only for a
+laminate that is symmetric about the chosen reference surface, so it is a
+property of the SG \emph{and} of where you put the reference. Run it with
+
+\begin{lstlisting}[style=shellst]
+python plate_homo_2dsg.py
+\end{lstlisting}
+
+which calls \texttt{plate\_homo\_2d(name + ".yaml", material\_param=...,
+angles=..., n\_model=2)} and writes \texttt{RHC\_SW\_2UC\_45.out} with banner
+\verb| OpenSG msg-solid plate model, omega 35.248001, periodic| and title
+\texttt{The Effective Classical Plate Stiffness Matrix}. Here $\omega =
+35.248001$ is the in-plane SG measure (the cell width), and the leading entries
+are $A_{11} = 3.3586\times10^{5}$, $A_{22} = 1.1291\times10^{5}$,
+$A_{66} = 1.0552\times10^{5}$ N/mm and $D_{11} = 9.0368\times10^{7}$,
+$D_{22} = 5.7011\times10^{7}$, $D_{66} = 4.6026\times10^{7}$ N$\cdot$mm. The
+$\mathbf B$ block is at the $10^{0}$ level against an $\mathbf A$ of $10^{5}$,
+i.e.\ the cell is symmetric about its own mid-surface to solver precision.
+
+\subsection{Reissner--Mindlin plate law}
+
+The shear-refined model adds the transverse-shear pair. The strain vector grows
+to eight components and the resultant vector gains the two transverse shear
+forces $Q_1$ and $Q_2$:
+
+\begin{equation}
+\begin{Bmatrix} \mathbf N \\ \mathbf M \\ \mathbf Q \end{Bmatrix}
+=
+\begin{bmatrix}
+\mathbf A & \mathbf B & \mathbf 0 \\[2pt]
+\mathbf B^{\mathsf T} & \mathbf D & \mathbf 0 \\[2pt]
+\mathbf 0 & \mathbf 0 & \mathbf G
+\end{bmatrix}
+\begin{Bmatrix} \boldsymbol\varepsilon \\ \boldsymbol\kappa \\ \boldsymbol\gamma \end{Bmatrix},
+\qquad
+\boldsymbol\gamma = \{\,2\gamma_{13}\;\;2\gamma_{23}\,\}^{\mathsf T},
+\qquad
+\mathbf Q = \{\,Q_1\;\;Q_2\,\}^{\mathsf T},
+\label{eq:abdg}
+\end{equation}
+
+with $\boldsymbol\varepsilon$ and $\boldsymbol\kappa$ exactly the first and
+second triples of Eq.~\eqref{eq:abd}.
+
+The zero off-diagonal blocks are structural, not an approximation of
+convenience. The code assembles the $8\times8$ as \verb|ABDG[:6,:6] = A6| and
+\verb|ABDG[6:,6:] = G_msg|, so the in-plane law and the transverse-shear law
+come from two separate variational problems and are then stacked. The
+$2\times2$ block $\mathbf G$ is obtained as $\mathbf G = \mathbf X^{-1}$ from
+the $\mathbf U^*$ least-squares reduction of the first-order warping ladder
+(function \texttt{\_rm\_ls\_reduction}), a 78-equation, 27-unknown system solved
+by a column-equilibrated truncated-SVD minimum-norm solve with cutoff
+\texttt{\_LS\_RCOND = 1e-12}. Two diagnostics come out with it: the relative
+residual of the fit, reported as \texttt{r["Ustar\_rel"]}, and the smallest
+eigenvalue of $\mathbf X$. If that eigenvalue is not positive the SPD gate
+fails and the block is returned as \texttt{None} --- in which case no
+$8\times8$ exists and the code falls back to printing the classical
+$6\times6$. Always check that you got an $8\times8$ before trusting a
+transverse-shear number.
+
+\subsubsection{The 1-D SG route}
+
+\texttt{opensg\_solid.rm\_plate\_1D.msg\_rm\_plate.rm\_plate\_msg} solves the
+through-thickness SG of a single laminate and returns \texttt{A6} (the
+$6\times6$ ABD), \texttt{G\_msg} and \texttt{ABDG}, with rows
+\verb|e11 e22 g12 k11 k22 k12 2g13 2g23|. Which of the two matrices is printed
+is selected by \texttt{model:} in the user's \texttt{layup\_db.yaml}:
+\texttt{model: 0} prints the classical $6\times6$, \texttt{model: 1} prints the
+full $8\times8$. From
+\texttt{examples/OpenSG-solid/1\_get\_plate\_props\_from\_1DSG}:
+
+\begin{lstlisting}[style=shellst]
+python 1d_sg.py
+\end{lstlisting}
+
+The input the user edits is \texttt{layup\_db.yaml} alone. It carries the
+reference surface (\texttt{fraction: 0.5} is the mid-surface, \texttt{0} the
+bottom or OML face, \texttt{1} the top), the materials with their densities,
+the stacking sequence bottom-ply-first, and the SG discretisation
+(\texttt{n\_per\_layer: 1} element per physical ply, \texttt{elem\_order: 4} for
+the five-noded quartic element that represents the warping ladder exactly).
+The script writes the SG mesh \texttt{1dsg.yaml} plus
+\texttt{1dsg.png} (Figure~\ref{fig:plate1dsg}) and the law in
+\texttt{layup\_db\_plate\_homo.out}.
+
+The shipped case is the Nayak Example-5 sandwich, $(0/90/0/90/\mathrm{core})_s$,
+nine plies, total thickness $h = 0.1524$ m, graphite/epoxy faces
+($E_1 = 128$ GPa) over a HEREX C70.130 PVC foam core, each face ply
+$0.9525$ mm and the core $144.78$ mm. Its \texttt{.out} banner records
+\verb|9 plies, h = 0.152400 m, fraction = 0.5, rho*h = 30.251400 kg/m^2| and
+the leading entries are
+
+\begin{equation}
+A_{11} = A_{22} = 5.49165\times10^{8}\ \mathrm{N/m},\quad
+D_{11} = 3.00055\times10^{6},\quad D_{22} = 2.93711\times10^{6}\ \mathrm{N\!\cdot\!m},
+\end{equation}
+\begin{equation}
+G_{11} = 7.70098\times10^{6}\ \mathrm{N/m},\qquad
+G_{22} = 7.54237\times10^{6}\ \mathrm{N/m}.
+\end{equation}
+
+Read them physically: the thin stiff faces carry the membrane and bending
+channels, while the thick compliant core sets the transverse shear. The
+$\mathbf B$ block prints at $10^{-6}$ against an $\mathbf A$ of $10^{8}$,
+because the stack is symmetric about \texttt{fraction: 0.5}; change that to
+\texttt{fraction: 0.0} and $\mathbf B$ becomes a leading-order term.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\textwidth]{\FIGDIR/plate_1dsg.png}
+\caption{The through-thickness one-dimensional structure gene of the Nayak
+Example-5 sandwich written by \texttt{1d\_sg.py}: eight graphite/epoxy face
+plies over a HEREX C70.130 foam core, with the mid-surface reference
+(\texttt{fraction: 0.5}) marked. This mesh is the SG whose solution is the
+$8\times8$ of Eq.~\eqref{eq:abdg}.}
+\label{fig:plate1dsg}
+\end{figure}
+
+\subsubsection{The 2-D / 3-D SG route}
+
+\texttt{plate\_homo\_2d(..., n\_model=2, shear\_refined=True)} runs
+\texttt{plate\_shear\_ladder} on the general SG assembly after the classical
+solve, re-integrating the value-product ladder blocks on a quadrature exact to
+degree $2p+2$. It adds \texttt{r["G\_msg"]} ($2\times2$),
+\texttt{r["A6\_ladder"]}, \texttt{r["X\_shear"]}, \texttt{r["Ustar\_rel"]} and
+\texttt{r["ABDG"]} to the result dict, and the \texttt{.out} switches its title
+to \texttt{Reissner-Mindlin Plate} and its matrix to the $8\times8$. Passing
+\texttt{shear\_refined=True} with any \texttt{n\_model} other than $2$ raises a
+\texttt{ValueError}.
+
+Note the derivation status recorded in the docstring of
+\texttt{plate\_shear\_ladder}, because it decides how much to trust the
+$\mathbf G$ block. For \texttt{n\_sg = 1} this \emph{is} the Yu (2005)
+one-dimensional formulation, gated against the closed-form anchors (an
+isotropic layer with $\nu = 0$ returns $\tfrac{5}{6}Gh$). For \texttt{n\_sg = 2}
+or \texttt{3} it is the SwiftComp-style extension --- the same energy functional
+with $\Gamma_h$ carrying the resolved-dimension derivatives, periodic
+master--slave coupling, and the $\langle w \rangle = 0$ average constraint
+replacing the one-dimensional node constraint. That extension is gated on the
+laminate-as-strip equivalence (a laminate meshed as a 2-D or 3-D SG must
+reproduce its 1-D $\mathbf G$ under refinement) but is \textbf{not} yet
+validated against an external reference for SGs that are heterogeneous
+\emph{in plane}. The shear-refined \emph{recovery} is likewise not ported:
+plate dehomogenization stays the classical Kirchhoff-mode recovery.
+
+\section{Solid: the equivalent 3-D law}
+\label{sec:solid}
+
+When the macro model is ordinary three-dimensional elasticity, the SG returns a
+$6\times6$ anisotropic stiffness in the Voigt order $[11\;22\;33\;23\;13\;12]$
+with engineering shear strains:
+
+\begin{equation}
+\begin{Bmatrix}
+\sigma_{11} \\ \sigma_{22} \\ \sigma_{33} \\ \sigma_{23} \\ \sigma_{13} \\ \sigma_{12}
+\end{Bmatrix}
+=
+\mathbf C^{\,\mathrm{3D}}
+\begin{Bmatrix}
+\bar\Gamma_{11} \\ \bar\Gamma_{22} \\ \bar\Gamma_{33} \\
+2\bar\Gamma_{23} \\ 2\bar\Gamma_{13} \\ 2\bar\Gamma_{12}
+\end{Bmatrix},
+\qquad \mathbf C^{\,\mathrm{3D}} \in \mathbb R^{6\times6}.
+\label{eq:c3d}
+\end{equation}
+
+Internally the solid engine stores strain and stress in the SwiftComp order
+$(xx, yy, zz, yz, xz, xy)$, which is the same list. On the msg-shell routes
+axis 1 is the prismatic (beam) direction and axes 2 and 3 span the
+cross-section, as recorded in the module constant
+\texttt{opensg\_shell.sg\_homo.GBAR\_ORDER}:
+\verb|strains [e11 e22 e33 2e23 2e13 2e12] -> stiffness C11..C66|
+\verb|(1=beam axis, 2/3=cross-section axes)|.
+
+\subsection{The engineering-constants block}
+
+This is the only law for which the \texttt{.out} also prints an
+engineering-constants block. It is computed from the compliance
+$\mathbf S = (\mathbf C^{\,\mathrm{3D}})^{-1}$ by the orthotropic-approximation
+formulas coded in \texttt{write\_sc\_K} (and mirrored on the shell side by
+\texttt{opensg\_shell.sg\_homo.elastic\_constants}, which also returns
+$\mathrm{cond}(\mathbf C)$):
+
+\begin{equation}
+E_1 = \frac{1}{S_{11}},\quad E_2 = \frac{1}{S_{22}},\quad E_3 = \frac{1}{S_{33}},
+\qquad
+G_{12} = \frac{1}{S_{66}},\quad G_{13} = \frac{1}{S_{55}},\quad G_{23} = \frac{1}{S_{44}},
+\end{equation}
+\begin{equation}
+\nu_{12} = -\frac{S_{12}}{S_{11}},\qquad
+\nu_{13} = -\frac{S_{13}}{S_{11}},\qquad
+\nu_{23} = -\frac{S_{23}}{S_{22}}.
+\end{equation}
+
+The word \emph{approximated} in the printed heading is load-bearing. These nine
+numbers reproduce $\mathbf C^{\,\mathrm{3D}}$ exactly only if that matrix is
+genuinely orthotropic in the SG axes. A cell with normal--shear coupling still
+prints them, and they will not rebuild the full matrix. The matrix, not the
+constants block, is the result.
+
+\subsection{Which entry points produce it}
+
+\begin{table}[htbp]
+\centering
+\caption{The three entry points that return an equivalent 3-D solid law, and
+the measure each divides the assembled energy by.}
+\label{tab:solidroutes}
+\footnotesize
+\begin{tabular}{lll}
+\toprule
+entry point & SG & normalisation \\
+\midrule
+\texttt{plate\_homo\_2d(..., n\_model=3)} & 1-D/2-D/3-D solid SG & $\mathbf C_{\mathrm{eff}} = (\bar{\mathbf D} + \mathbf D_1)/\omega$ \\
+\texttt{opensg\_shell.build\_solid\_bundle} & 1-D shell SG (cross-section contour) & $\mathbf C^{\,\mathrm{3D}} = \mathbf D_{\mathrm{eff}}/A_{\mathrm{cell}}$ \\
+\texttt{opensg\_shell.sg\_homo.shell\_sg3d} & 3-D shell SG (surface mesh) & $\mathbf D_{\mathrm{eff}}/\omega$, $\omega$ = midsurface area \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For \texttt{build\_solid\_bundle} the normalising area defaults to the convex
+hull of the contour (\texttt{area\_source = "hull"}); pass \texttt{cell\_area}
+explicitly to use a different measure, and the banner records which was used.
+The isotropic square-tube example in the folder
+\texttt{examples/OpenSG\_shell/3\_get\_solid\_props\_from\_shell\_cross\_section/}
+\texttt{square\_section\_isotropic}
+sets \texttt{CELL\_AREA = 4*a*t\_w}, the wall material area, so that the shell
+route and the solid route are normalised identically and can be compared term
+by term. Its \texttt{square\_tube\_1Dshell\_C3D.out} returns
+$E_1 = 7.0000000\times10^{10}$ Pa and $\nu_{12} = 0.30000$, recovering the wall
+material's own $E$ and $\nu$ along the beam axis exactly, which is the sanity
+check that fixes the normalisation.
+
+The last row of Table~\ref{tab:solidroutes} carries a subtlety worth stating
+plainly. \texttt{shell\_sg3d} \emph{returns} \texttt{C3D} divided by the SG
+measure (the midsurface surface area, the three-dimensional analogue of the
+plane-section perimeter), but \emph{writes} the \texttt{.out} divided by the
+bounding-box cell volume $V_{\mathrm{cell}}$, so the printed moduli compare
+directly against a solid SwiftComp \texttt{.K} file. If you read the numbers
+out of the return dict and out of the \texttt{.out} and they differ by a
+constant factor, that factor is $\omega/V_{\mathrm{cell}}$ and nothing is
+wrong.
+
+\subsection{Periodicity, and the aperiodic alternative}
+\label{sec:periodicity}
+
+A free SG driven by six macro strains is rank one by construction: every mode
+except $\bar\Gamma_{11}$ can be cancelled at zero energy by an affine
+fluctuation. Something must forbid those fields. All three routes
+\emph{default} to periodicity, and periodicity is the SwiftComp-parity mode:
+
+\begin{itemize}
+\item \texttt{build\_solid\_bundle(..., periodic=True)} is the default; it ties
+  opposite bounding-box faces through the shell periodic assembly map, and the
+  repeated \texttt{dof\_map[dof\_map]} resolves the edge and corner chains, so
+  faces, edges and corners are all tied. The tie rides in the assembly map, so
+  no constraint rows are added and the rigid kernel drops from four rows to the
+  three translations.
+\item \texttt{shell\_sg3d(..., boundary="periodic")} is the default; the same
+  map is applied on the full three-dimensional coordinates, and the three rigid
+  translations are removed by area-weighted Lagrange rows.
+\item \texttt{plate\_homo\_2d(..., boundary=None)} resolves to
+  \texttt{"periodic"}.
+\end{itemize}
+
+Two of these also accept an aperiodic treatment, and it is a genuine
+alternative, not a diagnostic. It is the \emph{boundary-solution} treatment:
+for a unit cell the boundary solution is the macro (affine) field itself, and
+mapping it onto the boundary prescribes zero fluctuation there.
+
+\begin{itemize}
+\item \texttt{shell\_sg3d(..., boundary="aperiodic")} clamps
+  $w_1 = w_2 = w_3 = 0$ on every node of the bounding-box faces and leaves the
+  three rotational DOFs \textbf{natural}. Translations are what the macro solid
+  strain prescribes; clamping the rotations as well over-stiffens the cut
+  edges, and the in-code note records the measured effect of freeing them
+  ($+12\,\%$ down to $+7\,\%$ on $C_{11}$). No Lagrange border is needed,
+  because the Dirichlet data also fixes the rigid modes.
+\item \texttt{plate\_homo\_2d(..., boundary="aperiodic")} pins all three
+  fluctuation DOFs of every bounding-box-face node --- the solid engine carries
+  no rotational DOFs, so those three are the whole node --- instead of the usual
+  first-node pin, and assembles on the raw mesh rather than the periodic map.
+  It is supported for the plate and solid models with
+  \texttt{solver="direct"}; requesting it with \texttt{n\_model=1} or
+  \texttt{solver="cg"} raises a \texttt{ValueError}.
+\end{itemize}
+
+Kinematic (Dirichlet) homogenization is an \emph{upper bound} on a single cell,
+and it converges to the periodic answer as the SG grows, because the boundary
+layer scales like $1/N$. That convergence is the acceptance check.
+
+The head-to-head is shipped. On the shell side, the script
+\texttt{compare\_boundary\_modes.py} in
+\texttt{examples/OpenSG\_shell/4\_get\_solid\_props\_from\_shell\_3D\_SG}
+runs \texttt{shell\_sg3d} on the same Schwarz-P TPMS cell
+(Figure~\ref{fig:schwarz}) in both modes and appends a per-unit-cell block to
+\texttt{boundary\_compare.dat}:
+
+\begin{lstlisting}[style=shellst]
+python compare_boundary_modes.py
+\end{lstlisting}
+
+\begin{table}[htbp]
+\centering
+\caption{Schwarz-P shell cell, per-unit-cell stiffness in MPa, from
+\texttt{boundary\_compare.dat}. The aperiodic run clamps 720 free-face nodes
+(81216 DOF, 42.3 s) against 79056 DOF and 66.5 s for periodic.}
+\label{tab:bcshell}
+\small
+\begin{tabular}{lrrrrrr}
+\toprule
+& \multicolumn{3}{c}{$t = 0.036457$} & \multicolumn{3}{c}{$t = 0.129330$} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+term & aperiodic & periodic & diff \% & aperiodic & periodic & diff \% \\
+\midrule
+$C_{11}$ & 2375.89 & 2225.31 & $+6.77$ & 9881.00 & 8916.81 & $+10.81$ \\
+$C_{22}$ & 2375.92 & 2225.28 & $+6.77$ & 9881.00 & 8916.85 & $+10.81$ \\
+$C_{33}$ & 2376.22 & 2225.03 & $+6.80$ & 9873.34 & 8916.17 & $+10.74$ \\
+$C_{12}$ & 1537.47 & 1564.87 & $-1.75$ & 4921.09 & 5352.21 & $-8.06$ \\
+$C_{44}$ & 1078.28 & 1040.98 & $+3.58$ & 4150.25 & 3961.63 & $+4.76$ \\
+$C_{66}$ & 1078.61 & 1040.93 & $+3.62$ & 4151.27 & 3961.51 & $+4.79$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:bcshell} is exactly the expected signature: the direct terms come
+out stiffer (a kinematic upper bound), the Poisson terms softer, and the gap
+widens with wall thickness because the clamped boundary layer occupies more of
+the cell. The solid-side twin, the identically named script in
+\texttt{examples/OpenSG-solid/6\_get\_solid\_props\_from\_3D\_SG},
+does the same for the tetrahedral TPMS SGs with
+\texttt{plate\_homo\_2d(n\_model=3)} and shows a larger boundary layer on the
+denser cell: for Sample\_1, $C_{11}$ is $12977.0$ MPa aperiodic against
+$10190.2$ MPa periodic ($+27.3\,\%$) with 17610 boundary nodes, while
+$C_{12}$ falls $3.94\,\%$. Both runs take about 150 s, so the aperiodic mode
+costs nothing extra --- the choice is physical, not computational.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.60\textwidth]{\FIGDIR/schwarz_p_mesh.png}
+\caption{The Schwarz-P TPMS three-dimensional shell SG solved by
+\texttt{shell\_sg3d}: 13536 nodes, 26360 shell elements, and zero junction
+edges (a smooth TPMS has every edge interior, so the junction treatment never
+fires). The banner of the \texttt{.out} reports all three counts.}
+\label{fig:schwarz}
+\end{figure}
+
+\subsection{A worked solid law: the TPMS Sample\_1 cell}
+
+The reference case for Eq.~\eqref{eq:c3d} on the solid engine is
+\texttt{examples/OpenSG-solid/6\_get\_solid\_props\_from\_3D\_SG/sample\_1}:
+
+\begin{lstlisting}[style=shellst]
+python run_sample_1.py
+\end{lstlisting}
+
+\begin{lstlisting}[style=opensg,caption={run\_sample\_1.py: a 546k-tet TPMS cell of aluminium, periodic in all three directions. The single material row is isotropic E = 69 GPa, nu = 0.3, matched to the SwiftComp .K it is checked against.}]
+E, nu = 69.0e9, 0.30
+G = E/(2*(1+nu))
+r = plate_homo_2d(SC, material_param=jnp.array([(E, E, E, G, G, G,
+                                                 nu, nu, nu)]),
+                  angles=jnp.array([0.0]), n_model=3, workdir=".", plot=True,
+                  boundary="periodic")   # SwiftComp .K digit-parity mode
+\end{lstlisting}
+
+This writes \texttt{Sample\_1.out} (banner
+\verb| OpenSG msg-solid 3D elastic model, omega 0.3|, where $\omega = 0.3$ is
+the relative density of the cell), the mesh figure
+\texttt{Sample\_1\_mesh.png}, the per-unit-cell matrix
+\texttt{Sample\_1\_msg\_solid.out}, and the comparison table
+\texttt{Sample\_1\_compare.dat}. The engineering-constants block of
+\texttt{Sample\_1.out} reads
+
+\begin{table}[htbp]
+\centering
+\caption{The engineering constants printed by \texttt{Sample\_1.out} for the
+TPMS Sample\_1 cell (aluminium, $E = 69$ GPa, $\nu = 0.3$, $\omega = 0.3$).}
+\label{tab:tpmsconst}
+\small
+\begin{tabular}{lrlrlr}
+\toprule
+constant & value (Pa) & constant & value (Pa) & constant & value \\
+\midrule
+$E_1$ & $2.0547093\times10^{10}$ & $G_{12}$ & $1.5065850\times10^{10}$ & $\nu_{12}$ & $0.35652386$ \\
+$E_2$ & $2.0547272\times10^{10}$ & $G_{13}$ & $1.5065455\times10^{10}$ & $\nu_{13}$ & $0.35654253$ \\
+$E_3$ & $2.0546693\times10^{10}$ & $G_{23}$ & $1.5065467\times10^{10}$ & $\nu_{23}$ & $0.35653028$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three things to read out of Table~\ref{tab:tpmsconst}. First, the three Young's
+moduli agree to five significant figures although they come from three
+independent unit-strain solves on the same cell --- that is the cubic symmetry
+of the geometry reappearing in the answer, and it is the cheapest available
+verification that the periodic tie caught all faces, edges and corners.
+Second, the aluminium is isotropic but the cell is not: $E_1/E = 0.298$ while
+$G_{12}/G = 0.568$, so a TPMS at 30\,\% relative density retains far more shear
+stiffness than axial stiffness. Third, the off-diagonal terms of the printed
+stiffness sit at $10^{5}$ against diagonals of $10^{10}$, so the orthotropic
+approximation behind the constants block is legitimate here. The
+per-unit-cell comparison in \texttt{Sample\_1\_compare.dat} agrees with the
+SwiftComp \texttt{.K} to $\pm 0.000\,\%$ on all nine reported terms
+($C_{11} = 10190.158$ MPa for both).
+
+A second, independent validation of the same law is
+\texttt{examples/OpenSG-solid/5\_get\_solid\_props\_from\_SG}
+(Figure~\ref{fig:udcomp}), a UD fibre/matrix square cell meshed with 801 nodes
+and 1536 triangles. It ships a self-contained constant-strain-triangle driver
+that solves Eq.~\eqref{eq:c3d} under generalized plane strain with periodic
+faces and writes \texttt{UDcomp\_2D\_Deff.out} plus
+\texttt{UDcomp\_2D\_constants\_vs\_paper.dat}. Its nine constants reproduce the
+ASC-23 Table II Model-3 values ($E_1 = 167.2553$ GPa, $E_2 = E_3 = 11.4136$
+GPa, $G_{12} = G_{13} = 6.8017$ GPa, $G_{23} = 3.0955$ GPa,
+$\nu_{12} = \nu_{13} = 0.31178$, $\nu_{23} = 0.57574$) to within
+$0.002\,\%$ on every entry.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{\FIGDIR/udcomp_2dsg_mesh.png}
+\caption{The UD fibre/matrix two-dimensional SG of
+\texttt{examples/OpenSG-solid/5\_get\_solid\_props\_from\_SG}, whose equivalent
+3-D law reproduces the published nine constants to $0.002\,\%$.}
+\label{fig:udcomp}
+\end{figure}
+
+\section{The wall law: per-section $8\times8$ ABDG}
+\label{sec:wallabdg}
+
+The msg-shell routes need a plate law for \textbf{each wall of the
+cross-section} before they can solve the shell SG at all, and that intermediate
+is exported so it can be inspected independently.
+\texttt{opensg\_shell.sg\_homo.write\_abdg\_out} writes one $8\times8$
+stiffness and its compliance per layup section to
+\texttt{<yaml base>\_ABDG.out}. Both \texttt{build\_rm\_bundle} and
+\texttt{build\_solid\_bundle} call it, so this file appears next to every shell
+\texttt{.out} without your having to ask for it.
+
+The file header states the row convention verbatim:
+
+\begin{Verbatim}[fontsize=\small,frame=single]
+ OpenSG msg-shell wall plate laws, one block per section
+ rows [eps11 eps22 2eps12 | K11 K22 K12+K21 | 2g13 2g23]
+\end{Verbatim}
+
+so the block structure is the same
+$[[\mathbf A,\mathbf B,\mathbf 0],[\mathbf B^{\mathsf T},\mathbf D,\mathbf 0],
+[\mathbf 0,\mathbf 0,\mathbf G]]$ as Eq.~\eqref{eq:abdg}, with the shell
+operators' twisting measure $K_{12}+K_{21}$ in the sixth slot rather than
+$\kappa_{12}$. Each block is preceded by its section identity and full layup,
+for example the first block of \texttt{iea\_s10\_shell\_ABDG.out}:
+
+\begin{Verbatim}[fontsize=\footnotesize,frame=single]
+ section 0: layup_0  layup [['gelcoat', 0.0005, 0.0], ['glass_triax', 0.00300294, 0.0],
+                            ['glass_uniax', 0.02609467, 0.0], ['glass_triax', 0.00300294, 0.0]]
+\end{Verbatim}
+
+Each layup entry is \texttt{[material name, thickness (m), angle (deg)]}, bottom
+ply first. That section returns $A_{11} = 1.3701540\times10^{9}$ N/m,
+$A_{22} = 5.5764061\times10^{8}$ N/m, $A_{66} = 1.3539842\times10^{8}$ N/m,
+$D_{11} = 1.0897268\times10^{5}$ N$\cdot$m,
+$G_{11} = 8.2828865\times10^{7}$ N/m and
+$G_{22} = 9.8804474\times10^{7}$ N/m, with a non-zero coupling block
+($B_{11} = 3.1172920\times10^{5}$ N) because the stack --- gelcoat, triax,
+uniax, triax --- is not symmetric about the mid-surface.
+
+Two facts about how these blocks are built matter when comparing them against
+hand calculations.
+
+\begin{enumerate}
+\item The ABD is shifted by the parallel-axis rule to the reference surface the
+  YAML declares. \texttt{reference: center} gives the laminate mid-surface and
+  sets $\mathrm{fraction} = 0.5$; \texttt{oml} gives $0.0$, \texttt{iml} and
+  \texttt{oml\_flip} give $1.0$. The $\mathbf B$ block depends on that choice,
+  and so therefore does every extension--bending coupling downstream of it.
+\item With the default \texttt{g\_source="msg"} the transverse-shear block
+  $\mathbf G$ is \textbf{replaced} by the MSG least-squares result from
+  \texttt{rm\_plate\_msg}, evaluated at the same \texttt{fraction}. It is not a
+  shear-correction-factor estimate. The alternative \texttt{g\_source="whitney"}
+  selects the complementary-energy shear-flow value instead.
+\end{enumerate}
+
+\section{Where each law is produced and written}
+\label{sec:lawmap}
+
+Table~\ref{tab:lawmap} is the index for everything above: given a macro model,
+it names the function that computes the law, the file the law lands in, and the
+title printed inside that file.
+
+\begin{table}[htbp]
+\centering
+\caption{Macro model, producing function, output file, and the matrix title
+printed in the \texttt{.out}. Function names are given without their module
+prefix: \texttt{plate\_homo\_2d}, \texttt{\_beam\_homo\_kkt},
+\texttt{plate\_shear\_ladder} and \texttt{write\_sc\_K} live in
+\texttt{opensg\_solid.sg\_homo}, \texttt{rm\_plate\_msg} in
+\texttt{opensg\_solid.rm\_plate\_1D.msg\_rm\_plate}, and the rest in
+\texttt{opensg\_shell}. \texttt{<sg>} is the basename of the
+\texttt{.sc}/\texttt{.yaml} input, \texttt{<yaml>} the basename of the shell
+YAML, and \texttt{<db>} the basename of the \texttt{layup\_db.yaml}.}
+\label{tab:lawmap}
+\scriptsize
+\begin{tabular}{p{2.5cm}p{4.6cm}p{3.9cm}p{3.5cm}}
+\toprule
+macro law & producing function & output file & title in the \texttt{.out} \\
+\midrule
+Timoshenko beam $6\times6$ & \texttt{plate\_homo\_2d(n\_model=1)} $\rightarrow$ \texttt{\_beam\_homo\_kkt} & \texttt{<sg>.out} & \texttt{The Effective Timoshenko Stiffness Matrix} \\
+Timoshenko beam $6\times6$ & \texttt{build\_rm\_bundle} $\rightarrow$ \texttt{ring\_indep} & \texttt{<yaml>\_Timo.out} & \texttt{The Effective Timoshenko Stiffness Matrix} \\
+Timoshenko beam $6\times6$ & \texttt{segment\_timo\_from\_3dyaml} & \texttt{<yaml>\_Timo.out} & \texttt{The Effective Timoshenko Stiffness Matrix} \\
+Euler--Bernoulli beam $4\times4$ & \texttt{\_beam\_homo\_kkt} $\rightarrow$ \texttt{r["C\_eff\_EB"]} & in-memory only & --- \\
+Classical plate ABD $6\times6$ & \texttt{plate\_homo\_2d(n\_model=2)} & \texttt{<sg>.out} & \texttt{The Effective Classical Plate Stiffness Matrix} \\
+RM plate ABDG $8\times8$ & \texttt{plate\_homo\_2d(n\_model=2, shear\_refined=True)} $\rightarrow$ \texttt{plate\_shear\_ladder} & \texttt{<sg>.out} & \texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix} \\
+RM plate ABDG $8\times8$ & \texttt{rm\_plate\_msg} $\rightarrow$ \texttt{r["ABDG"]} & \texttt{<db>\_plate\_homo.out} & \texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix} \\
+3-D solid $6\times6$ & \texttt{plate\_homo\_2d(n\_model=3)} & \texttt{<sg>.out} & \texttt{The Effective Stiffness Matrix} + engineering constants \\
+3-D solid $6\times6$ & \texttt{build\_solid\_bundle} $\rightarrow$ \texttt{ring\_solid} & \texttt{<yaml>\_C3D.out} & \texttt{The Effective Stiffness Matrix} + engineering constants \\
+3-D solid $6\times6$ & \texttt{sg\_homo.shell\_sg3d} & \texttt{<yaml>\_C3D.out} & \texttt{The Effective Stiffness Matrix} + engineering constants \\
+Wall plate law $8\times8$, per section & \texttt{sg\_homo.write\_abdg\_out} & \texttt{<yaml>\_ABDG.out} & \texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix}, one block per section \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Running the laws backwards: two-step recovery}
+\label{sec:recovery}
+
+Homogenization is only half of MSG. Each law above was obtained together with
+the fluctuation (warping) fields that produced it, and those fields let the
+macro answer be pushed back down to pointwise 3-D stress and strain inside the
+SG. The rule is \emph{homogenize once, recover as often as needed}: every field
+the recovery needs rides along in the result dict, so no second homogenization
+is ever required.
+
+\subsection{The shell chain: beam force to plate resultants to 3-D stress}
+
+The shell chain has two interfaces, and naming them is the clearest way to see
+why it works. It is verified end to end in
+\texttt{examples/OpenSG\_shell/IEA\_blade\_beam/2\_dehom\_v2\_vabs.py}:
+
+\begin{lstlisting}[style=shellst]
+python 2_dehom_v2_vabs.py
+\end{lstlisting}
+
+\paragraph{Step 2a --- beam to wall (\texttt{opensg\_shell}).}
+The macro beam strain follows from inverting the Timoshenko law of
+Eq.~\eqref{eq:timo}, $\mathbf{st} = \mathbf C_6^{-1}\,\mathbf{FF}$, with
+\texttt{FF} the six beam force and moment components in VABS order read from
+the load table \texttt{ff51\_rmc\_reform.dat}. For the IEA-22 station at
+$r/R = 0.20$ that row is
+$\mathbf{FF} = [\,4.1927\times10^{4},\;8.2674\times10^{3},\;
+1.4673\times10^{6},\;1.2191\times10^{6},\;-6.0185\times10^{7},\;
+3.0426\times10^{5}\,]$ in N and N$\cdot$m, i.e.\ a flapwise-moment-dominated
+state. \texttt{\_macro\_fields} recombines the ring warping modes $V_0$ and
+$V_1$ into the nodal fields $w = V_0\,\mathbf{st}_m + V_1\,\mathbf{st}_{c1}$ and
+$w' = V_0\,\mathbf{st}_{c1} + V_1\,\mathbf{st}_{c2}$, and
+\texttt{\_rm\_shell\_strain} then evaluates, per ring element, the six shell
+strains
+$\mathbf s_6 = [\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;
+\kappa_{11}\;\kappa_{22}\;2\kappa_{12}]$ together with the transverse pair
+$[2\gamma_{13}\;2\gamma_{23}]$. Multiplying by that wall's own MSG ABD gives
+the interface quantity handed to the plate SG:
+
+\begin{equation}
+\mathbf F_6 \;=\; \mathbf A_6\,\mathbf s_6
+\;=\; [\,N_{11}\;\;N_{22}\;\;N_{12}\;\;M_{11}\;\;M_{22}\;\;M_{12}\,]^{\mathsf T}.
+\label{eq:f6}
+\end{equation}
+
+These are exactly the resultants of Eq.~\eqref{eq:abd}: the beam model has
+handed each wall a plate problem. They are written to
+\texttt{<name>\_elem\_plate\_forces.dat}, one row per ring element, with columns
+
+\begin{Verbatim}[fontsize=\footnotesize,frame=single]
+elem  y2(m) y3(m)  e11 e22 2e12 k11 k22 2k12  N11 N22 N12(N/m) M11 M22 M12(N)
+\end{Verbatim}
+
+The first row of \texttt{iea\_s10\_elem\_plate\_forces.dat} reads element 0 at
+$(y_2, y_3) = (4.677, 0.105)$ m with $\varepsilon_{11} = 5.427\times10^{-4}$ and
+$N_{11} = 7.149\times10^{5}$ N/m --- a trailing-edge panel in tension under the
+flapwise moment.
+
+\paragraph{Step 2b --- wall to 3-D (\texttt{opensg\_solid.rm\_plate\_1D}).}
+For each distinct layup, \texttt{rm\_plate\_msg} builds the through-thickness SG
+once. Then \texttt{msgrm\_strain\_at\_depth} --- or
+its vectorized twin \texttt{msgrm\_strain\_at\_depth\_batch}, which is the same
+algebra evaluated with batched einsums and is what makes a $10^5$-point section
+sweep tractable --- returns the 3-D Voigt strain, the 3-D Voigt stress and the
+ply angle at any depth $z$. Passing only the first strain gradients
+\texttt{dE1}/\texttt{dE2} selects the first-order recovery (Yu Eq.~63); adding
+\texttt{dE11}/\texttt{dE12}/\texttt{dE22} selects the second-order recovery
+(Eq.~66), which is what can carry the transverse pair $\sigma_{33}$ and
+$\sigma_{13}$ that first order cannot produce. Output is in the ply material
+frame by default (\texttt{frame="material"}), since failure criteria live
+there; pass \texttt{frame="plate"} for anything that integrates or
+differentiates across plies.
+
+\subsection{What the shell chain gets right, and where it does not}
+
+The IEA-22 station at $r/R = 0.20$ is validated against a VABS two-dimensional
+solid solution of the same section, sampled at every VABS Gauss point. The RMS
+differences, in MPa, web / skin, are recorded in \texttt{iea\_s10\_report.txt}
+and reproduced in Table~\ref{tab:dehomrms}.
+
+\begin{table}[htbp]
+\centering
+\caption{RMS difference against VABS, in MPa, web / skin, for the IEA-22
+station at $r/R = 0.20$. The last column is the RMS of the VABS field itself,
+so a difference equal to it means the chain returns essentially zero for that
+component.}
+\label{tab:dehomrms}
+\small
+\begin{tabular}{lrrr}
+\toprule
+component & first order & second order (V2) & VABS RMS \\
+\midrule
+$\sigma_{11}$ & 43.073 / 9.529 & 43.073 / 9.529 & 44.440 / 96.676 \\
+$\sigma_{22}$ & 0.612 / 0.482 & 0.612 / 0.482 & 0.704 / 0.998 \\
+$\sigma_{12}$ & 6.799 / 1.255 & 6.798 / 1.255 & 22.026 / 6.009 \\
+$\sigma_{33}$ & 0.081 / 0.049 & 0.081 / 0.049 & 0.081 / 0.049 \\
+$\sigma_{13}$ & 0.394 / 0.192 & 0.394 / 0.192 & 0.394 / 0.193 \\
+$\sigma_{23}$ & 0.035 / 0.028 & 0.035 / 0.028 & 0.035 / 0.028 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Read the last column together with the others. The dominant $\sigma_{11}$ is
+recovered to roughly $10\,\%$ of its own RMS in the skin, and the same holds
+along a through-thickness path in the spar cap (38.355 MPa difference against a
+VABS path RMS of 285.457 MPa). But the transverse components $\sigma_{33}$,
+$\sigma_{13}$ and $\sigma_{23}$ show differences \emph{equal to} the VABS RMS
+itself, which means the shell chain returns essentially zero there. That gap in
+the transverse pair is the honest open item on this route. It is also why the
+second-order drivers exist even though their payload at this near-constant load
+state is small: V2 changes $\sigma_{11}$ by $1.95\times10^{-4}$ MPa RMS against
+a first-order RMS of $8.851\times10^{1}$ MPa, and its visible effect is on
+$\sigma_{33}$, where the first-order field is $3.6\times10^{-13}$ MPa (machine
+zero) and V2 produces $5.19\times10^{-5}$ MPa against a VABS RMS of
+$5.58\times10^{-2}$ MPa.
+
+The recovered in-plane stress over the full section is shown in
+Figure~\ref{fig:dehomstress}: the spar caps in compression above and tension
+below under the flapwise moment, with the shear flow visible in $\sigma_{12}$
+around the leading edge and the trailing-edge panels.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{\FIGDIR/shell_dehom_stress.png}
+\caption{Recovered $\sigma_{11}$ and $\sigma_{12}$ over the IEA-22 blade
+cross-section at $r/R = 0.20$, plotted at the recovery points around the
+contour and the shear webs, from the two-step chain of
+Eq.~\eqref{eq:f6} followed by \texttt{msgrm\_strain\_at\_depth\_batch}.}
+\label{fig:dehomstress}
+\end{figure}
+
+\subsection{The solid chain}
+
+For an SG homogenized through \texttt{plate\_homo\_2d}, recovery is a single
+call in \texttt{opensg\_solid.sg\_dehom}. From
+\texttt{examples/OpenSG-solid/4\_get\_plate\_dehom\_from\_2DSG}:
+
+\begin{lstlisting}[style=opensg,caption={The plate recovery driver plate\_dehom\_2dsg.py, reduced to its essentials. epsilon\_bar is the user's macro state at the point of interest.}]
+from opensg_solid.sg_homo import plate_homo_2d
+from opensg_solid.sg_dehom import dehom_fields, export_gauss
+
+r = plate_homo_2d("RHC_SW_2UC_45.yaml", material_param=material_param,
+                  angles=angles, n_model=2)
+# the MACRO plate strain [e11, e22, 2e12, k11, k22, 2k12]
+epsilon_bar = jnp.array([0.0, 0.1, 0.0, 0.1, 0.0, 0.0])
+Gam, Sig, U = dehom_fields(r, epsilon_bar)
+export_gauss(r, Gam, Sig, "RHC_SW_2UC_45_dehom", U_eqd=U)
+\end{lstlisting}
+
+\texttt{epsilon\_bar} is whichever macro state matches the model that was
+homogenized: the six plate strains
+$[\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;\kappa_{11}\;
+\kappa_{22}\;2\kappa_{12}]$ for \texttt{n\_model=2}, the six macro strains of
+Eq.~\eqref{eq:c3d} for \texttt{n\_model=3}, or the six Timoshenko beam strains
+of Eq.~\eqref{eq:timo} for \texttt{n\_model=1}. The beam case is run by
+\texttt{examples/OpenSG-solid/8\_get\_beam\_dehom\_from\_SG/beam\_dehom\_sg.py},
+whose shipped state is
+\verb|epsilon_bar = jnp.array([0.001, 0.0, 0.0, 0.0, 0.01, 0.0])|, i.e.\ a unit
+axial extension of $10^{-3}$ combined with a $\kappa_2$ curvature of $10^{-2}$.
+For \texttt{n\_model=1} the valid recovery drivers are the classical-channel
+states (extension, twist, bending and their combinations); the shear channels
+do not drive the recovery chain.
+
+The call returns, at every element Gauss point, the local strain \texttt{Gamma}
+of shape $(E, Q, 6)$, the local stress \texttt{Sigma} of shape $(E, Q, 6)$ ---
+both in SwiftComp storage order $(xx, yy, zz, yz, xz, xy)$ --- and the
+fluctuation-only displacement \texttt{U} of shape $(E, Q, 3)$.
+\texttt{plate\_dehom\_2d} is a two-output view of the same single pass, and
+\texttt{gauss\_coords(r)} returns the physical coordinates of the recovery
+points as $(E \cdot Q, n_{sg})$.
+
+\texttt{export\_gauss} writes five files from one recovery:
+\texttt{<prefix>.txt} (the tab-separated Gauss table, one row per point with
+coordinates, six strains and six stresses), \texttt{<prefix>.vtk} (a point
+cloud for ParaView carrying all twelve components as scalars), and the OpenSG
+dehom files \texttt{<prefix>.SM} (stress), \texttt{<prefix>.EM} (strain) and
+\texttt{<prefix>.U} (fluctuation displacement). One convention trap is worth
+flagging: the printed component order in the \texttt{.SM}, \texttt{.EM} and
+\texttt{.U} files is $11\;22\;33\;12\;13\;23$, not the SwiftComp order. The
+reorder happens on write only; the arrays you hold in memory stay in
+$(xx, yy, zz, yz, xz, xy)$. In those three files the SG coordinates occupy the
+\emph{last} $n_{sg}$ of the $(x, y, z)$ columns, with the leading slots zero, so
+that the last SG coordinate --- the plate thickness direction --- always lands
+in the $z$ column.

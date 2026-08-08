@@ -9,22 +9,43 @@ theory:
 | **msg-shell** (`opensg_shell`) | 1-D shell SG (cross-section), 3-D shell SG (surface) | Timoshenko $6\times6$, equivalent 3-D solid $6\times6$ |
 | **msg-solid** (`opensg_solid`) | 1-D / 2-D / 3-D solid SG | plate ABD, Timoshenko $6\times6$, equivalent 3-D solid $6\times6$ |
 
-Every run writes a timed `.out` in the SwiftComp `.K` layout — see
-`Rules/output_format_and_timing.md`.
+Every run is the same shape: **a YAML (or SwiftComp `.sc`) goes in, a timed `.out` in the
+SwiftComp `.K` layout comes back**. The core packages hold no paths and no `main` blocks — each
+example script names its input file and calls one entry function.
 
-```{toctree}
-:maxdepth: 1
-:caption: Equivalent 3-D solid properties
+```python
+from opensg_shell import build_rm_bundle
 
-tutorials/solid_props_shell_sg
-tutorials/solid_props_3d_sg
+B = build_rm_bundle("iea_s10_shell.yaml")   # writes iea_s10_shell_Timo.out
+B["Timo"]                                    # the Timoshenko 6x6
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: Beam properties
+:caption: Start here
 
+input_format
+constitutive
+architecture
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Tutorials — msg-shell
+
+tutorials/msg_shell_beam
+tutorials/solid_props_shell_sg
 tutorials/taper_segment_aperiodic
+tutorials/windio_blade_pipeline
+```
+
+```{toctree}
+:maxdepth: 1
+:caption: Tutorials — msg-solid
+
+tutorials/msg_solid_plate
+tutorials/msg_solid_beam_and_solid
+tutorials/solid_props_3d_sg
 ```
 
 ```{toctree}
@@ -32,8 +53,18 @@ tutorials/taper_segment_aperiodic
 :caption: Theory & conventions
 
 theory
-architecture
 ```
+
+## What each capability answers
+
+| you have | you want | tutorial |
+|---|---|---|
+| a laminate stacking sequence | plate ABD / Reissner–Mindlin $8\times8$, and stress through the thickness | Plate Properties and Recovery (msg-solid) |
+| a 2-D unit cell (honeycomb, lattice) | plate ABD, beam $6\times6$, or an equivalent 3-D solid | Plate / Beam and Equivalent-Solid (msg-solid) |
+| a composite blade cross-section | Timoshenko $6\times6$ and 3-D wall stress from beam loads | Beam Properties from a Shell Cross-Section |
+| a tapered blade segment (two different ends) | the segment's Timoshenko $6\times6$ without periodicity | Tapered / Aperiodic Shell Segment |
+| a TPMS or lattice unit cell | the equivalent 3-D solid law | Equivalent 3-D Solid Properties |
+| a windIO blade file | a full spanwise beam model for BeamDyn, plus recovery | Full Blade Pipeline |
 
 ## Validation status
 
@@ -54,5 +85,5 @@ Formulation and workflow rules live in `Rules/` at the repository root:
 - `junction_corrections.md` — when a junction term applies, and when it must stay off
 - `output_format_and_timing.md` — the `.out` contract
 - `benchmarking_solid_props.md` — reference hierarchy and how to compare
-- `periodicity_in_solid_props.md` — periodicity is always on for solid properties
+- `periodicity_in_solid_props.md` — periodic vs aperiodic boundary treatment
 - `orientation_e1_out_of_plane.md` — $e_1$ convention for 1-D/2-D YAML

@@ -1,0 +1,1062 @@
+\chapter{Input Formats and Conventions}
+\label{ch:input}
+
+OpenSG-2.0 reads three kinds of structure-gene (SG) description, plus one
+laminate shorthand and one legacy converter. Which dialect you write is decided
+by the geometry you have, not by the answer you want: a thin-walled cross-section
+contour is a 1-D shell SG, a sheet meshed as a surface in space is a 3-D shell
+SG, and anything meshed as a filled domain (a laminate through its thickness, a
+honeycomb unit cell, a lattice block) is a solid SG. The five dialects are listed
+in Table~\ref{tab:input-dialects}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The five input dialects, the package that reads each, and the example
+file shipped with the code.}
+\label{tab:input-dialects}
+\begin{tabular}{@{}lll@{}}
+\toprule
+dialect & read by & example file \\
+\midrule
+1-D shell SG (cross-section contour) & \texttt{opensg\_shell}
+  & \texttt{iea\_s10\_shell.yaml} \\
+3-D shell SG (surface in space) & \texttt{opensg\_shell}
+  & \texttt{schwarz\_p\_3Dshell.yaml} \\
+solid SG (1-D / 2-D / 3-D mesh) & \texttt{opensg\_solid}
+  & \texttt{RHC\_SW\_2UC\_45.yaml} \\
+SwiftComp \texttt{.sc} & converted to the solid SG YAML
+  & \texttt{RHC\_SW\_2UC\_45.sc} \\
+through-thickness layup database & \texttt{opensg\_solid.rm\_plate\_1D}
+  & \texttt{layup\_db.yaml} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The two shell dialects share one schema --- the same six top-level keys,
+differing only in element dimension --- while the solid dialect is a separate,
+deliberately minimal schema whose material blocks mirror SwiftComp's.
+
+Every run, in every dialect, writes a timed \texttt{.out} in the SwiftComp
+\texttt{.K} layout. The writer is \texttt{opensg\_solid.sg\_homo.write\_sc\_K}
+and it always emits, in order: an \texttt{ OpenSG} banner line naming the model,
+\texttt{The Effective <Name> Stiffness Matrix}, \texttt{The Effective <Name>
+Compliance Matrix}, and a \texttt{ Time taken: <s> sec} footer. The
+\texttt{<Name>} infix is \texttt{Timoshenko} for a beam $6\times6$,
+\texttt{Classical Plate} for a $6\times6$ ABD, \texttt{Reissner-Mindlin Plate}
+for an $8\times8$ ABDG, and empty for the equivalent 3-D solid law --- which
+alone is written with \texttt{constants=True} and therefore also prints
+\texttt{The Engineering Constants (Approximated as Orthotropic)}. The full
+contract is \texttt{Rules/output\_format\_and\_timing.md} at the repository
+root.
+
+%========================================================================
+\section{The 1-D shell SG YAML}
+\label{sec:input-shell1d}
+
+This is the cross-section of a thin-walled beam: the wall midline (or mold line)
+meshed with 2-node line segments, each segment carrying a laminate. It is the
+input to \texttt{opensg\_shell.build\_rm\_bundle}, which returns the Timoshenko
+$6\times6$.
+
+The example \texttt{iea\_s10\_shell.yaml} in
+\texttt{examples/OpenSG\_shell/1\_get\_beam\_props\_from\_shell\_cross\_section/}
+is station $r/R = 0.2$ of the IEA-22 blade: 307 nodes, 310 line elements, 6
+layups, 6 materials. Its top-level keys, in the order OpenSG's own writers emit
+them, are listed in Table~\ref{tab:input-shell-keys}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Top-level keys of the 1-D shell SG YAML.}
+\label{tab:input-shell-keys}
+\begin{tabular}{@{}lp{10.2cm}@{}}
+\toprule
+key & content \\
+\midrule
+\texttt{nodes} & one bracketed, space-separated triple per node:
+  the two cross-section coordinates then the beam-axis coordinate \\
+\texttt{elements} & one bracketed, space-separated pair per line element,
+  1-based node ids \\
+\texttt{sets} & \texttt{element:} a list of \texttt{\{name, labels\}} groups;
+  \texttt{labels} are 1-based element indices \\
+\texttt{sections} & one entry per layup, tied to a set through
+  \texttt{elementSet}, carrying the \texttt{layup} ply table \\
+\texttt{elementOrientations} & one row of nine direction cosines per element,
+  a genuine YAML list of floats \\
+\texttt{materials} & named orthotropic materials with \texttt{density} and an
+  \texttt{elastic} block of \texttt{E}, \texttt{G}, \texttt{nu} triples \\
+\texttt{reference} & one scalar naming the surface the wall laws are referenced
+  to: \texttt{center}, \texttt{oml}, \texttt{oml\_flip} or \texttt{iml} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{\texttt{nodes}}
+
+One row per node, three coordinates. In the shell dialect the row is written as a
+bracketed, \emph{space-separated} triple --- a single YAML scalar inside a flow
+sequence --- and not as a comma list:
+
+\begin{lstlisting}[style=shellst,caption={The first two node rows of iea\_s10\_shell.yaml.}]
+nodes:
+- [4.70852238 0.09722431 0.00000000]
+- [4.64563825 0.11238283 0.00000000]
+\end{lstlisting}
+
+The space-separated form is required, not merely conventional: the orientation
+plotter \texttt{fe\_jax/orient\_plot.py} parses each row with
+\texttt{str(row[0]).split()}, so a comma-separated list of floats will not plot.
+The loader \texttt{sg\_mesh.load\_ring\_ref} is more forgiving --- its
+\texttt{\_row} helper replaces commas by spaces before splitting --- but writing
+the space form keeps every consumer happy at once.
+
+The component order is fixed and is the source of most first-run confusion. The
+loader sets \texttt{ax = 2} and \texttt{cross = [0, 1]}, meaning the
+\textbf{third column is the beam axis} and the first two columns are the
+in-plane cross-section pair $(y_2, y_3)$. For a plane cross-section the beam-axis
+column is identically zero, exactly as in the excerpt above. If you are writing a
+cross-section by hand and your third column is not all zeros, you have written a
+segment, not a cross-section.
+
+\subsection{\texttt{elements}}
+
+One row per element, the node ids of a 2-node line segment, 1-based, again
+space-separated inside brackets:
+
+\begin{lstlisting}[style=shellst,caption={The first two element rows; element k here is element label k everywhere else in the file.}]
+elements:
+- [1 2]
+- [2 3]
+\end{lstlisting}
+
+The loader detects the base with \texttt{if cells.min() == 1: cells = cells - 1},
+so a 0-based mesh is also accepted, but every generator in the repository writes
+1-based. Element $k$ in this list is element label $k$ in \texttt{sets}, and
+row $k$ of \texttt{elementOrientations} belongs to it. The contour need not be a
+single loop: the last element of the IEA station is \texttt{- [307 65]}, which
+closes a shear web back onto a skin node.
+
+\subsection{\texttt{sets} and \texttt{sections}}
+
+\texttt{sets} groups element labels by name; \texttt{sections} gives each named
+group its laminate. The tie between them is the \texttt{elementSet} field, which
+must equal a set \texttt{name}:
+
+\begin{lstlisting}[style=shellst,caption={Abridged sets and sections blocks. In the real file layup\_0 lists 25 labels (elements 1-12 and 209-221) and there are six sets and six sections.}]
+sets:
+  element:
+  - name: layup_0
+    labels:
+    - 1
+    - 2
+    - 3
+sections:
+- type: shell
+  elementSet: layup_0
+  layup:
+  - - gelcoat
+    - 0.0005
+    - 0.0
+  - - glass_triax
+    - 0.00300294
+    - 0.0
+  - - glass_uniax
+    - 0.02609467
+    - 0.0
+  - - glass_triax
+    - 0.00300294
+    - 0.0
+\end{lstlisting}
+
+Labels are 1-based element indices into \texttt{elements}.
+\texttt{sg\_materials.\_material\_by\_section} builds one ABD per entry of
+\texttt{sections} and keys it by the section's \emph{position in the list}; the
+loader then maps every element through \texttt{rsub[label - 1] =
+section\_index}. An element that appears in no set silently falls to section 0,
+so every element should appear in exactly one set. \texttt{type: shell} is
+descriptive metadata --- the shell readers key only off \texttt{elementSet} and
+\texttt{layup}.
+
+Each \texttt{layup} row is \texttt{[material, thickness, angle\_deg]}: a
+material name that must exist in \texttt{materials}, a ply thickness in metres,
+and a ply angle in degrees. The list is ordered \textbf{outer face first} and
+stacks inward along $e_3$: \texttt{compute\_ABD\_matrix} documents its input as
+layer thicknesses bottom to top with the reference surface at that bottom
+(outer) face, and \texttt{emit\_station\_abd} records the same order in its
+\texttt{convention} string as \texttt{plies OML->IML}. The sum of the row
+thicknesses is the wall thickness used for the reference shift; for
+\texttt{layup\_0} above that is $0.0005 + 0.00300294 + 0.02609467 + 0.00300294 =
+0.03260055$~m, which is the \texttt{thickness} the cached ABD file reports for
+that layup.
+
+\subsection{\texttt{elementOrientations}}
+
+One row of nine direction cosines per element, $[e_1(3)\;e_2(3)\;e_3(3)]$, in the
+same component order as the node rows. Unlike \texttt{nodes} and
+\texttt{elements}, these rows are true YAML lists of floats:
+
+\begin{lstlisting}[style=shellst,caption={One orientation row: e1 = [0,0,1] out of plane, then the in-plane e2 and e3.}]
+elementOrientations:
+- [0.0, 0.0, 1.0, -0.9721541292349604, 0.2343423756204075, 0.0, -0.2343423756204075,
+  -0.9721541292349604, 0.0]
+\end{lstlisting}
+
+The meaning of the triad is covered in Section~\ref{sec:input-orientation}.
+
+\subsection{\texttt{materials}}
+
+A list of named materials, each with a \texttt{density} and an \texttt{elastic}
+block holding three-component \texttt{E}, \texttt{G} and \texttt{nu}:
+
+\begin{lstlisting}[style=shellst,caption={One material block from iea\_s10\_shell.yaml.}]
+materials:
+- name: glass_triax
+  density: 1940.0
+  elastic:
+    E:
+    - 28211400000.0
+    - 16238800000.0
+    - 15835500000.0
+    G:
+    - 8248220000.0
+    - 3491240000.0
+    - 3491240000.0
+    nu:
+    - 0.497511
+    - 0.18091
+    - 0.27481
+\end{lstlisting}
+
+The triples are $[E_1, E_2, E_3]$, $[G_{12}, G_{13}, G_{23}]$ and $[\nu_{12},
+\nu_{13}, \nu_{23}]$ --- the argument order of
+\texttt{fe\_jax.msg\_materials.build\_stiffness\_6x6}, which fills the
+orthotropic compliance
+\[
+S_{11} = 1/E_1,\quad S_{12} = -\nu_{12}/E_1,\quad S_{13} = -\nu_{13}/E_1,\quad
+S_{23} = -\nu_{23}/E_2,
+\]
+\[
+S_{44} = 1/G_{23},\quad S_{55} = 1/G_{13},\quad S_{66} = 1/G_{12},
+\]
+and inverts it to the $6\times6$ stiffness. Units follow the input; the examples
+are SI, so moduli are in Pa, thicknesses in m and \texttt{density} in
+kg/m$^3$. \texttt{density} feeds the section mass per unit area that
+\texttt{emit\_station\_abd} reports as \texttt{mass\_per\_area} (62.892567
+kg/m$^2$ for \texttt{layup\_0} of this station); it is not needed for the
+stiffness.
+
+\subsection{\texttt{reference}}
+
+\begin{lstlisting}[style=shellst,caption={The whole reference block -- one scalar, the last line of the file.}]
+reference: center
+\end{lstlisting}
+
+This single scalar names the surface the wall ABD --- and therefore the whole
+cross-section model --- is referenced to, and it is the single source of truth.
+\texttt{build\_rm\_bundle(shell\_yaml)} reads it when its \texttt{ref} argument
+is left \texttt{None} via \texttt{ref = d.get("reference", "center")}, and the
+value is immediately turned into a thickness fraction
+\texttt{frac = \{"center": 0.5, "oml": 0.0, "oml\_flip": 1.0, "iml": 1.0\}} that
+then drives the ring laminate reference, the plate-SG \texttt{z\_ref}, the
+emitted ABD file, and the depth conversion used in stress recovery. Absent, it
+defaults to \texttt{center}. The four accepted values and the fraction each maps
+to are listed in Table~\ref{tab:input-reference}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Values of \texttt{reference} and the thickness fraction each maps to.}
+\label{tab:input-reference}
+\begin{tabular}{@{}llc@{}}
+\toprule
+value & meaning & fraction from the outer face \\
+\midrule
+\texttt{center} & contour is the laminate mid-surface; ABD shifted by $t/2$ & 0.5 \\
+\texttt{oml} & contour is the outer mold line; laminate stacks inward, no shift & 0.0 \\
+\texttt{oml\_flip} & diagnostic: reference moved the full thickness the other way & 1.0 \\
+\texttt{iml} & contour is the inner mold line; laminate stacks outward & 1.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Mid-surface meshes (tubes, ellipses, generated cross-sections) use
+\texttt{center}; airfoil YAMLs written on the OML use \texttt{oml}. Getting this
+wrong shifts $\mathbf{B}$ and $\mathbf{D}$ by a parallel-axis term of the wall
+thickness and moves every bending and torsion entry of the beam $6\times6$, which
+is why it is recorded in the file rather than passed at the call site.
+
+\subsection{Running it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section
+python beam_homo_shell.py
+\end{lstlisting}
+
+The driver sets \texttt{name = "iea\_s10"}, calls
+\texttt{build\_rm\_bundle(name + "\_shell.yaml")}, and prints the $6\times6$
+with the diagonal labelled \texttt{EA GA2 GA3 GJ EI2 EI3}:
+
+\begin{lstlisting}[style=opensg,caption={The whole compute part of beam\_homo\_shell.py.}]
+from opensg_shell import build_rm_bundle, auto_emit
+
+name = "iea_s10"
+B = build_rm_bundle(name + "_shell.yaml")
+C6 = np.asarray(B["Timo"])
+LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
+print("diagonal: " + "  ".join("%s=%.5g" % (LBL[i], C6[i, i]) for i in range(6)))
+
+auto_emit(name + "_shell.yaml", out_png=name + "_orient.png")
+\end{lstlisting}
+
+Four files come back. \texttt{iea\_s10\_shell\_Timo.out} holds the Timoshenko
+$6\times6$ and its compliance under the banner \texttt{ OpenSG msg-shell beam
+model [ext sh2 sh3 twist bend2 bend3]}; for this station the diagonal reads
+$EA = 2.766\times10^{10}$~N, $GA_2 = 7.186\times10^{8}$~N,
+$GA_3 = 4.217\times10^{8}$~N, $GJ = 2.438\times10^{9}$~N\,m$^2$,
+$EI_2 = 3.514\times10^{10}$~N\,m$^2$, $EI_3 = 6.813\times10^{10}$~N\,m$^2$, and
+the footer records \texttt{ Time taken: 8.02 sec}.
+\texttt{iea\_s10\_shell\_ABDG.out} holds one $8\times8$ RM wall law per section,
+written by \texttt{sg\_homo.write\_abdg\_out} with the header
+\texttt{rows [eps11 eps22 2eps12 | K11 K22 K12+K21 | 2g13 2g23]}, so you can read
+off, for instance, the $A_{11} = 1.370\times10^{9}$~N/m and the transverse-shear
+$G_{11} = 8.283\times10^{7}$~N/m of \texttt{layup\_0} directly.
+\texttt{iea\_s10\_mesh.png} is the contour coloured by layup and
+\texttt{iea\_s10\_orient.png} is the orientation check discussed in
+Section~\ref{sec:input-orientation}. On the first run \texttt{build\_rm\_bundle}
+additionally caches the per-station wall laws as
+\texttt{abd/iea\_s10\_shell\_abd.yaml} at the same reference the YAML declared
+(here written out as \texttt{reference: mid}); the write is guarded by an
+existence test on that path, so later runs reuse the cached file rather than
+recompute it.
+
+%========================================================================
+\section{The 3-D shell SG YAML}
+\label{sec:input-shell3d}
+
+Same six keys, but the mesh is a surface embedded in 3-D: \texttt{nodes} are
+genuine three-dimensional points and \texttt{elements} are 3-noded triangles or
+4-noded quads. There is no \texttt{reference} key --- \texttt{shell\_sg3d} calls
+\texttt{\_material\_by\_section} with \texttt{center\_ref=True} unconditionally,
+so every wall law is referenced to its mid-surface. This is the input to
+\texttt{opensg\_shell.sg\_homo.shell\_sg3d}, which returns the equivalent 3-D
+solid $6\times6$.
+
+\texttt{schwarz\_p\_3Dshell.yaml} is a Schwarz-P triply-periodic minimal-surface
+cell: 13536 nodes and 26360 triangles, one aluminium layup at $T = 0.036457$~m
+with $E = 69$~GPa and $\nu = 0.3$. Triangles are read and padded to the quad
+connectivity by repeating the last node,
+\texttt{el = np.array([e + [e[-1]]*(4 - len(e)) for e in el], int) - 1}, so tri
+and quad meshes go through one element path; ids are 1-based as in the 1-D
+dialect. The mesh itself is shown in Figure~\ref{fig:input-schwarz-mesh}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\textwidth]{\FIGDIR/schwarz_p_mesh.png}
+\caption{The Schwarz-P TPMS 3-D shell SG: 13536 nodes, 26360 triangles, one
+aluminium layup. The mesh figure is drawn by the driver from the same YAML the
+solver reads.}
+\label{fig:input-schwarz-mesh}
+\end{figure}
+
+\texttt{make\_schwarz\_yaml.py} in the same folder is the canonical way to write
+one, and its emission loop shows every row format at once. The frame is built per
+triangle from the geometry: $e_3$ is the unit facet normal, $e_2$ is the unit
+$p_1 \to p_2$ edge, and $e_1 = e_2 \times e_3$.
+
+\begin{lstlisting}[style=opensg,caption={The emission loop of make\_schwarz\_yaml.py.}]
+o = ["nodes:"]
+o += ["- [%.12f %.12f %.12f]" % tuple(p) for p in nd]
+o.append("elements:")
+o += ["- [%d %d %d]" % tuple(e) for e in el]
+o.append("elementOrientations:")
+for k in range(ne):
+    e1 = np.cross(e2[k], e3[k])
+    o.append("- [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f]"
+             % (*e1, *e2[k], *e3[k]))
+o += ["sections:", "- type: shell", "  elementSet: layup_0", "  layup:",
+      "  - - alu", "    - %.6e" % T, "    - 0.0",
+      "materials:", "- name: alu", "  density: 2700.0", "  elastic:",
+      "    E: [%.6e, %.6e, %.6e]" % (E, E, E),
+      "    G: [%.6e, %.6e, %.6e]" % (G, G, G),
+      "    nu: [%.6f, %.6f, %.6f]" % (nu, nu, nu),
+      "sets:", "  element:", "  - name: layup_0", "    labels:"]
+o += ["    - %d" % (e+1) for e in range(ne)]
+open("schwarz_p_3Dshell.yaml", "w").write("\n".join(o) + "\n")
+\end{lstlisting}
+
+Note the asymmetry the loop makes explicit and that trips up hand-written files:
+\texttt{nodes} and \texttt{elements} rows are space-separated inside brackets,
+\texttt{elementOrientations} rows are comma-separated, and the \texttt{sets}
+labels are 1-based. The generator prints the surface area and the relative
+density $\text{area} \times T$ so the shell idealisation can be checked against
+the solid cell it replaces.
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG
+python make_schwarz_yaml.py
+python schwarz_solid_props.py
+\end{lstlisting}
+
+The second command writes \texttt{schwarz\_p\_3Dshell\_C3D.out}, whose banner
+records the mesh size, the junction-edge count, the boundary treatment and the
+bounding-box volume the law is normalized by. For this cell it reads
+\texttt{ OpenSG msg-shell equivalent 3D solid (3-D shell SG, 13536 nodes, 26360
+elems, 0 junction edges, periodic in 3 dirs, per unit cell 1)}. Because the 3-D
+solid law is written with \texttt{constants=True}, the file ends with the
+orthotropic-approximated engineering constants --- here
+$E_1 = 9.3296\times10^{8}$, $E_2 = 9.3314\times10^{8}$,
+$E_3 = 9.3285\times10^{8}$~Pa and $G_{12} = 1.0409\times10^{9}$~Pa --- followed
+by \texttt{ Time taken: 66.43 sec}. The near-equality of the three Young's
+moduli is the physical check: a Schwarz-P cell is cubic-symmetric, so any
+appreciable spread means the mesh or the frames are wrong.
+
+%========================================================================
+\section{The solid SG YAML}
+\label{sec:input-solid}
+
+The solid dialect describes a meshed \emph{domain} rather than a laminated
+\emph{surface}, so it carries no layups and no orientations by default --- the
+material blocks are already $6\times6$ stiffnesses or engineering constants.
+\texttt{RHC\_SW\_2UC\_45.yaml} is a two-unit-cell honeycomb plate SG with 4251
+nodes, 6640 triangles and 3 materials (Figure~\ref{fig:input-rhc-mesh}). The
+excerpt below keeps two rows per list and two of the three material blocks; its
+keys are collected in Table~\ref{tab:input-solid-keys} and its material types in
+Table~\ref{tab:input-mattypes}.
+
+\begin{lstlisting}[style=shellst,caption={Abridged RHC\_SW\_2UC\_45.yaml.}]
+dim: 2
+scale: 35.248
+nodes:
+- [17.6240005, 23.3500004, 0.0]
+- [-17.6240005, 23.3500004, 0.0]
+cells:
+- [0, 66, 345]
+- [345, 3, 0]
+mat_id: [1, 1, 1, 1, 1]
+materials:
+  1:
+    type: 2
+    aux: [0.0, 0.0]
+    C:
+    - [35696.6, 27696.6, 3251.1, 0.0, 0.0, -25368.7]
+    - [27696.6, 35696.6, 3251.1, 0.0, 0.0, -25368.7]
+    - [3251.1, 3251.1, 8917.8, 0.0, 0.0, -487.1]
+    - [0.0, 0.0, 0.0, 3500.0, -500.0, 0.0]
+    - [0.0, 0.0, 0.0, -500.0, 3500.0, 0.0]
+    - [-25368.7, -25368.7, -487.1, 0.0, 0.0, 27958.5]
+  3:
+    type: 0
+    aux: [0.0, 0.0]
+    E: 69000.0
+    nu: 0.3
+\end{lstlisting}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Keys of the solid SG YAML, as consumed by
+\texttt{opensg\_solid.sg\_mesh.load\_sg\_input}.}
+\label{tab:input-solid-keys}
+\begin{tabular}{@{}lp{10.4cm}@{}}
+\toprule
+key & meaning \\
+\midrule
+\texttt{dim} & SG spatial dimension, 1, 2 or 3. Only the first \texttt{dim} node
+  coordinates are used (\texttt{points = nodes[:, 0:n\_sg]}), so the trailing
+  zeros above are padding. \\
+\texttt{scale} & the normalization value carried over from the \texttt{.sc}
+  trailing line. It is parsed and preserved on the input dict, but the
+  homogenizer computes its own SG measure $\omega$ from the mesh and prints that
+  in the banner. \\
+\texttt{nodes} & comma-separated coordinate rows, always three components. \\
+\texttt{cells} & element connectivity, \textbf{0-based} in this dialect (note
+  the \texttt{0} in the first row). All elements in one SG must have the same
+  node count; a mixed batch raises \texttt{mixed element types in one SG are
+  unsupported}. \\
+\texttt{mat\_id} & one material id per cell, \textbf{1-based} (the reader forms
+  \texttt{mat\_id - 1} internally). \\
+\texttt{materials} & a mapping from that id to a material block. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each material block carries a \texttt{type} that selects how the $6\times6$ is
+built, matching the SwiftComp material types.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Material types in the solid SG YAML and the \texttt{.sc} it mirrors.}
+\label{tab:input-mattypes}
+\begin{tabular}{@{}clp{7.6cm}@{}}
+\toprule
+\texttt{type} & fields & interpretation \\
+\midrule
+0 & \texttt{E}, \texttt{nu} & isotropic; $G = E/[2(1+\nu)]$ \\
+1 & \texttt{engineering} & the nine constants
+  $E_1\,E_2\,E_3\,G_{12}\,G_{13}\,G_{23}\,\nu_{12}\,\nu_{13}\,\nu_{23}$ \\
+2 & \texttt{C} & the $6\times6$ stiffness stored directly --- typically an
+  already-rotated ply, so no \texttt{angles} should be supplied with it \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\texttt{aux} is the auxiliary line of the material block, carried through
+verbatim from the \texttt{.sc}; the elastic path does not consume it.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.72\textwidth]{\FIGDIR/rhc_2dsg_mesh.png}
+\caption{The RHC honeycomb 2-D solid SG, elements coloured by material id. This
+figure is written automatically as \texttt{RHC\_SW\_2UC\_45\_mesh.png} by
+\texttt{plot\_sg\_mesh} on every run with \texttt{plot=True} (the default), and
+is drawn from the actual parsed mesh.}
+\label{fig:input-rhc-mesh}
+\end{figure}
+
+The driver overrides the pre-rotated \texttt{type: 2} blocks with engineering
+constants plus explicit per-material angles, which is the recommended pattern
+when you want the ply angle to appear in exactly one place:
+
+\begin{lstlisting}[style=opensg,caption={plate\_homo\_2dsg.py, the whole user input and the one call.}]
+import jax.numpy as jnp
+from opensg_solid.sg_homo import plate_homo_2d
+
+n_model = 2                    # 1: Beam; 2: Plate; 3: 3D elastic
+name = "RHC_SW_2UC_45"         # reads <name>.yaml
+
+material_param = jnp.array([
+    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply +45
+    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply -45
+    (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
+angles = jnp.array([45.0, -45.0, 0.0])   # deg per material; 0.0 = none
+
+r = plate_homo_2d(name + ".yaml", material_param=material_param,
+                  angles=angles, n_model=n_model)
+print(r["C_eff"])
+\end{lstlisting}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/3_get_plate_props_from_2D_SG
+python plate_homo_2dsg.py
+\end{lstlisting}
+
+\texttt{n\_model} selects the macro model: 1 beam (Timoshenko), 2 plate, 3
+equivalent 3-D solid. The run writes \texttt{RHC\_SW\_2UC\_45.out} ---
+\texttt{The Effective Classical Plate Stiffness Matrix}, rows
+\texttt{[N11 N22 N12 M11 M22 M12]}, under the banner
+\texttt{ OpenSG msg-solid plate model, omega 35.248001, periodic} --- plus
+\texttt{RHC\_SW\_2UC\_45\_mesh.png}. The printed $\omega = 35.248001$ is the
+in-plane span measured from the mesh; it agrees with the file's
+\texttt{scale: 35.248} to six digits, and that agreement is the check that the
+mesh and the \texttt{.sc} header describe the same cell. For this run
+$A_{11} = 3.3586\times10^{5}$, $D_{11} = 9.0368\times10^{7}$ in the file's own
+units, and the footer reads \texttt{ Time taken: 7.83 sec}.
+
+%========================================================================
+\section{The SwiftComp \texttt{.sc} input and the converter}
+\label{sec:input-sc}
+
+A \texttt{.sc} file can be used directly --- \texttt{load\_sg\_input} dispatches
+on the extension and converts --- or converted once and kept as YAML. The
+anatomy the reader expects is documented in the
+\texttt{opensg\_solid.rm\_plate\_1D.helper.sc\_to\_yaml} module docstring,
+implemented in its \texttt{read\_sc}, and summarized in
+Table~\ref{tab:input-sc}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Blocks of a SwiftComp \texttt{.sc} file, in file order.}
+\label{tab:input-sc}
+\begin{tabular}{@{}lp{10.2cm}@{}}
+\toprule
+block & content \\
+\midrule
+model header & 1 to 3 short lines (submodel flags and similar) \\
+META line & \texttt{dim  n\_nodes  n\_elems  n\_mats} followed by further
+  integers; located as the first line holding at least five integers \\
+node records & \texttt{n\_nodes} lines of \texttt{id  x [y [z]]} \\
+element records & \texttt{n\_elems} lines of \texttt{id  mat\_id  conn}, the
+  connectivity zero-padded to a fixed slot count; the padding zeros are not
+  nodes \\
+material blocks & per material: a header \texttt{mat\_id  mat\_type  n}, an
+  auxiliary line such as \texttt{0 0}, then the properties --- type 0 is
+  \texttt{E  nu}, type 1 is \texttt{E1 E2 E3 / G12 G13 G23 / v12 v13 v23}, type
+  2 is the 21 upper-triangular constants of the $6\times6$ over six lines \\
+trailing line & the \texttt{scale} (volume or thickness normalization) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+In \texttt{RHC\_SW\_2UC\_45.sc} the META line is \texttt{2 4251 6640 3 0 0} --- a
+2-D SG with 4251 nodes, 6640 elements and 3 materials --- and the file ends with
+the lone line \texttt{35.248}. The file's last triangle, element 6640 of material
+3 on nodes 4251/2988/3079, shows the zero padding in full:
+
+\begin{lstlisting}[style=shellst]
+6640 3 4251 2988 3079 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+\end{lstlisting}
+
+The documented way to run the conversion is the module's own \texttt{convert}:
+
+\begin{lstlisting}[style=opensg,caption={Converting a .sc by hand.}]
+from opensg_solid.rm_plate_1D.helper.sc_to_yaml import convert
+
+sc = convert("RHC_SW_2UC_45.sc")
+print(sc["dim"], len(sc["nodes"]), len(sc["cells"]), sc["scale"])
+\end{lstlisting}
+
+\texttt{convert} writes \textbf{two} files next to the input ---
+\texttt{<base>.yaml}, the solid SG YAML documented above, and
+\texttt{<base>.msh}, a gmsh v2.2 mesh carrying the material id as both physical
+and elementary tag --- and returns the parsed dict. The module defines no
+\texttt{\_\_main\_\_} block, so import \texttt{convert} rather than invoking the
+module with \texttt{python -m}. Because \texttt{plate\_homo\_2d} performs the
+same conversion automatically when handed a \texttt{.sc} path, converting by hand
+is only needed when you want to inspect or edit the YAML before homogenizing.
+
+Two failure modes are worth knowing. The tet10 slot convention is remapped
+explicitly (four corners, then the six midsides from slots 7--12), and any 3-D
+record whose nonzero slot count is not 4, 8 or 10 is refused loudly rather than
+converted into phantom nodes.
+
+%========================================================================
+\section{The through-thickness \texttt{layup\_db.yaml}}
+\label{sec:input-layupdb}
+
+For a plain laminate there is no mesh to write: the 1-D SG is one element stack
+through the thickness, and \texttt{layup\_db.yaml} is the whole user input. The
+driver \texttt{1d\_sg.py} reads it, generates the SG mesh (\texttt{1dsg.yaml}
+plus \texttt{1dsg.png}) through
+\texttt{opensg\_solid.rm\_plate\_1D.segment\_plate.plate\_sg\_yaml}, homogenizes
+with \texttt{msg\_rm\_plate.rm\_plate\_msg}, and writes
+\texttt{layup\_db\_plate\_homo.out}. The generated mesh is shown in
+Figure~\ref{fig:input-plate1dsg} and the file's keys in
+Table~\ref{tab:input-layupdb}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\textwidth]{\FIGDIR/plate_1dsg.png}
+\caption{The generated through-thickness 1-D plate SG, elements coloured by
+material: eight thin graphite/epoxy plies bracketing the thick PVC foam core.
+The abscissa is $y_3$, running from $-h/2$ to $+h/2$ because
+\texttt{fraction: 0.5} put the origin at mid-thickness.}
+\label{fig:input-plate1dsg}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Keys of \texttt{layup\_db.yaml} read by \texttt{1d\_sg.py}.}
+\label{tab:input-layupdb}
+\begin{tabular}{@{}lp{9.8cm}@{}}
+\toprule
+key & meaning \\
+\midrule
+\texttt{model} & \texttt{0} prints the classical $6\times6$ ABD, \texttt{1} the
+  shear-refined $8\times8$ ABDG. This also names the matrix in the
+  \texttt{.out}: \texttt{Classical Plate} or \texttt{Reissner-Mindlin Plate}. \\
+\texttt{fraction} & the reference surface as a fraction of the total thickness:
+  \texttt{0} = bottom/OML face, \texttt{0.5} = mid-surface, \texttt{1} = top.
+  This is the solid-side analogue of the shell YAML's \texttt{reference}. \\
+\texttt{mesh.n\_per\_layer} & SG elements per physical ply. \\
+\texttt{mesh.elem\_order} & element polynomial order $p$; nodes per element are
+  $p+1$, and the engine supports 1 to 4. \texttt{4} --- the five-noded quartic
+  --- is the default in the example and represents the whole warping ladder
+  exactly ($V_0$ quadratic, $V_1$ cubic, $V_2$ quartic). \\
+\texttt{materials} & a mapping from short name to \texttt{E} (3), \texttt{G}
+  (3), \texttt{nu} (3) and \texttt{rho}, with an optional \texttt{full\_name}.
+  Every number must parse as a float; the example's comment about
+  \texttt{128.0e9} is a real PyYAML trap, which is why \texttt{1d\_sg.py}
+  coerces with \texttt{float(v)} on read. \\
+\texttt{layup} & the stacking sequence, \textbf{bottom ply first}, each entry
+  \texttt{\{material, thickness, angle\}}. An optional \texttt{divisions} key is
+  read only by the Abaqus 3-D deck generator and ignored by the homogenizer. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Nayak sandwich in the example is a nine-ply $(0/90/0/90/\text{core})_s$ stack
+of graphite/epoxy faces on a HEREX C70.130 PVC foam core:
+
+\begin{lstlisting}[style=shellst,caption={The mesh, reference and stacking blocks of layup\_db.yaml.}]
+mesh:
+  n_per_layer: 1
+  elem_order: 4
+fraction: 0.5
+layup:
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: herex, thickness: 0.1447800, angle:  0.0, divisions: 8}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+  - {material: ge,    thickness: 0.0009525, angle: 90.0}
+  - {material: ge,    thickness: 0.0009525, angle:  0.0}
+\end{lstlisting}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/1_get_plate_props_from_1DSG
+python 1d_sg.py
+\end{lstlisting}
+
+\texttt{1d\_sg.py} accepts an alternative database as its one positional
+argument, and the output file is named after that database rather than after the
+mesh. The \texttt{.out} banner echoes back every number that mattered, which is
+the fastest way to confirm the file was read as intended:
+\texttt{ OpenSG msg-solid plate model from 1dsg.yaml: 9 plies, h = 0.152400 m,
+fraction = 0.5, rho*h = 30.251400 kg/m\^{}2, rows [e11 e22 g12 k11 k22 k12 2g13
+2g23]}. With \texttt{model: 1} the matrix printed is the $8\times8$, whose
+transverse-shear block for this sandwich is $G_{11} = 7.7010\times10^{6}$ and
+$G_{22} = 7.5424\times10^{6}$~N/m, and whose $B$ block is numerically zero
+(entries of order $10^{-6}$ against a $10^{8}$ membrane term) as a symmetric
+stack requires.
+
+The generated \texttt{1dsg.yaml} records the same decisions in its own header,
+
+\begin{lstlisting}[style=shellst,caption={Header, first node and first elements of the generated 1dsg.yaml (37 node rows and 9 element rows in full).}]
+sg: {type: plate_1d, elem_order: 4, n_per_layer: 1, reference_fraction: 0.5,
+  thickness: 0.15239999999999998, n_ply: 9}
+nodes:
+- [-0.07619999999999999]
+elements:
+- [1, 2, 3, 4, 5]
+- [5, 6, 7, 8, 9]
+\end{lstlisting}
+
+and \texttt{read\_plate\_sg\_yaml} cross-checks the stored ply thicknesses and
+\texttt{reference\_fraction} against the mesh itself, rejecting a hand-edited
+file whose header and coordinates disagree instead of silently trusting it.
+
+Note the element rows carefully, because this is the one place where the two
+solid routes genuinely differ. \texttt{segment\_plate.plate\_sg\_yaml} numbers
+each element's nodes \emph{sequentially}, \texttt{np.arange(p*e, p*e + p + 1)},
+which is why the rows read \texttt{[1, 2, 3, 4, 5]} and \texttt{[5, 6, 7, 8, 9]}
+--- consecutive integers, adjacent elements sharing their end node.
+\texttt{rm\_plate\_msg} then homogenizes that mesh with its own equispaced
+Lagrange basis (\texttt{nodes\_xi = np.linspace(-1.0, 1.0, p + 1)},
+$\max(3, p+1)$-point Gauss-Legendre), so the \texttt{layup\_db.yaml} route never
+touches the general SG engine's element table at all. The ends-first
+gmsh/basix line ordering --- \texttt{[seq[0], seq[-1]] + seq[1:-1]} --- belongs
+instead to \texttt{opensg\_solid.sg\_mesh.laminate\_to\_sg}, the parity route
+that feeds the general engine, and it is that engine's
+\texttt{plate\_homo\_2d} which consults \texttt{\_cell\_basis}
+(Section~\ref{sec:input-elements}).
+
+%========================================================================
+\section{Finite elements used by each route}
+\label{sec:input-elements}
+
+The two packages discretize differently, and knowing which element you are
+getting explains both the DOF count and the failure modes.
+
+\subsection{Shell route}
+
+The shell SG never assembles a line element directly. The contour is extruded one
+quad deep along the beam axis by \texttt{sg\_homo.\_strip}, with extrusion length
+$h$ equal to the mean contour element length, giving quads
+\texttt{[a, b, m+b, m+a]}; the top node row is then DOF-mapped onto the bottom
+row (\texttt{dof\_map = np.concatenate([np.arange(m), np.arange(m)])}) so the
+field is exactly span-invariant. That is the operator's own prismatic reduction.
+The element is therefore a 4-node bilinear quad integrated at $2\times2$ Gauss
+points ($\pm 1/\sqrt{3}$ in each direction), and the 1-D cross-section problem is
+recovered as its span-invariant limit. Two element families are built on that
+quad, and they differ only in what they do with the drilling rotation
+(Table~\ref{tab:input-shell-elements}).
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The two shell element families and how each handles the drilling
+rotation.}
+\label{tab:input-shell-elements}
+\begin{tabular}{@{}lccp{5.6cm}@{}}
+\toprule
+entry point & DOF/node & DOF/elem & drilling \\
+\midrule
+\texttt{sg\_homo.ring\_indep} (production)
+  & 6: \texttt{[w1, w2, w3, om1, om2, om3]} & 24
+  & independent nodal $\omega_3$, tied back by a finite drilling residual
+    (\texttt{NDOF6 = 6}) \\
+\texttt{sg\_assembly.ring\_general}
+  & 5: \texttt{[w1, w2, w3, om1, om2]} & 20
+  & eliminated algebraically through
+    $\omega_3 = S/(2C_{33}) - (C_{3b}/C_{33})\,\omega_b$ (\texttt{NDOF = 5}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The independent-drilling element exists because the elimination divides by
+$C_{33} = n \cdot b_3$, which vanishes on a flat wall. In the 6-DOF element
+$\omega_3$ is a genuine nodal DOF and the in-plane symmetry that defined it is
+re-imposed in its finite, undivided form as the drilling residual
+\[
+DR = C_{33}\,\omega_3 + C_{3b}\,\omega_b - S/2 ,
+\]
+which equals $C_{33}(\omega_3 - \omega_3^{\text{eliminated}})$ and stays finite
+even at $C_{33} = 0$. It is enforced by an element-wise Lagrange multiplier
+(\texttt{lam\_space="elem"}, the production setting) or by a penalty. Transverse
+shear uses MITC assumed-strain tying in the Dvorkin--Bathe sense: the production
+ring scheme is \texttt{shear="mitc4\_g23"}, which ties only $\gamma_{23}$,
+because under span invariance $\gamma_{13}$ is algebraic in the directors and
+carries no fluctuation gradient.
+
+The 3-D shell SG uses the same quad element, with triangles entering as quads
+whose last node is repeated.
+
+\subsection{Solid route}
+
+\texttt{opensg\_solid.sg\_mesh.\_cell\_basis} maps the SG dimension and the node
+count per element onto a basix cell type and Lagrange degree. This table
+\emph{is} the list of supported elements, and it is consulted by exactly one
+function: \texttt{sg\_homo.plate\_homo\_2d}, the general SG engine entry point
+(and therefore also by anything that reaches it, including a \texttt{.sc} handed
+to it directly and the \texttt{laminate\_to\_sg} parity route). The supported
+combinations are given in Table~\ref{tab:input-cellbasis}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The \texttt{\_cell\_basis} table: every element the general solid SG
+engine supports.}
+\label{tab:input-cellbasis}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\texttt{dim} & nodes/elem & basix cell & degree \\
+\midrule
+1 & 2 & \texttt{interval} & 1 \\
+1 & 3 & \texttt{interval} & 2 \\
+1 & 4 & \texttt{interval} & 3 \\
+1 & 5 & \texttt{interval} & 4 \\
+2 & 3 & \texttt{triangle} & 1 \\
+2 & 4 & \texttt{quadrilateral} & 1 \\
+3 & 4 & \texttt{tetrahedron} & 1 \\
+3 & 8 & \texttt{hexahedron} & 1 \\
+3 & 10 & \texttt{tetrahedron} & 2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Anything else raises \texttt{unsupported <dim>D element with <n> nodes}. Basis
+functions are equispaced Lagrange (\texttt{LagrangeVariant.equispaced}) with
+quadrature degree 6 for degree $>1$ and 2 otherwise. Two connectivity
+conventions are applied on the way in: \texttt{\_to\_basix\_order} permutes quad4
+to \texttt{[0, 1, 3, 2]} and hex8 to \texttt{[0, 1, 3, 2, 4, 5, 7, 6]}, while
+triangles, tetrahedra and intervals pass through unchanged.
+
+The through-thickness laminate of Section~\ref{sec:input-layupdb} does
+\emph{not} go through this table. Its route ---
+\texttt{plate\_sg\_yaml} to \texttt{rm\_plate\_msg} --- carries its own
+equispaced Lagrange basis and its own sequential node numbering, as described
+there. Only \texttt{laminate\_to\_sg}, the alternative route that packages a
+laminate as a generic 1-D SG dict for \texttt{plate\_homo\_2d}, writes the
+ends-first gmsh/basix line ordering that the \texttt{\_cell\_basis} elements
+expect.
+
+%========================================================================
+\section{Sign and order conventions}
+\label{sec:input-conventions}
+
+Three orderings appear across the codebase. Every one of them is stated in a
+module docstring rather than inferred, and every one of them is a common source
+of a plausible-looking but wrong answer.
+
+\subsection{Solid (3-D) Voigt order}
+
+The solid order is the SwiftComp order
+\[
+[\,11\;\;22\;\;33\;\;23\;\;13\;\;12\,]
+\]
+with \textbf{engineering shears}. The compliance therefore carries
+$S_{44} = 1/G_{23}$, $S_{55} = 1/G_{13}$, $S_{66} = 1/G_{12}$, and the shear rows
+of a recovered strain are $2\gamma$, not $\gamma$. This is the order of
+\texttt{write\_sc\_K}'s output, of \texttt{build\_stiffness\_6x6}, and of every
+\texttt{type: 2} material \texttt{C} block in a solid SG YAML.
+
+\subsection{Beam order}
+
+The beam order is
+\[
+[\,\varepsilon_{11}\;\;\gamma_{12}\;\;\gamma_{13}\;\;\kappa_1\;\;\kappa_2\;\;
+\kappa_3\,],
+\]
+whose diagonal is the familiar VABS ordering
+\[
+[\,EA\;\;GA_2\;\;GA_3\;\;GJ\;\;EI_2\;\;EI_3\,],
+\]
+the \texttt{LBL} list used by the shell drivers. \textbf{Axis 1 is the beam
+axis}; axes 2 and 3 are the cross-section axes.
+
+The solver indexes global axes as $(1,2,3) = (\text{axial},\,y_2,\,y_3)$ while an
+SG YAML writes each 3-vector as $(y_2,\,y_3,\,\text{axial})$. That is why
+\texttt{opensg\_solid.sg\_materials.elem\_rotation\_from\_yaml} cycles
+\[
+[a,\,b,\,c] \;\longrightarrow\; [c,\,a,\,b]
+\]
+(implemented as \texttt{o[:, :, [2, 0, 1]]}) before a YAML orientation can be
+used as a direction-cosine matrix in the solid beam path. Skipping that cycle
+points $e_1$ along $y_3$: the run still completes and still looks plausible, but
+it destroys the section's symmetry, and a square tube comes out with
+$EI_2 \neq EI_3$.
+
+\subsection{Plate order}
+
+The plate order is $[\,N_{11}\;N_{22}\;N_{12}\;M_{11}\;M_{22}\;M_{12}\,]$ for the
+classical $6\times6$, conjugate to the strain vector
+$[\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;\kappa_{11}\;
+\kappa_{22}\;\kappa_{12}]$. The Reissner--Mindlin $8\times8$ appends the two
+transverse shears, giving the rows
+\texttt{[e11 e22 g12 k11 k22 k12 2g13 2g23]} that both
+\texttt{write\_abdg\_out} and \texttt{1d\_sg.py} print in their banners, and the
+block structure
+\[
+\mathbf{ABDG} =
+\begin{bmatrix}
+\mathbf{A} & \mathbf{B} & \mathbf{0} \\
+\mathbf{B} & \mathbf{D} & \mathbf{0} \\
+\mathbf{0} & \mathbf{0} & \mathbf{G}
+\end{bmatrix}.
+\]
+
+For a plate SG the \textbf{last SG coordinate is the thickness direction} --- the
+$y_3$ of the solid Voigt order above. With \texttt{dim: 2} that is node
+coordinate index 1, since only the first \texttt{dim} coordinates are read; for a
+through-thickness 1-D SG it is the single coordinate. This is why the RHC cell
+reports $\omega = 35.248$, the span of coordinate 0 (the in-plane periodic
+direction), and not its larger extent in coordinate 1.
+
+\subsection{Changing the reference surface}
+
+Moving the reference surface by $z_0$ maps the membrane strain
+$\varepsilon$ to $\varepsilon + z_0\,\kappa$, so with
+$\mathbf{T} = \begin{bmatrix} \mathbf{I} & z_0\mathbf{I} \\ \mathbf{0} &
+\mathbf{I}\end{bmatrix}$ the plate law transforms as
+\[
+\mathbf{ABD}_{\text{new}} = \mathbf{T}^{-\mathsf{T}}\,\mathbf{ABD}\,
+\mathbf{T}^{-1},
+\]
+which is exactly what \texttt{fe\_jax.msg\_materials.shift\_abd\_reference(ABD,
+z0)} computes. Use it rather than reversing the layup: reversal flips $e_3$ and
+breaks agreement with the material orientation. The transverse-shear block
+$\mathbf{G}$ is reference-independent, which is why
+\texttt{compute\_ABD\_matrix} can shift the $6\times6$ and leave the $8\times8$'s
+$\mathbf{G}$ untouched.
+
+%========================================================================
+\section{Material orientation}
+\label{sec:input-orientation}
+
+Each row of \texttt{elementOrientations} is nine direction cosines forming three
+stacked unit vectors,
+
+\begin{lstlisting}[style=shellst]
+[ e1x e1y e1z | e2x e2y e2z | e3x e3y e3z ]
+\end{lstlisting}
+
+with the roles fixed across both shell dialects:
+
+\begin{itemize}
+\item $e_1$ is the \textbf{beam axis} --- the prismatic direction, which for a
+  plane cross-section meshed in $(y_2, y_3)$ is out of plane, so
+  \texttt{e1 = [0, 0, 1]}.
+\item $e_2$ is the \textbf{in-plane ply-flow direction}, the wall tangent along
+  the contour.
+\item $e_3 = e_1 \times e_2$ is the \textbf{wall normal}, in plane for a
+  cross-section SG, and the direction the layup stacks along from the reference
+  surface.
+\end{itemize}
+
+The triad must be orthonormal and right-handed.
+\texttt{opensg\_shell.sg\_mesh.frame\_report(nodes, cells, e1, e2, e3)} checks
+this numerically. It \textbf{returns} the pair \texttt{(ok, txt)} and prints
+nothing --- callers such as \texttt{sg\_mesh.extract} do the printing --- and its
+one-line summary ends in \texttt{OK} or \texttt{CHECK}. Its pass/fail gate is
+
+\[
+\bigl|\,\overline{|e_i|} - 1\,\bigr| < 10^{-6}\ (i = 1,2,3), \qquad
+\max_{i\neq j}\bigl|e_i \cdot e_j\bigr| < 10^{-6},
+\]
+\[
+\min\bigl(e_1 \times e_2 \cdot e_3\bigr) > 0.99, \qquad
+\min\bigl(e_1 \cdot \hat{x}\bigr) > 0.999 .
+\]
+
+The first three are universal; the fourth --- $e_1$ axial --- is
+cylinder-specific, as the docstring says. The report also prints a fifth number,
+the mean of $e_3 \cdot (-\hat{r})$, i.e.\ how nearly $e_3$ is the inward radial
+normal, but that value is \textbf{reported and not gated}: it appears in the text
+so you can read it, and a poor value alone will not turn an \texttt{OK} into a
+\texttt{CHECK}.
+
+Because any mesh handling can renumber nodes and cells, an orientation PNG is a
+compulsory deliverable of every OpenSG run. It is emitted by the \emph{example
+driver} calling \texttt{opensg\_shell.auto\_emit} --- see the last line of
+\texttt{beam\_homo\_shell.py} --- and not by any homogenization entry point:
+\texttt{build\_rm\_bundle}, \texttt{shell\_sg3d} and \texttt{plate\_homo\_2d}
+never call it. \texttt{auto\_emit} is cached once per \texttt{(shell, solid)}
+path per process and swallows any exception with a
+\texttt{[orient\_plot] skipped} message, so it never raises and is safe to call
+from inside a compute path; a new driver of your own should call it explicitly.
+
+The colour convention of \texttt{fe\_jax/orient\_plot.py} is \textbf{$e_2$ blue,
+$e_3$ green}, drawn at element centroids over a light mesh; $e_1$ is out of the
+page and so not drawn. (The separate 3-D plotters in \texttt{sg\_mesh.py} use
+red/blue/black for $e_1$/$e_2$/$e_3$, since there $e_1$ is visible.) The
+canonical example is the IEA-22 $r/R = 0.2$ station of
+Figure~\ref{fig:input-orient}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{\FIGDIR/shell_xsec_orient.png}
+\caption{Material orientation of the IEA-22 $r/R = 0.2$ shell cross-section:
+$e_2$ in blue (in-plane ply direction), $e_3$ in green (wall normal). This is
+\texttt{iea\_s10\_orient.png}, written by the \texttt{auto\_emit} call at the end
+of \texttt{beam\_homo\_shell.py}.}
+\label{fig:input-orient}
+\end{figure}
+
+Read it as a physical check, not decoration. On this station the green $e_3$
+arrows point inward everywhere on the skin, which is what an outward-first layup
+stacked from the mid-surface requires, and the blue $e_2$ arrows are tangent to
+every wall --- running consistently around the closed skin loop and along each of
+the three shear webs. An $e_3$ that flips between neighbouring skin elements, or
+a web whose $e_2$ opposes its neighbours, means the layup is being stacked in two
+directions at once: visible here in seconds, and invisible in the resulting
+$6\times6$.
+
+\subsection{Where the ply angle lives}
+
+The ply angle is \textbf{not} baked into $e_1$. It lives in the third column of
+each \texttt{layup} row (shell dialect) or in the \texttt{angles} argument (solid
+dialect), and it rotates the material about $e_3$, away from $e_1$. The rotation
+\texttt{rotation\_6x6(theta)} leaves the Voigt-33 row untouched and mixes the
+11/22/12 rows, and the reduced in-plane stiffness built by
+\texttt{msg\_transverse\_shear.\_ply\_Q\_and\_G} is the textbook
+\[
+\bar{Q}_{11} = Q_{11}\cos^4\theta + 2(Q_{12} + 2Q_{66})\sin^2\theta\cos^2\theta
+  + Q_{22}\sin^4\theta ,
+\]
+so \texttt{angle: 0.0} places the fibre along $e_1$ --- the beam axis. A
+wind-blade unidirectional spar cap therefore carries \texttt{angle: 0.0}, and a
+$\pm45$ ply carries \texttt{45.0} and \texttt{-45.0}.
+
+The governing repository rule is
+\texttt{Rules/orientation\_e1\_out\_of\_plane.md}, which also records the failure
+mode: a YAML whose $e_1$ already contains the fibre rotation (so
+$|e_{1z}| < 1$) is a \emph{fibre} frame, and combining it with a non-zero
+\texttt{angle} applies the rotation twice. The rule supplies a two-line check
+worth running on any YAML you did not write yourself:
+
+\begin{lstlisting}[style=opensg,caption={The orientation precheck from Rules/orientation\_e1\_out\_of\_plane.md.}]
+ori = np.array(d["elementOrientations"], float)
+e1, e3 = ori[:, 0:3], ori[:, 6:9]
+assert np.allclose(np.abs(e1[:, 2]), 1.0)   # e1 out of plane
+assert np.allclose(e3[:, 2], 0.0)           # e3 in plane
+\end{lstlisting}
+
+If the first assertion fails, the file carries a fibre frame; either switch to
+the frame variant built with the axial rotation only, or set the fibre angle to
+zero downstream so the rotation is applied exactly once.

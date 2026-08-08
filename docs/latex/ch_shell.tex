@@ -1,0 +1,1323 @@
+\chapter{Tutorials: the Shell Engine (msg-shell)}
+\label{ch:shell}
+
+The \texttt{msg-shell} engine solves structure genes whose heterogeneity lives
+in a \emph{surface}: the mid-surface of a thin composite wall. Thickness never
+appears in the mesh. It lives inside the wall's Reissner--Mindlin plate law and
+inside the through-thickness recovery ladder, so changing a ply schedule is a
+change of material data, not a remesh.
+
+Five capabilities ship as runnable examples, all under
+\texttt{examples/OpenSG\_shell/}. Every one of them takes a YAML file in and
+writes a timed output file in the SwiftComp \texttt{.K} layout.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+example folder & driver & entry point & produces \\
+\midrule
+\texttt{1\_get\_beam\_props\_...}   & \texttt{beam\_homo\_shell.py}  & \texttt{build\_rm\_bundle}          & Timoshenko $6\times6$ \\
+\texttt{2\_get\_beam\_dehom\_...}   & \texttt{beam\_dehom\_shell.py} & \texttt{build\_rm\_bundle} + recovery & 3-D wall stress \\
+\texttt{3\_get\_solid\_props\_...}  & four sub-folders               & \texttt{build\_solid\_bundle}       & equivalent solid $6\times6$ \\
+\texttt{4\_get\_solid\_props\_...}  & \texttt{schwarz\_solid\_props.py} & \texttt{shell\_sg3d}             & equivalent solid $6\times6$ \\
+\texttt{5\_taper\_segment\_...}     & \texttt{run\_taper\_segment.py} & \texttt{segment\_timo\_from\_3dyaml} & tapered-segment $6\times6$ \\
+\bottomrule
+\end{tabular}
+\caption{The five \texttt{msg-shell} capabilities and the example folder that
+demonstrates each one. Folder names are abbreviated; the full names appear at
+the head of each section below.}
+\label{tab:shell-capabilities}
+\end{table}
+
+%=====================================================================
+\section{Beam properties from a shell cross-section}
+\label{sec:shell-beam}
+
+\subsection{What this capability computes}
+
+Given the contour of a thin-walled composite cross-section, this run produces
+the $6\times6$ Timoshenko beam stiffness matrix of that section: the constitutive
+law a beam solver such as BeamDyn or GEBT needs. It also writes the
+$8\times8$ Reissner--Mindlin plate law of every distinct wall region, because
+those are the intermediate quantities the beam matrix is assembled from.
+
+The example is \texttt{examples/OpenSG\_shell/1\_get\_beam\_props\_from\_shell\_cross\_section},
+and the input is \texttt{iea\_s10\_shell.yaml}: station $r/R = 0.20$ of the
+IEA-22 MW reference blade.
+
+\subsection{What a 1-D shell SG is}
+
+A \textbf{1-D shell structure gene} is the contour of the cross-section: a chain
+of straight two-node line elements along the wall mid-surface, each element
+carrying a laminate stack as material data rather than as geometry. A 2-D solid
+cross-section mesh, by contrast, discretizes the wall \emph{through} its
+thickness with area elements, so every ply interface must be resolved by the
+mesh.
+
+The consequence for the user is size. This station spans about 7.2\,m in $y_2$
+and 2.5\,m in $y_3$, has spar caps 87.6\,mm thick and three shear webs, and is
+fully described by 307 nodes and 310 line elements. The price is that the walls
+are modelled as Reissner--Mindlin plates, so wall-thickness effects enter through
+the plate law and the recovery ladder rather than through the mesh.
+
+\subsection{The input file the user edits}
+
+\texttt{build\_rm\_bundle} reads exactly one file. These are its blocks, with the
+values found in \texttt{iea\_s10\_shell.yaml}.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+block & content & this station \\
+\midrule
+\texttt{nodes} & \texttt{[y2 y3 0]} contour coordinates, metres & 307 nodes \\
+\texttt{elements} & 1-based two-node line connectivity & 310 elements \\
+\texttt{sets: element} & named element sets, one per wall region & 6 sets \\
+\texttt{sections} & per set: \texttt{elementSet} plus \texttt{layup} as & 6 sections \\
+                  & \texttt{[material, thickness, angle]} triples, outer ply first & \\
+\texttt{elementOrientations} & per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$ & 310 rows \\
+\texttt{materials} & \texttt{name}, \texttt{density}, \texttt{elastic: \{E, G, nu\}} as 3-vectors & 6 materials \\
+\texttt{reference} & the reference surface the whole run is referred to & \texttt{center} \\
+\bottomrule
+\end{tabular}
+\caption{The seven YAML blocks read by \texttt{build\_rm\_bundle}.}
+\label{tab:shell-yaml-blocks}
+\end{table}
+
+The \texttt{reference} field is the single source of truth. \texttt{build\_rm\_bundle}
+reads it and maps it to a thickness fraction (\texttt{center} $\to$ 0.5,
+\texttt{oml} $\to$ 0.0, \texttt{iml} and \texttt{oml\_flip} $\to$ 1.0). That one
+number is then used consistently for the ring laminate reference, the plate-SG
+$z$ origin, the emitted ABD cache and the recovery depth conversion. Pass
+\texttt{ref=} explicitly only to override it. Because the reference here is the
+mid-surface, quantities that depend on the reference axis, in particular $GJ$ and
+the bending--extension couplings, are mid-surface values.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{\FIGDIR/shell_xsec_mesh.png}
+\caption{The 1-D shell SG of IEA-22 station $r/R = 0.20$: 307 nodes and 310 line
+elements along the wall mid-surface, coloured by \texttt{sets: element} entry.
+This is the figure written by \texttt{beam\_homo\_shell.py} as
+\texttt{iea\_s10\_mesh.png}.}
+\label{fig:shell-xsec-mesh}
+\end{figure}
+
+Each colour in Figure~\ref{fig:shell-xsec-mesh} is one element set, and each set
+carries one laminate stack.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{llrr}
+\toprule
+layup & plies, outer ply first & total thickness (m) & elements \\
+\midrule
+\texttt{layup\_0} & gelcoat, glass\_triax, glass\_uniax, glass\_triax & 0.03260055 & 25 \\
+\texttt{layup\_1} & gelcoat, glass\_triax, medium\_density\_foam, glass\_triax & 0.07711403 & 161 \\
+\texttt{layup\_2} & gelcoat, glass\_triax, carbon\_uniax (0.08106 m), glass\_triax & 0.08756579 & 13 \\
+\texttt{layup\_3} & gelcoat, glass\_triax, glass\_uniax, glass\_triax & 0.02808872 & 8 \\
+\texttt{layup\_4} & gelcoat, glass\_triax, carbon\_uniax (0.07707 m), glass\_triax & 0.08358040 & 14 \\
+\texttt{layup\_5} & glass\_biax, medium\_density\_foam, glass\_biax & 0.04600000 & 89 \\
+\bottomrule
+\end{tabular}
+\caption{The six laminate stacks of station \texttt{iea\_s10}, as read from the
+\texttt{sections} block and echoed in the header of each block of
+\texttt{iea\_s10\_shell\_ABDG.out}.}
+\label{tab:shell-layups}
+\end{table}
+
+\texttt{layup\_2} and \texttt{layup\_4} are the carbon spar caps on the upper and
+lower surfaces, \texttt{layup\_1} is the foam-cored skin that covers most of the
+contour, \texttt{layup\_5} is the three shear webs, \texttt{layup\_0} is the
+trailing-edge reinforcement and \texttt{layup\_3} the leading edge. Every ply
+angle in this file is $0^\circ$; the biax and triax fabrics are supplied as
+smeared orthotropic materials rather than as individual plies, so the material
+frame of the recovery coincides with the wall frame here.
+
+\subsection{Orientation frames}
+
+A wrong \texttt{elementOrientations} block is the most common way to get a
+plausible-looking but wrong answer, so the example driver calls
+\texttt{auto\_emit} explicitly after the homogenization and writes an orientation
+figure. Note that \texttt{auto\_emit} is called \emph{by the driver}, not from
+inside \texttt{build\_rm\_bundle}: if you write your own script around
+\texttt{build\_rm\_bundle}, add the \texttt{auto\_emit} call yourself.
+
+$e_1$ is the beam axis (out of the page), $e_2$ (blue) is the in-plane ply-flow
+direction along the contour, and $e_3$ (green) is the wall normal, which sets the
+OML $\to$ IML sense used by the recovery.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{\FIGDIR/shell_xsec_orient.png}
+\caption{Per-element $e_2$ (in-plane ply direction) and $e_3$ (wall normal) on
+the contour, written by \texttt{auto\_emit} as \texttt{iea\_s10\_orient.png}.
+Check that the normals point consistently into the section on the skin and
+consistently to one side on each web before trusting any stiffness number.}
+\label{fig:shell-xsec-orient}
+\end{figure}
+
+\subsection{The element and the wall law}
+
+The ring is assembled as a one-quad-deep prismatic strip: the contour is extruded
+by the mean element length along the beam axis, and the extruded node row is
+DOF-mapped back onto the original row, which enforces the prismatic
+(span-invariant) condition exactly. All matrices are then divided by that depth,
+so the result is per unit length. The strip actually assembled is returned in the
+bundle under the key \texttt{strip} as \texttt{(nodes, quads, h)}.
+
+Each node carries \textbf{six} degrees of freedom,
+$[w_1\;w_2\;w_3\;\omega_1\;\omega_2\;\omega_3]$. The drilling rotation
+$\omega_3$ is an \emph{independent} field rather than an algebraic function of the
+displacements. Making it independent is what allows adjacent walls meeting at a
+junction to share a consistent rotation, but it also introduces a spurious mode,
+which is removed by a weak drilling constraint carried by one element-constant
+Lagrange multiplier per element (\texttt{lam\_space="elem"}). Element-constant is
+the inf-sup-stable choice; equal-order nodal multipliers over-constrain as the
+mesh is refined.
+
+Transverse shear uses assumed-strain (MITC) tying, and the production ring scheme
+(\texttt{shear="mitc4\_g23"}, the default of \texttt{build\_rm\_bundle}) ties
+\textbf{only} the $\gamma_{23}$ row. The reason is specific to a prismatic strip:
+under span invariance $\gamma_{13}$ carries no fluctuation gradient and is
+algebraic in the directors, so tying it would alias the drilling mode instead of
+curing shear locking. Only $\gamma_{23}$ pairs a differentiated displacement with
+a rotation.
+
+The wall constitutive law is therefore the $8\times8$ Reissner--Mindlin plate law
+\begin{equation}
+\mathbf{ABDG} =
+\begin{bmatrix}
+\mathbf{A} & \mathbf{B} & \mathbf{0}\\
+\mathbf{B} & \mathbf{D} & \mathbf{0}\\
+\mathbf{0} & \mathbf{0} & \mathbf{G}
+\end{bmatrix},
+\qquad
+\bar{\varepsilon} =
+\begin{bmatrix}
+\varepsilon_{11} & \varepsilon_{22} & 2\varepsilon_{12} &
+K_{11} & K_{22} & K_{12}+K_{21} & 2\gamma_{13} & 2\gamma_{23}
+\end{bmatrix}^{T},
+\label{eq:shell-abdg}
+\end{equation}
+with exactly that row grouping printed in the header of
+\texttt{iea\_s10\_shell\_ABDG.out}:
+\texttt{rows [eps11 eps22 2eps12 | K11 K22 K12+K21 | 2g13 2g23]}.
+
+The $2\times2$ transverse-shear block $\mathbf{G}$ has a default,
+\texttt{g\_source="msg"}: the MSG/VAM second-order-energy projection (the
+Yu--2002 least-squares construction, Eq.~61 of Yu, Hodges \& Volovoi,
+\emph{Computers \& Structures} \textbf{81}:439--454, 2003), computed by
+\texttt{opensg\_solid.rm\_plate\_1D.msg\_rm\_plate.rm\_plate\_msg}. The
+alternative, \texttt{g\_source="whitney"}, is the coupling-aware
+complementary-energy shear flow. Table~\ref{tab:shell-gblocks} shows why this is
+not a detail on a foam-cored blade section.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+layup & $G_{11}$ (N/m) & $G_{22}$ (N/m) \\
+\midrule
+\texttt{layup\_0} & $8.2828865\times10^{7}$ & $9.8804474\times10^{7}$ \\
+\texttt{layup\_1} & $4.1457954\times10^{6}$ & $4.1451801\times10^{6}$ \\
+\texttt{layup\_2} & $2.8674578\times10^{8}$ & $2.1272143\times10^{8}$ \\
+\texttt{layup\_3} & $5.8528099\times10^{7}$ & $8.6668255\times10^{7}$ \\
+\texttt{layup\_4} & $2.7301565\times10^{8}$ & $2.0317797\times10^{8}$ \\
+\texttt{layup\_5} & $2.4877763\times10^{6}$ & $2.4877763\times10^{6}$ \\
+\bottomrule
+\end{tabular}
+\caption{The MSG wall transverse-shear block $\mathbf{G}$ of each layup, rows 7
+and 8 of the $8\times8$ blocks in \texttt{iea\_s10\_shell\_ABDG.out}. The
+foam-cored skin \texttt{layup\_1} and the foam-cored webs \texttt{layup\_5} are
+roughly seventy and a hundred times more shear-compliant than the carbon cap
+\texttt{layup\_2}, so the soft core dominates the section's shear compliance and
+must not be assigned by a rule of thumb.}
+\label{tab:shell-gblocks}
+\end{table}
+
+\subsection{Run it}
+
+The driver has a single user-input line:
+
+\begin{lstlisting}[style=opensg,caption={The user-input block of beam\_homo\_shell.py.}]
+############### User Input #################################
+name = "iea_s10"               # reads <name>_shell.yaml
+############################################################
+\end{lstlisting}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section
+python beam_homo_shell.py
+\end{lstlisting}
+
+\subsection{The one call}
+
+Everything is behind one function.
+
+\begin{lstlisting}[style=opensg,caption={The minimal script: build the bundle, take the 6x6, emit the orientation figure.}]
+import numpy as np
+from opensg_shell import build_rm_bundle, auto_emit
+
+B  = build_rm_bundle("iea_s10_shell.yaml")   # RM 6-DOF ring + MSG wall G
+C6 = np.asarray(B["Timo"])                   # (6, 6) Timoshenko stiffness
+print(B["ref"], B["g_source"])               # "center msg"
+print(np.diag(C6))
+auto_emit("iea_s10_shell.yaml", out_png="iea_s10_orient.png")
+\end{lstlisting}
+
+\texttt{build\_rm\_bundle} returns a \textbf{bundle}, not just a matrix, because
+the dehomogenization of Section~\ref{sec:shell-dehom} must reuse the identical
+discretization. The bundle carries the keys of
+Table~\ref{tab:shell-bundle-keys}.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{ll}
+\toprule
+key & content \\
+\midrule
+\texttt{Timo} & the $(6,6)$ Timoshenko stiffness \\
+\texttt{V0}, \texttt{V1} & zeroth- and first-order warping fields, $(6m,4)$ each, \\
+                         & including the drilling $\omega_3$ boundary values \\
+\texttt{corners}, \texttt{red\_cells} & the $(m,2)$ contour coordinates and $(n_{el},2)$ connectivity \\
+\texttt{rx3}, \texttt{re3}, \texttt{k22} & 3-D ring coordinates, wall normals and hoop curvature per element \\
+\texttt{strip} & the prismatic strip actually assembled, as \texttt{(nodes, quads, h)} \\
+\texttt{ax}, \texttt{cross} & the beam-axis index and the two cross-section axis indices \\
+\texttt{layup\_per\_elem} & the layup name of each element \\
+\texttt{layup\_db}, \texttt{material\_db} & the geometry-free plate-SG databases \\
+\texttt{frac}, \texttt{ref}, \texttt{g\_source} & the reference fraction, its name, and the wall-$G$ source \\
+\bottomrule
+\end{tabular}
+\caption{Keys of the dictionary returned by \texttt{build\_rm\_bundle}.}
+\label{tab:shell-bundle-keys}
+\end{table}
+
+\subsection{What comes out}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+file & written by & content \\
+\midrule
+\texttt{iea\_s10\_shell\_Timo.out} & \texttt{build\_rm\_bundle} & the effective Timoshenko stiffness and \\
+                                   & (via \texttt{write\_sc\_K}) & compliance in the SwiftComp \texttt{.K} layout, \\
+                                   & & with an \texttt{OpenSG} banner and a \texttt{Time taken} footer \\
+\texttt{iea\_s10\_shell\_ABDG.out} & \texttt{build\_rm\_bundle} & one $8\times8$ RM plate stiffness and compliance \\
+                                   & (via \texttt{write\_abdg\_out}) & block per section, each headed by its layup \\
+\texttt{abd/iea\_s10\_shell\_abd.yaml} & \texttt{emit\_station\_abd} & per-layup cache of the $8\times8$ wall law plus ply \\
+                                   & & lists, thickness and mass per area \\
+\texttt{iea\_s10\_mesh.png} & the driver & the contour coloured by layup \\
+\texttt{iea\_s10\_orient.png} & \texttt{auto\_emit} & the $e_2$/$e_3$ arrows \\
+\bottomrule
+\end{tabular}
+\caption{Output files of \texttt{beam\_homo\_shell.py}.}
+\label{tab:shell-beam-outputs}
+\end{table}
+
+Two notes on the ABD cache. It is written \textbf{only if it does not already
+exist}, so delete \texttt{abd/iea\_s10\_shell\_abd.yaml} after changing the
+layups or the change will not take. And it records \texttt{g\_source: whitney}
+and \texttt{reference: mid}, because \texttt{emit\_station\_abd} defaults to the
+complementary-energy shear flow. It is a cache for downstream station-level tools
+such as shell buckling, not a dump of the ring's own MSG wall law, which lives in
+\texttt{\_ABDG.out}.
+
+\subsection{The numbers}
+
+This is the stiffness block of \texttt{iea\_s10\_shell\_Timo.out} exactly as
+written, in SI units, on the strain set
+$[\varepsilon_{11}\;\gamma_{12}\;\gamma_{13}\;\kappa_1\;\kappa_2\;\kappa_3]$
+(extension, the two transverse shears, twist, and the two bending curvatures,
+which is the VABS ordering):
+
+\begin{Verbatim}[fontsize=\footnotesize,frame=single,framesep=4pt]
+ The Effective Timoshenko Stiffness Matrix
+ --------------------------------------------
+     2.7660599E+010    -1.7230658E-005     4.6650498E-006     5.4020232E-006     1.6686413E+009    -2.0773040E+009
+    -1.7230658E-005     7.1861326E+008     5.7520370E+007    -1.0192044E+008     2.3079953E-006     5.2738749E-006
+     4.6650498E-006     5.7520370E+007     4.2174428E+008    -1.6217837E+008     8.4816767E-006     2.7931393E-007
+     5.4020232E-006    -1.0192044E+008    -1.6217837E+008     2.4375653E+009     1.6449557E-006    -8.1140553E-006
+     1.6686413E+009     2.3079953E-006     8.4816767E-006     1.6449557E-006     3.5143887E+010    -5.5571249E+009
+    -2.0773040E+009     5.2738749E-006     2.7931393E-007    -8.1140553E-006    -5.5571249E+009     6.8129724E+010
+\end{Verbatim}
+
+The diagonal is what the driver prints.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+term & value & units & meaning \\
+\midrule
+$EA$    & $2.7660599\times10^{10}$ & N               & axial stiffness \\
+$GA_2$  & $7.1861326\times10^{8}$  & N               & transverse shear, chordwise \\
+$GA_3$  & $4.2174428\times10^{8}$  & N               & transverse shear, flapwise \\
+$GJ$    & $2.4375653\times10^{9}$  & N$\cdot$m$^2$   & torsion about the mid-surface reference \\
+$EI_2$  & $3.5143887\times10^{10}$ & N$\cdot$m$^2$   & flapwise bending \\
+$EI_3$  & $6.8129724\times10^{10}$ & N$\cdot$m$^2$   & edgewise bending \\
+\bottomrule
+\end{tabular}
+\caption{The Timoshenko diagonal of station \texttt{iea\_s10}, read from
+\texttt{iea\_s10\_shell\_Timo.out}.}
+\label{tab:shell-timo-diag}
+\end{table}
+
+The off-diagonals are the physics that a beam table without couplings would throw
+away. The extension--bending entries $1.6686\times10^{9}$ and
+$-2.0773\times10^{9}$ N$\cdot$m locate the tension centre away from the
+mid-surface reference point; $-5.5571\times10^{9}$ N$\cdot$m$^2$ is the
+flap--edge bending coupling, which says the section's principal bending axes are
+not the $y_2$/$y_3$ axes; and $-1.0192\times10^{8}$ and $-1.6218\times10^{8}$
+N$\cdot$m are the shear--twist couplings that place the shear centre.
+
+Entries printed at $10^{-5}$ against diagonals of $10^{10}$ are exact zeros to
+about fifteen digits: extension does not couple to transverse shear or to twist
+on this section. That is a useful self-check that the drilling constraint and the
+rigid-body kernel are behaving.
+
+The footer of the same file reads \texttt{Time taken: 8.02 sec} for this run.
+That covers the whole bundle build: reading the YAML, the six per-layup MSG plate
+solves, the ring KKT factorization and the layup-database build.
+
+%=====================================================================
+\section{Two-step recovery to 3-D wall stress}
+\label{sec:shell-dehom}
+
+\subsection{What this capability computes}
+
+Homogenization gave the beam its stiffness. \emph{Dehomogenization} does the
+inverse: given the beam's internal forces at this station, it reconstructs the
+3-D stress at every point of every wall, which is what a failure criterion
+actually needs. The example is
+\texttt{examples/OpenSG\_shell/2\_get\_beam\_dehom\_from\_shell\_cross\_section}
+and runs on the same \texttt{iea\_s10\_shell.yaml}.
+
+\subsection{The input the user edits}
+
+\begin{lstlisting}[style=opensg,caption={The user-input block of beam\_dehom\_shell.py.}]
+############### User Input #################################
+name = "iea_s10"                  # reads <name>_shell.yaml
+ff_file = "ff51_rmc_reform.dat"   # beam FF per station (# eta F1 F2 F3 M1 M2 M3)
+station_row = 10                  # row 10 -> eta = r/R = 0.20 (iea_s10)
+n_depth = 9                       # through-thickness recovery points per element
+stress_frame = "material"         # "material" (ply axes) | "plate" (wall axes)
+############################################################
+\end{lstlisting}
+
+\texttt{ff51\_rmc\_reform.dat} is a plain table whose header line reads
+\texttt{\# eta F1 F2 F3 M1 M2 M3 (RM CENTER-ref BeamDyn, VABS order)}: one row per
+spanwise station, the first column $\eta = r/R$ and the remaining six the beam
+force and moment resultants, in the same VABS order and the same SI units (N,
+N$\cdot$m) as the $6\times6$. Row 10 is
+\begin{equation}
+FF = \begin{bmatrix}
+4.1927\times10^{4} & 8.2674\times10^{3} & 1.4673\times10^{6} &
+1.2191\times10^{6} & -6.0185\times10^{7} & 3.0426\times10^{5}
+\end{bmatrix},
+\label{eq:shell-ff}
+\end{equation}
+a 60\,MN$\cdot$m flapwise moment with a 1.47\,MN flapwise shear, which is what
+dominates everything that follows. The forces must be referred to the same axis
+as the stiffness: this table is center-referenced, matching
+\texttt{reference: center} in the YAML.
+
+\subsection{Run it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/2_get_beam_dehom_from_shell_cross_section
+python beam_dehom_shell.py
+\end{lstlisting}
+
+\subsection{The two-step chain}
+
+\textbf{Step 1, along the contour.} The macro beam strain is
+$\mathrm{st} = \mathbf{C}_6^{-1}FF$. That strain is fed through
+\texttt{\_macro\_fields}, which recombines the bundle's warping fields into the
+nodal warping $w = V_0\,\mathrm{st}_m + V_1\,\mathrm{st}_{c1}$ and its axial
+derivative $w' = V_0\,\mathrm{st}_{c1} + V_1\,\mathrm{st}_{c2}$, and then through
+\texttt{\_rm\_shell\_strain}, which applies the \emph{same} element operators
+used to assemble the stiffness. The result is, per element, the six shell strains
+$[\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;K_{11}\;K_{22}\;2K_{12}]$
+at mid-arc. Because it reuses \texttt{quad\_ops\_indep}, step 1 is the exact
+energy-consistent adjoint of the homogenization rather than a separate
+post-processing model.
+
+The recovery also needs the \emph{gradients} of those strains. The span gradient
+$\partial/\partial y_1$ comes from the operators directly; the arc gradient
+$\partial/\partial y_2$ is a finite difference of nodally averaged values, and
+the averaging is \textbf{layup-boundary aware}. Two element values are averaged
+at a node only when both elements carry the same layup, so no difference is ever
+taken across a section change where the strains legitimately jump.
+
+\textbf{Step 2, through the thickness.} For each of the 6 layups,
+\texttt{rm\_plate\_msg} builds a 1-D MSG-RM plate structure gene (the warping
+ladder plus the MSG $\mathbf{G}$), and \texttt{msgrm\_strain\_at\_depth}
+evaluates the first-order recovery at a depth $z$ measured from the reference
+surface, returning the 3-D Voigt strain, the 3-D Voigt stress
+$[\sigma_{11}\;\sigma_{22}\;\sigma_{33}\;\sigma_{23}\;\sigma_{13}\;\sigma_{12}]$
+and the ply angle at that depth. Both functions are imported from
+\texttt{opensg\_solid.rm\_plate\_1D.msg\_rm\_plate}, shared verbatim with the
+plate and solid examples.
+
+The driver evaluates \texttt{n\_depth = 9} ply-interior stations per element, at
+$\zeta = (k + \tfrac12)/9$ with $\zeta = 0$ at the OML and $\zeta = 1$ at the
+IML, giving $310 \times 9 = 2790$ recovery points.
+
+\begin{lstlisting}[style=opensg,caption={The recovery chain in miniature: one element, one depth.}]
+import numpy as np
+from opensg_shell import build_rm_bundle, _macro_fields, _rm_shell_strain
+from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
+
+B  = build_rm_bundle("iea_s10_shell.yaml")
+FF = np.loadtxt("ff51_rmc_reform.dat")[10, 1:]
+st, st_m, aA, aB = _macro_fields(B, beam_force_vabs=FF)
+s6, s2 = _rm_shell_strain(B, 75, 0.5, st_m, aA, aB)   # element 75, mid-arc
+
+ldb = B["layup_db"]; mdb = B["material_db"]; frac = float(B["frac"])
+warp = rm_plate_msg(ldb["layup_2"]["thick"], ldb["layup_2"]["angles"],
+                    ldb["layup_2"]["mat_names"], mdb, fraction=frac)
+h = float(sum(ldb["layup_2"]["thick"]))
+Gam, Sig, ply = msgrm_strain_at_depth(warp, (0.056 - frac) * h,
+                                      np.asarray(s6, float), frame="material")
+print(Sig / 1e6)      # MPa, Voigt [S11 S22 S33 S23 S13 S12]
+\end{lstlisting}
+
+\subsection{What comes out}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{ll}
+\toprule
+file & content \\
+\midrule
+\texttt{iea\_s10\_dehom\_shell.txt} & 2790 rows, one per recovery point: \texttt{elem}, \texttt{y2}, \texttt{y3}, \\
+ & \texttt{z} from the reference surface, \texttt{zeta}, \texttt{ply} angle in degrees, \\
+ & then the six stresses in MPa. The header repeats the frame, $\eta$ and the full \texttt{FF}. \\
+\texttt{iea\_s10\_dehom\_stress.png} & the section stress cloud, $\sigma_{11}$ and $\sigma_{12}$ \\
+\texttt{iea\_s10\_cap\_tt.png} & $\sigma_{11}$ and $\sigma_{12}$ against $\zeta$ along one through-thickness \\
+ & line at the arc-centre element of the peak-stress cap \\
+\bottomrule
+\end{tabular}
+\caption{Output files of \texttt{beam\_dehom\_shell.py}.}
+\label{tab:shell-dehom-outputs}
+\end{table}
+
+The driver reports the peak as
+
+\begin{Verbatim}[fontsize=\small,frame=single,framesep=4pt]
+peak |sigma11| = 318.18 MPa at (y2, y3) = (-0.677, 1.311), zeta = 0.06  [material frame]
+\end{Verbatim}
+
+\subsection{Reading the result}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.82\textwidth]{\FIGDIR/shell_dehom_stress.png}
+\caption{Recovered $\sigma_{11}$ (top) and $\sigma_{12}$ (bottom) over the
+cross-section, all 2790 recovery points, in MPa. Points sit slightly off the
+contour because each one is displaced from the mid-surface by its own depth $z$
+along the wall normal, which is why the cap points reach $y_3 = 1.311$\,m while
+the contour stops at $1.273$\,m.}
+\label{fig:shell-dehom-stress}
+\end{figure}
+
+The axial stress is confined almost entirely to the two spar caps, exactly as a
+flap-dominated load state should be.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+quantity & value & where \\
+\midrule
+minimum $\sigma_{11}$ & $-318.177$ MPa & element 75, \texttt{layup\_2}, $(y_2,y_3) = (-0.677, 1.311)$, $\zeta = 0.056$ \\
+maximum $\sigma_{11}$ & $+314.461$ MPa & element 150, \texttt{layup\_4}, $(y_2,y_3) = (-0.145, -1.249)$, $\zeta = 0.056$ \\
+maximum $|\sigma_{12}|$ & $5.573$ MPa & element 11, \texttt{layup\_0}, $(y_2,y_3) = (3.895, 0.335)$ \\
+\bottomrule
+\end{tabular}
+\caption{Extremes of \texttt{iea\_s10\_dehom\_shell.txt} under the load state of
+Eq.~\eqref{eq:shell-ff}.}
+\label{tab:shell-dehom-extremes}
+\end{table}
+
+The upper cap is in compression and the lower cap in tension under this
+flap-dominated state, at nearly equal magnitude, and both extremes fall at the
+outermost recovery station $\zeta = 0.056$, which for these layups lies just
+inside the carbon uniaxial ply. That is where a maximum-stress check on the
+carbon belongs. The in-plane shear tells a different story: it peaks not in the
+caps but in the trailing-edge and leading-edge regions, where the closed cell
+carries the torque as shear flow.
+
+\subsection{What this route recovers, and what it does not}
+
+The repository's \texttt{examples/OpenSG\_shell/IEA\_blade\_beam} benchmark folder
+compares this same station's recovery against a VABS 2-D solid run of the
+identical section (\texttt{iea\_s10.sg.SM}), and records the result in
+\texttt{iea\_s10\_report.txt} as rms differences alongside the rms magnitude of
+the VABS field itself.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llrr}
+\toprule
+component & region & rms difference (MPa) & rms of the VABS field (MPa) \\
+\midrule
+$\sigma_{11}$ & skin & 9.529 & 96.676 \\
+$\sigma_{11}$ & web & 43.073 & 44.440 \\
+$\sigma_{12}$ & web & 6.799 & 22.026 \\
+$\sigma_{11}$ & spar-cap through-thickness path & 38.355 & 285.457 \\
+$\sigma_{11}$ & cap-left junction path & 1.265 & 286.837 \\
+\bottomrule
+\end{tabular}
+\caption{Two-step shell recovery against a VABS 2-D solid run of the same
+section, from \texttt{iea\_s10\_report.txt}.}
+\label{tab:shell-dehom-vabs}
+\end{table}
+
+The in-plane picture is sound where the load is: about 10\,\% rms on the skin,
+13\,\% along the cap thickness, and 0.4\,\% along the reference junction path.
+The web $\sigma_{11}$ difference is the same size as the field itself, which is
+honest to state plainly: the webs carry almost no axial stress at this state, so
+the comparison there is a ratio of two small numbers.
+
+Two components are \textbf{not} delivered by this route and should not be used
+from the output file:
+
+\begin{itemize}
+\item $\sigma_{33}$ is machine-zero in the first-order recovery (rms
+  $3.6\times10^{-13}$ MPa against a VABS rms of $5.6\times10^{-2}$ MPa). This is
+  visible directly in the \texttt{S33} column of
+  \texttt{iea\_s10\_dehom\_shell.txt}, whose entries are of order $10^{-13}$
+  (median $1.96\times10^{-13}$, maximum $9.18\times10^{-13}$).
+\item $\sigma_{13}$ is recovered at rms $6.3\times10^{-3}$ MPa against a VABS rms
+  of $2.4\times10^{-1}$ MPa. This is structural, not a bug: on a prismatic ring
+  the $\gamma_{13}$ row is untied by construction, so it carries the flat-wall
+  drilling mode and cannot serve as a recovery target. The companion diagnostic
+  \texttt{iea\_s10\_q\_consistency.txt} quantifies this. The tied $\gamma_{23}$
+  channel closes its equilibrium identity
+  $\int \sigma_{23}\,dz = (\mathbf{G}_{\mathrm{msg}}\,s_2)_2$ to 1.05\,\% median
+  error, while the untied $\gamma_{13}$ channel does not, giving a $\sigma_{13}$
+  target that is invalid by a factor of order 100. A physical $\sigma_{13}$ needs
+  the surface-quad route of Sections~\ref{sec:shell-sg3d}
+  and~\ref{sec:shell-segment}, where both rows are tied, not a rescale of this
+  ring.
+\end{itemize}
+
+The same benchmark folder also records that adding the second-order recovery rung
+changes $\sigma_{11}$ by an rms of $1.95\times10^{-4}$ MPa against a first-order
+rms of 88.51 MPa, so the first-order chain used by \texttt{beam\_dehom\_shell.py}
+is the right default for this class of section.
+
+%=====================================================================
+\section{Equivalent 3-D solid from a cross-section SG}
+\label{sec:shell-solid-xsec}
+
+\subsection{What this capability computes}
+
+The same 1-D shell structure gene can be homogenized to an \textbf{equivalent 3-D
+solid} $6\times6$ instead of a beam $6\times6$: the anisotropic continuum
+stiffness of a cell that is tiled periodically in the two transverse directions.
+This is the MSG thin-walled (MSG-TW) equivalent-continuum problem, and it is what
+you want for a cellular solid, a lattice, or any prismatic microstructure whose
+walls are thin.
+
+The strain order is the solid Voigt order
+\begin{equation}
+\bar{\Gamma} = \begin{bmatrix}
+\bar\Gamma_{11} & \bar\Gamma_{22} & \bar\Gamma_{33} &
+2\bar\Gamma_{23} & 2\bar\Gamma_{13} & 2\bar\Gamma_{12}
+\end{bmatrix}^{T},
+\label{eq:shell-gbar}
+\end{equation}
+with axis 1 along the prismatic direction. That string is returned in the bundle
+under the key \texttt{order} and exported as \texttt{GBAR\_ORDER}.
+
+Where the beam problem drives the SG with four beam strains, the solid problem
+drives it with the six macro strains, so \textbf{periodicity is always on}:
+opposite edges and the corners of the 2-D cell are tied
+(\texttt{periodic=True} is the default of \texttt{build\_solid\_bundle}). The wall
+law is the same Reissner--Mindlin $8\times8$ of Eq.~\eqref{eq:shell-abdg}, so the
+walls carry transverse shear that a classical (CLPT/Kirchhoff) wall model
+discards. That distinction is the entire point of the benchmarks below.
+
+\subsection{The driver}
+
+\begin{lstlisting}[style=opensg,caption={The one call for equivalent-solid properties from a cross-section SG.}]
+from opensg_shell import build_solid_bundle
+
+b = build_solid_bundle("cell_1Dshell.yaml", cell_area=A_cell)
+C3D = b["C3D"]            # 6x6 equivalent solid stiffness, Pa
+b["cell_area"], b["area_source"]   # the normalizing area and where it came from
+b["solve_time"]           # seconds; also written into <yaml>_C3D.out
+\end{lstlisting}
+
+\texttt{cell\_area} is the one argument you must think about: it is the measure
+$\omega$ the energy is divided by. Pass it explicitly (then
+\texttt{area\_source} reads \texttt{"user"}); if you omit it, the convex-hull
+area of the contour is used instead and \texttt{area\_source} reads
+\texttt{"hull"}. \texttt{build\_solid\_bundle} writes
+\texttt{<yaml>\_C3D.out} by default, in the SwiftComp \texttt{.K} layout
+(effective stiffness, effective compliance, orthotropic-approximated engineering
+constants) with an \texttt{OpenSG} banner and a \texttt{Time taken} footer, plus
+\texttt{<yaml>\_ABDG.out} for the wall laws.
+
+\subsection{Validation: Deo \& Yu (2023)}
+
+The reference is A. Deo and W. Yu, \emph{Equivalent 3D properties of thin-walled
+composite structures using mechanics of structure genome}, \emph{Mechanics of
+Advanced Materials and Structures} \textbf{30}(9), 2023, 1737--1748. Two columns
+are quoted from that paper: \textbf{Deo TW}, its own thin-walled model with a
+classical wall law, and the reference \textbf{SwiftComp} column, which is the
+paper's MSG solid result and the equivalent of an OpenSG 2-D-solid run. All
+values below are MPa, and \texttt{ours \%} and \texttt{Deo TW \%} are both
+measured against the SwiftComp column. Every table is the literal content of the
+\texttt{*\_compare.dat} file written by the driver.
+
+Four sub-folders live under
+\texttt{examples/OpenSG\_shell/3\_get\_solid\_props\_from\_shell\_cross\_section}.
+Each is a two-command run: a generator that writes the 1-D shell YAML, then the
+driver that homogenizes it.
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/3_get_solid_props_from_shell_cross_section/deo_cellular_solid
+python make_deo_cellular_yamls.py
+python deo_cellular_solid_props.py
+\end{lstlisting}
+
+The generator is where the geometry is edited. For the cellular solid it is a
+five-line block at the top of \texttt{make\_deo\_cellular\_yamls.py}:
+\texttt{l, h, t = 0.10, 0.10, 0.005}, aluminium \texttt{E, nu = 68.9e9, 0.33},
+and \texttt{nseg = 10} elements per wall of length $l$. The driver then computes
+the cell area itself from the wall angle,
+\texttt{area = (2*l*np.cos(th))*(2*(h + l*np.sin(th)))}, and passes it as
+\texttt{cell\_area}.
+
+\subsubsection{Cellular solid, $\theta = +15^\circ$ (paper Table 1)}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+term & OpenSG-TW (RM) & Deo MSG-TW & SwiftComp & ours \% & Deo TW \% \\
+\midrule
+$C_{11}$ & 4733.84 & 4736.90 & 4678.90 & $+1.17$ & $+1.24$ \\
+$C_{12}$ & 1086.01 & 1089.40 & 1105.50 & $-1.76$ & $-1.46$ \\
+$C_{13}$ &  380.63 &  381.81 &  386.88 & $-1.61$ & $-1.31$ \\
+$C_{22}$ & 2444.24 & 2446.39 & 2488.90 & $-1.79$ & $-1.71$ \\
+$C_{23}$ &  846.69 &  847.44 &  860.89 & $-1.65$ & $-1.56$ \\
+$C_{33}$ &  306.74 &  306.99 &  311.48 & $-1.52$ & $-1.44$ \\
+$\mathbf{C_{44}}$ & \textbf{4.20} & 4.32 & 4.19 & $\mathbf{+0.18}$ & $+3.09$ \\
+$C_{55}$ &  562.61 &  564.15 &  573.11 & $-1.83$ & $-1.56$ \\
+$C_{66}$ &  993.78 &  997.52 & 1000.10 & $-0.63$ & $-0.26$ \\
+\bottomrule
+\end{tabular}
+\caption{Deo cellular solid at $\theta = +15^\circ$, MPa, from
+\texttt{deo\_cellular\_compare.dat}. Aluminium $E = 68.9$ GPa, $\nu = 0.33$;
+$l = h = 10$ cm, $t = 5$ mm. Solve 1.5 s.}
+\label{tab:deo-cell-p15}
+\end{table}
+
+\subsubsection{Re-entrant cellular solid, $\theta = -15^\circ$ (paper Table 2)}
+
+The auxetic lattice, with the negative $C_{13}$ and $C_{23}$ couplings.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+term & OpenSG-TW (RM) & Deo MSG-TW & SwiftComp & ours \% & Deo TW \% \\
+\midrule
+$C_{11}$ & 7505.26 & 7507.40 & 7352.90 & $+2.07$ & $+2.10$ \\
+$C_{12}$ & 1090.52 & 1094.10 & 1075.20 & $+1.42$ & $+1.76$ \\
+$C_{13}$ & $-219.81$ & $-220.53$ & $-213.94$ & $+2.74$ & $+3.08$ \\
+$C_{22}$ & 4151.29 & 4154.90 & 4080.00 & $+1.75$ & $+1.84$ \\
+$C_{23}$ & $-846.69$ & $-847.45$ & $-821.77$ & $+3.03$ & $+3.12$ \\
+$C_{33}$ &  180.61 &  180.75 &  173.48 & $+4.11$ & $+4.19$ \\
+$\mathbf{C_{44}}$ & \textbf{2.47} & 2.68 & 2.47 & $\mathbf{+0.17}$ & $+8.38$ \\
+$C_{55}$ &  331.26 &  332.17 &  346.01 & $-4.26$ & $-4.00$ \\
+$C_{66}$ & 1687.82 & 1694.20 & 1706.40 & $-1.09$ & $-0.71$ \\
+\bottomrule
+\end{tabular}
+\caption{Deo re-entrant cellular solid at $\theta = -15^\circ$, MPa, from
+\texttt{deo\_cellular\_compare.dat}. Solve 0.2 s.}
+\label{tab:deo-cell-m15}
+\end{table}
+
+$C_{44}$ is the in-plane shear channel, the one the paper flags as its largest
+error and attributes to the classical wall model dropping the segment transverse
+shear, with a first-order-shear wall model named as future work. That is exactly
+the RM wall law used here: the $+3.09$\,\% and $+8.38$\,\% errors drop to
+$+0.18$\,\% and $+0.17$\,\%. Every other term tracks the paper's own thin-walled
+column to a few tenths of a percent, so the two independent MSG-TW
+implementations agree where they share physics.
+
+\subsubsection{Hierarchical square (paper Table 3)}
+
+Run from \texttt{deo\_hierarchical\_square}. The generator
+\texttt{make\_deo\_square\_yaml.py} carries \texttt{R, r, t = 0.10, 0.05, 0.005}
+and \texttt{nseg = 10}, the same aluminium.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+term & OpenSG-TW (RM) & Deo MSG-TW & SwiftComp & ours \% & Deo TW \% \\
+\midrule
+$C_{11}$ & 5183.48 & 5186.39 & 5099.03 & $+1.66$ & $+1.71$ \\
+$C_{12}$ &   24.22 &   24.83 &   26.75 & $-9.47$ & $-7.18$ \\
+$C_{13}$ &   24.22 &   24.83 &   26.75 & $-9.47$ & $-7.18$ \\
+$C_{22}$ &   46.23 &   47.13 &   50.46 & $-8.39$ & $-6.60$ \\
+$C_{23}$ &   27.15 &   27.94 &   30.59 & $-11.23$ & $-8.66$ \\
+$C_{33}$ &   46.23 &   47.13 &   50.45 & $-8.37$ & $-6.58$ \\
+$C_{44}$ &    3.20 &    3.22 &    3.39 & $-5.60$ & $-5.01$ \\
+$C_{55}$ &  647.56 &  650.00 &  670.92 & $-3.48$ & $-3.12$ \\
+$C_{66}$ &  647.56 &  650.00 &  670.93 & $-3.48$ & $-3.12$ \\
+\bottomrule
+\end{tabular}
+\caption{Deo hierarchical square, MPa, from \texttt{deo\_square\_compare.dat}.
+$R = 10$ cm, $r = 5$ cm, $t = 5$ mm. Solve 1.8 s.}
+\label{tab:deo-hier}
+\end{table}
+
+This lattice is \textbf{bending-dominated}: its transverse channels are
+$t^3$-scale ($C_{22}\approx 50$ MPa against $C_{11}\approx 5100$ MPa), so the
+load path is wall bending, not wall stretching. Two consequences are worth
+recording. First, the RM result is mesh-converged and the offset is physics:
+refining from 10 to 40 elements per segment moves $C_{23}$ by 1\,\%, and running
+the same model with shear-rigid walls (the Kirchhoff limit) reproduces the
+paper's classical column to 0.0--0.3\,\%. The gap between the two columns is
+therefore the wall transverse-shear compliance, which is real at the $t/l = 0.1$
+ligaments; element order is not involved. Second, both thin-walled models miss
+the same junction stiffness. The residual against SwiftComp is the finite
+rotational stiffness of the joint regions, which no midline model carries. The
+classical model's smaller apparent error is a partial cancellation, artificial
+shear rigidity offsetting missing joint stiffness, and the RM model removes the
+first error, exposing the second.
+
+\subsubsection{Composite square (paper Fig.~13 / Table 4)}
+
+Run from \texttt{deo\_composite\_square}. The cell is $25.4\times25.4$ mm, so the
+driver passes \texttt{cell\_area = L2*L2} with \texttt{L2 = 25.4e-3}; horizontal
+segments sit at $y_3=\pm5.84$ mm with one vertical segment through the centre,
+and every wall is a $[15]_8$ laminate of $t = 1.016$ mm with $E_1 = 141.96$,
+$E_2 = E_3 = 9.79$, $G = 6.136$ GPa, $\nu = 0.42$.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+term & OpenSG-TW (RM) & Deo MSG-TW & SwiftComp & ours \% & Deo TW \% \\
+\midrule
+$C_{11}$ & 15263.83 & 16133.90 & 15518.11 & $-1.64$ & $+3.97$ \\
+$C_{12}$ &   936.74 &  1016.82 &  1008.76 & $-7.14$ & $+0.80$ \\
+$C_{13}$ &   468.37 &   468.38 &   459.01 & $+2.04$ & $+2.04$ \\
+$C_{15}$ & $+1191.85$ & $-1192.81$ & $-1135.27$ & sign & $+5.07$ \\
+$C_{16}$ &  2383.70 &  2589.74 &  2535.23 & $-5.98$ & $+2.15$ \\
+$C_{22}$ &   906.11 &   983.56 &   988.88 & $-8.37$ & $-0.54$ \\
+$C_{23}$ &     0.00 &     0.00 &    20.44 & $-100$ & $-100$ \\
+$C_{26}$ &   292.25 &   317.09 &   311.80 & $-6.27$ & $+1.70$ \\
+$C_{33}$ &   453.06 &   453.06 &   456.25 & $-0.70$ & $-0.70$ \\
+$C_{35}$ & $+146.13$ & $-146.06$ & $-140.04$ & sign & $+4.30$ \\
+$C_{44}$ &     0.94 &     1.08 &     1.16 & $-18.57$ & $-6.90$ \\
+$C_{55}$ &   547.31 &   547.32 &   545.43 & $+0.35$ & $+0.35$ \\
+$C_{66}$ &  1094.63 &  1188.20 &  1188.30 & $-7.88$ & $-0.01$ \\
+\bottomrule
+\end{tabular}
+\caption{Deo composite square, MPa, from
+\texttt{deo\_composite\_square\_compare.dat}. Solve 1.8 s. The \texttt{.dat} file
+prints the two sign-flipped rows as $-204.98$ and $-204.35$ percent, which is the
+arithmetic of a sign reversal, not a magnitude error.}
+\label{tab:deo-comp}
+\end{table}
+
+$C_{13}$, $C_{33}$ and $C_{55}$ reproduce the paper's thin-walled column exactly,
+and $C_{11}$ improves on it against SwiftComp. Two open items are recorded
+honestly. $C_{15}$ and $C_{35}$ match the published magnitudes to 0.1\,\% with
+the \emph{opposite sign}, a ply-angle handedness convention still to be
+reconciled, and the likely cause of the $-6$ to $-8$\,\% group. And $C_{23}$ is
+zero in both thin-walled models, for the reason below.
+
+\subsubsection{A fifth folder: the isotropic square tube}
+
+\texttt{square\_section\_isotropic} is the simplest case in the set and the best
+place to start. It reads \texttt{square\_tube\_1Dshell.yaml} and its user-input
+block is four lines: \texttt{a, t\_w = 1.0, 0.03} and
+\texttt{CELL\_AREA = 4*a*t\_w}, which is the \emph{wall material area}, the same
+measure the solid engines use, so the two routes are directly comparable. Run it
+with \texttt{python solid\_props\_msg\_shell.py}; it writes
+\texttt{square\_solid\_msg\_shell.out} with the $6\times6$ and the nine
+engineering constants obtained from \texttt{elastic\_constants(C)}.
+
+\subsection{Why $C_{23}$ vanishes on axis-aligned lattices}
+
+For a wall at angle $\varphi$ the only $\Gamma_e$ entries carrying weight in
+\emph{both} the $\bar\Gamma_{22}$ and $\bar\Gamma_{33}$ columns are the membrane
+$\varepsilon_{22}$ row ($\cos^2\varphi$, $\sin^2\varphi$) and the
+transverse-shear $2\gamma_{23}$ row ($-\sin\varphi\cos\varphi$,
+$+\sin\varphi\cos\varphi$), giving a per-length integrand
+\begin{equation}
+(A_{11}-G_{\mathrm{msg}})\,\sin^2\varphi\cos^2\varphi .
+\label{eq:shell-c23}
+\end{equation}
+On a $0/90$ lattice every wall has $\sin^2\varphi\cos^2\varphi = 0$, so this
+$O(t)$ membrane path vanishes identically and the whole of $C_{23}$ is the
+$O(t^2)$ \textbf{junction} contribution: the wall-overlap blocks, which have zero
+measure on a midline mesh. Inclined-wall cells are unaffected, which is why the
+cellular cases above carry $C_{23}$ correctly and only the square lattices expose
+the junction term. Optional junction corrections (\texttt{junction="census"},
+\texttt{"micro"}, \texttt{"microcell"}) recover it for stretch-dominated cells;
+they do \emph{not} apply to bending-dominated lattices such as the hierarchical
+square, and they are off by default.
+
+%=====================================================================
+\section{Equivalent 3-D solid from a 3-D shell SG}
+\label{sec:shell-sg3d}
+
+\subsection{What this capability computes}
+
+A structure gene periodic in \textbf{all three} directions -- a triply-periodic
+minimal surface (TPMS) unit cell, a lattice block, any 3-D microstructure whose
+material is a thin sheet -- homogenizes to the same equivalent 3-D solid
+$6\times6$ of Eq.~\eqref{eq:shell-gbar}. \texttt{shell\_sg3d} solves it when the
+microstructure is a thin sheet meshed as a \emph{surface}: the wall carries the
+RM $8\times8$ law, so thickness is a parameter rather than a remesh.
+
+It reuses the cross-section $\Gamma_e$ / $\Gamma_h$ operators unchanged (they are
+geometry-general) and adds only the 3-D environment: sparse assembly, the
+three-direction periodic map, drilling by penalty on the element-constant
+residual, and a three-translation kernel. Shell edges shared by more than two
+elements are detected as \textbf{junction lines} and reported as
+\texttt{n\_junction\_edges}; a smooth TPMS has none.
+
+The example is
+\texttt{examples/OpenSG\_shell/4\_get\_solid\_props\_from\_shell\_3D\_SG}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\textwidth]{\FIGDIR/schwarz_p_mesh.png}
+\caption{The Schwarz-P TPMS unit cell as a 3-D shell SG: 13\,536 nodes and
+26\,360 triangular shell elements on the midsurface, written by
+\texttt{schwarz\_solid\_props.py} as \texttt{schwarz\_p\_mesh.png}. The cell is
+the unit cube, and the wall thickness is a number in the YAML, not geometry.}
+\label{fig:schwarz-mesh}
+\end{figure}
+
+\subsection{The input the user edits}
+
+The mesh comes from a gmsh 2.2 triangle file, and
+\texttt{make\_schwarz\_yaml.py} converts it. Its user block is four lines:
+
+\begin{lstlisting}[style=opensg,caption={The user block of make\_schwarz\_yaml.py: mesh path, thickness, material.}]
+MSH = ("../../../tests/08072026_square_shell_mesh/TPMS_SC_files/"
+       "schwarz_p_D2_shell.msh")
+T = 0.036457           # Sample_2, volume-consistent
+E, nu = 69.0e9, 0.30
+G = E/(2*(1+nu))
+\end{lstlisting}
+
+The converter computes each element's frame from the triangle geometry
+($e_3$ = unit normal, $e_2$ along the first edge, $e_1 = e_2\times e_3$), writes
+one \texttt{sections} entry with the single ply \texttt{[alu, T, 0.0]}, and
+reports the surface area and the resulting relative density
+\texttt{area.sum()*T}.
+
+\subsection{Run it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG
+python make_schwarz_yaml.py
+python schwarz_solid_props.py
+python compare_boundary_modes.py
+\end{lstlisting}
+
+\begin{lstlisting}[style=opensg,caption={The two boundary treatments of shell\_sg3d.}]
+from opensg_shell.sg_homo import shell_sg3d
+
+r = shell_sg3d("schwarz_p_3Dshell.yaml")                        # boundary="periodic" (default)
+r = shell_sg3d("schwarz_p_3Dshell.yaml", boundary="aperiodic")  # non-periodic SGs (explicit)
+r["C3D"], r["n_junction_edges"], r["ndof"], r["solve_time"]
+\end{lstlisting}
+
+The SG measure $\omega$ defaults to the \textbf{midsurface area}, the 3-D
+analogue of $\omega = \text{perimeter}$ for a plane-section shell SG, and can be
+overridden with the \texttt{omega=} argument. The \texttt{.out} file is written
+per unit-cell volume so its moduli compare directly with a solid \texttt{.K}.
+
+\subsection{What comes out}
+
+\texttt{shell\_sg3d} writes \texttt{schwarz\_p\_3Dshell\_C3D.out}, and the driver
+writes \texttt{schwarz\_p\_mesh.png}. The banner line of the \texttt{.out} records
+the whole configuration, and the default periodic run at $t = 0.036457$ gives:
+
+\begin{Verbatim}[fontsize=\footnotesize,frame=single,framesep=4pt]
+ OpenSG msg-shell equivalent 3D solid (3-D shell SG, 13536 nodes, 26360 elems,
+ 0 junction edges, periodic in 3 dirs, per unit cell 1)
+
+ The Effective Stiffness Matrix
+ --------------------------------------------
+     2.2253086E+009     1.5648739E+009     1.5649503E+009  ...
+     1.5648739E+009     2.2252770E+009     1.5647791E+009  ...
+     1.5649503E+009     1.5647791E+009     2.2250347E+009  ...
+
+ The Engineering Constants (Approximated as Orthotropic)
+ ----------------------------------------------------------
+  E1  =     9.3296450E+008
+  E2  =     9.3313789E+008
+  E3  =     9.3284790E+008
+  G12 =     1.0409258E+009
+  G13 =     1.0410061E+009
+  G23 =     1.0409794E+009
+  nu12=     4.1277916E-001
+  nu13=     4.1304617E-001
+  nu23=     4.1288357E-001
+
+ Time taken: 66.43 sec
+\end{Verbatim}
+
+Read the numbers as a health check first. The three normal terms agree to five
+digits ($2.2253$, $2.2253$, $2.2250$ GPa) and the three shear terms likewise
+($1.04098$, $1.04101$, $1.04093$ GPa), so the effective law is cubic to five
+digits, as the Schwarz-P symmetry demands. Every symmetry-forbidden coupling sits
+at $10^{3}$--$10^{5}$ Pa against diagonals of $10^{9}$ Pa, four to six orders
+below. That is the health check on the all-directions periodic tie: if the tie
+map were wrong, those entries would not be small. The repository also records a
+head-to-head of this same surface against the msg-solid route on the same
+structure, where the shell result runs about 3\,\% below on the normal terms and
+about 6\,\% below on the shears, with cubic symmetry intact in both; because the
+solid column is digit-identical to SwiftComp, those percentages measure the
+thin-shell reduction itself at a surface reaching $t/R \approx 0.2$ near the
+saddle necks.
+
+\subsection{Boundary treatment: periodic default versus aperiodic}
+
+\texttt{shell\_sg3d} takes a \texttt{boundary} argument, and the default is
+\texttt{"periodic"}: opposite faces, edges and corners of the bounding box are
+tied through the sparse assembly map, and the three rigid translations are
+removed by area-weighted Lagrange rows. This is the exact treatment for a
+periodic medium, and it is what to report.
+
+\texttt{boundary="aperiodic"} is the boundary-solution treatment. For a unit cell
+the boundary solution is the macro (affine) field itself, so mapping it onto the
+boundary nodes prescribes zero \textbf{translational} warping fluctuation
+($w_1=w_2=w_3=0$, Dirichlet) on every node of the bounding-box faces, with the
+rotational DOFs left natural. That forbids the affine fluctuations which make a
+\emph{free} aperiodic SG rank-one, fixes the rigid modes without a Lagrange
+border, and is a kinematic upper bound. Clamping the rotations as well would
+roughly double the offset.
+
+\texttt{compare\_boundary\_modes.py} runs both on the current YAML, copies each
+per-mode \texttt{.out} to \texttt{schwarz\_t<T>\_<mode>.out}, and appends a block
+to \texttt{boundary\_compare.dat}. Table~\ref{tab:schwarz-boundary} is that file.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrr@{\hskip 2em}rrr}
+\toprule
+ & \multicolumn{3}{c}{$t = 0.036457$} & \multicolumn{3}{c}{$t = 0.129330$} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+term & aperiodic & periodic & \%diff & aperiodic & periodic & \%diff \\
+\midrule
+$C_{11}$ & 2375.89 & 2225.31 & $+6.767$ & 9881.00 & 8916.81 & $+10.813$ \\
+$C_{22}$ & 2375.92 & 2225.28 & $+6.770$ & 9881.00 & 8916.85 & $+10.813$ \\
+$C_{33}$ & 2376.22 & 2225.03 & $+6.795$ & 9873.34 & 8916.17 & $+10.735$ \\
+$C_{12}$ & 1537.47 & 1564.87 & $-1.751$ & 4921.09 & 5352.21 & $-8.055$ \\
+$C_{13}$ & 1539.24 & 1564.95 & $-1.643$ & 4931.10 & 5352.71 & $-7.877$ \\
+$C_{23}$ & 1538.99 & 1564.78 & $-1.648$ & 4931.00 & 5352.55 & $-7.876$ \\
+$C_{44}$ & 1078.28 & 1040.98 & $+3.583$ & 4150.25 & 3961.63 & $+4.761$ \\
+$C_{55}$ & 1078.32 & 1041.01 & $+3.585$ & 4150.26 & 3961.63 & $+4.761$ \\
+$C_{66}$ & 1078.61 & 1040.93 & $+3.620$ & 4151.27 & 3961.51 & $+4.790$ \\
+\midrule
+ndof     & \multicolumn{1}{c}{81216} & \multicolumn{1}{c}{79056} & &
+           \multicolumn{1}{c}{81216} & \multicolumn{1}{c}{79056} & \\
+solve    & \multicolumn{1}{c}{42.3 s} & \multicolumn{1}{c}{66.5 s} & &
+           \multicolumn{1}{c}{42.2 s} & \multicolumn{1}{c}{65.4 s} & \\
+\bottomrule
+\end{tabular}
+\caption{Aperiodic versus periodic on the same Schwarz-P YAML at two wall
+thicknesses, per unit cell, MPa. The literal content of
+\texttt{boundary\_compare.dat}. In both blocks 720 free-face nodes of 13\,536 are
+clamped by the aperiodic treatment.}
+\label{tab:schwarz-boundary}
+\end{table}
+
+The offset is the clamped-face boundary layer of a \textbf{single} cell: the
+expected kinematic bound, not an error in either path. It grows with wall
+thickness, from $+6.8$\,\% on $C_{11}$ at $t = 0.036457$ to $+10.8$\,\% at
+$t = 0.129330$, because a thicker wall makes the clamped skin a larger fraction of
+the cell. Aperiodic is about 35\,\% \emph{faster} here, because the Dirichlet
+rows leave the factorization and there is no tie map or Lagrange border, despite
+the slightly larger nominal DOF count. Report periodic for a periodic medium;
+request \texttt{"aperiodic"} only for SGs that genuinely are not periodic.
+
+%=====================================================================
+\section{Tapered and aperiodic segments}
+\label{sec:shell-segment}
+
+\subsection{What this capability computes}
+
+Everything so far has assumed the beam is prismatic: the classical msg-shell
+analysis meshes only the cross-section contour and enforces periodicity along the
+beam axis. A \textbf{tapered} segment has no such periodicity, because its two end
+cross-sections differ. \texttt{opensg\_shell.sg\_homo.segment\_timo\_from\_3dyaml}
+handles this by replacing the axial periodic condition with Dirichlet data taken
+from the two ends. The input is no longer a 1-D ring but a genuine 3-D surface
+mesh of a slice of the beam.
+
+The pipeline has four stages:
+
+\begin{enumerate}
+\item \textbf{Boundary extraction.} The two end cross-sections are found
+  \emph{topologically}: a mesh edge used by exactly one quad is a free edge, and
+  each connected component of the free-edge graph with at least three nodes is one
+  end ring. The axis is the direction between the two most widely separated
+  components, and left/right is decided by the axial coordinate. Each ring is
+  written out as a standalone 1-D YAML together with the ring-node $\to$
+  segment-node map.
+\item \textbf{Boundary solves.} Each ring is homogenized on its own with
+  \texttt{ring\_indep}, giving its Timoshenko $6\times6$ and the warping fields
+  $V_0$ (Euler--Bernoulli) and $V_1$ (Timoshenko), all six DOFs per node
+  including the drilling rotation $\omega_3$.
+\item \textbf{Mapping.} The ring $V_0$/$V_1$ are transferred onto the segment's
+  boundary nodes as Dirichlet data, replacing the periodic boundary condition and
+  fixing the segment's rigid-body modes.
+\item \textbf{Segment solve.} One LU factorization of the constrained system
+  serves both orders,
+  \begin{equation}
+  \mathbf{D}_{hh}\,V_0 = -\mathbf{D}_{he}, \qquad
+  \mathbf{D}_{hh}\,V_1 = b(V_0),
+  \label{eq:seg-orders}
+  \end{equation}
+  with $V_0 = V_0^{\text{ring}}$ and $V_1 = V_1^{\text{ring}}$ on both ends. The
+  generalized-Timoshenko finalization divides the energy by the segment length
+  $L$, which is measured as the extent of the nodes along the axis.
+\end{enumerate}
+
+The example is
+\texttt{examples/OpenSG\_shell/5\_taper\_segment\_aperiodic\_boundaries}.
+
+\subsection{Seeing the capability}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{\FIGDIR/aperiodic_segment_bar_urc.png}
+\caption{The BAR-URC blade segment the example runs, coloured by its per-element
+material frames. This is the surface on which the segment problem is solved: a
+3-D shell mesh, not a cross-section.}
+\label{fig:seg-bar-urc}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{\FIGDIR/aperiodic_ring_L.png}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+\centering
+\includegraphics[width=\textwidth]{\FIGDIR/aperiodic_ring_R.png}
+\end{minipage}
+\caption{The two end cross-sections extracted automatically from the free-edge
+graph of the segment mesh, left ring and right ring, each written as a standalone
+1-D SG and solved on its own. On a tapered segment the two rings differ, and
+their two $6\times6$ matrices bracket the segment result.}
+\label{fig:seg-rings}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.72\textwidth]{\FIGDIR/aperiodic_prismatic_segment.png}
+\caption{The prismatic circular cylinder used for the acceptance test. The same
+free-edge extraction runs on it, and here both ends are identical by
+construction, so the segment $6\times6$ must reproduce the ring $6\times6$.}
+\label{fig:seg-prismatic}
+\end{figure}
+
+\subsection{The input the user edits}
+
+For the validation case, \texttt{make\_cylinder\_segment.py} generates the
+surface mesh. Its parameter block is the whole user interface:
+
+\begin{lstlisting}[style=opensg,caption={The parameter block of make\_cylinder\_segment.py.}]
+R  = 1.0            # wall mid-surface radius [m]
+NC = 160            # circumferential quads
+NL = 3              # axial quads over the segment (>=2 so an interior ring exists)
+L  = 1.5            # segment length [m]
+HR = [0.05, 0.1, 0.2]   # wall/radius ratios: thin, moderate, thick
+
+ISO = {"name": "iso", "density": 1800.0,
+       "E": [70e9, 70e9, 70e9], "G": [26.923e9]*3, "nu": [0.3, 0.3, 0.3]}
+ANI = {"name": "ani", "density": 1800.0,
+       "E": [37e9, 9e9, 9e9], "G": [4e9, 4e9, 4e9], "nu": [0.3, 0.3, 0.3]}
+\end{lstlisting}
+
+It writes six files into a \texttt{meshes/} sub-folder, named
+\texttt{seg\_<tag>\_hR<ratio>.yaml}: an isotropic single-ply tube and a balanced
+$[+45/-45]$ tube at each of the three thickness ratios. The beam axis is $x$, the
+cross-section plane is $(y,z)$, the reference surface is the wall mid-surface,
+and each element stores the nine-component triad $[e_1\,e_2\,e_3]$ with $e_1$
+axial, $e_2$ the hoop tangent and $e_3$ the inward normal.
+
+\subsection{Run it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/5_taper_segment_aperiodic_boundaries
+python make_cylinder_segment.py
+python run_taper_segment.py
+python run_bar_urc_segment.py
+\end{lstlisting}
+
+The whole pipeline is one call on the 3-D shell YAML. There are no boundary files
+to prepare, because the ends are found from the mesh topology. Note the path: the
+cylinder meshes live in the \texttt{meshes/} sub-folder, so the argument carries
+that prefix.
+
+\begin{lstlisting}[style=opensg,caption={The segment call, with the meshes/ path used by run\_taper\_segment.py.}]
+from opensg_shell.sg_homo import segment_timo_from_3dyaml
+
+r = segment_timo_from_3dyaml("meshes/seg_iso_hR0.1.yaml")
+r["S6"]             # segment Timoshenko 6x6
+r["C6L"], r["C6R"]  # the two boundary-ring 6x6s
+r["L"]              # segment length used to normalize the energy
+r["solve_time"]     # seconds
+\end{lstlisting}
+
+\subsection{What comes out}
+
+Each run writes, alongside the input YAML, the two boundary 1-D YAMLs
+(\texttt{boundary\_<tag>\_L.yaml} and \texttt{\_R.yaml}), the
+\texttt{<tag>\_boundaries.npz} bundle, three orientation PNGs
+(\texttt{orient\_<tag>\_segment.png}, \texttt{orient\_<tag>\_ring\_L.png},
+\texttt{orient\_<tag>\_ring\_R.png}), and the timed \texttt{<yaml>\_Timo.out} in
+the SwiftComp layout. For the isotropic cylinder that file opens with
+
+\begin{Verbatim}[fontsize=\small,frame=single,framesep=4pt]
+ OpenSG msg-shell tapered/aperiodic segment (boundary V0/V1 Dirichlet, L=1.5)
+\end{Verbatim}
+
+\noindent
+and closes with \texttt{Time taken: 2.51 sec}.
+
+One caveat on the figures. The extraction is called with \texttt{plot="auto"},
+which means an orientation PNG is drawn \emph{only if that file is not already on
+disk}. If you regenerate or edit a mesh and rerun, delete the three
+\texttt{orient\_*.png} files for that tag first, or you will be looking at the
+frames of the previous mesh.
+
+\subsection{Acceptance test: the prismatic identity}
+
+For a \textbf{prismatic} segment the taper terms vanish, so the segment
+$6\times6$ must equal the boundary ring's own $6\times6$. That identity is the
+acceptance test of the whole boundary extraction plus $V_0$/$V_1$ mapping, and
+\texttt{run\_taper\_segment.py} measures it on the prismatic circular tube
+($R=1$, $t/R=0.1$, $L=1.5$) in both the isotropic and the $\pm45$ layup, writing
+\texttt{seg\_ring\_identity.dat}.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrl}
+\toprule
+term & segment $S_6$ & boundary ring $C_6$ & \% error & case \\
+\midrule
+$EA$   & $4.397947\times10^{10}$ & $4.397947\times10^{10}$ & $0.0000$ & \\
+$GA_2$ & $8.473281\times10^{9}$  & $8.473258\times10^{9}$  & $0.0003$ & \texttt{iso\_hR0.1} \\
+$GA_3$ & $8.473281\times10^{9}$  & $8.473258\times10^{9}$  & $0.0003$ & $L=1.5$ \\
+$GJ$   & $1.694078\times10^{10}$ & $1.694078\times10^{10}$ & $0.0000$ & solve 2.5 s \\
+$EI_2$ & $2.200273\times10^{10}$ & $2.200269\times10^{10}$ & $0.0002$ & \\
+$EI_3$ & $2.200273\times10^{10}$ & $2.200269\times10^{10}$ & $0.0002$ & \\
+\midrule
+$EA$   & $7.706160\times10^{9}$  & $7.706160\times10^{9}$  & $0.0000$ & \\
+$GA_2$ & $3.262832\times10^{9}$  & $3.262807\times10^{9}$  & $0.0007$ & \texttt{aniso\_hR0.1} \\
+$GA_3$ & $3.262832\times10^{9}$  & $3.262807\times10^{9}$  & $0.0007$ & $L=1.5$ \\
+$GJ$   & $6.526891\times10^{9}$  & $6.526891\times10^{9}$  & $0.0000$ & solve 1.5 s \\
+$EI_2$ & $3.855225\times10^{9}$  & $3.855204\times10^{9}$  & $0.0006$ & \\
+$EI_3$ & $3.855225\times10^{9}$  & $3.855204\times10^{9}$  & $0.0006$ & \\
+\bottomrule
+\end{tabular}
+\caption{The prismatic identity, diagonal terms, from
+\texttt{seg\_ring\_identity.dat}. The worst diagonal error is $0.0003$\,\% (on
+$GA$) for the isotropic tube and $0.0007$\,\% for the $\pm45$ layup. The worst
+error anywhere in the $6\times6$ is $0.0052$\,\% and it falls on the
+$GA_2$--$EI_2$ shear--bending coupling of the anisotropic case, whose ring value
+is $-3.684772\times10^{7}$ against a segment value of $-3.684965\times10^{7}$.}
+\label{tab:seg-identity}
+\end{table}
+
+The \texttt{\% error} matrix in the file reports insignificant ring terms as
+zero: entries whose magnitude is below $10^{-6}$ of the largest are divided by
+infinity rather than by numerical noise, which is why the file shows exact zeros
+where the ring value is $10^{-5}$ against diagonals of $10^{10}$.
+
+\subsection{Tapered demonstration: BAR-URC segment 12}
+
+\texttt{run\_bar\_urc\_segment.py} runs the same pipeline on a real tapered
+segment of the 100 m BAR-URC blade,
+\texttt{BAR\_URC\_numEl\_52\_segment\_12.yaml}. Here no identity holds. Each
+boundary ring has its own $6\times6$, and the segment result is the true
+length-averaged Timoshenko stiffness of the tapered piece. The physical check is
+that every segment diagonal falls \emph{between} its two ring values, which the
+driver reports as the ratio $(S-R)/(L-R)$; a value in $[0,1]$ means the segment
+lies between its two ends.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrr}
+\toprule
+term & segment $S$ & ring L & ring R & ratio \\
+\midrule
+$EA$   & $1.487716\times10^{10}$ & $1.498819\times10^{10}$ & $1.483824\times10^{10}$ & 0.260 \\
+$GA_2$ & $6.098229\times10^{8}$  & $6.248039\times10^{8}$  & $6.030954\times10^{8}$  & 0.310 \\
+$GA_3$ & $1.398945\times10^{8}$  & $1.457255\times10^{8}$  & $1.345727\times10^{8}$  & 0.477 \\
+$GJ$   & $3.353538\times10^{8}$  & $3.684346\times10^{8}$  & $3.057355\times10^{8}$  & 0.472 \\
+$EI_2$ & $2.996686\times10^{9}$  & $3.244829\times10^{9}$  & $2.765385\times10^{9}$  & 0.482 \\
+$EI_3$ & $8.971707\times10^{9}$  & $9.620926\times10^{9}$  & $8.397279\times10^{9}$  & 0.469 \\
+\bottomrule
+\end{tabular}
+\caption{BAR-URC tapered shell segment 12, from \texttt{bar\_urc\_segment12.dat}.
+Segment length $L = 3.45293$ m, solve 15.9 s. All six ratios lie in $[0,1]$, so
+every segment diagonal is bracketed by its two boundary rings.}
+\label{tab:seg-bar-urc}
+\end{table}
+
+Read the ratios as a taper diagnostic. The bending and torsion terms sit near
+0.47--0.48, close to the arithmetic mean of the two ends, which is what a nearly
+linear taper in those channels produces. $EA$ and $GA_2$ sit at 0.26 and 0.31,
+noticeably below the mean, which says the axial and chordwise-shear stiffness of
+this segment is closer to its thin end than a linear interpolation of the two
+ring values would suggest. A station-by-station beam table built by interpolating
+ring properties would therefore over-predict those two terms on this segment.
+
+\subsection{Shear-scheme rule for segments}
+
+\texttt{segment\_timo\_from\_3dyaml} defaults to \texttt{shear="full"}
+($2\times2$ Gauss), and that is the production setting to keep: MITC tying
+aliases the algebraic drilling content on flat-walled and webbed sections. The
+tied variants exposed by the element (\texttt{"mitc4\_wonly"}, which ties both
+rows at the Dvorkin--Bathe points but keeps every rotation column at its
+full-integration value; \texttt{"mitc4\_g23"}, which ties only the $\gamma_{23}$
+row; and \texttt{"mitc4\_both"}, naive full tying) are ablation options for
+studying the element, not recommended production settings for segments. Note the
+contrast with the ring of Section~\ref{sec:shell-beam}, whose production default
+\emph{is} \texttt{"mitc4\_g23"}: the ring is a one-quad-deep prismatic strip and
+the segment is a genuine surface mesh, and the two geometries do not want the
+same treatment.

@@ -1,0 +1,108 @@
+% OpenSG-2.0 tutorial -- master document.
+% Build:  cd docs/latex && bash build.sh   (pdflatex x2 -> opensg_tutorial.pdf)
+\documentclass[11pt,letterpaper,oneside]{report}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyvrb}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage[colorlinks=true,linkcolor=blue!55!black,urlcolor=blue!55!black,
+            citecolor=blue!55!black]{hyperref}
+
+% Long identifiers and file paths appear inline throughout. Allow a line
+% break after each underscore so they wrap instead of overrunning the margin.
+\setlength{\emergencystretch}{3em}
+\sloppy
+\AtBeginDocument{\def\_{\char95\allowbreak}}
+
+\newcommand{\FIGDIR}{../_static}
+\graphicspath{{../_static/}}
+
+\definecolor{codebg}{rgb}{0.97,0.97,0.95}
+\definecolor{codekw}{rgb}{0.10,0.30,0.65}
+\definecolor{codestr}{rgb}{0.55,0.20,0.10}
+\definecolor{codecom}{rgb}{0.35,0.45,0.35}
+
+\lstdefinestyle{opensg}{
+  language=Python,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codekw}\bfseries,
+  stringstyle=\color{codestr},
+  commentstyle=\color{codecom}\itshape,
+  showstringspaces=false,
+  breaklines=true,
+  breakatwhitespace=true,
+  frame=single,
+  rulecolor=\color{black!25},
+  framesep=4pt,
+  columns=fullflexible,
+  keepspaces=true,
+  captionpos=b,
+}
+\lstdefinestyle{shellst}{
+  language=bash,
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{black},
+  showstringspaces=false,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{black!25},
+  framesep=4pt,
+  columns=fullflexible,
+  keepspaces=true,
+  captionpos=b,
+}
+\lstset{style=opensg}
+
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{3}
+
+\title{\vspace{-1.5cm}\Huge\bfseries OpenSG-2.0\\[0.35cm]
+       \Large Mechanics of Structure Genome homogenization in JAX\\[0.2cm]
+       \Large User Tutorial}
+\author{Akshat Bagla \\ Purdue University}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+OpenSG-2.0 computes the macroscopic constitutive law of a heterogeneous
+structure -- a beam $6\times6$, a plate ABD, or an equivalent 3-D solid
+$6\times6$ -- from a structure gene (SG): the smallest piece of the
+structure that carries its heterogeneity. It also runs the calculation
+backwards, recovering pointwise 3-D stress inside that SG from macroscopic
+loads. Two engines share the theory and the file conventions: \texttt{msg-shell}
+works on shell structure genes (a composite cross-section contour, a thin
+sheet meshed as a surface, a tapered blade segment), and \texttt{msg-solid}
+works on solid structure genes in one, two or three dimensions. Every run has
+the same shape: a YAML (or SwiftComp \texttt{.sc}) file goes in, and a timed
+output file in the SwiftComp \texttt{.K} layout comes back.
+
+This tutorial covers the architecture of both engines, the input file formats
+and sign conventions, the constitutive relations each capability produces, a
+worked tutorial for every example shipped with the code, and the full wind
+turbine blade pipeline from a windIO file to BeamDyn and back to recovered
+wall stress.
+\end{abstract}
+
+\tableofcontents
+
+\input{ch_overview}
+\input{ch_input}
+\input{ch_constitutive}
+\input{ch_shell}
+\input{ch_solid}
+\input{ch_windio}
+
+\end{document}

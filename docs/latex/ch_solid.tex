@@ -1,0 +1,1602 @@
+\chapter{Tutorials: the Solid Engine (msg-solid)}
+\label{ch:solid}
+
+The \texttt{msg-solid} engine reduces a \emph{solid} structure gene (SG) --- a
+mesh of ordinary continuum elements in one, two or three dimensions --- to a
+macroscopic constitutive law, and then runs the same construction backwards to
+recover the pointwise three-dimensional strain and stress inside that gene.
+Everything in this chapter is reached through two entry points.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{llp{4.8cm}}
+\toprule
+entry point & module & structure gene it reads \\
+\midrule
+\texttt{rm\_plate\_msg} & \texttt{opensg\_solid.rm\_plate\_1D.msg\_rm\_plate}
+  & a 1-D line mesh through a wall thickness \\
+\texttt{plate\_homo\_2d} & \texttt{opensg\_solid.sg\_homo}
+  & a 1-D, 2-D or 3-D solid SG \\
+\bottomrule
+\end{tabular}
+\caption{The two homogenization entry points of \texttt{msg-solid}.}
+\label{tab:solid-entry}
+\end{table}
+
+The first is the dedicated through-thickness (laminate) route: the wall is a
+stack of plies, nothing varies in-plane, so the gene is one-dimensional and the
+result is a plate law. The second is the general route. Its \texttt{n\_model}
+argument selects which macro model the same SG is reduced to.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{clll}
+\toprule
+\texttt{n\_model} & macro model & row and column order & title infix \\
+\midrule
+1 & beam & \texttt{[eps11 gam12 gam13 k1 k2 k3]} & \texttt{Timoshenko} \\
+2 & plate & \texttt{[N11 N22 N12 M11 M22 M12]} & \texttt{Classical Plate} \\
+3 & 3-D elastic & Voigt \texttt{[11 22 33 23 13 12]} & (none) \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{n\_model} on \texttt{plate\_homo\_2d}. The infix goes into
+\texttt{The Effective <infix> Stiffness Matrix}; the plate route becomes
+\texttt{Reissner-Mindlin Plate} when \texttt{shear\_refined=True} produces an
+$8\times8$.}
+\label{tab:solid-nmodel}
+\end{table}
+
+Every \texttt{plate\_homo\_2d} call writes a timed SwiftComp-\texttt{.K}-layout
+report --- effective stiffness, effective compliance, and, for the 3-D solid law
+only, an engineering-constants block --- opening with an \texttt{ OpenSG} banner
+and closing with a \texttt{ Time taken: } line in seconds. Unless you pass
+\texttt{plot=False} it also writes a \texttt{<base>\_mesh.png} with the elements
+coloured by material. One rule governs the names of both: inside
+\texttt{plate\_homo\_2d} the output base is
+\texttt{base = os.path.splitext(sc\_path)[0]}, so the report is
+\emph{always} \texttt{<input basename>.out}, regardless of what the script calls
+the case.
+
+The eight runnable examples live under \texttt{examples/OpenSG-solid}. Each
+runner is meant to be executed from inside its own folder, because the SG file
+is named relative to the working directory.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{lp{3.2cm}p{5.4cm}}
+\toprule
+folder & script & what it does \\
+\midrule
+\texttt{1\_get\_plate\_props\_from\_1DSG} & \texttt{1d\_sg.py} & layup $\rightarrow$ 1-D SG $\rightarrow$ plate law \\
+\texttt{2\_get\_plate\_stress\_from\_1DSG} & \texttt{rm\_dehom.py}, \texttt{rm\_dehom\_ff.py} & plate resultants $\rightarrow$ 3-D ply stress \\
+\texttt{3\_get\_plate\_props\_from\_2D\_SG} & \texttt{plate\_homo\_2dsg.py} & 2-D cell SG $\rightarrow$ plate ABD \\
+\texttt{4\_get\_plate\_dehom\_from\_2DSG} & \texttt{plate\_dehom\_2dsg.py} & macro plate strain $\rightarrow$ fields in the cell \\
+\texttt{5\_get\_solid\_props\_from\_SG} & \texttt{solid\_homo\_2dsg.py} & 2-D cell SG $\rightarrow$ equivalent 3-D solid \\
+\texttt{6\_get\_solid\_props\_from\_3D\_SG} & \texttt{tpms\_solid\_props.py} and others & 3-D SG $\rightarrow$ equivalent 3-D solid \\
+\texttt{7\_get\_beam\_props\_from\_SG} & \texttt{beam\_homo\_sg.py} & 2-D cross-section SG $\rightarrow$ Timoshenko $6\times6$ \\
+\texttt{8\_get\_beam\_dehom\_from\_SG} & \texttt{beam\_dehom\_sg.py} & macro beam strain $\rightarrow$ fields in the section \\
+\bottomrule
+\end{tabular}
+\caption{The eight \texttt{msg-solid} example folders.}
+\label{tab:solid-examples}
+\end{table}
+
+A note on what you will find in those folders before you run anything. Some of
+the files named as outputs below are regenerated on every run and are simply not
+checked in; where that is the case it is said explicitly. Nothing in this
+chapter depends on a pre-computed file being present.
+
+\section{Plate properties from a through-thickness 1-D SG}
+\label{sec:solid-plate1d}
+
+\subsection{What it computes}
+
+The structure gene is the wall discretised through its own thickness: one
+element per ply, quartic by default, with each node carrying the three warping
+(fluctuation) degrees of freedom. Minimising the 3-D strain energy over that
+line mesh order by order in $h/\ell$ gives the warping ladder --- the
+zeroth-order columns $V_0$ and the first-gradient columns $V_{11}$, $V_{12}$ ---
+from which the classical plate stiffness follows as
+%
+\begin{equation}
+\mathbf{A}_6 = \big\langle (\mathbf{\Gamma}_\varepsilon
+ + \mathbf{\Gamma}_h \mathbf{V}_0)^{\mathsf T}\,
+ \mathbf{C}(z)\,
+ (\mathbf{\Gamma}_\varepsilon + \mathbf{\Gamma}_h \mathbf{V}_0) \big\rangle ,
+\label{eq:solid-A6}
+\end{equation}
+%
+where $\langle\cdot\rangle$ is the through-thickness integral and
+$\mathbf{C}(z)$ the ply stiffness rotated by its fibre angle. With
+\texttt{model: 1} the run additionally identifies the $2\times2$ MSG
+transverse-shear block $\mathbf{G}$ from the second-order energy and assembles
+the $8\times8$ law
+%
+\begin{equation}
+\mathbf{ABDG} =
+\begin{bmatrix} \mathbf{A}_6 & \mathbf{0} \\ \mathbf{0} & \mathbf{G} \end{bmatrix},
+\label{eq:solid-abdg}
+\end{equation}
+%
+in which the transverse shears are uncoupled from the membrane and bending
+measures. Row and column order is
+\texttt{[e11 e22 g12 k11 k22 k12 2g13 2g23]}, and that string is printed in the
+banner of every \texttt{.out} so a file can always be read without the manual.
+
+\subsection{The input you edit}
+
+Everything lives in \texttt{layup\_db.yaml}. The script reads that file and
+nothing else, so a new laminate means editing the YAML, never the code.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{lp{7.2cm}p{2.6cm}}
+\toprule
+key & what it sets & value in the shipped file \\
+\midrule
+\texttt{model} & \texttt{0} = classical $6\times6$ ABD, \texttt{1} = $8\times8$ ABDG & \texttt{1} \\
+\texttt{fraction} & reference surface as a fraction of thickness & \texttt{0.5} \\
+\texttt{mesh: n\_per\_layer} & SG elements per physical ply & \texttt{1} \\
+\texttt{mesh: elem\_order} & element order; \texttt{4} = 5-noded quartic & \texttt{4} \\
+\texttt{materials} & per material \texttt{E: [E1,E2,E3]}, \texttt{G: [G12,G13,G23]}, \texttt{nu: [nu12,nu13,nu23]}, \texttt{rho} & \texttt{ge}, \texttt{herex} \\
+\texttt{layup} & one entry per ply, bottom ply first & 9 plies \\
+\bottomrule
+\end{tabular}
+\caption{The six keys \texttt{1d\_sg.py} reads from \texttt{layup\_db.yaml}.}
+\label{tab:solid-layupdb}
+\end{table}
+
+For \texttt{fraction}, \texttt{0} is the bottom (OML) face, \texttt{0.5} the
+mid-surface and \texttt{1} the top face. It is a property of the \emph{mesh},
+not of the homogenization call: the generated node coordinates are measured from
+the reference plane, so they run from $-\text{fraction}\cdot h$ to
+$(1-\text{fraction})\cdot h$ and $x_3 = 0$ \emph{is} the reference. The $B$
+block of the ABD depends on this choice, so homogenize, analyze and recover with
+the same \texttt{fraction}.
+
+The shipped case is a $[0/90/0/90/\text{core}]_s$ sandwich: eight
+graphite/epoxy plies of $0.9525$~mm ($E_1 = 128$~GPa, $E_2 = E_3 = 11$~GPa,
+$G_{12}=G_{13}=4.48$~GPa, $G_{23}=1.53$~GPa, $\rho = 1500$~kg/m$^3$) around a
+$144.78$~mm HEREX C70.130 PVC foam core ($E = 103.63$~MPa, $G = 50$~MPa,
+$\nu = 0.32$, $\rho = 130$~kg/m$^3$), total $h = 0.1524$~m.
+
+The same \texttt{layup\_db.yaml} also carries a \texttt{V2} flag, a
+\texttt{plate:} block and a \texttt{dehom:} block. Those are read by the
+recovery scripts of Section~\ref{sec:solid-dehom1d}; \texttt{1d\_sg.py} itself
+uses only the six keys in Table~\ref{tab:solid-layupdb}.
+
+\subsection{Run it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/1_get_plate_props_from_1DSG
+python 1d_sg.py
+\end{lstlisting}
+
+A different database file may be passed as the single positional argument:
+
+\begin{lstlisting}[style=shellst]
+python 1d_sg.py my_other_layup.yaml
+\end{lstlisting}
+
+\subsection{What comes out}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lp{9.6cm}}
+\toprule
+file & content \\
+\midrule
+\texttt{1dsg.yaml} & the generated 1-D SG mesh: an \texttt{sg:} header
+  (\texttt{type: plate\_1d}, \texttt{elem\_order: 4}, \texttt{n\_per\_layer: 1},
+  \texttt{reference\_fraction: 0.5}, \texttt{thickness}, \texttt{n\_ply}), 37
+  nodes given as single $x_3$ coordinates from $-0.0762$ to $+0.0762$~m, 9
+  five-noded elements, the material blocks with densities, and one element set
+  plus one \texttt{sections:} entry per ply carrying its material, angle and
+  thickness \\
+\texttt{1dsg.png} & the mesh figure, plies coloured by material \\
+\texttt{layup\_db\_plate\_homo.out} & the plate law, named
+  \texttt{<layup\_db stem>\_plate\_homo.out} \\
+\bottomrule
+\end{tabular}
+\caption{Outputs of \texttt{1d\_sg.py}.}
+\label{tab:solid-ex1out}
+\end{table}
+
+The \texttt{.out} opens with a banner that records the whole run, then the
+matrix whose title follows \texttt{model} --- \texttt{Reissner-Mindlin Plate}
+here, \texttt{Classical Plate} at \texttt{model: 0}:
+
+\begin{lstlisting}[style=shellst]
+ OpenSG msg-solid plate model from 1dsg.yaml: 9 plies, h = 0.152400 m, fraction = 0.5, rho*h = 30.251400 kg/m^2, rows [e11 e22 g12 k11 k22 k12 2g13 2g23]
+
+ The Effective Reissner-Mindlin Plate Stiffness Matrix
+ --------------------------------------------
+     5.4916502E+008     2.6417019E+007     1.5524611E-010     3.6182957E-006     3.6122933E-006     1.0244011E-024     0.0000000E+000     0.0000000E+000
+\end{lstlisting}
+
+The effective compliance follows in the same layout and the file closes with
+\texttt{ Time taken: 0.82 sec}. Engineering constants are printed only for the
+3-D solid law, never for a plate law, because a plate stiffness is not a
+material stiffness.
+
+\subsection{What the numbers mean}
+
+The eight diagonal entries of the shipped run, in SI (the code is unit-agnostic
+and simply follows the input, which is metres and pascals here):
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+term & value & units \\
+\midrule
+$A_{11}$ & $5.4916502\times10^{8}$ & N/m \\
+$A_{22}$ & $5.4916502\times10^{8}$ & N/m \\
+$A_{66}$ & $4.1376600\times10^{7}$ & N/m \\
+$D_{11}$ & $3.0005458\times10^{6}$ & N$\cdot$m \\
+$D_{22}$ & $2.9371144\times10^{6}$ & N$\cdot$m \\
+$D_{66}$ & $2.0111708\times10^{5}$ & N$\cdot$m \\
+$G_{11}$ & $7.7009772\times10^{6}$ & N/m \\
+$G_{22}$ & $7.5423712\times10^{6}$ & N/m \\
+\bottomrule
+\end{tabular}
+\caption{Diagonal of the $8\times8$ plate law of the shipped sandwich.}
+\label{tab:solid-ex1diag}
+\end{table}
+
+Three checks are worth making on any run of your own, and all three are visible
+in this one.
+
+\begin{itemize}
+\item \textbf{The section mass.} The banner's $\rho h = 30.2514$~kg/m$^2$ equals
+  $8 \times 0.0009525 \times 1500 + 0.14478 \times 130
+  = 11.43 + 18.8214$~kg/m$^2$, so the layup that reached the solver is the
+  layup you wrote.
+\item \textbf{The $B$ block.} The stack is symmetric about the mid-surface and
+  \texttt{fraction: 0.5} puts the reference plane there, so membrane-bending
+  coupling must vanish. It does: the largest entry of the $B$ block is
+  $3.6183\times10^{-6}$ against an $A_{11}$ of $5.4917\times10^{8}$, fourteen
+  orders down.
+\item \textbf{The transverse-shear block.} $G_{11} = 7.7010\times10^{6}$~N/m
+  sits $6.4\,\%$ above the crude core-only estimate
+  $G_{\rm core} h_{\rm core} = 50\times10^{6} \times 0.14478
+  = 7.239\times10^{6}$~N/m, which is the expected magnitude for a sandwich whose
+  shear is carried almost entirely by the foam. $A_{11}$, by contrast, is set by
+  the stiff faces.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.5\textwidth]{\FIGDIR/plate_1dsg.png}
+\caption{The through-thickness 1-D structure gene of the sandwich laminate, as
+written by the run to \texttt{1dsg.png}. The gene is a line, drawn with
+thickness for legibility: the thin graphite/epoxy face plies are at top and
+bottom, the foam core between them, and the dashed line marks the reference
+surface at mid-thickness.}
+\label{fig:solid-plate1dsg}
+\end{figure}
+
+\subsection{What it is validated against}
+
+\texttt{src/opensg\_solid/rm\_plate\_1D/tests/test\_msg\_rm\_plate.py} gates the
+construction on analytic anchors and on an independent plain-NumPy re-assembly
+of the same SG matrices. For an isotropic plate with $\nu = 0$ the
+transverse-shear block comes out exactly $\tfrac56 G h$, the textbook
+shear-correction factor, with the least-squares residual $U^*$ at machine zero
+(\texttt{test\_isotropic\_nu0\_gives\_five\_sixths}); $\mathbf{A}_6$ equals the
+classical lamination-theory \texttt{msg\_materials.compute\_ABD\_matrix} at the
+matching reference plane (\texttt{test\_A6\_matches\_compute\_ABD});
+$\mathbf{A}_6(\text{fraction})$ equals the offset transform of
+$\mathbf{A}_6(0)$ (\texttt{test\_reference\_plane\_transform}); and the warping
+fields satisfy the Euler-Lagrange equations and the gauge condition
+$\psi^{\mathsf T} H V = 0$ for $V_0$, $V_{11}$ and $V_{12}$ directly
+(\texttt{test\_euler\_lagrange\_residuals}, \texttt{test\_H\_identities\_and\_gauge}).
+The formulation is that of Yu, Hodges and Volovoi, \emph{Computers \& Structures}
+81 (2003) 439--454.
+
+\section{Through-thickness stress recovery}
+\label{sec:solid-dehom1d}
+
+\subsection{What it computes}
+
+Homogenization threw information away; recovery puts it back. Given the section
+resultants at a point of the plate, the recovery evaluates the 3-D strain,
+stress, warping and displacement at every depth of the gene. The construction is
+linear in \textbf{42 drivers},
+%
+\begin{equation}
+\mathbf{D} = [\,\mathbf{E}_6,\ \mathbf{E}_{6,1},\ \mathbf{E}_{6,2},\
+ \mathbf{E}_{6,11},\ \mathbf{E}_{6,12},\ \mathbf{E}_{6,22},\ \mathbf{qt}_6\,],
+\label{eq:solid-42}
+\end{equation}
+%
+so the code builds three operators once per depth from 42 unit evaluations ---
+$\mathbf{T}_E,\mathbf{T}_S \in \mathbb{R}^{6\times42}$ and
+$\mathbf{T}_W \in \mathbb{R}^{3\times42}$ --- after which every station is one
+matrix-vector product, \texttt{jax.vmap}-ed over the whole field. The plate
+strains come from the section law itself,
+$\mathbf{E}_6 = \mathbf{A}_6^{-1}\mathbf{F}_6$, so a recovery never bypasses the
+homogenization.
+
+Which driver feeds which component is the thing to understand before choosing an
+input.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{p{2.6cm}p{3.6cm}p{4.2cm}p{3.0cm}}
+\toprule
+driver & where it comes from & what it produces & without it \\
+\midrule
+$\mathbf{E}_6$ & $\mathbf{A}_6^{-1}\mathbf{F}_6$ at the station
+  & $\sigma_{11}$, $\sigma_{22}$, $\sigma_{12}$ layer by layer & nothing \\
+$\mathbf{E}_{6,1}$, $\mathbf{E}_{6,2}$ & in-plane gradients of the resultants
+  & $\sigma_{13}$, $\sigma_{23}$ (the $V_{11}/V_{12}$ warping)
+  & $\sigma_{13}=\sigma_{23}\equiv0$ \\
+$\mathbf{E}_{6,11}$, $\mathbf{E}_{6,12}$, $\mathbf{E}_{6,22}$ & second gradients
+  & the $\sigma_{33}$ interior build-up
+  & $\sigma_{33}$ keeps only its face terms \\
+$\mathbf{qt}_6$ & the \emph{applied} surface-pressure ladder
+  \texttt{[q q,1 q,2 q,11 q,12 q,22]}
+  & the face traction $\sigma_{33} = -q$ & $\sigma_{33}=0$ at that face \\
+\bottomrule
+\end{tabular}
+\caption{The four driver groups of the through-thickness recovery.}
+\label{tab:solid-drivers}
+\end{table}
+
+$Q_1$ and $Q_2$ are deliberately not part of $\mathbf{F}_6$: there is no shear
+slot among the 42 drivers, because in the asymptotic construction the transverse
+shears are produced by the gradient brackets. They enter only as the per-station
+rescale targets $\int\sigma_{13}\,dz = Q_1$ and $\int\sigma_{23}\,dz = Q_2$, so
+the profile \emph{shape} comes from the gradients while the carried force is
+exactly the one you supplied.
+
+\subsection{Driver A: one station, resultants typed into the script}
+
+\texttt{rm\_dehom.py} recovers a single station. The input is the
+\texttt{USER INPUT} block at the bottom of the file: \texttt{SG\_YAML} (the mesh
+written in Section~\ref{sec:solid-plate1d}), \texttt{F6} and \texttt{Q2v}, plus
+the optional gradient and load ladders. \texttt{F6} and \texttt{Q2v} ship as
+\texttt{None} and the script raises a \texttt{ValueError} rather than run, by
+design --- a built-in number would silently masquerade as a result. The block
+below is the file with the two mandatory entries filled in with an example
+loading; the values are yours to choose.
+
+\begin{lstlisting}[style=opensg,caption={The USER INPUT block of rm\_dehom.py, with the two mandatory entries supplied.}]
+SG_YAML = os.path.join(HERE, "1dsg.yaml")
+F6  = [1.0e6, 0.0, 0.0, 5.0e4, 0.0, 0.0]  # [N11, N22, N12, M11, M22, M12]
+Q2v = [0.0, 0.0]                          # [Q1, Q2]  [N/m]
+DE1 = DE2 = None                          # d(E6)/dx, d(E6)/dy
+D11 = D12 = D22 = None                    # second gradients
+QT6 = None                                # [q q,1 q,2 q,11 q,12 q,22]
+LATTICE = "gauss"                         # "gauss" (default) or "nodes"
+\end{lstlisting}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/2_get_plate_stress_from_1DSG
+python rm_dehom.py
+\end{lstlisting}
+
+It writes \texttt{1dsg\_dehom.SM}, \texttt{.EM}, \texttt{.U} and \texttt{.vtk}
+--- the VTK is part of the default output, not an extra step --- and prints
+\texttt{max|S11|} through \texttt{max|S23|}. Because the script refuses to run
+until you supply \texttt{F6} and \texttt{Q2v}, these four files are produced by
+your own run and are not checked into the folder.
+
+With every optional input left at \texttt{None} this is the honest classical
+recovery: $\sigma_{11}, \sigma_{22}, \sigma_{12}$ exact layer by layer,
+$\sigma_{13} = \sigma_{23} = 0$ exactly, $\sigma_{33}$ at machine zero. One
+station has no neighbours, so it cannot supply gradients, and the code does not
+invent them. \texttt{LATTICE} selects the output depths: \texttt{"gauss"} (the
+default) puts them at the Gauss abscissae of each element, \texttt{"nodes"} at
+the SG nodes.
+
+\subsection{Driver B: a whole field from a \texttt{.ff} station table}
+
+\texttt{rm\_dehom\_ff.py} is the general driver and the one to use for real
+work. A \texttt{.ff} file is the plate analogue of a VABS \texttt{.glb}:
+whitespace separated, \texttt{\#} comments, one row per in-plane station, in any
+row order and on any station geometry. The shipped table was collected from an
+Abaqus S8R shell field, but any solver can write it --- the driver contains no
+Abaqus. Its first three lines state the format:
+
+\begin{lstlisting}[style=shellst]
+# plate dehom FF station table (collected from ex5_shell_S8R_field.dat)
+# x[m] y[m] N11 N22 N12[N/m] M11 M22 M12[N] Q1 Q2[N/m] u1 u2 u3[m] wx wy[-]
+# 40 x 40 rectangular station lattice, x-fastest
+\end{lstlisting}
+
+Ten columns are required (\texttt{x y N11 N22 N12 M11 M22 M12 Q1 Q2}); the
+optional columns 11--15 add the mid-surface displacement $u_1, u_2, u_3$ and
+slopes $w_x, w_y$, and without them the \texttt{.U} file carries the warping
+alone. The loader accepts exactly 10 or 15 columns and raises otherwise.
+\textbf{Every gradient driver is computed from the stations themselves}, by one
+of two paths chosen automatically: exact tensor-grid finite differences
+(\texttt{np.gradient} on the true non-uniform spacings) when the coordinates
+form a complete rectangular lattice, or a meshfree KD-tree patch fit
+($k = 12$ nearest neighbours, distance-weighted local quadratic least squares,
+first and second derivatives from one batched solve) for any other cloud. The
+flag \texttt{--scatter} forces the meshfree path.
+
+Unlike the single-station driver, \texttt{rm\_dehom\_ff.py} has no
+\texttt{LATTICE} variable at all: it always calls
+\texttt{z\_stations(sg, "gauss")} and therefore always reports at the element
+Gauss depths. \texttt{LATTICE = "nodes"} exists only in \texttt{rm\_dehom.py}.
+
+The applied face pressure is \emph{not} in the table --- loads are input, not
+solver output --- so it lives in \texttt{layup\_db.yaml}:
+
+\begin{lstlisting}[style=opensg,caption={The dehom: block of layup\_db.yaml.}]
+dehom:
+  ff: Abaqus_results/ex5_shell_S8R_field.ff
+  loads:
+    top: {q0: 68.9476e6, shape: sinsin}   # uniform | sin_x | sin_y | sinsin
+    bottom: none
+\end{lstlisting}
+
+Each \texttt{shape} fixes the whole six-term ladder analytically, differentiated
+with \texttt{a} and \texttt{b} from the \texttt{plate:} block ($a = b = 1.524$~m
+in the shipped file). Bottom-face loads raise \texttt{NotImplementedError}: the
+42-driver operator block carries the top ladder only.
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/2_get_plate_stress_from_1DSG
+python rm_dehom_ff.py ex5_shell_S8R_field.ff
+\end{lstlisting}
+
+Pass the table explicitly, as above. The \texttt{dehom: ff:} key in the shipped
+\texttt{layup\_db.yaml} points at
+\texttt{Abaqus\_results/ex5\_shell\_S8R\_field.ff}, and that folder does not
+exist in this example: the table sits at the top level of the folder as
+\texttt{ex5\_shell\_S8R\_field.ff}. Leaving the path to the key therefore trips
+the driver's own guard, which reads \texttt{no .ff table: pass it on the command
+line or set dehom: ff in} followed by the database path. Either give the file
+name on the command line, as above, or correct the key. \texttt{--db} points at a database elsewhere. The run prints its chosen
+gradient path (\texttt{lattice FD (40 x 40)} for this table), the operator
+build, the \texttt{jax.vmap} over stations, and the peak of each stress
+component.
+
+\subsection{What comes out}
+
+Outputs are named after the table, \texttt{<ff stem>\_ff}.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{lp{8.0cm}}
+\toprule
+file & content \\
+\midrule
+\texttt{ex5\_shell\_S8R\_field\_ff.SM} & 3-D stress: columns \texttt{x y z} then
+  \texttt{S11 S22 S33 S12 S13 S23} in Pa \\
+\texttt{ex5\_shell\_S8R\_field\_ff.EM} & 3-D strain, same layout, \texttt{E11}
+  through \texttt{E23} \\
+\texttt{ex5\_shell\_S8R\_field\_ff.U} & 3-D displacement \texttt{U1 U2 U3} in m \\
+\texttt{ex5\_shell\_S8R\_field\_ff\_gauss.vtk} & ASCII
+  \texttt{STRUCTURED\_GRID}, \texttt{DIMENSIONS 40 40 45}, 72\,000 points,
+  written only on a lattice \\
+\bottomrule
+\end{tabular}
+\caption{Outputs of \texttt{rm\_dehom\_ff.py} on the shipped table.}
+\label{tab:solid-ex2out}
+\end{table}
+
+The three text files share a two-line header naming the recovery and its station
+set. For this run the second line reads \texttt{1600 .ff stations
+[lattice FD (40 x 40)] x the 45 SG-element Gauss depths; ALL gradient drivers
+from the stations; S/E in the PLY MATERIAL frame (U global); z = 0 is the
+reference surface}. Four conventions matter when you read the files.
+
+\begin{itemize}
+\item $z$ is in the \textbf{SG frame}: $z = 0$ is the reference surface, not the
+  mid-plane, unless \texttt{fraction} put them at the same place.
+\item The depths are the Gauss abscissae of each five-noded element --- five per
+  ply here, 45 in all --- so every output point is strictly inside one ply, and
+  a material interface, where stress is genuinely double-valued, never appears
+  in a file.
+\item Stress and strain are written in the \textbf{ply material frame} of each
+  depth, which is where failure criteria live. The chain computes in the
+  laminate frame --- it must, since the gradients and the $Q$-rescale integrate
+  across plies --- and rotates only at write time. The displacement \texttt{.U}
+  stays global.
+\item Component order in the files is \texttt{11 22 33 12 13 23}, reordered from
+  the internal SG Voigt order $(11, 22, 33, 23, 13, 12)$ on write.
+\end{itemize}
+
+\subsection{What it is validated against}
+
+The accuracy table in
+\texttt{src/opensg\_solid/rm\_plate\_1D/USER\_GUIDE.md} records the recovery
+errors against reference elasticity solutions, falling at $\mathcal{O}(S^{-2})$
+in the slenderness $S$.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lccl}
+\toprule
+component (chain) & $S = 4$ & $S = 10$ & thin \\
+\midrule
+$\sigma_{13}$ (cross-ply) & 21\,\% & 4.4\,\% & 0.18\,\% at $S = 50$ \\
+$\sigma_{33}$ equilibrium & 5.5\,\% & 1.2\,\% & 0.05\,\% \\
+$\sigma_{11}$ second-order & 27\,\% & 2.0\,\% & 0.04\,\% at $S = 64$ \\
+$\sigma_{12}$ angle-ply & 18\,\% & --- & 0.07\,\% at $S = 64$ \\
+$U_1$ & 30\,\% & 1.4\,\% & 0.02\,\% at $S = 64$ \\
+\bottomrule
+\end{tabular}
+\caption{Recovery accuracy against reference elasticity solutions, from
+\texttt{USER\_GUIDE.md}.}
+\label{tab:solid-accuracy}
+\end{table}
+
+Soft-core sandwiches need a larger $S$ for the in-plane second-order recovery;
+their $\sigma_{13}$, $\sigma_{33}$ and displacements stay accurate at $S = 10$.
+Separately, \texttt{dehom\_README.md} in the example folder records that the
+finite-difference gradient path and the analytically differentiated known-mode
+path were run side by side on the same field and agree to better than
+$1\,\%$ on every component in the interior (four integration points trimmed per
+edge); the $11$--$15\,\%$ whole-field figure is entirely the one-sided stencil
+band about two elements wide at the boundary. That same README derives the full
+chain equation by equation and states which term is Yu's and which is this
+project's. The second-order recovery gate itself is
+\texttt{examples/OpenSG-solid/CS\_OpeNSG\_exampels/static/validate\_v2.py},
+which drives four Pagano cylindrical-bending cases with exact closed-form
+harmonic drivers; its reference \texttt{.dat} profiles are produced by the
+per-case \texttt{run\_case.py} and are not checked in.
+
+\section{Plate properties from a 2-D cell SG}
+\label{sec:solid-plate2d}
+
+\subsection{What it computes}
+
+When the wall has in-plane microstructure --- a honeycomb core, a corrugation, a
+truss --- the gene is a 2-D mesh of one periodic cell, and \texttt{plate\_homo\_2d}
+homogenizes it to the plate ABD with \texttt{n\_model=2}. Opposite faces, edges
+and corners are tied through the sparse periodic map;
+\texttt{boundary="periodic"} is the default and is the correct treatment for a
+periodic medium.
+
+\subsection{The example SG and the input you edit}
+
+\texttt{RHC\_SW\_2UC\_45.yaml} is a two-unit-cell composite honeycomb sandwich
+section: \texttt{dim: 2}, \texttt{scale: 35.248}, 4251 nodes, 6640 three-node
+triangles, three materials. Coordinates are in millimetres and moduli in MPa.
+
+The \texttt{User Input} block of \texttt{plate\_homo\_2dsg.py} is three items:
+
+\begin{lstlisting}[style=opensg,caption={The User Input block of plate\_homo\_2dsg.py.}]
+n_model = 2                    # 1: Beam; 2: Plate; 3: 3D elastic
+name = "RHC_SW_2UC_45"         # reads <name>.yaml
+
+material_param = jnp.array([
+    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply +45
+    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply -45
+    (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
+angles = jnp.array([45.0, -45.0, 0.0])   # deg per material; 0.0 = none
+\end{lstlisting}
+
+\texttt{material\_param} is one row of engineering constants per material,
+$(E_1, E_2, E_3, G_{12}, G_{13}, G_{23}, \nu_{12}, \nu_{13}, \nu_{23})$, and
+\texttt{angles} one rotation per material in degrees. Passing them
+\emph{overrides} the material blocks stored in the SG file. That override is the
+intended route here and it is not cosmetic: opening
+\texttt{RHC\_SW\_2UC\_45.yaml} shows materials 1 and 2 stored as
+\texttt{type: 2}, that is as full $6\times6$ $\mathbf{C}$ blocks already rotated
+to $\pm45^\circ$ (their $C_{16}$ entries are $\mp25368.7$), while material 3 is
+\texttt{type: 0}, isotropic aluminium with $E = 69000$~MPa and $\nu = 0.3$.
+Supplying \texttt{angles} together with the stored blocks would rotate the plies
+twice. Rebuilding from engineering constants and rotating in code is
+unambiguous. The same numbers are recorded next to the runner in
+\texttt{mat\_override.yaml} for reference; omit both arguments to use the file's
+own blocks unchanged.
+
+The solver reads \texttt{<name>.yaml}. A SwiftComp \texttt{.sc} is converted
+once with the packaged helper. That helper is a library function, not a
+command-line tool: the module \texttt{sc\_to\_yaml} has no \texttt{\_\_main\_\_}
+block, so
+\texttt{python -m opensg\_solid.rm\_plate\_1D.helper.sc\_to\_yaml file.sc}
+does nothing. Call
+\texttt{convert} instead, which writes \texttt{<base>.yaml} and
+\texttt{<base>.msh} and returns the parsed dictionary:
+
+\begin{lstlisting}[style=opensg,caption={Converting a SwiftComp .sc once.}]
+from opensg_solid.rm_plate_1D.helper.sc_to_yaml import convert
+
+sc = convert("RHC_SW_2UC_45.sc")   # writes RHC_SW_2UC_45.yaml + .msh
+\end{lstlisting}
+
+\subsection{Run it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/3_get_plate_props_from_2D_SG
+python plate_homo_2dsg.py
+\end{lstlisting}
+
+\subsection{What comes out}
+
+The run writes \texttt{RHC\_SW\_2UC\_45.out}, the timed \texttt{Classical Plate}
+stiffness and compliance in the \texttt{.K} layout, and
+\texttt{RHC\_SW\_2UC\_45\_mesh.png}, the cell mesh with elements coloured by
+material. The script also prints \texttt{r["C\_eff"]}, the same $6\times6$ it
+wrote. The \texttt{.out} banner records the SG measure and the boundary
+treatment:
+
+\begin{lstlisting}[style=shellst]
+ OpenSG msg-solid plate model, omega 35.248001, periodic
+
+ The Effective Classical Plate Stiffness Matrix
+ --------------------------------------------
+     3.3585973E+005     7.7500043E+004    -1.4366892E+002     4.1488404E-001     1.4861902E+000     3.6602858E-002
+\end{lstlisting}
+
+closing with \texttt{ Time taken: 7.83 sec} for this 4251-node, 6640-triangle
+cell.
+
+\subsection{What the numbers mean}
+
+$\omega = 35.248001$ is the cell's in-plane period, and it is directly checkable
+against the mesh: the nodes run from $y_1 = -17.624$ to $+17.624$~mm. The
+diagonal, in the mesh's own units:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+term & value & units \\
+\midrule
+$A_{11}$ & $3.3585973\times10^{5}$ & N/mm \\
+$A_{22}$ & $1.1291139\times10^{5}$ & N/mm \\
+$A_{66}$ & $1.0551654\times10^{5}$ & N/mm \\
+$D_{11}$ & $9.0367521\times10^{7}$ & N$\cdot$mm \\
+$D_{22}$ & $5.7011050\times10^{7}$ & N$\cdot$mm \\
+$D_{66}$ & $4.6026320\times10^{7}$ & N$\cdot$mm \\
+\bottomrule
+\end{tabular}
+\caption{Diagonal of the honeycomb cell's plate ABD.}
+\label{tab:solid-ex3diag}
+\end{table}
+
+The membrane law is strongly anisotropic, $A_{11}/A_{22} = 2.97$, while the
+bending law is much closer to isotropic, $D_{11}/D_{22} = 1.59$: the two
+directions see the cell very differently in stretching and much less
+differently in bending. The largest entry of the whole $B$ block is $4.954$
+against $A$ terms of order $10^{5}$ and $D$ terms of order $10^{7}$, which is
+what a cell symmetric about its mid-plane should give and is the first health
+check to make on a run of your own.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.78\textwidth]{\FIGDIR/rhc_2dsg_mesh.png}
+\caption{The two-unit-cell honeycomb sandwich structure gene, elements coloured
+by material, as written to \texttt{RHC\_SW\_2UC\_45\_mesh.png}. The
+$\pm45^\circ$ face laminae (materials 1 and 2) are the thin horizontal bands at
+$y_2 = \pm23$~mm and the isotropic core web (material 3) folds between them over
+the in-plane period. The through-thickness coordinate is $y_2$, spanning
+$\pm23.35$~mm.}
+\label{fig:solid-rhcmesh}
+\end{figure}
+
+\subsection{The Reissner-Mindlin option}
+
+Passing \texttt{shear\_refined=True} to \texttt{plate\_homo\_2d} additionally
+runs the RM first-order warping ladder and returns \texttt{r["G\_msg"]} (the
+$2\times2$ transverse-shear block), \texttt{r["ABDG"]} (the same $8\times8$
+block form as Eq.~\eqref{eq:solid-abdg}), \texttt{r["A6\_ladder"]} and
+\texttt{r["Ustar\_rel"]}. When the ladder produces an SPD fit the \texttt{.out}
+is written from the $8\times8$ and its matrices are titled
+\texttt{Reissner-Mindlin Plate} instead of \texttt{Classical Plate}; otherwise
+the run falls back to the $6\times6$. The argument applies to
+\texttt{n\_model=2} only and raises for any other model.
+
+\begin{lstlisting}[style=opensg,caption={Requesting the 8x8 from a 2-D cell SG.}]
+from opensg_solid.sg_homo import plate_homo_2d
+
+r = plate_homo_2d("RHC_SW_2UC_45.yaml", material_param=material_param,
+                  angles=angles, n_model=2, shear_refined=True)
+print(r["ABDG"])
+\end{lstlisting}
+
+\subsection{The 1-D gene in the same folder, and a naming trap}
+
+The folder also ships \texttt{Plate\_1D\_SG\_2UC\_45.yaml}, a \textbf{1-D}
+structure gene (\texttt{dim: 1}, two-node line elements through a stack), which
+runs through the identical call by changing \texttt{name}.
+\texttt{plate\_homo\_2d} reads 1-D, 2-D and 3-D genes from the same code path,
+so a stack of plies can be homogenized either here or through the dedicated
+through-thickness route of Section~\ref{sec:solid-plate1d}.
+
+Be careful about the output name. \texttt{plate\_homo\_2d} always derives its
+report path from the \emph{input} basename, so setting
+\texttt{name = "Plate\_1D\_SG\_2UC\_45"} writes
+\texttt{Plate\_1D\_SG\_2UC\_45.out} --- the \texttt{.K}-layout report --- and
+nothing else. The file \texttt{Plate\_1D\_SG\_2UC\_45\_plate\_ABD.out} sitting
+in that folder is not produced by \texttt{plate\_homo\_2dsg.py} at all: it is an
+\texttt{np.savetxt} leftover from an older script style, a bare $6\times6$ under
+a single comment line (\texttt{\# plate 6x6 [N11 N22 N12 M11 M22 M12] from the
+1D SG Plate\_1D\_SG\_2UC\_45.sc}) with no banner, no compliance block and no
+timing. Its contents are still a valid record of that gene ---
+$A_{11} = A_{22} = 1.65452926\times10^{6}$,
+$A_{66} = 6.42527474\times10^{5}$,
+$D_{11} = D_{22} = 7.86727254\times10^{7}$,
+$D_{66} = 3.12496023\times10^{7}$ in N/mm and N$\cdot$mm --- but do not expect
+your run to reproduce that file name or that layout.
+
+\section{Plate recovery from a 2-D SG}
+\label{sec:solid-platedehom2d}
+
+\subsection{What it computes}
+
+Given a converged plate solution you know the macro plate strain at the point of
+interest. Feeding it back into the homogenized cell recovers the local 3-D
+strain and stress at \textbf{every Gauss point of the gene}, which is where a
+honeycomb actually fails --- in the web, not in the smeared plate.
+\texttt{dehom\_fields} returns the strain, the stress and the fluctuation
+displacement in one pass, using the warping columns $V_0$ that the
+homogenization already solved. Nothing is re-solved.
+
+\subsection{The input you edit}
+
+\texttt{plate\_dehom\_2dsg.py} takes the same \texttt{name},
+\texttt{material\_param} and \texttt{angles} as Section~\ref{sec:solid-plate2d},
+plus one new line --- the macro plate strain, in the order
+\texttt{[e11, e22, 2e12, k11, k22, 2k12]}:
+
+\begin{lstlisting}[style=opensg,caption={The macro plate strain driving the recovery.}]
+epsilon_bar = jnp.array([0.0, 0.1, 0.0, 0.1, 0.0, 0.0])
+\end{lstlisting}
+
+The shipped state combines a transverse extension $\varepsilon_{22} = 0.1$ with
+a bending curvature $\kappa_{11} = 0.1$~mm$^{-1}$. This vector is yours: it
+comes from your plate solution at the station you care about, and there is no
+default that would be meaningful.
+
+\subsection{Run it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/4_get_plate_dehom_from_2DSG
+python plate_dehom_2dsg.py
+\end{lstlisting}
+
+\subsection{What comes out}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{lp{8.2cm}}
+\toprule
+file & content \\
+\midrule
+\texttt{RHC\_SW\_2UC\_45.out} & the timed \texttt{.K}-layout
+  \texttt{Classical Plate} report written by \texttt{plate\_homo\_2d} inside the
+  script; regenerated on each run \\
+\texttt{RHC\_SW\_2UC\_45\_plate\_ABD.out} & the plain-text $6\times6$ ABD via
+  \texttt{np.savetxt}, header \texttt{plate 6x6 [N11 N22 N12 M11 M22 M12] from
+  the 2D SG RHC\_SW\_2UC\_45} \\
+\texttt{RHC\_SW\_2UC\_45\_dehom.txt} & one row per Gauss point:
+  \texttt{GP\_Index}, \texttt{Coord\_X}, \texttt{Coord\_Y}, then
+  \texttt{Eps\_xx Eps\_yy Eps\_zz Eps\_yz Eps\_xz Eps\_xy} and \texttt{Sig\_xx}
+  through \texttt{Sig\_xy} --- SwiftComp component order; one header line plus
+  19\,920 rows \\
+\texttt{RHC\_SW\_2UC\_45\_dehom.vtk} & ASCII \texttt{UNSTRUCTURED\_GRID} point
+  cloud of the same 19\,920 points, each strain and stress component as its own
+  \texttt{SCALARS} array, ready for ParaView \\
+\texttt{RHC\_SW\_2UC\_45\_dehom.SM} / \texttt{.EM} / \texttt{.U} & the same
+  fields in the \texttt{rm\_plate\_1D} layout: \texttt{x y z} then
+  \texttt{S11 S22 S33 S12 S13 S23}, \texttt{E11} through \texttt{E23}, and
+  \texttt{U1 U2 U3} \\
+\texttt{RHC\_SW\_2UC\_45\_mesh.png} & the mesh figure, from the
+  \texttt{plate\_homo\_2d} call the script makes first \\
+\bottomrule
+\end{tabular}
+\caption{Outputs of \texttt{plate\_dehom\_2dsg.py}.}
+\label{tab:solid-ex4out}
+\end{table}
+
+The 19\,920 rows are 6640 triangles times three quadrature points. The script
+prints the ABD diagonal and the peak of each stress component.
+
+Two conventions are worth knowing before reading the files. In the
+\texttt{.SM}/\texttt{.EM}/\texttt{.U} tables the SG coordinates are placed in
+the \textbf{last} slots of the \texttt{x y z} triple, so a 2-D gene leaves the
+\texttt{x} column at zero and puts $y_1$ in \texttt{y} and the
+through-thickness $y_2$ in \texttt{z}. And \texttt{.U} is the
+\textbf{fluctuation-only} displacement --- its own header says so --- because a
+unit-state SG recovery has no macro displacement to add.
+
+\subsection{Reading the result}
+
+The first Gauss point of the shipped run sits at
+$(y_1, y_2) = (17.54067,\ 23.29375)$~mm, right at the top face of the cell whose
+half-thickness is $23.35$~mm, and reports
+%
+\begin{equation}
+\varepsilon_{11} = 2.329375, \qquad
+\sigma_{11} = 8.755003\times10^{4}, \quad
+\sigma_{22} = 7.102971\times10^{4}, \quad
+\sigma_{12} = -6.542276\times10^{4}
+\end{equation}
+%
+in MPa. That $\varepsilon_{11}$ is exactly $\kappa_{11} y_2
+= 0.1 \times 23.29375$, the macro part of the strain reproduced to every printed
+digit, which is the cheapest possible check that the strain state you passed is
+the strain state that arrived. The other five components are what the recovery
+adds: $\varepsilon_{22} = 0.2643$ and $\varepsilon_{33} = -0.9187$ are the
+fluctuation response of the cell, and $\sigma_{12}$ is large even though the
+applied macro shear strain $2\varepsilon_{12}$ is zero, which is consistent with
+the off-axis face laminae the mesh figure shows at that height.
+
+Over the whole gene the field maxima are:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+component & $\max\lvert\sigma\rvert$ (MPa) & $\max\lvert\varepsilon\rvert$ \\
+\midrule
+$xx$ & $1.641632\times10^{5}$ & $2.329375$ \\
+$yy$ & $9.199997\times10^{4}$ & $1.499038$ \\
+$zz$ & $2.535821\times10^{4}$ & $1.032184$ \\
+$yz$ & $1.083274\times10^{4}$ & $1.153314$ \\
+$xz$ & $5.210321\times10^{3}$ & $8.807437\times10^{-1}$ \\
+$xy$ & $7.369978\times10^{4}$ & $7.881358\times10^{-1}$ \\
+\bottomrule
+\end{tabular}
+\caption{Component maxima over the 19\,920 Gauss points of the shipped plate
+recovery.}
+\label{tab:solid-ex4max}
+\end{table}
+
+The $xx$ strain maximum is again $\kappa_{11} y_2^{\max} = 2.329375$, as it must
+be at the extreme fibre. Local states like the $\sigma_{zz}$ and $\sigma_{yz}$
+columns are exactly what a smeared plate model cannot show you, and the reason
+to run a dehomogenization at all. The driver here is a demonstration magnitude,
+not a service load; scale it to your own macro state before reading the stresses
+as failure indices.
+
+\section{Equivalent 3-D solid from a 2-D SG}
+\label{sec:solid-3dfrom2d}
+
+\subsection{What it computes}
+
+\texttt{n\_model=3} reduces an SG to an equivalent \textbf{3-D solid} stiffness:
+the $6\times6$ material law of the homogenized continuum, in Voigt order
+$[11, 22, 33, 23, 13, 12]$ with engineering shears. On a \textbf{2-D} SG this is
+the generalized-plane-strain problem: the cell is periodic in its two in-plane
+directions and uniform out of plane, six unit macro strains are applied, the
+fluctuation field $\mathbf{V}_0$ is solved for each, and the effective law is
+%
+\begin{equation}
+\mathbf{D}_{\rm eff} =
+ \frac{\mathbf{D}_{ee} + \mathbf{V}_0^{\mathsf T}\mathbf{D}_{he}}{\omega},
+\label{eq:solid-deff}
+\end{equation}
+%
+with $\omega$ the cell area. This is the classical micromechanics unit-cell
+problem, which makes it the natural place to validate the route against
+published numbers.
+
+\subsection{The example SG}
+
+\texttt{examples/OpenSG-solid/5\_get\_solid\_props\_from\_SG} homogenizes a
+unidirectional fibre/matrix square unit cell: 801 nodes, 1536 three-node
+triangles, 512 matrix elements and 1024 fibre elements, cell area
+$\omega = 1$.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lllll}
+\toprule
+material & $E_1, E_2, E_3$ (MPa) & $G_{12}, G_{13}, G_{23}$ (MPa)
+ & $\nu_{12}, \nu_{13}, \nu_{23}$ & density \\
+\midrule
+matrix & 4760, 4760, 4760 & 1737.226 each & 0.37, 0.37, 0.37 & 1200.0 \\
+fibre & 276000, 19500, 19500 & 70000, 70000, 5735 & 0.28, 0.28, 0.70 & 1800.0 \\
+\bottomrule
+\end{tabular}
+\caption{The two phases of the UD unit cell. The matrix shear modulus is written
+by the converter as $4760/(2\cdot1.37)$.}
+\label{tab:solid-udmat}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.5\textwidth]{\FIGDIR/udcomp_2dsg_mesh.png}
+\caption{The unidirectional composite unit cell written to
+\texttt{UDcomp\_2D\_mesh.png}, fibre and matrix elements coloured by phase, with
+the SG coordinates labelled $y_2$ and $y_3$.}
+\label{fig:solid-udmesh}
+\end{figure}
+
+\subsection{Step 1: build the SG yaml from the gmsh mesh}
+
+\texttt{make\_udcomp\_yaml.py} is a one-time converter from
+\texttt{UDcomp\_2D.msh} (gmsh 2.2 format) to \texttt{UDcomp\_2D.yaml}. It writes
+the nodes as \texttt{- [x y z]} rows, the triangles as 1-based
+\texttt{- [n1 n2 n3]} rows, a constant \texttt{elementOrientations} frame
+($e_1$ = axial $z$, $e_2$ = $+x$, $e_3$ = $+y$), the two materials as
+engineering constants in MPa, and \texttt{sets.element} splitting the mesh into
+the matrix and fibre phases by gmsh physical tag. The yaml is already checked
+in, so this step is only needed if you remesh.
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/5_get_solid_props_from_SG
+python make_udcomp_yaml.py
+\end{lstlisting}
+
+\subsection{Step 2: homogenize}
+
+\begin{lstlisting}[style=shellst]
+python solid_homo_2dsg.py
+\end{lstlisting}
+
+The \texttt{User Input} block is three lines: \texttt{n\_model = 3},
+\texttt{name = "UDcomp\_2D"} (which reads \texttt{<name>.yaml}), and the
+\texttt{paper} dictionary of reference constants to compare against.
+
+This particular runner is deliberately self-contained. It assembles
+constant-strain triangles, the periodic master-slave node map (right to left
+matching $y$, top to bottom matching $x$, with corner chains resolved by three
+passes of \texttt{master = master[master]}) and the three pinned rigid
+translations in plain NumPy, so the entire \texttt{n\_model=3} algebra is
+readable in one file. It therefore writes its own \texttt{\_Deff.out} through
+\texttt{np.savetxt} rather than the SwiftComp-layout report, and it consumes the
+\texttt{nodes}/\texttt{elements}/\texttt{elementOrientations}/\texttt{materials}/\texttt{sets}
+yaml dialect that \texttt{make\_udcomp\_yaml.py} emits, not the
+\texttt{dim}/\texttt{nodes}/\texttt{cells}/\texttt{mat\_id}/\texttt{materials}
+dialect that \texttt{opensg\_solid.sg\_mesh.load\_sg\_input} parses. The engine
+path itself is exercised on the honeycomb SG: \texttt{n\_model=3} on
+\texttt{RHC\_SW\_2UC\_45.yaml} runs through \texttt{plate\_homo\_2d} and writes
+the full SwiftComp \texttt{.out} with its engineering-constants block.
+
+\subsection{What comes out}
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{lp{8.2cm}}
+\toprule
+file & content \\
+\midrule
+\texttt{UDcomp\_2D\_Deff.out} & the $6\times6$ $\mathbf{D}_{\rm eff}$ in MPa,
+  Voigt order \texttt{[e11 e22 e33 2e23 2e13 2e12]}, with $\omega$ in the
+  header \\
+\texttt{UDcomp\_2D\_constants\_vs\_paper.dat} & the nine effective engineering
+  constants next to the published values and the percentage difference \\
+\texttt{UDcomp\_2D\_mesh.png} & the unit cell, elements coloured by phase \\
+\bottomrule
+\end{tabular}
+\caption{Outputs of \texttt{solid\_homo\_2dsg.py}.}
+\label{tab:solid-ex5out}
+\end{table}
+
+\subsection{What the numbers mean, and what they were validated against}
+
+The nine constants are read off the compliance
+$\mathbf{S} = \mathbf{D}_{\rm eff}^{-1}$ as $E_i = 1/S_{ii}$,
+$G_{ij} = 1/S_{kk}$ and $\nu_{ij} = -S_{ij}/S_{ii}$, and compared against Table
+II Model-3 of the ASC-23 OpenSG-Solid paper --- the same case as the FEniCS
+\texttt{3DModel.ipynb} in \texttt{wenbinyugroup/OpenSG}. The shipped
+\texttt{UDcomp\_2D\_constants\_vs\_paper.dat} reads:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrr}
+\toprule
+constant & this code & paper & \% difference \\
+\midrule
+$E_1$ (GPa) & 167.255337 & 167.255300 & $+0.0000$ \\
+$E_2$ (GPa) & 11.413657 & 11.413600 & $+0.0005$ \\
+$E_3$ (GPa) & 11.413657 & 11.413600 & $+0.0005$ \\
+$G_{23}$ (GPa) & 3.095555 & 3.095500 & $+0.0018$ \\
+$G_{13}$ (GPa) & 6.801763 & 6.801700 & $+0.0009$ \\
+$G_{12}$ (GPa) & 6.801763 & 6.801700 & $+0.0009$ \\
+$\nu_{12}$ & 0.311780 & 0.311780 & $-0.0000$ \\
+$\nu_{13}$ & 0.311780 & 0.311780 & $-0.0000$ \\
+$\nu_{23}$ & 0.575743 & 0.575740 & $+0.0006$ \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{UDcomp\_2D\_constants\_vs\_paper.dat}, verbatim.}
+\label{tab:solid-udvspaper}
+\end{table}
+
+Every constant agrees with the published value to within $0.002\,\%$, which is
+the round-off of the paper's own printed precision. The route is exact against
+its reference, not merely close.
+
+The stiffness itself, from \texttt{UDcomp\_2D\_Deff.out} (MPa, $\omega = 1$):
+%
+\begin{equation}
+\mathbf{D}_{\rm eff} =
+\begin{bmatrix}
+1.726544\times10^{5} & 8.658488\times10^{3} & 8.658488\times10^{3} & 0 & 0 & 0\\
+8.658488\times10^{3} & 1.750725\times10^{4} & 1.026390\times10^{4} & 0 & 0 & 0\\
+8.658488\times10^{3} & 1.026390\times10^{4} & 1.750725\times10^{4} & 0 & 0 & 0\\
+0 & 0 & 0 & 3.095555\times10^{3} & 0 & 0\\
+0 & 0 & 0 & 0 & 6.801763\times10^{3} & 0\\
+0 & 0 & 0 & 0 & 0 & 6.801763\times10^{3}
+\end{bmatrix}
+\end{equation}
+
+Two health checks are worth making a habit of. First, the symmetry the geometry
+demands is recovered: $D_{22} = D_{33}$ and $D_{55} = D_{66}$ to all printed
+digits, and every normal-shear coupling term in the shipped file is either
+exactly zero or below $3.4\times10^{-2}$~MPa, six to seven orders under the
+diagonal, which is the numerical signature of a correctly tied periodic cell.
+Second, the transverse plane is \textbf{not} isotropic: a transversely isotropic
+material would satisfy $D_{44} = (D_{22} - D_{23})/2 = 3621.7$~MPa, whereas the
+computed $D_{44}$ is $3095.6$~MPa, $14.5\,\%$ lower. A square fibre array is
+tetragonal, so $G_{23}$ genuinely has to be homogenized rather than inferred
+from $E_2$ and $\nu_{23}$, which is precisely why a unit-cell solve is needed
+instead of a rule of mixtures.
+
+\section{Equivalent 3-D solid from a 3-D SG}
+\label{sec:solid-3dfrom3d}
+
+\subsection{What it computes}
+
+When the SG is periodic in all three directions --- a triply-periodic minimal
+surface (TPMS) unit cell, a lattice block, any genuine 3-D microstructure ---
+the same macro model is reached with
+\texttt{plate\_homo\_2d(..., n\_model=3, boundary="periodic")} on a tet or hex
+mesh. \texttt{"periodic"} is the default on every route;
+\texttt{boundary="aperiodic"} maps the boundary solution onto the
+bounding-box-face nodes as Dirichlet data (solid elements carry only
+translations, so this clamps every degree of freedom of those nodes) and is the
+explicit request for SGs that genuinely are not periodic. Aperiodic supports the
+plate and solid models with \texttt{solver="direct"} only; asking for it with
+\texttt{n\_model=1} or \texttt{solver="cg"} raises.
+
+\subsection{The samples and the runners}
+
+Two TPMS samples are supplied as SwiftComp \texttt{.sc} meshes of linear tets on
+a unit cell, in aluminium. Reading the \texttt{.sc} meta line directly gives
+their sizes.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llrrr}
+\toprule
+sample & surface & nodes & tets & relative density $\omega$ \\
+\midrule
+\texttt{Sample\_1} & Schwarz-P & 116\,851 & 545\,741 & 0.3000 \\
+\texttt{Sample\_2} & Schwarz-P & 54\,874 & 191\,957 & 0.0857 \\
+\bottomrule
+\end{tabular}
+\caption{The two TPMS solid structure genes.}
+\label{tab:solid-tpms}
+\end{table}
+
+Four runners sit in \texttt{6\_get\_solid\_props\_from\_3D\_SG}.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{p{4.4cm}p{9.4cm}}
+\toprule
+script & what it does \\
+\midrule
+\texttt{sample\_1/run\_sample\_1.py}, \texttt{sample\_2/run\_sample\_2.py} &
+  homogenize one sample at $E = 69$~GPa, $\nu = 0.3$ with
+  \texttt{boundary="periodic"} and compare term by term against the vendor's own
+  \texttt{Sample\_N.sc.k}; writes \texttt{Sample\_N.out},
+  \texttt{Sample\_N\_msg\_solid.out}, \texttt{Sample\_N\_compare.dat} and
+  \texttt{Sample\_N\_mesh.png} \\
+\texttt{compare\_boundary\_modes.py} & runs both samples under both boundary
+  treatments and writes \texttt{boundary\_compare.dat}, plus per-mode copies
+  \texttt{Sample\_N\_periodic.out} and \texttt{Sample\_N\_aperiodic.out} \\
+\texttt{tpms\_solid\_props.py} & the plain homogenization driver, taking the
+  sample number as an optional argument \\
+\texttt{sc\_to\_3dyaml.py} & converts the \texttt{.sc} tets to the OpenSG 3-D
+  solid yaml and reports the tet-volume check that distinguishes a solid mesh
+  from a shell surface \\
+\bottomrule
+\end{tabular}
+\caption{The runners of example 6.}
+\label{tab:solid-ex6runners}
+\end{table}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/6_get_solid_props_from_3D_SG/sample_1
+python run_sample_1.py
+\end{lstlisting}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/6_get_solid_props_from_3D_SG
+python compare_boundary_modes.py
+\end{lstlisting}
+
+One detail to check before comparing numbers across scripts: the two sample
+runners and \texttt{compare\_boundary\_modes.py} use $E = 69$~GPa, matched to
+the SwiftComp \texttt{.K}, whereas \texttt{tpms\_solid\_props.py} and
+\texttt{sc\_to\_3dyaml.py} use $E = 70$~GPa. Only the $69$~GPa runs are
+comparable with the benchmark below. The \texttt{Sample\_N\_msg\_solid.out}
+files that \texttt{tpms\_solid\_props.py} writes at the top level of the folder
+are regenerated on each run.
+
+\subsection{Normalization: per unit material volume, or per unit cell}
+
+The \texttt{.out} that \texttt{plate\_homo\_2d} writes is in the SG measure:
+$\omega$ appears in the banner, and for these samples $\omega$ \emph{is} the
+relative density, because the bounding cell has unit volume. So
+\texttt{Sample\_1\_periodic.out} opens with
+\texttt{ OpenSG msg-solid 3D elastic model, omega 0.3, periodic} and reports
+$C_{11} = 3.3967192\times10^{10}$~Pa --- the stiffness per unit volume of
+\emph{aluminium}. The sample runners multiply by $\omega$ to get the per-unit-cell
+value the vendor prints, $3.3967192\times10^{10}\times0.3 = 1.019016\times10^{10}$~Pa
+$= 10190.2$~MPa. Every comparison table below is per unit cell, in MPa.
+
+\subsection{The SwiftComp digit-parity benchmark}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrcrrr}
+\toprule
+& \multicolumn{3}{c}{Sample 1} & & \multicolumn{3}{c}{Sample 2} \\
+\cmidrule(lr){2-4}\cmidrule(lr){6-8}
+term & msg-solid & SwiftComp & err \% & & msg-solid & SwiftComp & err \% \\
+\midrule
+$C_{11}$ & 10190.158 & 10190.158 & $-0.000$ & & 2303.160 & 2303.160 & $-0.000$ \\
+$C_{12}$ & 5646.069 & 5646.068 & $+0.000$ & & 1612.130 & 1612.130 & $-0.000$ \\
+$C_{13}$ & 5646.092 & 5646.091 & $+0.000$ & & 1612.141 & 1612.141 & $+0.000$ \\
+$C_{22}$ & 10190.131 & 10190.131 & $+0.000$ & & 2303.067 & 2303.067 & $+0.000$ \\
+$C_{23}$ & 5646.012 & 5646.012 & $+0.000$ & & 1612.120 & 1612.120 & $+0.000$ \\
+$C_{33}$ & 10189.958 & 10189.958 & $+0.000$ & & 2303.019 & 2303.018 & $+0.000$ \\
+$C_{44}$ & 4519.640 & 4519.640 & $-0.000$ & & 1106.734 & 1106.735 & $-0.000$ \\
+$C_{55}$ & 4519.637 & 4519.637 & $-0.000$ & & 1106.668 & 1106.668 & $+0.000$ \\
+$C_{66}$ & 4519.755 & 4519.755 & $-0.000$ & & 1106.664 & 1106.664 & $-0.000$ \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{Sample\_1\_compare.dat} and \texttt{Sample\_2\_compare.dat},
+per unit cell in MPa, at $E = 69$~GPa and $\nu = 0.3$. Sample 1 is 545\,741
+tets and solved in 165.9~s; Sample 2 is 191\,957 tets and solved in 61.4~s.}
+\label{tab:solid-tpmsparity}
+\end{table}
+
+Digit-for-digit on both samples, to seven significant figures on every entry.
+The effective law is cubic to five digits, and every symmetry-forbidden coupling
+sits four to five orders below the diagonal, which is the health check on the
+all-directions periodic tie. The engineering constants that the \texttt{.out}
+prints for Sample 2 --- $E_1 = 1.1383725\times10^{10}$~Pa,
+$G_{12} = 1.2914214\times10^{10}$~Pa, $\nu_{12} = 0.41174$ --- are per unit
+material volume in the same way.
+
+\subsection{Periodic versus aperiodic}
+
+\texttt{compare\_boundary\_modes.py} runs the same \texttt{.sc} through both
+treatments, so the percentage column measures the aperiodic boundary layer of a
+single cell directly against the exact periodic answer.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrrrcrrr}
+\toprule
+& \multicolumn{3}{c}{Sample 1} & & \multicolumn{3}{c}{Sample 2} \\
+\cmidrule(lr){2-4}\cmidrule(lr){6-8}
+term & aperiodic & periodic & \% diff & & aperiodic & periodic & \% diff \\
+\midrule
+$C_{11}$ & 12977.036 & 10190.158 & $+27.349$ & & 2810.329 & 2303.160 & $+22.021$ \\
+$C_{22}$ & 12977.030 & 10190.131 & $+27.349$ & & 2810.363 & 2303.067 & $+22.027$ \\
+$C_{33}$ & 12976.815 & 10189.958 & $+27.349$ & & 2810.251 & 2303.019 & $+22.025$ \\
+$C_{12}$ & 5423.565 & 5646.069 & $-3.941$ & & 1548.627 & 1612.130 & $-3.939$ \\
+$C_{13}$ & 5423.674 & 5646.092 & $-3.939$ & & 1548.954 & 1612.141 & $-3.919$ \\
+$C_{23}$ & 5423.151 & 5646.012 & $-3.947$ & & 1549.049 & 1612.120 & $-3.912$ \\
+$C_{44}$ & 5545.997 & 4519.640 & $+22.709$ & & 1300.352 & 1106.734 & $+17.494$ \\
+$C_{55}$ & 5546.044 & 4519.637 & $+22.710$ & & 1300.151 & 1106.668 & $+17.483$ \\
+$C_{66}$ & 5546.133 & 4519.755 & $+22.709$ & & 1300.048 & 1106.664 & $+17.474$ \\
+\midrule
+solve & 146.3~s & 150.2~s & & & 52.4~s & 51.5~s & \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{boundary\_compare.dat}, per unit cell in MPa. The aperiodic
+run clamps 17\,610 boundary nodes on Sample 1 and 4456 on Sample 2.}
+\label{tab:solid-boundary}
+\end{table}
+
+Read the table this way. Clamping the fluctuation on the cube faces forbids the
+affine fluctuation modes, so the cell can only come out stiffer: the normal and
+shear diagonals rise by $17$ to $27\,\%$, while the off-diagonal $C_{12}$ family
+falls by about $4\,\%$. The bias is large because the clamped set is large ---
+$17\,610$ of $116\,851$ nodes, or $15\,\%$, for Sample 1, and $4456$ of
+$54\,874$, or $8\,\%$, for Sample 2 --- since the solid sheet meets the cube
+faces in two-dimensional patches. On the solid route aperiodic is also
+\textbf{not} faster: the periodic tie merges only face pairs, so the factorized
+size barely changes, and the two timings are within a few percent of each other
+in both directions. Periodic is the exact treatment for a periodic medium and is
+therefore the default; aperiodic is the right model only when the SG genuinely
+is not periodic.
+
+The folder carries two further comparison tables, both regenerated by their own
+scripts: \texttt{tpms\_all\_compare.dat}, which lines the solid results up
+against the same Schwarz-P surface homogenized by the \texttt{msg-shell} route
+at matched thickness, and \texttt{solid\_vs\_shell\_compare.dat}, which adds the
+normalized stiffness $C/(E\rho)$ and the Zener ratio $2C_{44}/(C_{11}-C_{12})$
+--- 1.989 for Sample 1, 3.203 for Sample 2, and 3.151 for the shell run at the
+matched thickness $t = 0.0365$. Those three rows are the cleanest available
+statement that the two engines describe the same structure.
+
+\section{Beam properties from a 2-D SG}
+\label{sec:solid-beam}
+
+\subsection{What it computes}
+
+\texttt{n\_model=1} reduces a cross-sectional SG to the Timoshenko beam
+constitutive law, relating the axial force, two transverse shear forces, torque
+and two bending moments to the six generalized strains
+$[\epsilon_{11},\gamma_{12},\gamma_{13},\kappa_1,\kappa_2,\kappa_3]$. Internally
+this is the Beam\_solid KKT engine merged into
+\texttt{sg\_assembly}/\texttt{sg\_homo}: the zeroth-order warping solve $V_0$ is
+run under four rigid-body Lagrange constraints, the $l$-chain first-order solve
+$V_{1s}$ reuses the same factorization, and the pair is reduced to the
+$6\times6$. The classical Euler-Bernoulli $4\times4$ in
+$[\epsilon_{11},\kappa_1,\kappa_2,\kappa_3]$ falls out of the same $V_0$ solve
+and rides along in \texttt{r["C\_eff\_EB"]} at no extra cost. The beam route
+requires an SG of dimension 2 or 3.
+
+\subsection{The example SG and the input you edit}
+
+\texttt{examples/OpenSG-solid/7\_get\_beam\_props\_from\_SG} homogenizes the same
+\texttt{RHC\_SW\_2UC\_45.yaml} honeycomb cross-section as
+Section~\ref{sec:solid-plate2d}: 4251 nodes, 6640 three-node triangles.
+Coordinates are in mm and moduli in MPa, so the resulting stiffnesses are in N
+and N$\cdot$mm$^2$.
+
+The runner has no command-line arguments --- the SG file and the materials are
+the \texttt{User Input} block at the top of the script, identical to the plate
+runner except for \texttt{n\_model}.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{cllll}
+\toprule
+id & material & $E_1, E_2, E_3$ (MPa) & $G_{12}, G_{13}, G_{23}$ (MPa) & angle \\
+\midrule
+1 & ply & 108000, 8000, 8000 & 4000, 4000, 3000 & $+45^\circ$ \\
+2 & ply & 108000, 8000, 8000 & 4000, 4000, 3000 & $-45^\circ$ \\
+3 & aluminium core & 69000, 69000, 69000 & 26540, 26540, 26540 & none \\
+\bottomrule
+\end{tabular}
+\caption{The three materials of the honeycomb section; $\nu_{12}, \nu_{13},
+\nu_{23}$ are $0.32, 0.32, 0.30$ for the plies and $0.30$ throughout for the
+core.}
+\label{tab:solid-beammat}
+\end{table}
+
+\begin{lstlisting}[style=opensg,caption={beam\_homo\_sg.py, complete.}]
+import numpy as np
+import jax.numpy as jnp
+
+from opensg_solid.sg_homo import plate_homo_2d
+
+n_model = 1                    # 1: Beam; 2: Plate; 3: 3D elastic
+name = "RHC_SW_2UC_45"         # reads <name>.yaml
+
+material_param = jnp.array([
+    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),
+    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),
+    (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
+angles = jnp.array([45.0, -45.0, 0.0])
+
+r = plate_homo_2d(name + ".yaml", material_param=material_param,
+                  angles=angles, n_model=n_model)
+np.set_printoptions(precision=5)
+print("beam 6x6  [eps11 gam12 gam13 kappa1 kappa2 kappa3]  (Timoshenko):")
+print(r["C_eff"])
+print("beam 4x4  [eps11 kappa1 kappa2 kappa3]  (EB, same run):")
+print(r["C_eff_EB"])
+\end{lstlisting}
+
+\subsection{Run it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/7_get_beam_props_from_SG
+python beam_homo_sg.py
+\end{lstlisting}
+
+\subsection{What comes out}
+
+The run writes \texttt{RHC\_SW\_2UC\_45.out}, the timed SwiftComp-layout report
+containing \texttt{The Effective Timoshenko Stiffness Matrix} followed by
+\texttt{The Effective Timoshenko Compliance Matrix}, with banner
+\texttt{ OpenSG msg-solid beam model, omega 1} and closing line
+\texttt{ Time taken: 8.94 sec}; and \texttt{RHC\_SW\_2UC\_45\_mesh.png}, the SG
+mesh coloured by material.
+
+The banner reports $\omega = 1$: for a beam model on a 2-D SG the measure is
+unity, so the $6\times6$ is the \textbf{total sectional stiffness}, not a
+per-area density. No engineering-constants block is printed, because a beam
+stiffness is not a material stiffness.
+
+\subsection{What the numbers mean}
+
+The shipped \texttt{RHC\_SW\_2UC\_45.out} stiffness block reads:
+
+\begin{lstlisting}[style=shellst]
+     9.8992866E+006     6.9973096E+003     1.2577025E+001    -7.7065215E-001     2.2740495E+000    -8.6717860E-001
+     6.9973096E+003     1.9074524E+006     5.9324366E+001    -3.4044009E+001    -1.6298115E+000    -6.0670378E-002
+     1.2577025E+001     5.9324366E+001     9.3619028E+005    -8.4787043E+001    -9.3250231E-001     8.5948371E-001
+    -7.7065184E-001    -3.4044009E+001    -8.4787043E+001     2.9774561E+008    -3.1862083E+006    -7.3057137E+003
+     2.2740506E+000    -1.6298115E+000    -9.3250231E-001    -3.1862083E+006     2.1895745E+009    -9.5964309E+004
+    -8.6717875E-001    -6.0670378E-002     8.5948371E-001    -7.3057137E+003    -9.5964309E+004     9.2899273E+008
+\end{lstlisting}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lllp{4.6cm}}
+\toprule
+entry & conjugate pair & value & reads as \\
+\midrule
+$C_{11}$ & $\epsilon_{11}$ & $9.8992866\times10^{6}$ N & axial (extensional) stiffness \\
+$C_{22}$ & $\gamma_{12}$ & $1.9074524\times10^{6}$ N & transverse shear stiffness, direction 2 \\
+$C_{33}$ & $\gamma_{13}$ & $9.3619028\times10^{5}$ N & transverse shear stiffness, direction 3 \\
+$C_{44}$ & $\kappa_1$ & $2.9774561\times10^{8}$ N$\cdot$mm$^2$ & torsional stiffness \\
+$C_{55}$ & $\kappa_2$ & $2.1895745\times10^{9}$ N$\cdot$mm$^2$ & bending stiffness about axis 2 \\
+$C_{66}$ & $\kappa_3$ & $9.2899273\times10^{8}$ N$\cdot$mm$^2$ & bending stiffness about axis 3 \\
+$C_{45}$ & $\kappa_1$--$\kappa_2$ & $-3.1862083\times10^{6}$ N$\cdot$mm$^2$ & twist-bend coupling from the $\pm45^\circ$ plies \\
+\bottomrule
+\end{tabular}
+\caption{The Timoshenko $6\times6$ of the honeycomb section, entry by entry.}
+\label{tab:solid-timo}
+\end{table}
+
+Read the diagonal only as a first orientation. When couplings are present the
+engineering stiffnesses are the inverses of the \textbf{compliance} diagonal,
+which is why the same \texttt{.out} prints the compliance: here
+$1/S_{11} = 9.89926\times10^{6}$ against $C_{11} = 9.89929\times10^{6}$
+($0.0003\,\%$ apart) and $1/S_{44} = 2.97741\times10^{8}$ against
+$C_{44} = 2.97746\times10^{8}$ ($0.0015\,\%$ apart), so on this section the
+couplings shift the engineering values by less than $0.002\,\%$.
+
+The twist-bend term $C_{45}$ is the physically meaningful signature of the
+$\pm45^\circ$ layup. Quantify it rather than eyeballing it: at
+$3.1862\times10^{6}$~N$\cdot$mm$^2$ it is a factor $93$ below $C_{44}$ and a
+factor $690$ below $C_{55}$ --- two to three orders down, not three.
+
+\subsection{The built-in cross-check: Euler-Bernoulli against Timoshenko}
+
+\texttt{r["C\_eff\_EB"]} is the classical $4\times4$ from the same $V_0$ solve,
+printed by \texttt{beam\_homo\_sg.py}. Its four entries must reproduce the
+classical rows of the Timoshenko $6\times6$, since the two differ only by the
+$l$-chain refinement that produces the shear terms. On this SG they agree to at
+least five significant figures on every classical diagonal.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+term & EB $4\times4$ & Timoshenko $6\times6$ \\
+\midrule
+extension & $9.89926177\times10^{6}$ & $9.89928657\times10^{6}$ \\
+torsion & $2.97745363\times10^{8}$ & $2.97745606\times10^{8}$ \\
+bending 2 & $2.18957447\times10^{9}$ & $2.18957452\times10^{9}$ \\
+bending 3 & $9.28992811\times10^{8}$ & $9.28992729\times10^{8}$ \\
+\bottomrule
+\end{tabular}
+\caption{The two classical laws from one run. The Timoshenko column is
+\texttt{RHC\_SW\_2UC\_45\_beam\_Timo.out}; the EB column is the same four
+numbers, recorded in \texttt{RHC\_SW\_2UC\_45\_beam\_EB.out} in example 8, a
+file left over from an earlier version of that script.}
+\label{tab:solid-ebvstimo}
+\end{table}
+
+The two transverse shear stiffnesses $C_{22}$ and $C_{33}$ exist \textbf{only}
+in the Timoshenko $6\times6$; that is the entire reason to run
+\texttt{n\_model=1} rather than read the EB block.
+
+\section{Beam recovery}
+\label{sec:solid-beamdehom}
+
+\subsection{What it computes}
+
+Dehomogenization takes a macro beam state and recovers the pointwise 3-D strain
+and stress inside the SG, at every element Gauss point. For \texttt{n\_model=1}
+this runs the generalized-Timoshenko recovery ladder
+(\texttt{sg\_dehom.compute\_fluctuations\_gpu}): a successive-derivative
+product-rule chain $\mathbf{F}' = \mathbf{R}\,\mathbf{F}$ seeded with
+$\mathbf{F}_{1d} = \mathbf{C}_{\rm eff}^{-1}\bar{\boldsymbol{\epsilon}}$, which
+builds the shear-corrected states and the zeroth- and first-order warping
+displacement fields. Nothing from the homogenization is recomputed: the result
+dictionary \texttt{r} carries the warping modes, the material tables and the
+quadrature data, so you homogenize once and recover as often as you like.
+
+\subsection{The input you edit}
+
+\texttt{examples/OpenSG-solid/8\_get\_beam\_dehom\_from\_SG} runs the same
+honeycomb SG. Beyond the material block, the one new user input is
+\texttt{epsilon\_bar}, the \textbf{macro beam strain}
+$[\epsilon_{11},\gamma_{12},\gamma_{13},\kappa_1,\kappa_2,\kappa_3]$ --- a
+strain six-vector, not a load vector. The shipped driver is
+$\epsilon_{11} = 0.001$ combined with $\kappa_2 = 0.01$~mm$^{-1}$.
+
+\begin{lstlisting}[style=opensg,caption={The body of beam\_dehom\_sg.py after the shared material block.}]
+from opensg_solid.sg_homo import plate_homo_2d
+from opensg_solid.sg_dehom import dehom_fields, export_gauss
+
+# the MACRO beam state [eps11, gam12, gam13, kappa1, kappa2, kappa3]
+epsilon_bar = jnp.array([0.001, 0.0, 0.0, 0.0, 0.01, 0.0])
+
+r = plate_homo_2d(name + ".yaml", material_param=material_param,
+                  angles=angles, n_model=n_model)
+np.savetxt(name + "_beam_Timo.out", r["C_eff"], fmt="%16.8e",
+           header="beam Timoshenko 6x6 [eps11 gam12 gam13 kappa1 kappa2"
+                  " kappa3] (Beam_solid KKT engine) from the %dD SG %s"
+                  % (r["n_sg"], name))
+
+Gam, Sig, U = dehom_fields(r, epsilon_bar)
+export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U)
+for i, nm in enumerate(("xx", "yy", "zz", "yz", "xz", "xy")):
+    print("  max|Sig_%s| = %.5e" % (nm, np.abs(Sig[..., i]).max()))
+\end{lstlisting}
+
+Only \textbf{classical-channel} states are valid drivers: extension, twist,
+bending and their combinations. The recovery chain is kept verbatim from its
+validated reference, and its seed is the compliance-scaled state
+$\mathbf{C}_{\rm eff}^{-1}\bar{\boldsymbol{\epsilon}}$, which makes the two
+transverse shear entries \texttt{epsilon\_bar[1]} and \texttt{epsilon\_bar[2]}
+\textbf{recovery-inert} --- a shear-only driver recovers essentially zero
+stress. This is a documented deviation from the refined theory stated in the
+docstring of \texttt{compute\_fluctuations\_gpu}, not a switch to flip.
+
+\subsection{Run it}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/8_get_beam_dehom_from_SG
+python beam_dehom_sg.py
+\end{lstlisting}
+
+\subsection{What comes out}
+
+\texttt{dehom\_fields} returns three arrays shaped $(E, Q, \cdot)$ over elements
+and Gauss points: \texttt{Gam} $(E,Q,6)$ strain, \texttt{Sig} $(E,Q,6)$ stress,
+and \texttt{U} $(E,Q,3)$ the \textbf{fluctuation-only} displacement (for the
+beam route, the zeroth- plus first-order warping $w_1 + w_{1s}$; there is no
+macro contribution in a unit-state SG recovery). \texttt{export\_gauss} writes
+them out.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{lp{8.2cm}}
+\toprule
+file & content \\
+\midrule
+\texttt{RHC\_SW\_2UC\_45.out} & the Timoshenko report written by
+  \texttt{plate\_homo\_2d} itself, as in Section~\ref{sec:solid-beam};
+  regenerated on each run \\
+\texttt{RHC\_SW\_2UC\_45\_beam\_Timo.out} & the bare $6\times6$ written by the
+  script through \texttt{np.savetxt}, one commented header line --- convenient
+  to \texttt{np.loadtxt} \\
+\texttt{RHC\_SW\_2UC\_45\_dehom.txt} & tab-separated Gauss table:
+  \texttt{GP\_Index}, \texttt{Coord\_X}, \texttt{Coord\_Y}, six \texttt{Eps\_*},
+  six \texttt{Sig\_*}; one header line plus 19\,920 rows (6640 triangles times
+  three quadrature points) \\
+\texttt{RHC\_SW\_2UC\_45\_dehom.vtk} & the same cloud as an ASCII unstructured
+  grid of vertex cells, each strain and stress component a \texttt{SCALARS}
+  field --- open in ParaView \\
+\texttt{RHC\_SW\_2UC\_45\_dehom.SM} / \texttt{.EM} / \texttt{.U} & the OpenSG
+  dehom files: stress, strain and fluctuation displacement in the
+  \texttt{rm\_plate\_1D} layout, \texttt{x y z} columns then components printed
+  in the order \texttt{11 22 33 12 13 23}, with the SG coordinates in the last
+  \texttt{n\_sg} of the \texttt{x, y, z} slots; regenerated on each run \\
+\texttt{RHC\_SW\_2UC\_45\_mesh.png} & the mesh figure \\
+\bottomrule
+\end{tabular}
+\caption{Outputs of \texttt{beam\_dehom\_sg.py}.}
+\label{tab:solid-ex8out}
+\end{table}
+
+The \texttt{.txt}/\texttt{.vtk} pair uses the SwiftComp component order
+\texttt{xx yy zz yz xz xy}; the \texttt{.SM}/\texttt{.EM}/\texttt{.U} files
+reorder to \texttt{11 22 33 12 13 23} on write only. Units follow the SG input
+system throughout, MPa here.
+
+\subsection{What the numbers mean}
+
+The shipped table is the run of the driver above. Its component maxima are:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+component & $\max\lvert\sigma\rvert$ (MPa) & $\max\lvert\varepsilon\rvert$ \\
+\midrule
+$xx$ & $1.529334\times10^{4}$ & $2.339375\times10^{-1}$ \\
+$yy$ & $3.460157\times10^{3}$ & $2.265195\times10^{-1}$ \\
+$zz$ & $5.539976\times10^{2}$ & $8.787251\times10^{-2}$ \\
+$yz$ & $6.034080\times10^{2}$ & $1.344338\times10^{-1}$ \\
+$xz$ & $1.176515\times10^{3}$ & $1.704428\times10^{-1}$ \\
+$xy$ & $2.959409\times10^{3}$ & $1.028684\times10^{-1}$ \\
+\bottomrule
+\end{tabular}
+\caption{Component maxima over the 19\,920 Gauss points of the shipped beam
+recovery.}
+\label{tab:solid-ex8max}
+\end{table}
+
+The axial field is the one to sanity-check first, because beam kinematics
+predict it directly: $\epsilon_{xx} \approx \bar{\epsilon}_{11}
++ \kappa_2 y_3$ plus a warping correction. The first row of the shipped
+\texttt{.txt} sits at $y_3 = 23.29375$~mm and reports
+$\epsilon_{xx} = 2.339375\times10^{-1}$, against
+$0.001 + 0.01 \times 23.29375 = 0.2339375$: an exact match, and the same value
+is the table maximum, as it must be at the extreme fibre.
+
+The useful content of the recovery is everything \emph{else}: the transverse and
+shear components, which exist purely because the cross-section is heterogeneous
+and warps, and which no beam theory can supply. The shipped driver is a
+demonstration magnitude, not a service load; scale it to your own macro state
+before reading the stresses as failure indices.
+
+\section{Files at a glance}
+\label{sec:solid-glance}
+
+\begingroup\footnotesize
+\begin{longtable}{cp{4.6cm}p{8.4cm}}
+\caption{Every \texttt{msg-solid} capability in one table. \texttt{<name>} is
+the \texttt{name} variable of the runner, \texttt{<ff stem>} the basename of the
+\texttt{.ff} table.}
+\label{tab:solid-glance} \\
+\toprule
+ex & you edit, then you run & it writes \\
+\midrule
+\endfirsthead
+\toprule
+ex & you edit, then you run & it writes \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+1 & \texttt{layup\_db.yaml}; \texttt{python 1d\_sg.py}
+  & \texttt{1dsg.yaml}, \texttt{1dsg.png},
+    \texttt{layup\_db\_plate\_homo.out} \\
+2 & the \texttt{USER INPUT} block; \texttt{python rm\_dehom.py}
+  & \texttt{1dsg\_dehom.SM}, \texttt{.EM}, \texttt{.U}, \texttt{.vtk} \\
+2 & a \texttt{.ff} table and the \texttt{dehom:} block;
+    \texttt{python rm\_dehom\_ff.py ex5\_shell\_S8R\_field.ff}
+  & \texttt{<ff stem>\_ff.SM}, \texttt{.EM}, \texttt{.U},
+    \texttt{<ff stem>\_ff\_gauss.vtk} \\
+3 & \texttt{name}, \texttt{material\_param}, \texttt{angles};
+    \texttt{python plate\_homo\_2dsg.py}
+  & \texttt{<name>.out}, \texttt{<name>\_mesh.png} \\
+4 & the above plus \texttt{epsilon\_bar};
+    \texttt{python plate\_dehom\_2dsg.py}
+  & \texttt{<name>.out}, \texttt{<name>\_plate\_ABD.out},
+    \texttt{<name>\_dehom.txt}, \texttt{.vtk}, \texttt{.SM}, \texttt{.EM},
+    \texttt{.U}, \texttt{<name>\_mesh.png} \\
+5 & \texttt{name} and the \texttt{paper} dictionary;
+    \texttt{python solid\_homo\_2dsg.py}
+  & \texttt{<name>\_Deff.out},
+    \texttt{<name>\_constants\_vs\_paper.dat}, \texttt{<name>\_mesh.png} \\
+6 & the \texttt{.sc} path, $E$ and $\nu$; \texttt{python run\_sample\_1.py}
+  & \texttt{Sample\_1.out}, \texttt{Sample\_1\_msg\_solid.out},
+    \texttt{Sample\_1\_compare.dat}, \texttt{Sample\_1\_mesh.png} \\
+6 & nothing; \texttt{python compare\_boundary\_modes.py}
+  & \texttt{boundary\_compare.dat}, \texttt{Sample\_1\_periodic.out},
+    \texttt{Sample\_1\_aperiodic.out} and the Sample 2 pair \\
+7 & \texttt{name}, \texttt{material\_param}, \texttt{angles};
+    \texttt{python beam\_homo\_sg.py}
+  & \texttt{<name>.out}, \texttt{<name>\_mesh.png} \\
+8 & the above plus \texttt{epsilon\_bar};
+    \texttt{python beam\_dehom\_sg.py}
+  & \texttt{<name>.out}, \texttt{<name>\_beam\_Timo.out},
+    \texttt{<name>\_dehom.txt}, \texttt{.vtk}, \texttt{.SM}, \texttt{.EM},
+    \texttt{.U}, \texttt{<name>\_mesh.png} \\
+\end{longtable}
+\endgroup

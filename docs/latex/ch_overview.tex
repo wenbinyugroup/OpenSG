@@ -1,0 +1,797 @@
+\chapter{Overview and Architecture}
+\label{ch:overview}
+
+\section{What OpenSG-2.0 is}
+\label{sec:what-is}
+
+OpenSG-2.0 is an implementation of Mechanics of Structure Genome (MSG)
+homogenization written in JAX. You give it a \emph{structure gene} (SG) --- the
+smallest piece of a structure that carries its heterogeneity --- and it returns
+the macroscopic constitutive law of the structure that SG builds: a Timoshenko
+beam $6\times6$, a plate ABD (or the shear-refined $8\times8$), or an equivalent
+3-D solid $6\times6$. It also runs the same calculation backwards
+(\emph{dehomogenization}), rebuilding the pointwise 3-D stress and strain inside
+the SG from macroscopic beam or plate loads.
+
+The repository is organised in four layers. Only the top layer knows where files
+live on disk.
+
+\begin{table}[htbp]
+\centering
+\caption{The four layers of OpenSG-2.0. Paths and \texttt{main} blocks exist
+only in the top row.}
+\label{tab:layers}
+\small
+\begin{tabular}{@{}llp{7.4cm}@{}}
+\toprule
+Layer & Package & Role \\
+\midrule
+user     & \texttt{examples/}        & YAML in $\rightarrow$ \texttt{.out} out; owns all paths \\
+msg-shell& \texttt{src/opensg\_shell}& Reissner--Mindlin shell SGs: ring (cross-section), aperiodic segment, 3-D shell cell \\
+msg-solid& \texttt{src/opensg\_solid}& solid SGs: plate ABD, beam KKT, 3-D solid law \\
+FE core  & \texttt{src/fe\_jax}      & JAX FE architecture: basis/quadrature, periodic assembly map, jitted element kernels, element-by-element (EBE) Chebyshev-CG, sparse direct \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The universal contract}
+\label{sec:contract}
+
+Every capability in both engines obeys the same contract: \textbf{a YAML file (or
+a SwiftComp \texttt{.sc} file) goes in, and a timed \texttt{.out} file in the
+SwiftComp \texttt{.K} layout comes back.} There is exactly one writer for that
+file, \texttt{opensg\_solid.sg\_homo.write\_sc\_K}, and it is called from inside
+the solver source, not from the example scripts, so no run can forget it. A
+minimal session looks like this:
+
+\begin{lstlisting}[style=opensg,caption={The whole contract in four lines.}]
+\texttt{.out} file is written as a side effect of the call.}]
+from opensg_shell import build_rm_bundle
+
+B = build_rm_bundle("iea_s10_shell.yaml")   # writes iea_s10_shell_Timo.out
+B["Timo"]                                    # the Timoshenko 6x6 as a numpy array
+\end{lstlisting}
+
+The file that comes back always has the same shape: an \texttt{OpenSG} banner
+naming the model and the SG measure $\omega$ on the first line, the effective
+stiffness matrix, its inverse (the compliance), an engineering-constants block
+for 3-D laws only, and \texttt{Time taken} on the last line. Numbers are printed
+in a $19$-character right-justified Fortran field
+(\verb|%.7E| mantissa, signed three-digit exponent) so the file drops straight
+into existing SwiftComp comparison tooling:
+
+\begin{Verbatim}[frame=single,fontsize=\small,samepage=false]
+ OpenSG msg-shell beam model [ext sh2 sh3 twist bend2 bend3]
+
+ The Effective Timoshenko Stiffness Matrix
+ --------------------------------------------
+     <6 numbers per row>
+ ...
+ The Effective Timoshenko Compliance Matrix
+ --------------------------------------------
+ ...
+ Time taken: 12.34 sec
+\end{Verbatim}
+
+The suffix on the output file names the model, so two different routes run on
+the same input YAML do not silently overwrite each other
+(Table~\ref{tab:outfiles}).
+
+\begin{table}[htbp]
+\centering
+\caption{Output file names. There is one file per model; the \texttt{\_Timo} vs
+\texttt{\_C3D} suffix disambiguates when two routes can read the same YAML.}
+\label{tab:outfiles}
+\small
+\begin{tabular}{@{}llp{5.2cm}@{}}
+\toprule
+Model & Entry function & Output file \\
+\midrule
+msg-solid beam / plate / 3-D & \texttt{plate\_homo\_2d} & \texttt{<base>.out} \\
+msg-shell beam (Timoshenko)  & \texttt{build\_rm\_bundle} & \texttt{<yaml>\_Timo.out}, \texttt{<yaml>\_ABDG.out} \\
+msg-shell aperiodic segment  & \texttt{segment\_timo\_from\_3dyaml} & \texttt{<yaml>\_Timo.out} \\
+msg-shell solid props, cross-section SG & \texttt{build\_solid\_bundle} & \texttt{<yaml>\_C3D.out} \\
+msg-shell 3-D shell SG       & \texttt{shell\_sg3d} & \texttt{<yaml>\_C3D.out} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{The cores hold no paths}
+\label{sec:no-paths}
+
+Neither \texttt{opensg\_shell} nor \texttt{opensg\_solid} contains a
+\texttt{main} block, a hard-coded directory, or an assumption about where you
+run from. Every path decision lives in the example script, which names its input
+file and calls exactly one entry function on it. That is why the tutorials in
+the later chapters can be reduced to two lines of user input and one call: to
+run a different cross-section you change the string, not the library.
+
+Two pieces of process-level setup do live in the package \texttt{\_\_init\_\_}
+files, and both matter to you:
+
+\begin{itemize}
+\item \textbf{Double precision is load-bearing.} Both packages execute
+      \texttt{jax.config.update("jax\_enable\_x64", True)} at import. Without
+      it JAX silently degrades to float32 and the digits of the $6\times6$ are
+      wrong. Import the package (\texttt{import opensg\_shell}) before you
+      import anything else that touches JAX.
+\item \textbf{A persistent compile cache.} \texttt{opensg\_solid/\_\_init\_\_.py}
+      points JAX's compilation cache at \verb|$JAX_COMPILATION_CACHE_DIR|,
+      defaulting to \verb|~/.cache/opensg_jax|, with
+      \texttt{jax\_persistent\_cache\_min\_compile\_time\_secs} set to $0$. A
+      cold run pays each XLA compile once; warm runs load the binaries back. The
+      cache is wrapped in a \texttt{try}/\texttt{except} --- it is an
+      optimisation, and the engine must run without it. The same file honours
+      \verb|$FE_JAX_CORE|, which prepends an external \texttt{fe\_jax} checkout
+      to \texttt{sys.path} to override the bundled copy at \texttt{src/fe\_jax}.
+\end{itemize}
+
+\section{The theory in one page}
+\label{sec:theory-one-page}
+
+Every pipeline in this manual is the same variational statement, specialised. It
+is worth reading this section once, because the symbols used here are the
+variable names used in the source: \texttt{Dee}, \texttt{Dhe}, \texttt{Dhh},
+\texttt{V0}, \texttt{V1}, \texttt{omega}.
+
+\subsection{The structure gene and the strain split}
+
+A structure gene is the smallest piece of the structure that carries the
+heterogeneity: a laminate stacking sequence through the thickness (a 1-D SG), a
+cross-section contour or a 2-D unit cell (a 2-D SG), a lattice or TPMS unit cell
+(a 3-D SG). The displacement field inside the SG is split into a macroscopic
+part driven by the macro strains $\bar\varepsilon$ and a fluctuation (warping)
+field $w$. In strain form,
+
+\begin{equation}
+\varepsilon \;=\; \Gamma_e\,\bar\varepsilon \;+\; \Gamma_h\,w ,
+\label{eq:split}
+\end{equation}
+
+where $\Gamma_e$ is the operator that embeds the macro strains into the SG and
+$\Gamma_h$ is the SG's own strain operator acting on the warping. The two are
+not independent: $\Gamma_e$ is $\Gamma_h$ evaluated on the macro embedding, a
+consistency requirement written down in
+\texttt{Rules/gamma\_e\_gamma\_h\_consistency.md} and enforced by building both
+from the same element kernel.
+
+\subsection{The quadratic form}
+
+Substituting~\eqref{eq:split} into the strain energy gives the quadratic form
+the code assembles, in exactly the block names used throughout the source:
+
+\begin{equation}
+2U \;=\; \bar\varepsilon^{T}\mathbf{D}_{ee}\,\bar\varepsilon
+      \;+\; 2\,w^{T}\mathbf{D}_{he}\,\bar\varepsilon
+      \;+\; w^{T}\mathbf{D}_{hh}\,w .
+\label{eq:energy}
+\end{equation}
+
+Read it as three integrals over the SG: $\mathbf{D}_{ee}$ is the macro-macro
+block (what you would get with no warping at all, the rule-of-mixtures answer),
+$\mathbf{D}_{hh}$ is the SG stiffness seen by the warping alone, and
+$\mathbf{D}_{he}$ couples them.
+
+\subsection{The zeroth-order solve}
+
+Minimising~\eqref{eq:energy} over $w$, subject to the SG's boundary treatment
+(periodicity, Dirichlet boundary data, or a rigid-body constraint that removes
+the null space) gives one linear system with as many right-hand sides as there
+are macro strains,
+
+\begin{equation}
+\mathbf{D}_{hh}\,\mathbf{V}_0 \;=\; -\,\mathbf{D}_{he},
+\label{eq:v0}
+\end{equation}
+
+and the effective law follows by substituting the minimiser back:
+
+\begin{equation}
+\mathbf{D}_{\mathrm{eff}} \;=\; \mathbf{D}_{ee} + \mathbf{V}_0^{T}\mathbf{D}_{he},
+\qquad
+\mathbf{C} \;=\; \mathbf{D}_{\mathrm{eff}}/\omega .
+\label{eq:deff}
+\end{equation}
+
+Here $\omega$ is the SG measure that stays in the model --- the thickness of a
+1-D laminate SG, the area of a cross-section SG, the volume of a 3-D solid cell,
+the perimeter (or, in three dimensions, the midsurface area) of a shell SG. The
+banner of every \texttt{.out} states $\omega$ because a bare matrix is
+ambiguous: a whole-matrix ratio that is uniform across all entries (exactly
+$0.5000$, say) is a normalisation difference, not a physics discrepancy.
+
+$\mathbf{V}_0$ is stored, not discarded. Its columns are the warping fields per
+unit macro strain, and they are what the dehomogenization reads back.
+
+Equation~\eqref{eq:deff} is the \textbf{zeroth-order} answer: the plate ABD, the
+Euler--Bernoulli $4\times4$, the equivalent 3-D solid law. It contains no
+transverse shear, because the classical macro models it corresponds to have
+none.
+
+\subsection{The first-order step: transverse shear}
+
+Recovering transverse shear --- the Reissner--Mindlin $G$ block of a plate, the
+$GA_{12}$ and $GA_{13}$ entries of a Timoshenko $6\times6$ --- takes a
+\textbf{first-order} step: a second solve for $\mathbf{V}_1$ against a
+right-hand side built from $\mathbf{V}_0$, followed by an energy transformation.
+Two functions do this, and they are shared by every beam route in the
+repository:
+
+\begin{itemize}
+\item \texttt{prepare\_v1\_rhs(V0, Dhl, Dll, Dle\_dense, Psi, Dc)} forms the
+      first-order right-hand side and the auxiliary blocks
+      $\mathbf{V}_0^{T}\mathbf{D}_{ll}\mathbf{V}_0$,
+      $\mathbf{D}_{hl}\mathbf{V}_0$ and
+      $\mathbf{D}_{hl}^{T}\mathbf{V}_0 + \mathbf{D}_{le}$, projecting the
+      right-hand side onto the range of $\mathbf{D}_{hh}$ so the singular
+      system stays consistent.
+\item \texttt{finalize\_v1\_and\_compute\_deff(V1s\_raw, V0, D\_eff, V0DllV0,
+      DhlV0, DhlTV0Dle, Psi, Dc)} projects $\mathbf{V}_1$, symmetrises
+      $\mathbf{D}_{\mathrm{eff}}$, and performs the generalized-Timoshenko
+      transformation of the energy blocks $(A, B, C, D)$ into the sorted
+      $6\times6$.
+\end{itemize}
+
+Both live in \texttt{opensg\_shell/fe\_jax/msg\_solver.py} and are
+\texttt{@jax.jit}-decorated. The output ordering of the $6\times6$ is
+\texttt{[EA, GA12, GA13, GJ, EI2, EI3]}, i.e.\ the strain measures
+$[\varepsilon_{11}\;\;\gamma_{12}\;\;\gamma_{13}\;\;\kappa_1\;\;\kappa_2\;\;\kappa_3]$,
+which is the VABS diagonal order.
+
+The symmetrisation inside \texttt{finalize\_v1\_and\_compute\_deff} is not
+cosmetic. $\mathbf{D}_{\mathrm{eff}}$ is a Hessian and therefore symmetric by
+construction, but a Dirichlet-constrained tapered-segment solve produces a small
+($2$ to $6$ percent) antisymmetric artifact, because with $\mathbf{V}_0$ pinned
+at the end rings $\mathbf{D}_{ee}+\mathbf{V}_0^{T}\mathbf{D}_{he}$ is no longer
+the exact symmetric Schur complement. Left alone, that artifact propagates
+through the inverse into the antisymmetric shear--bending coupling ($C_{26}$,
+$C_{35}$) and inflates it by up to $78$ percent on anisotropic tapers while
+leaving the symmetric terms untouched. Enforcing the invariant is a no-op for a
+prismatic SG.
+
+\subsection{One factorization for two solves}
+
+Equations~\eqref{eq:v0} and the $\mathbf{V}_1$ system share the same operator.
+Every beam route therefore factorizes once and back-substitutes twice. In
+\texttt{sg\_homo.ring\_indep} the augmented KKT matrix
+\[
+\begin{bmatrix}
+\mathbf{D}_{hh} & \mathbf{D}_c\\[2pt]
+\mathbf{D}_c^{T} & \mathbf{0}
+\end{bmatrix}
+\begin{Bmatrix}\mathbf{V}\\ \lambda\end{Bmatrix}
+=
+\begin{Bmatrix}\mathbf{R}\\ \mathbf{0}\end{Bmatrix}
+\]
+is built once, passed to \texttt{scipy.linalg.lu\_factor}, and then
+\texttt{lu\_solve} is called with $\mathbf{R}=-\mathbf{D}_{he}$ for
+$\mathbf{V}_0$ and with the \texttt{prepare\_v1\_rhs} output for
+$\mathbf{V}_1$. In the tapered-segment route the same idea appears as
+\texttt{sg\_assembly.dirichlet\_factor} followed by two
+\texttt{dirichlet\_solve\_fac} calls; the second call falls back to a fresh
+factorization only if the $\mathbf{V}_1$ Dirichlet set differs from the
+$\mathbf{V}_0$ one. In the msg-solid beam engine the equivalent is
+\texttt{solve\_fluctuation\_field}, which returns the assembled KKT matrix
+alongside $\mathbf{V}_0$ precisely so the caller can reuse it; there the
+constraint rows are scaled by $10^{8}$ before assembly to keep the saddle-point
+system well conditioned, and empty rows are given a unit diagonal with a zeroed
+right-hand side.
+
+\subsection{Dehomogenization: running the chain backwards}
+
+Given macro strains (or macro forces, converted through
+$\bar\varepsilon = \mathbf{C}^{-1}\mathbf{F}$), the warping is rebuilt from the
+stored $\mathbf{V}_0$ and $\mathbf{V}_1$, equation~\eqref{eq:split} is evaluated
+pointwise, and the material law of each element turns that strain into 3-D
+stress. Nothing is re-solved: homogenize once, recover as often as you like. For
+the shell engine this is a \emph{two-step} recovery --- step 1 rebuilds the six
+shell strains plus the two wall transverse shears
+$[\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;\kappa_{11}\;\kappa_{22}\;2\kappa_{12}]$
+and $[2\gamma_{13}\;2\gamma_{23}]$ on the ring, and step 2 pushes them through
+the through-thickness plate SG to get ply-level 3-D stress. The entry points are
+\texttt{opensg\_shell.stress\_at\_points} and
+\texttt{opensg\_shell.disp\_at\_points} for the shell engine, and
+\texttt{opensg\_solid.sg\_dehom.dehom\_fields} / \texttt{plate\_dehom\_2d} for
+the solid engine.
+
+\section{Module map}
+\label{sec:module-map}
+
+Both packages are split file-per-concern with the same naming, so a routine you
+know in one engine is in the same-named file in the other.
+
+\begin{table}[htbp]
+\centering
+\caption{\texttt{src/opensg\_shell} --- the MSG shell engine.}
+\label{tab:mod-shell}
+\small
+\begin{tabular}{@{}lp{9.1cm}@{}}
+\toprule
+File & Concern \\
+\midrule
+\texttt{sg\_mesh.py} &
+SG input loaders and mesh utilities: 1-D ring YAML loaders
+(\texttt{load\_ring}, \texttt{load\_ring\_ref}) with explicit laminate-reference
+conventions; 3-D segment loading and topological boundary extraction
+(\texttt{extract}) into solver \texttt{.npz} bundles; orientation-frame numeric
+reports and PNG prechecks. \\
+\texttt{sg\_materials.py} &
+Section laws: the per-section wall plate ABD $6\times6$ plus the $2\times2$
+transverse-shear $G$ (\texttt{\_material\_by\_section}), and the per-station
+wall-law emitter \texttt{emit\_station\_abd} / \texttt{load\_station\_abd} that
+writes one windIO-style YAML of $8\times8$ Reissner--Mindlin plate laws per
+cross-section. \\
+\texttt{sg\_assembly.py} &
+Shell element operators and assembly: the production 6-DOF drilling element, the
+5-DOF general taper element, the prismatic MITC4 element, MITC assumed-strain
+tying, the \texttt{compute\_k22} / \texttt{compute\_kg} initial-curvature
+corrections, the Dirichlet factorizations
+(\texttt{dirichlet\_factor}, \texttt{dirichlet\_solve\_fac}), and the six-block
+MSG energy assembly (\texttt{assemble\_segment\_indep},
+\texttt{assemble\_constraint}). \\
+\texttt{sg\_periodicity.py} &
+Periodic local-to-global sparse assembly map for a shell mesh, $6$ DOF per node
+$(w_1,w_2,w_3,\omega_1,\omega_2,\omega_3)$ instead of the solid engine's three
+translations. The tie is a plain index map; no transformation matrix is formed. \\
+\texttt{sg\_homo.py} &
+Homogenization drivers: \texttt{ring\_indep} (ring $\rightarrow$ Timoshenko
+$6\times6$), \texttt{build\_rm\_bundle} (the packaged bundle the dehom
+consumes), \texttt{ring\_solid} / \texttt{build\_solid\_bundle}
+(cross-section $\rightarrow$ equivalent 3-D solid), \texttt{shell\_sg3d} (3-D
+shell SG $\rightarrow$ \texttt{C3D}), \texttt{segment\_timo\_from\_3dyaml}
+(aperiodic / tapered segment), \texttt{elastic\_constants}. \\
+\texttt{sg\_dehom.py} &
+Reissner--Mindlin two-step dehomogenization and recovery:
+\texttt{stress\_at\_points}, \texttt{disp\_at\_points}, built on the same
+element operators as the homogenization so it is the energy-consistent adjoint. \\
+\texttt{sg\_junction.py} &
+Level-2 junction law: local corner and micro-cell solves
+(\texttt{corner\_micro\_law} for L/T/X topologies, \texttt{microcell\_law} for a
+periodic mini-lattice) that correct the shell lattice for sub-shell junction
+physics. \\
+\texttt{fe\_jax/} &
+The OpenSG-authored \texttt{msg\_*} kernels: \texttt{msg\_materials}
+(ABD and $6\times6$ tables, reference shifts), \texttt{msg\_transverse\_shear}
+(wall $G$, the $8\times8$ plate law), \texttt{msg\_mesh},
+\texttt{msg\_rm}/\texttt{msg\_rm\_timo} (RM operators and the 5-DOF Timoshenko
+assembly), \texttt{msg\_solver} (KKT solve, $\mathbf{V}_1$ RHS, Timoshenko
+finalization), \texttt{msg\_hermite} (the Hermite $C^1$ Kirchhoff--Love
+thin-walled pipeline), \texttt{msg\_dehom}, \texttt{orient\_plot}. \\
+\texttt{helper/} &
+Format converters (\texttt{ff\_to\_yaml.py}). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{\texttt{src/opensg\_solid} --- the general structure-gene engine.}
+\label{tab:mod-solid}
+\small
+\begin{tabular}{@{}lp{9.1cm}@{}}
+\toprule
+File & Concern \\
+\midrule
+\texttt{sg\_materials.py} &
+The $6\times6$ stiffness tables, per material and per element:
+\texttt{build\_material\_C} and \texttt{get\_heterogeneous\_C\_matrix}, plus the
+in-plane rotation. Voigt order everywhere is SwiftComp
+$(xx, yy, zz, yz, xz, xy)$. \\
+\texttt{sg\_mesh.py} &
+SG input parsing and mesh utilities: \texttt{load\_sg\_input} (a SwiftComp
+\texttt{.sc} or the helper's YAML), \texttt{\_cell\_basis} (SG dimension plus
+nodes-per-element $\rightarrow$ basix cell type and basis degree), and
+\texttt{plot\_sg\_mesh}, which draws the actual mesh coloured by material. \\
+\texttt{sg\_assembly.py} &
+Element kernels, periodic assembly, preconditioners and linear solvers:
+\texttt{calculate\_RHS\_and\_Ke\_batch\_periodic},
+\texttt{compress\_periodic\_cells\_jax}, \texttt{compute\_block\_inv\_diag},
+\texttt{apply\_block\_precond}, \texttt{apply\_chebyshev\_precond},
+\texttt{ebe\_jacobian\_product\_periodic},
+\texttt{estimate\_max\_eigenvalue}, \texttt{\_sparse\_direct\_solve},
+\texttt{solve\_fluctuation\_field},
+\texttt{plate\_ladder\_element\_blocks}. \\
+\texttt{sg\_homo.py} &
+Homogenization drivers and the one public entry \texttt{plate\_homo\_2d}: the
+periodic CG pipeline (\texttt{full\_homogenization\_pipeline},
+\texttt{\_homo\_direct}) for \texttt{n\_model} 2 and 3, the beam KKT path
+(\texttt{\_beam\_homo\_kkt}) for \texttt{n\_model} 1, the Reissner--Mindlin
+first-order plate ladder (\texttt{plate\_shear\_ladder}), and the single output
+writer \texttt{write\_sc\_K}. \\
+\texttt{sg\_dehom.py} &
+Dehomogenization: the Gauss-point recovery kernel for \texttt{n\_model} 2 and 3,
+the generalized-Timoshenko beam recovery chain for \texttt{n\_model} 1, the
+public \texttt{dehom\_fields} and \texttt{plate\_dehom\_2d}, and the Gauss
+exports (\texttt{export\_gauss}). The batched recovery is wrapped in a
+module-level \texttt{jit} so repeated calls in one process do not re-trace. \\
+\texttt{rm\_plate\_1D/} &
+The 1-D through-thickness plate stack used by both engines:
+\texttt{segment\_plate.plate\_sg\_yaml} (build the through-thickness SG from a
+stacking sequence), \texttt{msg\_rm\_plate.rm\_plate\_msg} (the $8\times8$ ABDG
+and the warping ladders), \texttt{rm\_dehom} (ply-level recovery),
+\texttt{rm\_homo}, \texttt{cli\_rm\_plate}. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The shared FE core \texttt{src/fe\_jax} is not an OpenSG concern but a general
+JAX finite-element architecture. The pieces the two engines actually import are
+\texttt{basis\_quadrature} (\texttt{FiniteElementType}, \texttt{get\_quadrature},
+\texttt{eval\_basis\_and\_derivatives}, all backed by basix),
+\texttt{setup.mesh\_to\_jax} and
+\texttt{setup.mesh\_to\_periodic\_sparse\_assembly\_map},
+\texttt{solve\_cg} (a conjugate-gradient solver that returns convergence
+information), \texttt{linear\_elasticity}, and \texttt{profiling}.
+
+\section{The pipelines}
+\label{sec:pipelines}
+
+Four routes are described here in the order a new user meets them. Each is a
+sequence of calls that the entry function makes on your behalf; you only ever
+call the entry function.
+
+\subsection{msg-shell: 1-D ring $\rightarrow$ Timoshenko $6\times6$}
+\label{sec:pipe-ring}
+
+This is the composite blade cross-section route. The input is a 1-D shell SG
+YAML: nodes and two-node elements tracing the wall contour,
+\texttt{elementOrientations}, \texttt{sections} carrying a layup per element set,
+and \texttt{materials}. The entry function is
+\texttt{build\_rm\_bundle(shell\_yaml, ref=None, shear="mitc4\_g23",
+g\_source="msg")}, and it proceeds as follows.
+
+\begin{enumerate}
+\item \texttt{sg\_mesh.load\_ring\_ref} reads the YAML and returns the contour
+      arrays --- nodal coordinates \texttt{rx}, connectivity \texttt{cells},
+      the per-element section index \texttt{rsub}, the element normals
+      \texttt{re3}, the axial index \texttt{ax} and the two cross-section
+      indices \texttt{cross}. The laminate reference surface comes from the
+      YAML's own \texttt{reference} field (absent $\rightarrow$ \texttt{center},
+      the mid-surface), so homogenization and recovery cannot disagree; pass
+      \texttt{ref} explicitly only to override. The reference is converted once
+      into a thickness fraction \texttt{frac}
+      (\texttt{center} $\rightarrow 0.5$, \texttt{oml} $\rightarrow 0.0$,
+      \texttt{oml\_flip} and \texttt{iml} $\rightarrow 1.0$) and that single
+      number then drives the ring laminate reference, the plate-SG $z$
+      reference, the emitted ABD and the recovery depth conversion.
+\item \texttt{sg\_materials.\_material\_by\_section} builds, per section, the
+      wall plate ABD $6\times6$ at the chosen reference and the $2\times2$
+      transverse-shear $G$.
+\item With the default \texttt{g\_source="msg"}, the wall $G$ of every section
+      is replaced by \texttt{rm\_plate\_msg}, the MSG (Yu-2002 least-squares)
+      through-thickness solve in \texttt{opensg\_solid.rm\_plate\_1D}, run at
+      the same \texttt{fraction=frac}. The alternative is
+      \texttt{g\_source="whitney"}, the complementary-energy shear-flow value.
+      The per-section laws are written to \texttt{<yaml>\_ABDG.out}.
+\item \texttt{sg\_assembly.compute\_k22} computes the hoop curvature per edge,
+      the initial-curvature correction that makes a curved wall stiffer than a
+      faceted approximation of it.
+\item \texttt{sg\_homo.ring\_indep} assembles the ring as a one-element-deep
+      strip of quads: the 6-DOF drilling element
+      $(w_1,w_2,w_3,\theta_1,\theta_2,\omega_3)$ with an element-wise Lagrange
+      multiplier enforcing the drilling constraint, and MITC tying of
+      $\gamma_{23}$ only. (Under span invariance $\gamma_{13}$ is algebraic in
+      the directors and carries no fluctuation gradient, so only $\gamma_{23}$
+      pairs a differentiated displacement with a rotation.) The six energy
+      blocks \texttt{Dhh, Dhe, Dee, Dhl, Dll, Dle} come out of
+      \texttt{assemble\_segment\_indep} and the drilling rows
+      \texttt{Gc, Gl, Ge} out of \texttt{assemble\_constraint}; all are divided
+      by the artificial strip depth $h$.
+\item The KKT matrix is factorized once; $\mathbf{V}_0$ and $\mathbf{V}_1$ are
+      obtained by two back-substitutions, and
+      \texttt{finalize\_v1\_and\_compute\_deff} returns the generalized-Timoshenko
+      $6\times6$, symmetrised.
+\item \texttt{write\_sc\_K} writes \texttt{<yaml>\_Timo.out}, and the returned
+      bundle carries \texttt{Timo}, \texttt{V0}, \texttt{V1}, the contour
+      geometry, the strip, the per-element layup names and the layup and
+      material databases --- everything the two-step dehomogenization needs.
+\end{enumerate}
+
+The shipped example is
+\texttt{examples/OpenSG\_shell/1\_get\_beam\_props\_from\_shell\_cross\_section},
+whose input is \texttt{iea\_s10\_shell.yaml} (the IEA-22 blade at $r/R=0.2$):
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section
+python beam_homo_shell.py
+\end{lstlisting}
+
+\noindent
+It writes \texttt{iea\_s10\_shell\_Timo.out} (the Timoshenko stiffness and
+compliance), \texttt{iea\_s10\_shell\_ABDG.out} (the per-section wall laws),
+\texttt{iea\_s10\_mesh.png} (the contour coloured by layup) and
+\texttt{iea\_s10\_orient.png} (the compulsory $e_1/e_2/e_3$ orientation figure,
+emitted by \texttt{auto\_emit}). The printed diagonal is
+$[EA, GA_2, GA_3, GJ, EI_2, EI_3]$.
+
+\subsection{msg-shell: 3-D segment $\rightarrow$ aperiodic Timoshenko $6\times6$}
+\label{sec:pipe-segment}
+
+The ring pipeline assumes the beam is prismatic: periodic along the axis, so one
+cross-section suffices. A tapered segment is not periodic, so the periodicity
+condition has to be replaced. The entry function is
+\texttt{segment\_timo\_from\_3dyaml(seg\_yaml, workdir=None,
+lam\_space="elem", shear="full")} and the input is a 3-D shell segment YAML
+(nodes, quads, sections, materials).
+
+\begin{enumerate}
+\item \texttt{sg\_mesh.extract} finds the two end cross-sections
+      \emph{topologically}: a mesh edge used by exactly one quad is a free edge,
+      and the connected components of the free-edge graph are the end rings.
+      Each is written out as a standalone 1-D SG YAML (so you can inspect or
+      re-run it on its own) together with an orientation PNG, and the whole
+      bundle --- segment coordinates, cells, subdomains, the three element frame
+      vectors, and the node-to-segment map --- is saved to
+      \texttt{<base>\_boundaries.npz}.
+\item Each end ring is solved as a ring in its own right by
+      \texttt{ring\_indep}, giving \texttt{C6}, \texttt{V0} and \texttt{V1} per
+      side.
+\item The full 3-D quad mesh is assembled with the same
+      \texttt{assemble\_segment\_indep} and \texttt{assemble\_constraint}, with
+      the element hoop curvature \texttt{k22\_e} and geometric curvature
+      \texttt{kg\_e} computed from the element centroids and frames. The
+      drilling multipliers are appended as extra rows and columns by
+      \texttt{\_augment\_drilling}, giving a saddle-point system with zero
+      penalty.
+\item \texttt{\_boundary\_dirichlet} maps the ring warping fields onto the
+      segment's end nodes. This is the boundary condition that replaces
+      periodicity: $\mathbf{V}_0 = \mathbf{V}_{0,\mathrm{ring}}$ and
+      $\mathbf{V}_1 = \mathbf{V}_{1,\mathrm{ring}}$ on both end sections.
+\item \texttt{dirichlet\_factor} factorizes the constrained interior once;
+      $\mathbf{V}_0$ and then $\mathbf{V}_1$ are solved against it. The
+      Euler--Bernoulli block is
+      $A_{EB} = (\mathbf{D}_{ee} + \mathbf{V}_0^{T}\mathbf{D}_{he})/L$ with $L$
+      the axial extent of the nodes, and every energy block handed to
+      \texttt{finalize\_v1\_and\_compute\_deff} is likewise divided by $L$, so
+      the result is a per-unit-length stiffness.
+\item \texttt{<yaml>\_Timo.out} is written with the segment length in its
+      banner; the returned dict carries \texttt{S6}, \texttt{C6L}, \texttt{C6R},
+      \texttt{L} and \texttt{solve\_time}.
+\end{enumerate}
+
+Two acceptance checks come with this route. On a \emph{prismatic} segment the
+segment $6\times6$ must reproduce its own boundary ring $6\times6$; measured on
+an isotropic and a $\pm45$ tube this identity holds to
+$\le 5\times10^{-5}$ relative. On a genuinely tapered segment no identity holds,
+and the check is instead that each diagonal term of the segment lies between the
+two ring values --- the ratio $(S_{ii}-R_{ii})/(L_{ii}-R_{ii})$ printed by the
+example must fall in $[0,1]$. The shipped case is a BAR-URC 100\,m blade
+segment:
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/5_taper_segment_aperiodic_boundaries
+python run_bar_urc_segment.py
+\end{lstlisting}
+
+\noindent
+which reads \texttt{BAR\_URC\_numEl\_52\_segment\_12.yaml} and writes
+\texttt{BAR\_URC\_numEl\_52\_segment\_12\_Timo.out},
+\texttt{BAR\_URC\_numEl\_52\_segment\_12\_boundaries.npz}, the two boundary
+YAMLs \texttt{boundary\_..\_L.yaml} and \texttt{boundary\_..\_R.yaml}, three
+orientation PNGs, and the comparison table \texttt{bar\_urc\_segment12.dat}.
+
+\subsection{msg-shell: 3-D shell SG $\rightarrow$ equivalent solid $C_{3D}$}
+\label{sec:pipe-shell3d}
+
+Here the SG is a surface in three dimensions --- a triply periodic minimal
+surface, a lattice of sheets --- and the answer wanted is the $6\times6$ of the
+equivalent homogeneous 3-D solid. The entry function is
+\texttt{shell\_sg3d(yaml\_path, omega=None, drill\_pen=1.0e-3,
+g\_source="msg", boundary="periodic")}.
+
+\begin{enumerate}
+\item The YAML's nodes, elements and \texttt{elementOrientations} are read; the
+      element normal $e_3$ is columns 7 through 9 of the orientation rows.
+      Triangles are accepted by repeating the last node.
+\item The single wall law (ABD at the mid-surface reference plus the $2\times2$
+      $G$, again from \texttt{rm\_plate\_msg} when
+      \texttt{g\_source="msg"}) is built once and applied to every element.
+\item Junction lines are counted: any shell edge shared by more than two
+      elements. The count appears in the \texttt{.out} banner, because it tells
+      you how much of the cell's stiffness comes from junction physics the
+      plain shell lattice does not resolve.
+\item The boundary treatment. With the default \texttt{boundary="periodic"} the
+      periodic map ties opposite faces, edges and corners through the sparse
+      assembly map, and the three rigid translations are removed by three
+      area-weighted Lagrange rows. With \texttt{boundary="aperiodic"} the macro
+      (affine) field is mapped onto the boundary instead, prescribing zero
+      \emph{translational} fluctuation $w_1=w_2=w_3=0$ on every node of the
+      bounding-box faces while the rotational DOFs stay free. Clamping the
+      rotations as well over-stiffens the cut edges; freeing them was measured
+      to move $C_{11}$ from $+12$ to $+7$ percent. The aperiodic result is a
+      kinematic upper bound on a single cell and converges to the periodic one
+      as the SG grows.
+\item The batched $\Gamma_h$ and $\Gamma_e$ operators are evaluated at the Gauss
+      points, contracted into the sparse $\mathbf{K}$, $\mathbf{D}_{he}$ and
+      $\mathbf{D}_{ee}$, with a drilling stabilisation of
+      \texttt{drill\_pen} $\times\,A_{11}$ on the $\omega_3$ DOF. One
+      \texttt{scipy.sparse.linalg.splu} factorization then serves all six macro
+      strain columns.
+\item $\mathbf{D}_{\mathrm{eff}} = \mathbf{D}_{ee} +
+      \mathbf{V}_0^{T}\mathbf{D}_{he}$ is symmetrised and divided by $\omega$.
+      The default $\omega$ is the integrated midsurface \emph{surface area} ---
+      the 3-D analogue of the plane-section $\omega = $ perimeter --- and that
+      is the normalisation of the returned \texttt{C3D}. The
+      \texttt{<yaml>\_C3D.out} file is instead written per unit-cell
+      \emph{volume}, so its moduli compare directly with a solid \texttt{.K}
+      file.
+\end{enumerate}
+
+Because the wall law is a Reissner--Mindlin plate law, the sheet thickness is a
+parameter of the material model rather than of the mesh: the same surface mesh
+serves any thickness, which is what makes a thickness sweep cheap.
+Figure~\ref{fig:schwarz} shows the Schwarz-P unit cell that the shipped example
+uses.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.55\textwidth]{\FIGDIR/schwarz_p_mesh.png}
+\caption{The Schwarz-P triply periodic minimal surface meshed as a 3-D shell
+structure gene. The surface carries a Reissner--Mindlin wall law, so sheet
+thickness is a material parameter and one mesh serves an entire thickness
+sweep. Produced by \texttt{schwarz\_solid\_props.py} in
+\texttt{examples/OpenSG\_shell/4\_get\_solid\_props\_from\_shell\_3D\_SG}.}
+\label{fig:schwarz}
+\end{figure}
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG
+python make_schwarz_yaml.py
+python schwarz_solid_props.py
+\end{lstlisting}
+
+\noindent
+The run prints the junction-edge count, the number of DOF and the solve time,
+then the $6\times6$; it writes \texttt{schwarz\_p\_3Dshell\_C3D.out} and
+\texttt{schwarz\_p\_mesh.png}. The companion script
+\texttt{compare\_boundary\_modes.py} runs the same cell under both boundary
+treatments and tabulates them in \texttt{boundary\_compare.dat}. This route is
+validated against its own solid counterpart: for the Schwarz-P cell the shell SG
+sits within $-3$ percent on the normal moduli, $-6$ percent on the shears and
+$+0.3$ percent on Poisson's ratio relative to the SwiftComp-exact msg-solid
+answer.
+
+\subsection{msg-solid: one driver, three macro models}
+\label{sec:pipe-solid}
+
+The msg-solid engine has a single public entry,
+
+\begin{lstlisting}[style=opensg,caption={The msg-solid driver signature.}]
+\texttt{n\_model} selects which macro strain set is built.}]
+from opensg_solid.sg_homo import plate_homo_2d
+
+r = plate_homo_2d(sc_path,               # a .sc or .yaml SG file
+                  material_param=None,   # (n_mat, 9) engineering override
+                  angles=None,           # deg per material
+                  n_model=2,             # 1 beam, 2 plate, 3 3-D solid
+                  workdir=None,
+                  elem_rotation=None,    # (E, 9) per-element direction cosines
+                  solver="direct",       # "direct" | "cg"
+                  shear_refined=False,   # + the RM G 2x2 (plate only)
+                  plot=True,             # writes <base>_mesh.png
+                  boundary=None)         # "periodic" (default) | "aperiodic"
+\end{lstlisting}
+
+\noindent
+and the argument that selects the physics is \texttt{n\_model}: it decides which
+macro strain set $\Gamma_e$ is built. The steps shared by all three are:
+
+\begin{enumerate}
+\item \texttt{sg\_mesh.load\_sg\_input} parses the \texttt{.sc} or YAML into a
+      dict carrying \texttt{dim} (the SG dimension, 1, 2 or 3), \texttt{nodes},
+      \texttt{cells}, \texttt{mat\_id} and the materials. With
+      \texttt{plot=True} it also writes \texttt{<base>\_mesh.png} of the actual
+      mesh, elements coloured by material. Mixed element types in one SG are
+      rejected --- the solver runs one homogeneous batch.
+\item \texttt{sg\_mesh.\_cell\_basis} maps (SG dimension, nodes per element) to
+      a basix cell type and basis degree; \texttt{fe\_jax.basis\_quadrature}
+      then supplies the quadrature points \texttt{xi\_qp}, weights \texttt{W\_q},
+      basis values \texttt{phi\_qn} and parametric gradients
+      \texttt{dphi\_dxi\_qnp}. The quadrature degree is $6$ for higher-order
+      elements and $2$ for linear ones.
+\item \texttt{fe\_jax.setup.mesh\_to\_jax} produces the element-node coordinate
+      array \texttt{x\_end} of shape $(E, N, d)$, and
+      \texttt{mesh\_to\_periodic\_sparse\_assembly\_map} produces the master
+      connectivity and the DOF map that carries periodicity. Periodicity rides
+      entirely in the assembly map; no transformation matrix is formed. With
+      \texttt{boundary="aperiodic"} the map is the identity and instead every
+      bounding-box-face node gets $w=0$ Dirichlet; that option is available for
+      the plate and solid models with \texttt{solver="direct"} only.
+\item \texttt{sg\_materials.get\_heterogeneous\_C\_matrix} builds the per-element
+      $6\times6$ table \texttt{C\_ess} of shape $(E,6,6)$, applying
+      \texttt{angles} and \texttt{elem\_rotation} (per-element frames are
+      honoured by all three models, not only the beam).
+\end{enumerate}
+
+\noindent
+From there the routes diverge:
+
+\begin{description}
+\item[\texttt{n\_model=1}, beam.] Control goes to \texttt{\_beam\_homo\_kkt}:
+      the four Euler--Bernoulli macro modes
+      $[\varepsilon_{11}\;\kappa_1\;\kappa_2\;\kappa_3]$ are solved under four
+      rigid-body Lagrange constraints, then the first-order chain runs and the
+      generalized-Timoshenko reduction produces the $6\times6$. The result dict
+      carries \texttt{C\_eff} (the Timoshenko $6\times6$) and
+      \texttt{C\_eff\_EB} (the classical $4\times4$ from the same run). The
+      output is \texttt{<base>.out}, named \emph{Timoshenko}, with $\omega$ in
+      the banner. This path needs an SG of dimension $\ge2$.
+\item[\texttt{n\_model=2}, plate.] The macro strain set is
+      $\bar\varepsilon = [\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;
+      \kappa_{11}\;\kappa_{22}\;\kappa_{12}]$ and the answer is the plate ABD,
+      written as \emph{Classical Plate}. With \texttt{shear\_refined=True} the
+      first-order warping ladder \texttt{plate\_shear\_ladder} runs as well and
+      the result gains \texttt{G\_msg} ($2\times2$), \texttt{ABDG} (the
+      $8\times8$ with the shear block on the diagonal) and
+      \texttt{A6\_ladder}.
+\item[\texttt{n\_model=3}, solid.] The macro strain set is the six 3-D strains
+      and the answer is the equivalent solid $6\times6$, written with the
+      orthotropic-approximated engineering constants appended
+      ($E_1$, $E_2$, $E_3$, $G_{12}$, $G_{13}$, $G_{23}$, $\nu_{12}$,
+      $\nu_{13}$, $\nu_{23}$).
+\end{description}
+
+Models 2 and 3 share the assembly and solve code (\texttt{\_homo\_direct}), so
+switching between a plate law and a solid law on the same mesh is a
+one-character change. The shipped examples are numbered by capability under
+\texttt{examples/OpenSG-solid/}: \texttt{1\_get\_plate\_props\_from\_1DSG}
+(a stacking sequence in \texttt{layup\_db.yaml} $\rightarrow$
+\texttt{layup\_db\_plate\_homo.out}, run with
+\texttt{python 1d\_sg.py layup\_db.yaml}),
+\texttt{3\_get\_plate\_props\_from\_2D\_SG},
+\texttt{6\_get\_solid\_props\_from\_3D\_SG}, and
+\texttt{7\_get\_beam\_props\_from\_SG}, whose script is:
+
+\begin{lstlisting}[style=shellst]
+cd examples/OpenSG-solid/7_get_beam_props_from_SG
+python beam_homo_sg.py
+\end{lstlisting}
+
+\noindent
+That one reads \texttt{RHC\_SW\_2UC\_45.yaml} (a two-unit-cell honeycomb
+cross-section) with \texttt{n\_model = 1} and three materials overridden through
+\texttt{material\_param} and \texttt{angles}, and writes
+\texttt{RHC\_SW\_2UC\_45.out} plus \texttt{RHC\_SW\_2UC\_45\_mesh.png}.
+
+\section{GPU readiness}
+\label{sec:gpu}
+
+The msg-solid engine has two interchangeable linear solvers, and the choice is
+the \texttt{solver} argument of \texttt{plate\_homo\_2d}.
+
+\texttt{solver="direct"} is the default. The jitted element kernels build the
+sparse matrix, which is handed as a CSR to \texttt{\_sparse\_direct\_solve} ---
+pypardiso (Intel MKL PARDISO) when it is importable, SciPy's SuperLU otherwise.
+One factorization serves all macro strain columns. This is the fastest route on
+a workstation, and it is the only stage of the calculation that leaves the
+accelerator.
+
+\texttt{solver="cg"} is the GPU route. The element kernels
+(\texttt{calculate\_RHS\_and\_Ke\_batch\_periodic} and the jitted
+\texttt{jacfwd} stiffness), the element-by-element operator
+(\texttt{ebe\_jacobian\_product\_periodic}), the block and Chebyshev
+preconditioners (\texttt{compute\_block\_inv\_diag},
+\texttt{apply\_block\_precond}, \texttt{apply\_chebyshev\_precond},
+\texttt{estimate\_max\_eigenvalue}) and the CG solver itself
+(\texttt{fe\_jax.solve\_cg}) are pure JAX and run device-resident: no global
+matrix is ever formed, so memory scales with the element batch rather than with
+the bandwidth of an assembled operator. On a GPU host,
+\texttt{plate\_homo\_2d(..., solver="cg")} therefore keeps the entire solve on
+the device.
+
+Switching solvers is digit-safe. The effective law
+$\mathbf{C}_{\mathrm{eff}}$ is \emph{stationary} in $\mathbf{V}_0$ ---
+equation~\eqref{eq:deff} evaluates the energy at its own minimiser --- so an
+error $\delta$ in the fluctuation field enters the answer at
+$O(\delta^2)$. A solver tolerance loose enough to be visible in $\mathbf{V}_0$
+is still invisible in the printed matrix. Both routes are documented to produce
+the same digits.
+
+The msg-shell routes are one step behind. Their operators are assembled as
+batched einsum contractions in the two-step form
+$\mathbf{C}\mathbf{B}$ then $\mathbf{B}^{T}(\mathbf{C}\mathbf{B})$, and those
+batches are written against the NumPy/\texttt{jnp} API and are portable to the
+device; the sparse factorization (SuperLU for the ring and the 3-D shell SG,
+pypardiso for the KKT solve in \texttt{msg\_solver}) is the remaining CPU stage.
+For the SG sizes these routes handle --- a cross-section contour is a few
+thousand DOF --- that factorization is not the bottleneck.

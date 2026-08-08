@@ -1,0 +1,983 @@
+\chapter{Full Blade Pipeline: windIO to BeamDyn and Back}
+\label{ch:windio}
+
+A wind-turbine blade is designed as a three-dimensional laminated shell but
+analysed, aeroelastically, as a one-dimensional beam. This chapter walks the
+whole round trip on the IEA-22 blade: a windIO blade description becomes one
+1-D shell structure gene per span station, each station is homogenized to a
+Timoshenko $6\times6$, the spanwise table of those matrices is what a 1-D beam
+solver needs, the beam run returns sectional force and moment resultants
+station by station, and those resultants drive the dehomogenization back down
+to three-dimensional stress in the wall.
+
+Three separate tools are involved, and the boundary between them is the single
+most important thing to understand before running anything. OpenSG never runs
+the blade dynamics. It produces the sectional constitutive law that the beam
+solver needs, and it consumes the sectional loads that the beam solver returns.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The five stages of the round trip, and which tool owns each one.}
+\label{tab:windio:stages}
+\begin{tabular}{clll}
+\toprule
+Stage & What happens & Tool & Driver \\
+\midrule
+1 & windIO blade $\rightarrow$ per-station 1-D shell SG YAML & OpenSG\_io & \texttt{scripts/opensg\_io.py} \\
+2 & 1-D shell SG $\rightarrow$ Timoshenko $6\times6$ & OpenSG-2.0 & \texttt{1\_homo\_beam\_props.py} \\
+  &  &  & \texttt{4\_sweep\_51\_stations.py} \\
+3 & spanwise $6\times6$ table $\rightarrow$ blade dynamics & BeamDyn / OpenFAST & run by you \\
+4 & sectional loads returned as a table & BeamDyn / OpenFAST & \texttt{ff51\_rmc\_reform.dat} \\
+5 & loads $+\ 6\times6$ $\rightarrow$ 3-D wall stress & OpenSG-2.0 & \texttt{2\_dehom\_v2\_vabs.py} \\
+  &  &  & \texttt{4\_sweep\_51\_stations.py} \\
+  & correctness check on transverse shear & OpenSG-2.0 & \texttt{3\_q\_consistency\_check.py} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{The worked example}
+\label{sec:windio:example}
+
+Everything in this chapter runs in the directory
+\texttt{examples/OpenSG\_shell/IEA\_blade\_beam/}. Run the scripts from inside
+that directory: the package holds no path assumptions, and the example owns
+every path it uses.
+
+The three single-station scripts all analyse the same section,
+\texttt{iea\_s10}, the IEA-22 station at $r/R = 0.20$. Its 1-D shell SG,
+\texttt{iea\_s10\_shell.yaml}, is a ring of \textbf{310 wall elements} carrying
+\textbf{6 layups} (\texttt{layup\_0} through \texttt{layup\_5}) built from
+\textbf{6 materials} (\texttt{gelcoat}, \texttt{glass\_triax},
+\texttt{glass\_uniax}, \texttt{medium\_density\_foam}, \texttt{carbon\_uniax},
+\texttt{glass\_biax}). The element count is confirmed by the recovery output:
+\texttt{iea\_s10\_elem\_plate\_forces.dat} has two header lines and 310 data
+rows, one per ring element. The fourth script,
+\texttt{4\_sweep\_51\_stations.py}, repeats the same computation for all 51
+stations of the blade.
+
+\section{Stage 1: windIO blade to per-station 1-D shell SG YAMLs}
+\label{sec:windio:stage1}
+
+\subsection*{What it does}
+
+\texttt{OpenSG\_io} is the input layer, and it is a \emph{separate repository}:
+\url{https://github.com/bagla0/OpenSG_io}, documented at
+\url{https://bagla0.github.io/OpenSG_io/}. It reads a windIO blade description
+-- auto-detecting windIO v1 and v2 -- interpolates the outer shape, the layup
+stacks and the material database to a requested span fraction, and writes the
+cross-section in the two forms an MSG analysis can use:
+
+\begin{itemize}
+  \item the \textbf{1-D shell SG YAML} that \texttt{opensg\_shell} reads
+        directly, which is what stages 2 and 5 of this chapter consume; and
+  \item a \textbf{PreVABS XML} that meshes to a 2-D solid cross-section, which
+        is the route that produces the independent VABS reference used to
+        validate the recovery in stage 5.
+\end{itemize}
+
+It also reads PreVABS XML cross-sections and OpenFAST ElastoDyn/BeamDyn blade
+data, so published beam properties can be pulled in as a validation reference.
+Its own README is explicit that it does not run windIO or OpenFAST; it reads
+those formats so you do not have to hand-build the structure gene.
+
+\subsection*{Installing it}
+
+\begin{lstlisting}[style=shellst]
+git clone --recurse-submodules https://github.com/bagla0/OpenSG_io
+cd OpenSG_io
+pip install -r requirements.txt
+python scripts/fetch_prevabs.py
+\end{lstlisting}
+
+The \texttt{requirements.txt} in that repository lists \texttt{numpy},
+\texttt{scipy}, \texttt{pyyaml} and \texttt{meshio} as the core dependencies,
+plus \texttt{gmsh}, \texttt{tetgen} and \texttt{pyvista} for the mesh
+generators. A windIO \emph{v2} input file additionally needs the
+\texttt{windIO} package installed; v1 files do not. The
+\texttt{fetch\_prevabs.py} script downloads the PreVABS release binary for your
+operating system, which is required only for the 2-D solid route -- the 1-D
+shell YAML needed for stages 2 through 5 is written by pure Python.
+
+\subsection*{The command line}
+
+One CLI handles any of the supported inputs. It writes a set of stations in a
+single call:
+
+\begin{lstlisting}[style=shellst]
+python scripts/opensg_io.py BAR_URC.yaml out --name bar --stations 0.3 0.5 0.7 --solid
+\end{lstlisting}
+
+Here \texttt{BAR\_URC.yaml} is the windIO blade, \texttt{out} is the output
+directory, \texttt{-{}-name bar} is the file-name stem, \texttt{-{}-stations}
+takes the span fractions $r/R$, and \texttt{-{}-solid} additionally emits the
+PreVABS XML and runs PreVABS to build the 2-D solid section. Omit
+\texttt{-{}-solid} if you only want the 1-D shell YAMLs.
+
+\subsection*{The Python API}
+
+The API is what you script a 51-station blade with, and it is what generated
+the station files used in the rest of this chapter:
+
+\begin{lstlisting}[style=opensg,caption={Building one station's 1-D shell SG and its PreVABS twin.}]
+from opensg_io import load_blade, build_cross_section, emit_opensg_yaml, emit_prevabs
+
+blade = load_blade("IEA-22-280-RWT.yaml")      # windIO v1 or v2, auto-detected
+cs = build_cross_section(blade, r=0.5)         # one span fraction
+emit_opensg_yaml(cs, "shell_r050.yaml")        # the 1-D shell SG for opensg_shell
+emit_prevabs(cs, "prevabs_r050", name="r050")  # PreVABS XML -> 2-D solid route
+\end{lstlisting}
+
+Loop over your station list and you have the \texttt{iea\_s00\_shell.yaml}
+through \texttt{iea\_s50\_shell.yaml} directory that stage 2 points at.
+
+\subsection*{What the 1-D shell SG YAML contains}
+
+\texttt{iea\_s10\_shell.yaml} is the reference for the format. Its top-level
+keys, in the order they appear in the file, are listed in
+Table~\ref{tab:windio:yamlkeys}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Top-level keys of the 1-D shell SG YAML, in file order.}
+\label{tab:windio:yamlkeys}
+\begin{tabular}{ll}
+\toprule
+Key & Content \\
+\midrule
+\texttt{nodes} & contour node coordinates \texttt{[y1, y2, y3]} in metres, one per line \\
+\texttt{elements} & two-node line segments along the section contour \\
+\texttt{sets} & \texttt{element} sets, one per layup, holding the element labels \\
+\texttt{sections} & \texttt{type: shell}, \texttt{elementSet: layup\_k}, and the \texttt{layup} as \\
+  & \texttt{[material, thickness (m), angle (deg)]} triples, outermost ply first \\
+\texttt{elementOrientations} & one $3\times3$ frame per element, flattened; the first row is $\mathbf{e}_1$, \\
+  & out of the section plane, along the beam axis \\
+\texttt{materials} & \texttt{density} in kg/m$^3$ and orthotropic \texttt{elastic: \{E, G, nu\}} triples in Pa \\
+\texttt{reference} & which surface the section geometry refers to \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A concrete section block from that file, the spar-cap laminate:
+
+\begin{lstlisting}[style=shellst]
+sections:
+- type: shell
+  elementSet: layup_0
+  layup:
+  - - gelcoat
+    - 0.0005
+    - 0.0
+  - - glass_triax
+    - 0.00300294
+    - 0.0
+  - - glass_uniax
+    - 0.02609467
+    - 0.0
+  - - glass_triax
+    - 0.00300294
+    - 0.0
+\end{lstlisting}
+
+The \texttt{reference} field is load-bearing and is the single source of truth
+for the whole chapter. \texttt{build\_rm\_bundle} reads it when no override is
+passed, and it fixes the through-thickness offset \texttt{frac} used by the
+ring laminate law, the plate SG's reference plane, the emitted ABD and the
+recovery depth conversion alike. The IEA stations all carry
+\texttt{reference: center}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The \texttt{reference} field and the through-thickness fraction it sets.}
+\label{tab:windio:reference}
+\begin{tabular}{lll}
+\toprule
+\texttt{reference} & \texttt{frac} & Meaning \\
+\midrule
+\texttt{center} & 0.5 & mid-surface (what the IEA stations use) \\
+\texttt{oml} & 0.0 & outer mould line \\
+\texttt{oml\_flip} & 1.0 & outer mould line, reversed stacking \\
+\texttt{iml} & 1.0 & inner mould line \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Stage 2: each station to a Timoshenko $6\times6$}
+\label{sec:windio:stage2}
+
+\subsection*{What it computes}
+
+The RM shell ring homogenization: a six-degree-of-freedom-per-node shell
+element with an element-wise drilling Lagrange multiplier, $\gamma_{23}$ tied
+by MITC, and the MSG (Yu 2002 least-squares) wall transverse-shear law
+$\mathbf{G}$. The ring warping problem is solved for the four Euler--Bernoulli
+modes $\mathbf{V}_0$ and the Timoshenko correction $\mathbf{V}_1$, and the
+energy is condensed to the beam $6\times6$ in the VABS strain order
+\[
+  \boldsymbol{\varepsilon} =
+  \begin{bmatrix} \varepsilon_{11} & \gamma_{12} & \gamma_{13} &
+                  \kappa_1 & \kappa_2 & \kappa_3 \end{bmatrix}^{\mathsf T},
+\]
+whose diagonal is $[\,EA\;\;GA_2\;\;GA_3\;\;GJ\;\;EI_2\;\;EI_3\,]$.
+
+\subsection*{What you edit}
+
+One line at the top of \texttt{1\_homo\_beam\_props.py}:
+
+\begin{lstlisting}[style=opensg]
+############### User Input #################################
+name = "iea_s10"                  # IEA-22 station at r/R = 0.20
+############################################################
+\end{lstlisting}
+
+\subsection*{The command}
+
+\begin{lstlisting}[style=shellst]
+python 1_homo_beam_props.py
+\end{lstlisting}
+
+\subsection*{The API, if you drive it yourself}
+
+\begin{lstlisting}[style=opensg,caption={The whole homogenization is one call.}]
+import numpy as np
+from opensg_shell import build_rm_bundle
+
+B = build_rm_bundle("iea_s10_shell.yaml")
+C6 = np.asarray(B["Timo"])        # (6,6) Timoshenko stiffness
+print(B["ref"], B["g_source"])    # 'center'  'msg'
+\end{lstlisting}
+
+The full signature is
+\texttt{build\_rm\_bundle(shell\_yaml, ref=None, shear="mitc4\_g23",
+g\_source="msg")}. Passing \texttt{ref=None} means the YAML's own
+\texttt{reference} field decides, which is why homogenization and
+dehomogenization cannot silently disagree; pass an explicit \texttt{ref} only
+to override. \texttt{g\_source} chooses the wall transverse-shear law,
+\texttt{"msg"} for the Yu 2002 least-squares projection or \texttt{"whitney"}
+for the complementary-energy shear flow.
+
+What comes back is a bundle, not just a matrix. It carries \texttt{Timo}, the
+warping modes \texttt{V0} and \texttt{V1}, the ring geometry
+(\texttt{corners}, \texttt{red\_cells}, \texttt{rx3}, \texttt{re3},
+\texttt{k22}, \texttt{ax}, \texttt{cross}, \texttt{strip}),
+\texttt{layup\_per\_elem}, the geometry-free \texttt{layup\_db} and
+\texttt{material\_db}, and \texttt{frac}, \texttt{ref}, \texttt{g\_source}.
+Stage 5 consumes every one of those entries, so do not throw the bundle away
+after reading the matrix out of it.
+
+\subsection*{What comes out}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Files written by a single-station homogenization run.}
+\label{tab:windio:stage2out}
+\begin{tabular}{lll}
+\toprule
+File & Written by & Content \\
+\midrule
+\texttt{iea\_s10\_shell\_Timo.out} & \texttt{build\_rm\_bundle} & the timed SwiftComp \texttt{.K} layout: the banner \\
+  &  & \texttt{OpenSG msg-shell beam model [ext sh2 sh3} \\
+  &  & \texttt{twist bend2 bend3]}, \texttt{The Effective Timoshenko} \\
+  &  & \texttt{Stiffness Matrix}, its compliance, and a \\
+  &  & \texttt{Time taken} footer \\
+\texttt{iea\_s10\_shell\_ABDG.out} & \texttt{build\_rm\_bundle} & one block per section: \texttt{The Effective Reissner-} \\
+  &  & \texttt{Mindlin Plate Stiffness Matrix}, the $8\times8$ ABD \\
+  &  & plus $\mathbf{G}$, and its compliance \\
+\texttt{abd/iea\_s10\_shell\_abd.yaml} & \texttt{build\_rm\_bundle} & the per-station ABD YAML, emitted once and \\
+  &  & cached; carries \texttt{mass\_per\_area} per layup \\
+\texttt{iea\_s10\_beam\_Timo.out} & the script & the bare $6\times6$ as text, with the strain order \\
+  &  & and the reference recorded in the header \\
+\texttt{iea\_s10\_ring\_mesh.png} & the script & the real computed ring, elements coloured by layup \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two details about the ABD YAML are worth knowing before you reuse it. It is
+written by \texttt{emit\_station\_abd} with \texttt{ref="mid"} when the station
+is \texttt{center}-referenced, so its \texttt{reference: mid} field means the
+same surface as the ring's \texttt{center}. And it is written with the
+emitter's default transverse-shear source, so the file records
+\texttt{g\_source: whitney}: the $8\times8$ block in that YAML uses the Whitney
+shear-flow $\mathbf{G}$, whereas the ring homogenization itself used the MSG
+$\mathbf{G}$. The membrane and bending blocks are identical either way; only
+the two transverse-shear rows differ. For \texttt{iea\_s10} the file reports
+\texttt{n\_layups: 6}, and for \texttt{layup\_0} a total \texttt{thickness} of
+$0.03260055$~m and a \texttt{mass\_per\_area} of $62.89$~kg/m$^2$.
+
+\subsection*{What the numbers mean}
+
+Table~\ref{tab:windio:c6} is the content of \texttt{iea\_s10\_beam\_Timo.out},
+in SI units. The YAML is in metres and pascals, so $EA$, $GA_2$ and $GA_3$ are
+in N and $GJ$, $EI_2$, $EI_3$ in N$\cdot$m$^2$.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{The Timoshenko $6\times6$ of IEA-22 station \texttt{iea\_s10} at $r/R = 0.20$,
+         in the VABS strain order, from \texttt{iea\_s10\_beam\_Timo.out}.}
+\label{tab:windio:c6}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+ & $\varepsilon_{11}$ & $\gamma_{12}$ & $\gamma_{13}$ & $\kappa_1$ & $\kappa_2$ & $\kappa_3$ \\
+\midrule
+$\varepsilon_{11}$ & 2.76606e+10 & $-$1.72307e$-$05 & 4.66505e$-$06 & 5.40202e$-$06 & 1.66864e+09 & $-$2.07730e+09 \\
+$\gamma_{12}$ & $-$1.72307e$-$05 & 7.18613e+08 & 5.75204e+07 & $-$1.01920e+08 & 2.30800e$-$06 & 5.27387e$-$06 \\
+$\gamma_{13}$ & 4.66505e$-$06 & 5.75204e+07 & 4.21744e+08 & $-$1.62178e+08 & 8.48168e$-$06 & 2.79314e$-$07 \\
+$\kappa_1$ & 5.40202e$-$06 & $-$1.01920e+08 & $-$1.62178e+08 & 2.43757e+09 & 1.64496e$-$06 & $-$8.11406e$-$06 \\
+$\kappa_2$ & 1.66864e+09 & 2.30800e$-$06 & 8.48168e$-$06 & 1.64496e$-$06 & 3.51439e+10 & $-$5.55712e+09 \\
+$\kappa_3$ & $-$2.07730e+09 & 5.27387e$-$06 & 2.79314e$-$07 & $-$8.11406e$-$06 & $-$5.55712e+09 & 6.81297e+10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Read the matrix as physics rather than as six numbers on a diagonal. The
+extension--bending entries $1.67\times10^{9}$ and $-2.08\times10^{9}$ say that
+the section's tension centre does not sit on the reference axis. The
+bending--bending coupling $-5.56\times10^{9}$ couples flap and edge bending, so
+the principal bending axes are not the reference axes either. The shear--twist
+entries $-1.02\times10^{8}$ and $-1.62\times10^{8}$ locate the shear centre
+away from the reference axis as well. The entries printed at $10^{-5}$ against
+diagonals of $10^{10}$ are numerically zero: extension does not couple to
+transverse shear or to twist in this section, and the solver reproduces that
+null result to fifteen orders of magnitude, which is a useful sanity check that
+the ring assembled and condensed correctly.
+
+\subsection*{The spanwise table: all 51 stations}
+
+\texttt{4\_sweep\_51\_stations.py} repeats the homogenization for every station
+of the blade and, in the same loop, runs the first-order recovery of stage 5.
+What you edit is the block at the top:
+
+\begin{lstlisting}[style=opensg]
+############### User Input #################################
+yaml_dir = os.path.expanduser(
+    "~/OpenSG-TW-claude/examples/data/iea_all_stations/shell51/1d_yaml")
+ff_file = "ff51_rmc_reform.dat"
+n_depth = 9                  # through-thickness recovery points per element
+stations = range(51)         # s00 .. s50
+############################################################
+\end{lstlisting}
+
+\texttt{yaml\_dir} is where \texttt{iea\_s00\_shell.yaml} through
+\texttt{iea\_s50\_shell.yaml} live, which is the OpenSG\_io output of stage 1.
+Point it at your own directory. The script builds each path as
+\texttt{iea\_s\%02d\_shell.yaml} against that directory, and reads the load
+table \texttt{ff\_file} from the current directory.
+
+\begin{lstlisting}[style=shellst]
+python 4_sweep_51_stations.py
+\end{lstlisting}
+
+A station whose YAML is missing prints
+\texttt{s\%02d: yaml missing -{}- skipped} and is passed over, and any station
+that raises is caught and reported as \texttt{s\%02d: FAILED} so that one bad
+section cannot kill a sweep that has already spent minutes on the others. In
+the shipped run, \textbf{49 of the 51 stations completed}: both
+\texttt{iea51\_beam\_props.dat} and \texttt{iea51\_peak\_stress.dat} carry
+$\eta = 0.00$ through $0.94$ in steps of $0.02$ plus $\eta = 1.00$, with
+$\eta = 0.96$ and $\eta = 0.98$ absent.
+
+One indexing rule matters here. The sweep takes station $i$'s load vector as
+row $i$ of the FF table, \texttt{FF = ffall[i, 1:]}, and its span fraction as
+\texttt{eta = ffall[i, 0]}. The row order of the load table must therefore match
+the station numbering of the YAML files. In the shipped data, station
+\texttt{s10} is row 10 and $\eta = 0.20$.
+
+\texttt{iea51\_beam\_props.dat} holds one row per completed station: $\eta$
+followed by the six diagonal terms, written with the header
+\texttt{IEA-22 spanwise Timoshenko beam properties (RM shell ring)}. Selected
+rows, verbatim from the file:
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Selected rows of \texttt{iea51\_beam\_props.dat}. Stiffnesses in N
+         ($EA$, $GA_2$, $GA_3$) and N$\cdot$m$^2$ ($GJ$, $EI_2$, $EI_3$).}
+\label{tab:windio:props}
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+$\eta = r/R$ & $EA$ & $GA_2$ & $GA_3$ & $GJ$ & $EI_2$ & $EI_3$ \\
+\midrule
+0.00 & 6.44275512e+10 & 7.96306621e+09 & 8.36135930e+09 & 1.27413308e+11 & 2.97295270e+11 & 2.19213722e+11 \\
+0.10 & 2.89212767e+10 & 1.11237808e+09 & 1.04545606e+09 & 1.14245218e+10 & 8.40070906e+10 & 1.21502270e+11 \\
+0.20 & 2.76605989e+10 & 7.18613262e+08 & 4.21744284e+08 & 2.43756534e+09 & 3.51438873e+10 & 6.81297238e+10 \\
+0.50 & 2.15596413e+10 & 5.34263266e+08 & 2.02128533e+08 & 4.95011412e+08 & 7.26524060e+09 & 1.82791086e+10 \\
+0.80 & 9.28038409e+09 & 3.90243799e+08 & 7.82870454e+07 & 6.27349440e+07 & 5.76401363e+08 & 2.07536066e+09 \\
+0.94 & 2.64020156e+09 & 1.80834082e+08 & 3.43479097e+07 & 1.35795150e+07 & 6.21667876e+07 & 4.27156667e+08 \\
+1.00 & 2.65581077e+08 & 1.56743220e+07 & 1.88135914e+06 & 5.15174420e+04 & 3.04364786e+05 & 1.60428557e+06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The $\eta = 0.20$ row is digit-for-digit the diagonal of the standalone
+\texttt{iea\_s10} run of Table~\ref{tab:windio:c6}: $EA$ is
+\texttt{2.76605989e+10} in both, $GJ$ is \texttt{2.43756534e+09} in both, and so
+on for all six. The sweep and the single-station script are the same
+computation, which is the cheapest available check that your sweep is wired
+correctly -- run \texttt{1\_homo\_beam\_props.py} on one station and match its
+row.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{\FIGDIR/iea51_beam_props.png}
+\caption{Spanwise Timoshenko diagonal of the IEA-22 blade: the six terms
+         $EA$, $GA_2$, $GA_3$, $GJ$, $EI_2$, $EI_3$ on log axes against $r/R$,
+         one panel each, produced by \texttt{4\_sweep\_51\_stations.py}.}
+\label{fig:windio:beamprops}
+\end{figure}
+
+Figure~\ref{fig:windio:beamprops} plots those six columns. Three regimes are
+visible. The root collapses fast as the circular root transitions into an
+aerofoil: $GJ$ falls from $1.274\times10^{11}$ at $\eta = 0$ to
+$1.142\times10^{10}$ N$\cdot$m$^2$ at $\eta = 0.10$, an order of magnitude in
+the first tenth of span, and $GA_2$ falls from $7.96\times10^{9}$ to
+$1.11\times10^{9}$ N over the same interval. The mid-span then decays smoothly
+as the section thins. The tip drops off a cliff. Across the whole blade $GJ$
+goes from $1.27\times10^{11}$ to $5.15\times10^{4}$ N$\cdot$m$^2$, six and a
+half decades, which is why the figure is drawn on log axes and why a beam
+solver must be given the table rather than an average.
+
+\section{Stage 3: handing the table to BeamDyn}
+\label{sec:windio:stage3}
+
+Be explicit about what changes hands here. \textbf{OpenSG produces the sectional
+$6\times6$ stiffness matrix, and nothing else.} BeamDyn, the geometrically exact
+beam module of OpenFAST, is a separate program that you install, configure and
+run yourself. OpenSG-2.0 ships no BeamDyn input file and no BeamDyn results, and
+this chapter does not attempt to document BeamDyn's input format: for the
+meaning, ordering and units of every field in a BeamDyn blade input file, and
+for the choice of quadrature and the number of input stations, consult the
+OpenFAST BeamDyn documentation, which is the authority on that file.
+
+\subsection*{The bridge that OpenSG\_io provides}
+
+\texttt{OpenSG\_io} contains an \texttt{openfast\_io} module whose job is
+exactly this hand-off. Two functions write the OpenFAST side:
+
+\begin{lstlisting}[style=opensg,caption={Writing a BeamDyn blade input from a spanwise table of OpenSG 6x6 matrices.}]
+import numpy as np
+from opensg_io.openfast_io import timo_to_beamdyn, write_beamdyn_blade
+
+# etas: (n,) span fractions; Ks: list of n OpenSG Timoshenko 6x6 matrices
+Kbd = timo_to_beamdyn(Ks[0])                 # one matrix, reordered
+write_beamdyn_blade(etas, Ks, M_list=None,
+                    out_path="blade_BeamDyn_Blade.dat")
+\end{lstlisting}
+
+\texttt{timo\_to\_beamdyn(Ktimo)} reorders an OpenSG Timoshenko $6\times6$,
+which is stored in the VABS order $[EA, GA_2, GA_3, GJ, EI_2, EI_3]$, into the
+BeamDyn degree-of-freedom order. It applies a symmetric permutation
+\texttt{Ktimo[np.ix\_(q, q)]} with \texttt{q = [1, 2, 0, 4, 5, 3]}, which is the
+mapping in Table~\ref{tab:windio:bdorder}. Because the permutation is applied to
+both rows and columns, every off-diagonal coupling is carried across intact.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The reordering performed by \texttt{timo\_to\_beamdyn}: which OpenSG
+         diagonal term lands in which BeamDyn slot.}
+\label{tab:windio:bdorder}
+\begin{tabular}{clc}
+\toprule
+BeamDyn slot & Meaning & From OpenSG term \\
+\midrule
+1 & shear\_x & $GA_2$ \\
+2 & shear\_y & $GA_3$ \\
+3 & axial & $EA$ \\
+4 & bend\_x & $EI_2$ \\
+5 & bend\_y & $EI_3$ \\
+6 & torsion & $GJ$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\texttt{write\_beamdyn\_blade(etas, K\_timo\_list, M\_list=None,
+out\_path="blade\_BeamDyn\_Blade.dat", damp=(0.003, 0.002, 0.002, 0.002, 0.003,
+0.002))} takes the span fractions and the list of OpenSG matrices, reorders each
+one internally with \texttt{timo\_to\_beamdyn}, and writes a BeamDyn blade input
+with a \texttt{station\_total} equal to the number of entries you supplied,
+\texttt{damp\_type} set to $1$, the six damping coefficients from
+\texttt{damp}, and then a stiffness block followed by a mass block for each
+station. Verify the resulting file against the BeamDyn documentation for the
+OpenFAST version you are running before trusting it.
+
+\subsection*{The mass matrix is yours}
+
+\texttt{write\_beamdyn\_blade} takes \texttt{M\_list} as an \emph{optional}
+argument and \textbf{writes a $6\times6$ block of zeros for every station when it
+is omitted}. That is a placeholder, not a mass model. Nothing in this pipeline
+computes a sectional mass matrix: the only mass quantity OpenSG-2.0 produces
+here is \texttt{mass\_per\_area} per laminate in the emitted ABD YAML
+(Section~\ref{sec:windio:stage2}). Building the sectional inertia matrix,
+assembling the complete BeamDyn input, and running the aeroelastic simulation
+are all yours, outside OpenSG.
+
+\subsection*{Use the full matrix, not the table's diagonal}
+
+\texttt{iea51\_beam\_props.dat} records only the six diagonal terms, for
+plotting and inspection. The couplings displayed in Table~\ref{tab:windio:c6}
+are precisely what a composite blade beam model exists to carry, so feed the
+beam solver the full $6\times6$ of each station -- either from that station's
+\texttt{<station>\_Timo.out} or, more conveniently, straight from
+\texttt{B["Timo"]} in your own driver script, collected into the
+\texttt{K\_timo\_list} above.
+
+\subsection*{Reading OpenFAST data back as a reference}
+
+The same module reads in the other direction, which is how you validate an
+OpenSG table against a published blade. \texttt{read\_beamdyn\_blade(path)}
+parses a BeamDyn blade input and returns \texttt{(etas, K\_list, M\_list)} with
+each matrix in BeamDyn order; \texttt{beamdyn\_to\_timo(Kbd)} reorders one back
+into the OpenSG order so it can be compared term by term.
+\texttt{read\_elastodyn\_blade(path)} parses an ElastoDyn blade file and returns
+arrays of \texttt{BlFract}, \texttt{PitchAxis}, \texttt{StrcTwst} in degrees,
+\texttt{BMassDen} in kg/m, and \texttt{FlpStff} and \texttt{EdgStff} in
+N$\cdot$m$^2$, which map to OpenSG's $EI_2$ (flap) and $EI_3$ (edge);
+\texttt{elastodyn\_at(ed, r)} interpolates those to any span fraction.
+
+\section{Stage 4: the loads come back as the FF table}
+\label{sec:windio:stage4}
+
+A BeamDyn or GEBT run returns, at every station, the sectional force and moment
+resultants the blade actually carries in a given load case. That table is the
+input to recovery. \texttt{ff51\_rmc\_reform.dat} is such a table. It has one
+comment header line and 51 data rows, one per station. The header and the first
+data rows, verbatim:
+
+\begin{lstlisting}[style=shellst]
+# eta F1 F2 F3 M1 M2 M3 (RM CENTER-ref BeamDyn, VABS order)
+0.00000000e+00 -6.44900592e-06 -2.39422988e-08 2.23607775e+06 1.21251850e+06 -1.12030544e+08 -4.11329552e-07
+2.00000000e-02 2.07495361e+03 7.56198425e+01 2.15497000e+06 1.21427150e+06 -1.05899552e+08 2.54692651e+03
+4.00000000e-02 4.74173926e+03 1.68900665e+02 2.07209938e+06 1.23365012e+06 -9.99422000e+07 5.32342041e+03
+\end{lstlisting}
+
+Column 1 is $\eta = r/R$, running from $0.00$ to $1.00$ in steps of $0.02$.
+Columns 2 through 4 are the forces $F_1$, $F_2$, $F_3$ in N; columns 5 through 7
+are the moments $M_1$, $M_2$, $M_3$ in N$\cdot$m. The row used by the
+single-station scripts is row 10:
+
+\begin{lstlisting}[style=shellst]
+2.00000000e-01 4.19268867e+04 8.26739746e+03 1.46733512e+06 1.21914500e+06 -6.01849720e+07 3.04264594e+05
+\end{lstlisting}
+
+The frame and the component order stated in that header are not decoration. The
+resultants must be expressed about the same reference axis and in the same
+component order as the $6\times6$ that produced them, or the round trip does not
+close and the recovered stress is silently wrong. Here both are \emph{RM
+center-ref} and VABS order, matching \texttt{reference: center} in the station
+YAMLs. Note also the $\eta = 0$ row: its axial and in-plane entries print as
+$-6.4\times10^{-6}$ and $-2.4\times10^{-8}$ N, a numerically zero root row
+rather than a physical load.
+
+A converter turns the table into an annotated YAML and pulls one station out of
+it:
+
+\begin{lstlisting}[style=opensg,caption={ff51\_rmc\_reform.yaml: the FF table as a self-describing file.}]
+from opensg_shell.helper.ff_to_yaml import convert, station_ff
+
+d = convert("ff51_rmc_reform.dat")                      # writes ff51_rmc_reform.yaml
+FF, eta = station_ff("ff51_rmc_reform.yaml", eta=0.20)  # (6,) resultants, and 0.2
+\end{lstlisting}
+
+\texttt{convert(dat\_path, out\_base=None, frame="RM center-ref")} reads the
+seven-column table, raising if it has fewer than seven columns, and writes
+\texttt{<base>.yaml}. \texttt{station\_ff(yaml\_path, eta=None, row=None)}
+returns the $(6,)$ resultant vector and the $\eta$ of one station, selected
+either by nearest $\eta$ or by row index. The resulting
+\texttt{ff51\_rmc\_reform.yaml} records the convention explicitly next to the
+data, which is what makes the file readable months later:
+
+\begin{lstlisting}[style=shellst]
+source: ff51_rmc_reform.dat
+convention:
+  order: [F1, F2, F3, M1, M2, M3]
+  frame: RM center-ref
+  units: {force: N, moment: N.m}
+stations:
+- row: 0
+  eta: 0.0
+  FF: [-6.44900592e-06, -2.39422988e-08, 2236077.75, 1212518.5, -112030544.0, -4.11329552e-07]
+- row: 10
+  eta: 0.2
+  FF: [41926.8867, 8267.39746, 1467335.12, 1219145.0, -60184972.0, 304264.594]
+\end{lstlisting}
+
+\section{Stage 5: dehomogenization back to 3-D wall stress}
+\label{sec:windio:stage5}
+
+\subsection*{What it computes}
+
+A two-step chain, because a blade wall is a laminate inside a section:
+\[
+  \text{beam } \mathbf{FF}
+  \;\xrightarrow[\text{RM shell ring}]{}\;
+  \text{per-element plate forces}
+  \;\xrightarrow[\text{RM plate SG}]{}\;
+  \boldsymbol{\sigma}(z)\ \text{through the wall.}
+\]
+
+\emph{Step 5a, the section} (\texttt{opensg\_shell}). The macro beam strain is
+$\bar{\boldsymbol{\varepsilon}} = \mathbf{C}_6^{-1}\mathbf{FF}$;
+\texttt{\_macro\_fields(B, beam\_force\_vabs=FF)} solves it and recombines the
+nodal RM warping fields $\mathbf{w} = \mathbf{V}_0\bar{\boldsymbol{\varepsilon}}
++ \mathbf{V}_1\boldsymbol{\varepsilon}'$ and their derivatives, and
+\texttt{\_rm\_shell\_strain(B, e, xi, st\_m, aA, aB)} evaluates, for ring
+element \texttt{e} at arc coordinate \texttt{xi}, the six shell strains
+\[
+  \mathbf{s}_6 = \begin{bmatrix} \varepsilon_{11} & \varepsilon_{22} &
+  2\varepsilon_{12} & \kappa_{11} & \kappa_{22} & 2\kappa_{12}\end{bmatrix}.
+\]
+That wall's own MSG ABD turns them into the \textbf{plate reaction forces}
+\[
+  \mathbf{F}_6 = \mathbf{A}_6\,\mathbf{s}_6 =
+  \begin{bmatrix} N_{11} & N_{22} & N_{12} & M_{11} & M_{22} & M_{12}\end{bmatrix},
+\]
+the interface quantity handed down to the plate SG.
+
+\emph{Step 5b, the wall} (\texttt{opensg\_solid.rm\_plate\_1D}).
+\texttt{rm\_plate\_msg(thick, angles\_deg, mat\_names, material\_db,
+fraction=frac)} builds the through-thickness MSG-RM structure gene for each
+layup once, and \texttt{msgrm\_strain\_at\_depth} -- or its vectorized twin
+\texttt{msgrm\_strain\_at\_depth\_batch}, which evaluates many points of one
+laminate in a handful of einsums -- returns the 3-D Voigt strain and stress at
+depth $z$. Both default to \texttt{frame="material"}, meaning the result is
+rotated into the ply material frame where failure criteria live; pass
+\texttt{frame="plate"} to stay in the wall frame.
+
+Recovery needs strain \emph{gradients}, and they come from the ring itself. The
+span gradient $\partial\mathbf{E}/\partial x_1$ comes from the macro recovery
+ladder, computed per element as \texttt{BDe @ st\_cl1 + BDh @ aB[g]} with the
+element operators from \texttt{quad\_ops\_indep}. The arc gradient
+$\partial\mathbf{E}/\partial x_2$ comes from nodal differencing of
+$\mathbf{s}_6$ between the two elements sharing a node -- but only where those
+two elements carry the \emph{same} layup, because a layup change is a physical
+jump and must never be differenced across. Passing the second gradients as well
+(\texttt{dE11}, \texttt{dE12}, \texttt{dE22}) selects the second-order (V2)
+recovery, the rung that can in principle carry the transverse pair
+$\sigma_{33}$, $\sigma_{13}$ that first order cannot.
+
+\subsection*{What you edit}
+
+The user block at the top of \texttt{2\_dehom\_v2\_vabs.py}:
+
+\begin{lstlisting}[style=opensg]
+############### User Input #################################
+name = "iea_s10"                     # IEA-22 station at r/R = 0.20
+ff_file = "ff51_rmc_reform.dat"      # BeamDyn FF (RM center-ref, VABS order)
+station_row = 10                     # row 10 -> eta = 0.20
+vabs_sm = "iea_s10.sg.SM"            # the VABS 2-D solid reference cloud
+jpath_file = "iea_s10.lp_sparcap_left_thickness.coords"
+############################################################
+\end{lstlisting}
+
+\begin{lstlisting}[style=shellst]
+python 2_dehom_v2_vabs.py
+\end{lstlisting}
+
+\subsection*{What comes out}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Files written by \texttt{2\_dehom\_v2\_vabs.py}.}
+\label{tab:windio:stage5out}
+\begin{tabular}{ll}
+\toprule
+File & Content \\
+\midrule
+\texttt{iea\_s10\_report.txt} & the validation report: the FF vector, the Timo diagonal, rms \\
+  & differences against VABS split web/skin, the V2 payload block, \\
+  & and the through-thickness path tables \\
+\texttt{iea\_s10\_elem\_plate\_forces.dat} & 310 rows, one per ring element: element index, \texttt{y2 y3}, the six \\
+  & shell strains, and the six plate reaction forces \\
+  & $N_{11}, N_{22}, N_{12}$ [N/m] and $M_{11}, M_{22}, M_{12}$ [N] \\
+\texttt{iea\_s10\_dehom\_v2.txt} & 166\,302 rows, one per VABS gauss point: \texttt{y2 y3 elem z}, then \\
+  & the six recovered V2 stresses and the six VABS stresses, all MPa \\
+\texttt{iea\_s10\_dehom\_v2.npz} & the same fields plus \texttt{C6}, \texttt{FF}, \texttt{s6mid}, \texttt{F6mid} and every strain \\
+  & gradient, for re-plotting without re-solving \\
+\texttt{iea\_s10\_v2\_section.png} & section contours, VABS beside RM V2, for $\sigma_{11}$, $\sigma_{12}$, $\sigma_{13}$, $\sigma_{33}$ \\
+\texttt{iea\_s10\_parity.png} & parity clouds, first order and V2 against VABS \\
+\texttt{iea\_s10\_thickness\_paths.png} & through-thickness profiles on a spar-cap wall, a web, and the \\
+  & station's own reference path \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The first two data rows of \texttt{iea\_s10\_elem\_plate\_forces.dat} show what
+the interface quantity looks like in practice:
+
+\begin{lstlisting}[style=shellst]
+# per-element PLATE REACTION FORCES from the RM shell beam model (Timo), eta=0.20
+# elem  y2(m) y3(m)  e11 e22 2e12 k11 k22 2k12  N11 N22 N12(N/m) M11 M22 M12(N)
+     0  4.677080e+00  1.048036e-01  5.426575e-04 -1.683049e-04  5.685206e-04 ...
+\end{lstlisting}
+
+\subsection*{What it was validated against}
+
+\texttt{iea\_s10.sg.SM} is the VABS stress cloud of the \emph{same}
+cross-section meshed as a 2-D solid, which is the independent reference: the
+recovery is projected onto its gauss points and differenced there, 166\,302
+points in all. Every point is assigned to its nearest ring element, a local arc
+coordinate and a signed wall depth, and the VABS columns are permuted into the
+$(11, 22, 33, 23, 13, 12)$ order and converted from Pa to MPa before the
+comparison. Table~\ref{tab:windio:vabs} is copied from
+\texttt{iea\_s10\_report.txt}, with the VABS rms alongside so each difference
+has a scale.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{rms difference against VABS in MPa, web / skin, from
+         \texttt{iea\_s10\_report.txt} at $\eta = 0.20$.}
+\label{tab:windio:vabs}
+\begin{tabular}{lrrr}
+\toprule
+Component & first order (web / skin) & V2 (web / skin) & VABS rms (web / skin) \\
+\midrule
+$\sigma_{11}$ & 43.073 / 9.529 & 43.073 / 9.529 & 44.440 / 96.676 \\
+$\sigma_{22}$ & 0.612 / 0.482 & 0.612 / 0.482 & 0.704 / 0.998 \\
+$\sigma_{12}$ & 6.799 / 1.255 & 6.798 / 1.255 & 22.026 / 6.009 \\
+$\sigma_{33}$ & 0.081 / 0.049 & 0.081 / 0.049 & 0.081 / 0.049 \\
+$\sigma_{13}$ & 0.394 / 0.192 & 0.394 / 0.192 & 0.394 / 0.193 \\
+$\sigma_{23}$ & 0.035 / 0.028 & 0.035 / 0.028 & 0.035 / 0.028 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Read this honestly, because the table says three different things at once.
+
+\emph{The in-plane skin stress is good.} $\sigma_{11}$ in the skin differs by
+9.53 MPa rms against a VABS rms of 96.68 MPa, and $\sigma_{12}$ by 1.26 against
+6.01. The report also tabulates three through-thickness paths, and those
+sharpen the picture considerably. On the station's own reference thickness path,
+whose 15 points sit \textbf{0.00 mm} from the nearest VABS gauss point and are
+therefore exactly in the reference frame, the $\sigma_{11}$ difference is
+\textbf{1.265 MPa against a VABS rms of 286.837 MPa}, better than half a
+percent. The two paths generated from the ring geometry sit 2.44 mm and 2.43 mm
+from the nearest VABS point, and their larger differences -- 38.355 MPa rms on
+the spar cap, 2.299 MPa on the web -- are dominated by that geometric offset
+rather than by the recovery itself. The printed nearest-VABS distance is the
+frame check: millimetres means the same frame, hundreds of millimetres means you
+are comparing against a foreign mesh.
+
+\emph{The web is the weak spot.} For $\sigma_{11}$ in the web the difference,
+43.07, is essentially the VABS rms itself, 44.44, which means the web axial
+stress is not being reproduced. The same pattern holds for the three transverse
+components everywhere: the difference equals the VABS rms to three digits, which
+is what you get when the recovered field is very nearly zero. This is the known
+transverse recovery gap of the shell-to-plate route, not a tuning problem.
+
+\emph{The second-order rung is inert at this load state.} The report's V2
+payload block measures what V2 \emph{changes}, rather than a rounded difference
+that could hide a small effect. At this station $\sigma_{11}$ moves by
+$1.950\times10^{-4}$ MPa rms against a first-order rms of $8.851\times10^{1}$,
+$\sigma_{12}$ by $5.685\times10^{-3}$ against $1.068\times10^{1}$,
+$\sigma_{33}$ by $5.190\times10^{-5}$ MPa against a VABS rms of
+$5.576\times10^{-2}$, and $\sigma_{13}$ and $\sigma_{23}$ by exactly
+$0.000\times10^{0}$. For this constant-force blade state the V2 drivers carry no
+payload, and the first-order $\sigma_{33}$ rms is $3.603\times10^{-13}$ MPa,
+machine zero.
+
+\subsection*{The correctness check on transverse shear}
+
+\texttt{3\_q\_consistency\_check.py} tests an identity that any recovered
+transverse shear must satisfy, wall by wall: the thickness integral of the
+recovered stress must equal the wall's own transverse-shear resultant, which the
+RM shell already knows.
+\[
+  I_a = \int_h \sigma_{a3}\,\mathrm{d}z
+  \;\;\overset{!}{=}\;\;
+  Q_a = \left(\mathbf{G}_{\mathrm{msg}}\,\mathbf{s}_2\right)_a ,
+  \qquad
+  \mathbf{s}_2 = \begin{bmatrix} 2\gamma_{13} & 2\gamma_{23}\end{bmatrix}.
+\]
+The plate pipeline enforces this by construction -- shape from the strain
+gradients, amplitude from the resultant, $\sigma_{a3}$ rescaled by $Q/I$. The
+shell-to-plate chain never uses $\mathbf{s}_2$, so nothing pins the amplitude,
+and the ratio $r = I/Q$ measures how far off it is. Consistency means $r = 1$.
+
+\begin{lstlisting}[style=opensg]
+############### User Input #################################
+name = "iea_s10"
+ff_file = "ff51_rmc_reform.dat"
+station_row = 10                  # eta = r/R = 0.20
+n_z = 41                          # integration points through each wall
+############################################################
+\end{lstlisting}
+
+\begin{lstlisting}[style=shellst]
+python 3_q_consistency_check.py
+\end{lstlisting}
+
+The script writes \texttt{iea\_s10\_q\_consistency.txt} and
+\texttt{iea\_s10\_q\_consistency.png}, the latter plotting recovered $|I_{13}|$
+against wall $|Q_1|$ on log axes with the consistency line, beside the histogram
+of $\log_{10}(I_{13}/Q_1)$. The measured result:
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Q-consistency ratios at $\eta = 0.20$, from
+         \texttt{iea\_s10\_q\_consistency.txt}.}
+\label{tab:windio:qcheck}
+\begin{tabular}{lrrrrl}
+\toprule
+Ratio & median & mean & min & max & Verdict \\
+\midrule
+$I_{13}/Q_1$ & 5.228e$-$01 & $-$6.974e+00 & $-$1.299e+03 & 2.260e+01 & target invalid \\
+$I_{23}/Q_2$ & 9.895e$-$01 & 1.096e+00 & $-$1.217e+01 & 1.194e+01 & target valid \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{$\sigma_{23}$ passes.} The median $I_{23}/Q_2$ is $0.9895$, a
+\textbf{1.05\% Q-consistency error}, with a wall $Q_2$ rms of $8.9686$ N/m
+against a recovered $I_{23}$ rms of $8.3085$ N/m.
+
+\textbf{$\sigma_{13}$ is not measurable in a cross-section model}, and the
+script explains why rather than papering over it. This ring is homogenized with
+\texttt{shear="mitc4\_g23"}: $\gamma_{23}$ is tied by MITC while $\gamma_{13}$
+is raw and carries the flat-wall drilling mode, so a $Q_1$ built from it is not
+a physical wall shear and cannot serve as a recovery target. The fingerprint is
+in the magnitudes -- $Q_1$ rms is $9.9064\times10^{2}$ N/m against a $Q_2$ rms
+of $8.9686$ N/m, a factor of about 110, which is implausible for a thin-walled
+section that carries its load as in-plane shear flow. The ring is a
+one-quad-deep prismatic strip, so the $\gamma_{13}$ tying interpolates along a
+direction in which the row is already linear and reproduces it exactly: the
+script measures \texttt{rms |Q1(g23) - Q1(both)| = 0.0000e+00 N/m} and the same
+for $Q_2$, so \texttt{mitc4\_g23} and \texttt{mitc4\_both} are bit-identical
+here even though both flags are plumbed and branch. A physical $\gamma_{13}$
+needs the surface-quad route, where both rows are genuinely tied, not a rescale
+of this ring against a contaminated $Q_1$.
+
+The practical rule that follows: trust $\sigma_{11}$, $\sigma_{22}$ and
+$\sigma_{12}$ from this pipeline, treat $\sigma_{23}$ as good to about one
+percent in amplitude, and do not use the cross-section route's $\sigma_{13}$ or
+$\sigma_{33}$ as a design quantity.
+
+\subsection*{The same recovery, all 51 stations}
+
+\texttt{4\_sweep\_51\_stations.py} runs the \emph{first-order} recovery -- it
+passes only the two first gradients to
+\texttt{msgrm\_strain\_at\_depth\_batch} -- at \texttt{n\_depth = 9} depths per
+wall element. The depths are mid-bin in the normalized thickness coordinate,
+$\zeta = (k + \tfrac12)/9$ for $k = 0 \ldots 8$, converted to a physical depth
+by $z = (\zeta - \texttt{frac})\,h$ with $h$ the total thickness of that
+element's layup and \texttt{frac} taken from the bundle. The peak $|\sigma|$ per
+component over the whole section, in the ply material frame, goes to
+\texttt{iea51\_peak\_stress.dat}.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\caption{Selected rows of \texttt{iea51\_peak\_stress.dat}: peak $|\sigma|$ per
+         component over the whole section, ply frame, in MPa. Column order
+         follows the file header.}
+\label{tab:windio:peak}
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+$\eta = r/R$ & $\sigma_{11}$ & $\sigma_{22}$ & $\sigma_{33}$ & $\sigma_{23}$ & $\sigma_{13}$ & $\sigma_{12}$ \\
+\midrule
+0.00 & 1.49271417e+02 & 1.53636678e+00 & 4.13972884e$-$13 & 5.39458803e$-$03 & 4.12768841e$-$02 & 2.24186054e+00 \\
+0.16 & 3.25793641e+02 & 4.14543750e+00 & 8.97794962e$-$13 & 3.91335971e$-$02 & 3.51941097e$-$02 & 7.01052831e+00 \\
+0.20 & 3.18177433e+02 & 3.08795353e+00 & 9.12696123e$-$13 & 1.57149557e$-$02 & 3.45770096e$-$02 & 5.66031217e+00 \\
+0.54 & 2.14382707e+02 & 1.62953363e+00 & 8.13510269e$-$13 & 1.74810053e$-$02 & 8.23774625e$-$02 & 5.64234617e+01 \\
+0.80 & 1.11316749e+02 & 1.94984342e+00 & 1.93947926e$-$13 & 1.15167225e$-$02 & 5.58043894e$-$02 & 3.85749086e+01 \\
+1.00 & 4.88165692e$-$01 & 2.71026227e$-$02 & 2.03726813e$-$15 & 4.70632777e$-$05 & 5.13380478e$-$02 & 7.89278421e+00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Reading the whole file rather than these six rows: the peak axial stress of the
+entire blade in this load case is \textbf{325.79 MPa at $\eta = 0.16$}, and the
+peak in-plane shear is \textbf{56.42 MPa at $\eta = 0.54$}, where the shear webs
+take over from the caps. The $\sigma_{33}$ column never leaves the range
+$2\times10^{-15}$ to $2\times10^{-12}$ MPa over all 49 stations -- identically
+zero to round-off, the first-order limit noted above -- so do not read it as a
+physical through-thickness stress. The $\sigma_{13}$ column, which stays between
+$0.033$ and $0.105$ MPa over the whole blade, is subject to the same caveat as in the Q-consistency check and is
+not a design quantity either.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{\FIGDIR/iea51_sweep.png}
+\caption{The two halves of the 51-station sweep. Left: the spanwise peaks of
+         $\sigma_{11}$ and $\sigma_{12}$ against $r/R$. Right: the recorded
+         per-station wall time, homogenization against dehomogenization.}
+\label{fig:windio:sweep}
+\end{figure}
+
+Figure~\ref{fig:windio:sweep} shows both halves. The left panel plots the
+spanwise peaks of $\sigma_{11}$ and $\sigma_{12}$: the axial peak climbs steeply
+out of the root, crests near $\eta \approx 0.16$ and decays to almost nothing at
+the tip, while the shear peak rises in distinct steps rather than smoothly, near
+$\eta \approx 0.36$ and $\eta \approx 0.46$, where the peak jumps from 4.85 to
+25.75 MPa and from 24.40 to 54.30 MPa respectively as a different wall takes
+over the shear. The right panel records the per-station wall time of the two
+halves separately, so you can see where a sweep's cost actually sits before
+scaling it to more stations or more blades. The same arrays are saved to
+\texttt{iea51\_sweep.npz} under the keys \texttt{eta}, \texttt{props},
+\texttt{peak}, \texttt{t\_homo}, \texttt{t\_dehom} and \texttt{stations}, so a
+sweep never has to be repeated just to redraw a figure.
+
+\section{Where each tool ends}
+\label{sec:windio:whodoeswhat}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Who does what across the three tools in the round trip.}
+\label{tab:windio:whodoeswhat}
+\begin{tabular}{p{0.30\textwidth}p{0.34\textwidth}p{0.28\textwidth}}
+\toprule
+OpenSG\_io & OpenSG-2.0 & OpenFAST / BeamDyn \\
+\midrule
+Reads windIO v1 and v2, PreVABS XML, and OpenFAST ElastoDyn/BeamDyn blade data.
+&
+Homogenizes each 1-D shell SG to the Timoshenko $6\times6$ and writes
+\texttt{<station>\_Timo.out}.
+&
+Runs the blade dynamics. Installed, configured and run by you, outside OpenSG.
+\\[4pt]
+Writes the per-station 1-D shell SG YAMLs that \texttt{opensg\_shell} consumes.
+&
+Writes the RM wall law per section, \texttt{<station>\_ABDG.out}, and the ABD
+YAML with \texttt{mass\_per\_area}.
+&
+Returns the per-station sectional force and moment resultants that come back as
+the FF table.
+\\[4pt]
+Writes the PreVABS XML for the 2-D solid route, which supplies the independent
+VABS reference.
+&
+Recovers the 3-D wall stress from the FF table and validates it against that
+VABS cloud.
+&
+Owns the blade input file format; consult the BeamDyn documentation for it.
+\\[4pt]
+Bridges the hand-off with \texttt{timo\_to\_beamdyn} and
+\texttt{write\_beamdyn\_blade}, and reads OpenFAST data back as a validation
+reference.
+&
+Runs the Q-consistency diagnostic on the recovered transverse shear.
+&
+Sectional mass matrices are not produced by either OpenSG tool and remain your
+responsibility.
+\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The chain closes only because the conventions match at every hand-off: the same
+reference surface (\texttt{center}), the same component order (VABS), and the
+same units (SI, metres and pascals in, newtons and newton-metres back). Those
+three lines are the first things to check when a recovered stress field looks
+wrong, and they are checkable without rerunning anything -- the station YAML
+records its \texttt{reference}, the FF table records its frame and order in the
+header line, and the ABD YAML records the reference it was emitted at.

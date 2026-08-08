@@ -13,6 +13,41 @@ input file.
 | msg-solid | `src/opensg_solid` | solid SGs: plate ABD, beam KKT, 3-D solid law |
 | FE core | `src/fe_jax` | JAX FE architecture: basis/quadrature, periodic assembly map, jitted element kernels, EBE Chebyshev-CG, sparse direct |
 
+## What a homogenization actually does
+
+Every pipeline below is the same variational statement, specialised. A
+structure gene (SG) is the smallest piece of the structure that carries the
+heterogeneity: a laminate through the thickness, a cross-section contour, a
+unit cell. Its displacement field is split into a macro part driven by the
+macro strains $\bar\varepsilon$ and a fluctuation (warping) field $w$:
+
+$$\varepsilon = \Gamma_e\,\bar\varepsilon + \Gamma_h\,w .$$
+
+Substituting into the strain energy gives the quadratic form the code
+assembles, in the block names used throughout the source:
+
+$$2U = \bar\varepsilon^T D_{ee}\,\bar\varepsilon
+      + 2\,w^T D_{he}\,\bar\varepsilon + w^T D_{hh}\,w .$$
+
+Minimising over $w$ (subject to the SG's boundary treatment — periodicity,
+Dirichlet boundary data, or a rigid-body constraint) gives
+$D_{hh}V_0 = -D_{he}$, and the effective law follows as
+
+$$D_{\rm eff} = D_{ee} + V_0^T D_{he},
+\qquad C = D_{\rm eff}/\omega ,$$
+
+with $\omega$ the SG measure that stays in the model (thickness, area,
+volume, perimeter). That is the **zeroth-order** answer: the plate ABD, the
+Euler–Bernoulli 4×4, the 3-D solid law. Recovering transverse shear —
+the Reissner–Mindlin $G$ block, the Timoshenko 6×6 — takes a **first-order**
+step: a second solve for $V_1$ against a right-hand side built from $V_0$
+(`prepare_v1_rhs`), then an energy transformation
+(`finalize_v1_and_compute_deff`). Both solves share one factorization.
+
+Running the chain backwards is **dehomogenization**: given macro strains or
+forces, rebuild $w$ from the stored $V_0$/$V_1$ and evaluate pointwise 3-D
+stress inside the SG.
+
 ## msg-shell: 1-D ring → Timoshenko 6×6
 
 ```{mermaid}
@@ -49,6 +84,24 @@ flowchart TD
     FIN2 --> OUT2[["&lt;yaml&gt;_Timo.out<br/>prismatic gate: S6 == ring 6x6"]]
 ```
 
+What the segment pipeline adds over the ring: the ring is periodic along the
+beam axis, so one cross-section suffices. A tapered segment is not, so its
+two end cross-sections are extracted from the 3-D mesh, solved as rings in
+their own right, and their warping fields are imposed as Dirichlet data on
+the segment's end nodes — the boundary condition that replaces periodicity.
+The figure below shows a BAR-URC blade segment with its per-element material
+frames, the surface the segment solve runs on:
+
+![BAR-URC tapered shell segment with element material frames](_static/aperiodic_segment_bar_urc.png)
+
+The two end rings are extracted topologically — a mesh edge used by exactly
+one quad is a free edge, and the connected components of the free-edge graph
+are the end cross-sections. Each is written as a standalone 1-D SG yaml and
+solved on its own:
+
+![Left boundary ring extracted from the segment](_static/aperiodic_ring_L.png)
+![Right boundary ring extracted from the segment](_static/aperiodic_ring_R.png)
+
 ## msg-shell: 3-D shell SG → equivalent solid C3D
 
 ```{mermaid}
@@ -63,10 +116,21 @@ flowchart TD
     DEFF --> OUT3[["&lt;yaml&gt;_C3D.out<br/>(per unit cell; digit gate vs SwiftComp)"]]
 ```
 
+Because the wall law is a Reissner–Mindlin plate law, thickness is a
+parameter of the material model rather than of the mesh — the same surface
+mesh serves any sheet thickness, which is what makes the TPMS sweep cheap:
+
+![Schwarz-P TPMS shell unit cell](_static/schwarz_p_mesh.png)
+
 ## msg-solid over the fe_jax core
 
 One driver, `sg_homo.plate_homo_2d(sc_path, n_model=…)`, serves all three
-macro models; the fe_jax layer supplies the FE machinery:
+macro models; the fe_jax layer supplies the FE machinery. `n_model` selects
+which macro strain set $\Gamma_e$ is built for — 1 routes to the beam KKT
+engine (four Euler–Bernoulli modes plus the $V_1$ chain to Timoshenko), 2
+builds the plate modes $\bar\varepsilon = [\varepsilon_{11}\,\varepsilon_{22}\,
+2\varepsilon_{12}\,\kappa_{11}\,\kappa_{22}\,\kappa_{12}]$, and 3 the six
+solid macro strains:
 
 ```{mermaid}
 flowchart TD

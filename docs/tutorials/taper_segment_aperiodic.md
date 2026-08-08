@@ -28,16 +28,46 @@ OpenSG-FEniCSx boundary flow:
    the generalized-Timoshenko finalization divides the energy by the segment
    length $L$.
 
+## What the user runs
+
+The whole pipeline is one call on the 3-D shell YAML — no boundary files to
+prepare, because the ends are found from the mesh topology:
+
 ```python
 from opensg_shell.sg_homo import segment_timo_from_3dyaml
 
-r = segment_timo_from_3dyaml("seg_iso_hR0.1.yaml")   # 3-D shell yaml in, ...
-r["S6"]            # segment Timoshenko 6x6
-r["C6L"], r["C6R"] # the two boundary-ring 6x6s
+r = segment_timo_from_3dyaml("meshes/seg_iso_hR0.1.yaml")
+r["S6"]             # segment Timoshenko 6x6
+r["C6L"], r["C6R"]  # the two boundary-ring 6x6s
+r["L"]              # segment length used to normalize the energy
 ```
 
-Each run writes the boundary 1-D yamls, the orientation-frame PNGs, and the
-timed `<yaml>_Timo.out` (SwiftComp layout).
+Each run writes the two boundary 1-D YAMLs, the `_boundaries.npz` bundle and
+the timed `<yaml>_Timo.out` in the SwiftComp layout. The three orientation
+PNGs (segment, left ring, right ring) are written only when they do not
+already exist, so delete them after changing a mesh if you want them
+refreshed.
+
+## Seeing the capability
+
+A tapered segment is a genuine 3-D surface mesh, not a cross-section. This is
+the BAR-URC blade segment the example runs, coloured by its per-element
+material frames — the surface on which the segment problem is solved:
+
+![BAR-URC tapered segment with per-element material frames](../_static/aperiodic_segment_bar_urc.png)
+
+The two ends are extracted automatically. A mesh edge used by exactly one quad
+is a free edge, and each connected component of the free-edge graph is one end
+cross-section, written out as a standalone 1-D SG and solved on its own:
+
+![Left boundary ring](../_static/aperiodic_ring_L.png)
+
+![Right boundary ring](../_static/aperiodic_ring_R.png)
+
+For the prismatic validation case the same extraction runs on a cylinder,
+where both ends are identical by construction:
+
+![Prismatic cylinder segment used for the identity check](../_static/aperiodic_prismatic_segment.png)
 
 ## Acceptance test: the prismatic identity
 
@@ -50,6 +80,16 @@ prismatic circular tube ($R=1$, $t/R=0.1$, $L=1.5$):
 |---|---|---|
 | isotropic (E = 70 GPa) | 0.0003 % (GA) | $2.7\times10^{-6}$ rel |
 | ±45 anisotropic layup | 0.0007 % (GA) | $5.2\times10^{-5}$ rel |
+
+Reproduce it from the example folder in two commands:
+
+```bash
+python make_cylinder_segment.py
+```
+
+```bash
+python run_taper_segment.py
+```
 
 ## Tapered demonstration: BAR-URC segment 12
 
@@ -70,6 +110,7 @@ segment diagonal falls **between** its two ring values
 ## Shear-scheme rule (segments)
 
 `shear="full"` (2×2 Gauss) is the production default for the segment
-operators: MITC tying aliases the algebraic drilling content on flat-walled
-and webbed sections. Reserve MITC ties for very thin walls
-($t/R \sim 0.02$); below the RM validity range use Kirchhoff–Love.
+operators, and it is what `assemble_segment_indep` itself documents: with the
+independent $\omega_3$, Dvorkin–Bathe tying aliases the algebraic drilling
+shear. The tied variants (`mitc4_wonly`, `mitc4_g23`, `mitc4_both`) are
+available as ablation options, not as recommended settings.
