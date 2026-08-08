@@ -46,17 +46,6 @@ DT, TTOT = 5.0e-5, 0.02      # the paper's 50 us step; 20 ms window
 CBLAST = 330.0               # blast decay e^(-c t), c = 330 1/s
 NZC = 8                      # solid elements through the core
 
-inp = read_plate_sg_yaml(os.path.join(HERE, "sandwich_sg.yaml"))
-r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
-                 inp["material_db"], fraction=inp["fraction"])
-ABDG = np.asarray(r["ABDG"])
-AB = ABDG[:6, :6]; G2 = ABDG[6:, 6:]
-db = inp["material_db"]
-thick = inp["thick"]; mats = inp["mat_names"]; angs = inp["angles"]
-H = float(sum(thick))
-rho_h = sum(db[m]["rho"] * t for m, t in zip(mats, thick))
-dx = A / NX
-
 
 def n(i, j):
     return 1 + i + (NX + 1) * j
@@ -452,7 +441,27 @@ def write_fsdt(path, kind, selt="S8R"):
     return path
 
 
-if __name__ == "__main__":
+def main():
+    """Homogenize the sandwich SG and write all six transient decks.
+
+    In:
+        none -- reads sandwich_sg.yaml next to this file.
+    Out:
+        None -- writes the {RM, SOLID, FSDT} x {step, blast} .inp decks and
+        sets the module-level section data (AB, G2, rho_h, ...) that the
+        write_* helpers read.
+    """
+    global inp, r, ABDG, AB, G2, db, thick, mats, angs, H, rho_h, dx
+    inp = read_plate_sg_yaml(os.path.join(HERE, "sandwich_sg.yaml"))
+    r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
+                     inp["material_db"], fraction=inp["fraction"])
+    ABDG = np.asarray(r["ABDG"])
+    AB = ABDG[:6, :6]; G2 = ABDG[6:, 6:]
+    db = inp["material_db"]
+    thick = inp["thick"]; mats = inp["mat_names"]; angs = inp["angles"]
+    H = float(sum(thick))
+    rho_h = sum(db[m]["rho"] * t for m, t in zip(mats, thick))
+    dx = A / NX
     # the ex5-standard element pairing: S8R shells (RM + FSDT) judged
     # against the C3D20 full-integration solid.  The legacy spellings
     # (S4 shells, C3D8I solid -- the Aug-1 first runs, both ~20 % too
@@ -472,3 +481,7 @@ if __name__ == "__main__":
                                     os.path.basename(p3)))
     print("rho*h = %.4f kg/m^2; D11 = %.4e; G11 = %.4e"
           % (rho_h, AB[3, 3], G2[0, 0]))
+
+
+if __name__ == "__main__":
+    main()

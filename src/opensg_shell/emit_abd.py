@@ -28,6 +28,15 @@ _ZREF = {"oml": 0.0, "mid": 0.5, "iml": 1.0}     # fraction of total thickness f
 
 
 def material_db_from_yaml(materials):
+    """Build a material lookup dict from a windIO-style materials list.
+
+    In:
+        materials: list of dicts, each with "name", "elastic" holding "E"/"G"/"nu"
+            component lists, and optional "density".
+    Out:
+        dict: name -> {"E": [3 floats], "G": [3 floats], "nu": [3 floats],
+            "rho": float} ("rho" = 0.0 when density is absent).
+    """
     db = {}
     for m in materials:
         el = m["elastic"]

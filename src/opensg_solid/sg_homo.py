@@ -3,30 +3,9 @@ SSDM periodic-CG pipeline (n_model 2/3 and the shared EB 4-mode beam
 masks), the Beam_solid Timoshenko/KKT beam path (n_model 1), and the
 public plate_homo_2d.  Element kernels / assembly / solvers live in
 sg_assembly.py, materials in sg_materials.py, input in sg_mesh.py,
-recovery in sg_dehom.py.
-
-PROVENANCE (plate/solid).  full_homogenization_pipeline is VERBATIM
-from the working SSDM plate model (Dehom_plate_plots_SSDM.py) --
-globals lifted into arguments, nothing else.
-
-PROVENANCE (beam).  prepare_v1_rhs / finalize_v1_and_compute_deff (the
-l-chain V1s solve + 6x6 Timoshenko reduction) and the _beam_homo_kkt
-driver flow are lifted from the OneDrive Beam_solid.py
-(Claude_code/Beam_solid.py -- the original lives outside this repo).
-Adaptations on lift: materials go through the repo interface
-(sg_materials; mat_seq = the per-element ids in sc["mat_id"];
-elem_rotation is an OPTIONAL (E, 9) argument, None from our parser --
-get_heterogeneous_C_matrix returns per-ELEMENT C tables, which also
-fixes Beam_solid's driver passing the per-MATERIAL table into the
-recovery einsum); the sparse direct solve is pypardiso with a scipy
-SuperLU fallback; the routed path constrains with
-assemble_rigid_body_ops' Dc, as Beam_solid's driver executed.
-DEDUPE audit: Beam_solid's build_orthotropic_C == build_single_C_matrix
-to 1e-17 (closed form vs compliance inverse) -- deduped onto the latter;
-Beam_solid's rotate_C_matrix is the OPPOSITE angle-sign convention of
-ours (R(-t)) -- NOT deduped, NOT lifted (see sg_materials.py).
-The beam path needs n_sg >= 2 (the shared EB kernels still cover the
-1-D-SG beam via full_homogenization_pipeline).
+recovery in sg_dehom.py.  The beam KKT path needs n_sg >= 2 (the shared
+EB kernels still cover the 1-D-SG beam via
+full_homogenization_pipeline).
 
 Voigt/order conventions: 3-D strain/stress order is the SwiftComp
 (xx, yy, zz, yz, xz, xy) with y3 = the plate thickness direction being
@@ -117,10 +96,20 @@ def full_homogenization_pipeline(
     x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     periodic_cells, unique_dofs, n_unique, n_model, n_sg
 ):
-    """The SSDM CG pipeline (kept selectable as solver="cg").  The eigen
-    estimate is HOISTED out of the per-column solve: estimate_max_eigenvalue
-    starts from ones_like(b) and never reads the column values, so one
-    estimate serves all columns bitwise-identically."""
+    """SSDM Chebyshev-preconditioned CG homogenization: solve the periodic
+    fluctuation columns and reduce to the effective macro law (selectable
+    as solver="cg").  The eigen estimate is HOISTED out of the per-column
+    solve: it never reads the column values, so one estimate serves all
+    columns bitwise-identically.
+
+    In:  x_end (E, N, d) element node coords; u_0_g (V*3,) zero seed;
+         dphi_dxi_qnp/phi_qn/W_q quadrature basis derivatives, values,
+         weights; C_ess (E, 6, 6) per-element stiffness; periodic_cells
+         (E, N) master connectivity; unique_dofs (n_unique,) global dof
+         ids; n_unique int solve size; n_model 1 beam / 2 plate /
+         3 solid; n_sg SG dimension
+    Out: C_eff (H, H) effective stiffness; V0_matrix (n_unique, H)
+         fluctuation columns; omega float SG measure."""
     Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
         u_0_g[unique_dofs], n_model, n_sg)
@@ -157,13 +146,19 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     the EBE operator applies (rows 0:3 -> identity, zero RHS), assembled
     into one csr and factorized once for all columns (pypardiso, scipy
     SuperLU fallback).  Digit-safe swap: C_eff is stationary in V0, so
-    solver error enters second order -- the CG(1e-6) and direct answers
-    agree beyond the reported digits (validated on the RHC gates).
-    Measured on the RHC plate SG: the per-column CG was 130 s of the
-    138 s run; this path removes it.
+    solver error enters second order.
     bdofs (aperiodic mode): global DOFs pinned to ZERO fluctuation
     (w = 0 Dirichlet on the boundary nodes) INSTEAD of the first-node
-    pin -- the connectivity is then the raw mesh, not the periodic map."""
+    pin -- the connectivity is then the raw mesh, not the periodic map.
+
+    In:  x_end (E, N, d) element node coords; u_0_g (V*3,) zero seed;
+         dphi_dxi_qnp/phi_qn/W_q quadrature basis tables; C_ess
+         (E, 6, 6) per-element stiffness; periodic_cells (E, N)
+         connectivity; unique_dofs (n_unique,) global dof ids; n_unique
+         int solve size; n_model 1 beam / 2 plate / 3 solid; n_sg SG
+         dimension; bdofs (n_b,) int global DOFs or None (periodic)
+    Out: C_eff (H, H) effective stiffness; V0_matrix (n_unique, H)
+         fluctuation columns; omega float SG measure."""
     Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
         u_0_g[unique_dofs], n_model, n_sg)
@@ -171,18 +166,18 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     N_nodes = n_ed // 3
     dof_map = ((np.asarray(periodic_cells, dtype=np.int64) * 3)
                .reshape(E_elem, N_nodes, 1)
-               + np.arange(3)).reshape(E_elem, n_ed)
+               + np.arange(3)).reshape(E_elem, n_ed).astype(np.int32)
     rows = np.repeat(dof_map, n_ed, axis=1).ravel()
     cols = np.tile(dof_map, (1, n_ed)).ravel()
     data = np.asarray(J_euu).ravel()
     if bdofs is None:
         keep = rows >= 3                # pinned rows 0:3 -> unit diagonal
-        pin = np.arange(3)
+        pin = np.arange(3, dtype=np.int32)
     else:                               # pinned rows = boundary DOFs
         pinmask = np.zeros(n_unique, bool)
         pinmask[np.asarray(bdofs, np.int64)] = True
         keep = ~pinmask[rows]
-        pin = np.where(pinmask)[0]
+        pin = np.where(pinmask)[0].astype(np.int32)
     rows = np.concatenate([rows[keep], pin])
     cols = np.concatenate([cols[keep], pin])
     data = np.concatenate([data[keep], np.ones(len(pin))])
@@ -210,9 +205,15 @@ _D2_SG = np.zeros((6, 2)); _D2_SG[4, 1] = 1.0; _D2_SG[5, 0] = 1.0
 def _rm_ls_reduction(A6, H11, H12, H22, S1, S2):
     """Yu Eqs. (57)-(61): the 78-equation / 27-unknown U* least squares
     -> X (2x2 shear compliance), G = X^-1.  NumPy port of the reduction
-    inside msg_rm_plate._bucket.single -- it consumes only assembled
-    quantities, so it is SG-dimension-agnostic.  Same column
-    equilibration, truncated-SVD minimum-norm solve, SPD gate."""
+    inside msg_rm_plate._bucket.single (same column equilibration,
+    truncated-SVD minimum-norm solve, SPD gate); it consumes only
+    assembled quantities, so it is SG-dimension-agnostic.
+
+    In:  A6 (6, 6) plate law; H11/H12/H22 (6, 6) second-order energy
+         blocks; S1/S2 (2, 6) constraint couplings
+    Out: G (2, 2) shear stiffness (inv(X)); X (2, 2) shear compliance;
+         ev_min float min eigenvalue of X (SPD gate); Ustar_rel float
+         relative LS residual."""
     H11 = 0.5 * (H11 + H11.T)
     H22 = 0.5 * (H22 + H22.T)
     H_tt = np.block([[H11, H12], [H12.T, H22]])
@@ -341,11 +342,17 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
             "V0": V0, "V11": V11, "V12": V12}
 
 
-# ------------------------- beam Timoshenko/KKT drivers (from Beam_solid.py)
+# ------------------------------------- beam Timoshenko/KKT drivers (n_model=1)
 @jax.jit
 def prepare_v1_rhs(V0, Dhl, Dll, Dle_dense, Psi, Dc):
     """RHS of the l-chain V1s solve, projected per Eq. 100 so it is
-    orthogonal to the rigid-body kernel (Beam_solid.py)."""
+    orthogonal to the rigid-body kernel.
+
+    In:  V0 (N_primal, 4) fluctuation field of the EB solve; Dhl/Dll
+         (N_primal, N_primal) sparse system blocks; Dle_dense
+         (N_primal, 4); Psi/Dc (N_primal, 4) rigid-body ops
+    Out: bb (N_primal, 4) projected RHS; DhlV0 (N_primal, 4);
+         DhlTV0Dle (N_primal, 4) = Dhl.T @ V0 + Dle; V0DllV0 (4, 4)."""
     DhlV0 = Dhl @ V0
     V0DllV0 = V0.T @ (Dll @ V0)
     DhlTV0Dle = Dhl.T @ V0 + Dle_dense
@@ -361,9 +368,16 @@ def prepare_v1_rhs(V0, Dhl, Dll, Dle_dense, Psi, Dc):
 def finalize_v1_and_compute_deff(V1s_raw, V0, D_eff, V0DllV0, DhlV0,
                                  DhlTV0Dle, Psi, Dc):
     """Project V1s per Eq. 85 and reduce to the 6x6 Timoshenko stiffness
-    [eps11 gam12 gam13 kap1 kap2 kap3] (Beam_solid.py).  D_eff = the EB
-    4x4 from the V0 solve; Q_base maps the 2 shears into the 4 classical
-    modes."""
+    [eps11 gam12 gam13 kap1 kap2 kap3].  Q_base maps the 2 shears into
+    the 4 classical modes.
+
+    In:  V1s_raw (N_primal, 4) unprojected l-chain solution; V0
+         (N_primal, 4) EB fluctuations; D_eff (4, 4) EB stiffness from
+         the V0 solve; V0DllV0 (4, 4); DhlV0/DhlTV0Dle (N_primal, 4)
+         from prepare_v1_rhs; Psi/Dc (N_primal, 4) rigid-body ops
+    Out: Deff_srt (6, 6) Timoshenko stiffness; B_tim (4, 4) coupling
+         block; C_tim (4, 4) symmetrized second-order block; V1s
+         (N_primal, 4) projected fluctuations."""
     inv_DcT_Psi = jnp.linalg.inv(Dc.T @ Psi)
     tmp_corr_v1 = inv_DcT_Psi @ (Dc.T @ V1s_raw)
     V1s = V1s_raw - (Psi @ tmp_corr_v1)
@@ -403,11 +417,20 @@ def finalize_v1_and_compute_deff(V1s_raw, V0, D_eff, V0DllV0, DhlV0,
 
 def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
                    W_q, dof_map_np, material_param, angles, elem_rotation):
-    """The n_model=1 driver flow of Beam_solid.py: V0 EB solve under the
-    4 rigid-body Lagrange constraints, the l-chain V1s solve reusing the
-    factorized KKT matrix, then the 6x6 Timoshenko reduction.  Out: the
-    plate_homo_2d r dict (C_eff = Timo 6x6, C_eff_EB = the classical
-    4x4; everything the beam dehom needs rides along)."""
+    """The n_model=1 beam driver: V0 EB solve under the 4 rigid-body
+    Lagrange constraints, the l-chain V1s solve reusing the factorized
+    KKT matrix, then the 6x6 Timoshenko reduction.
+
+    In:  sc parsed SG dict; n_sg SG dimension (>= 2); points (V, d)
+         nodes; cells (E, N) connectivity; x_end (E, N, d) element node
+         coords; phi_qn/dphi_dxi_qnp/W_q quadrature basis tables;
+         dof_map_np (V*3,) periodic dof map; material_param (n_mat, 9)
+         engineering override or None; angles (n_mat,) deg or None;
+         elem_rotation (E, 9) per-element DCs or None
+    Out: the plate_homo_2d r dict -- C_eff (6, 6) Timoshenko, C_eff_EB
+         (4, 4) classical, V0/V1s, dehomo_data, C_ess/C_stress,
+         elem_rotation (identity tile when None), connectivity, omega,
+         sc; everything the beam dehom needs rides along."""
     V = points.shape[0]
     cells_np = np.asarray(cells, np.uint64)
     reduced_cells, num_unique, x_unique = compress_periodic_cells_jax(
@@ -455,8 +478,10 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
 
 def _to_basix_order(cells, n_sg, nn):
     """gmsh/.sc -> basix (tensor) vertex order for quad4 and hex8; tri,
-    tet and interval orders coincide.  Gated by the laminate-as-strip
-    equivalence (quad/hex strips reproduce the 1-D laminate law)."""
+    tet and interval orders coincide.
+
+    In:  cells (E, nn) connectivity; n_sg SG dimension; nn nodes/elem
+    Out: (E, nn) reordered connectivity (unchanged unless quad4/hex8)."""
     if n_sg == 2 and nn == 4:
         return cells[:, jnp.array([0, 1, 3, 2])]
     if n_sg == 3 and nn == 8:
@@ -466,26 +491,40 @@ def _to_basix_order(cells, n_sg, nn):
 
 # ------------------------------------------------------------- the public API
 def _knum(v):
+    """Format one number in the SwiftComp .K fixed-width style.
+
+    In:  v float
+    Out: str, 19-char right-justified '%.7E' mantissa with a signed
+         3-digit exponent (e.g. '     1.2345678E+003')."""
     m, e = ("%.7E" % v).split("E")
     return "%19s" % ("%sE%s%03d" % (m, e[0], abs(int(e))))
 
 
-def write_sc_K(path, C, solve_time=None, model="", constants=True):
-    """Write a 6x6 effective stiffness in the SwiftComp .K format (as a .out
-    file): stiffness, compliance and orthotropic-approximated engineering
-    constants; OpenSG banner at the top, 'Time taken' at the bottom.  Units
-    follow the input; Voigt [11 22 33 23 13 12], engineering shears."""
+def write_sc_K(path, C, solve_time=None, model="", constants=True, name=""):
+    """Write an effective stiffness in the SwiftComp .K format (as a .out
+    file): stiffness, compliance and (3-D solid law only) the orthotropic-
+    approximated engineering constants; OpenSG banner at the top, 'Time
+    taken' at the bottom.  Units follow the input; solid Voigt order
+    [11 22 33 23 13 12], engineering shears.
+
+    In:  path str; C (n, n) effective stiffness; solve_time float | None;
+         model str banner text; constants bool (True: 3-D solid only);
+         name str matrix title infix -- '' -> 'The Effective Stiffness
+         Matrix'; 'Timoshenko' (beam 6x6), 'Classical Plate' (ABD 6x6),
+         'Reissner-Mindlin Plate' (ABDG 8x8)
+    Out: the .out file at path; returns None."""
     C = np.asarray(C, float)
     S = np.linalg.inv(C)
     n = C.shape[0]
+    infix = (name + " ") if name else ""
     with open(path, "w") as f:
         f.write(" OpenSG %s\n\n" % model)
-        f.write(" The Effective Stiffness Matrix\n"
-                " --------------------------------------------\n")
+        f.write(" The Effective %sStiffness Matrix\n"
+                " --------------------------------------------\n" % infix)
         for i in range(n):
             f.write("".join(_knum(C[i, j]) for j in range(n)) + "\n")
-        f.write("\n The Effective Compliance Matrix\n"
-                " --------------------------------------------\n")
+        f.write("\n The Effective %sCompliance Matrix\n"
+                " --------------------------------------------\n" % infix)
         for i in range(n):
             f.write("".join(_knum(S[i, j]) for j in range(n)) + "\n")
         if not constants:
@@ -540,8 +579,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     the boundary, i.e. ZERO fluctuation (w = 0 Dirichlet) on every
     bounding-box-face node.  Aperiodic forbids the rank-one affine fields
     of a free SG, fixes the rigid modes, and is a kinematic upper bound
-    on a single cell -- on the TPMS samples +22-27 % vs periodic
-    (Rules/periodicity_in_solid_props.md)."""
+    on a single cell (stiffer than periodic)."""
     if isinstance(sc_path, dict):
         base = os.path.join(workdir if workdir is not None else ".",
                             "laminate_sg")
@@ -579,9 +617,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     x_end = mesh_to_jax(vertices=points, cells=cells)
     V = points.shape[0]
 
-    # boundary defaults to periodic on every route; aperiodic (boundary-
-    # solution Dirichlet) only on explicit request
-    # (Rules/periodicity_in_solid_props.md)
+    # boundary defaults to periodic on every route; aperiodic only on request
     if boundary is None:
         boundary = "periodic"
     if boundary == "periodic":
@@ -602,14 +638,18 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         bdofs = (3*np.where(onb)[0][:, None] + np.arange(3)).ravel()
 
     if n_model == 1:
-        return _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
-                              dphi_dxi_qnp, W_q, dof_map_np,
-                              material_param, angles, elem_rotation)
+        r = _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
+                           dphi_dxi_qnp, W_q, dof_map_np,
+                           material_param, angles, elem_rotation)
+        r["solve_time"] = _time.perf_counter() - _t0
+        write_sc_K(base + ".out", np.asarray(r["C_eff"]),
+                   solve_time=r["solve_time"],
+                   model="msg-solid beam model, omega %.8g"
+                         % float(r["omega"]),
+                   constants=False, name="Timoshenko")
+        return r
 
-    # per-element material frames apply to the PLATE and SOLID models too, not
-    # just the beam route: dropping them here silently homogenized a section
-    # with per-wall frames as a single uniformly-rotated lamina (a square tube
-    # came out with C22 != C33, which its 90-degree symmetry forbids).
+    # per-element frames must be applied for plate/solid too, not only beam;
     # elem_rotation rows must be in the solver's global order -- see
     # sg_materials.elem_rotation_from_yaml.
     C_ess, _ = get_heterogeneous_C_matrix(sc, material_param, angles,
@@ -664,14 +704,22 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             r["ABDG"] = ABDG
     # every OpenSG run writes its timed .out by default (constants: 3-D only)
     r["solve_time"] = _time.perf_counter() - _t0
-    _mdl = {1: "msg-solid beam model (Timoshenko 6x6)",
-            2: "msg-solid plate model (ABD)",
+    _mdl = {2: "msg-solid plate model",
             3: "msg-solid 3D elastic model"}.get(n_model, "msg-solid")
     _bc = ("periodic" if r.get("boundary", "periodic") == "periodic"
            else "aperiodic: w=0 on %d boundary nodes"
                 % r["n_boundary_nodes"])
-    write_sc_K(base + ".out", np.asarray(r["C_eff"]),
-               solve_time=r["solve_time"],
-               model="%s, omega %.8g, %s" % (_mdl, float(r["omega"]), _bc),
-               constants=(n_model == 3))
+    if n_model == 2 and shear_refined and r.get("ABDG") is not None:
+        write_sc_K(base + ".out", np.asarray(r["ABDG"]),
+                   solve_time=r["solve_time"],
+                   model="%s, omega %.8g, %s" % (_mdl, float(r["omega"]),
+                                                 _bc),
+                   constants=False, name="Reissner-Mindlin Plate")
+    else:
+        write_sc_K(base + ".out", np.asarray(r["C_eff"]),
+                   solve_time=r["solve_time"],
+                   model="%s, omega %.8g, %s" % (_mdl, float(r["omega"]),
+                                                 _bc),
+                   constants=(n_model == 3),
+                   name="Classical Plate" if n_model == 2 else "")
     return r

@@ -1,37 +1,60 @@
-"""segment_indep.py -- EXPERIMENTAL: omega_3 as an INDEPENDENT 6th DOF.
+"""Six-DOF shell segment element with an independent drilling rotation omega_3.
 
-The general operator (segment_element_general) ELIMINATES the drilling omega_3 via
+Per-node DOFs are [w1, w2, w3, om1, om2, om3].  The general operator
+(segment_element_general) ELIMINATES the drilling omega_3 via
   omega_3 = S/(2 C33) - (C3b/C33) omega_b ,   C33 = n.b3 ,
-which is singular on flat walls where C33=n.b3 == 0 (the GA3-carrier walls / shear web).
-Here omega_3 is kept as a genuine nodal DOF (per node [w1,w2,w3,om1,om2,om3]) and appears
-DIRECTLY -- no 1/C33 anywhere:
+which is singular on flat walls where C33 = n.b3 == 0.  Here omega_3 is a
+genuine nodal DOF and appears DIRECTLY -- no 1/C33 anywhere:
 
-  curvature:  Lambda_a = omega_3|a + x_{1;a} omega_3'          (was the eliminated Lambda)
+  curvature:  Lambda_a = omega_3|a + x_{1;a} omega_3'
   shear:      2g13 += C23 om3 = x_{3;2} om3 ,  2g23 += -C13 om3 = -x_{3;1} om3
   membrane:   unchanged (no omega_3)
 
-The in-plane symmetry that DEFINED omega_3 is re-imposed in its FINITE (undivided) form
-as a penalty on the drilling residual
+The in-plane symmetry that DEFINED omega_3 is re-imposed in its FINITE (undivided)
+form via the drilling residual
   DR = C33 om3 + C3b om_b - S/2   (= C33 (om3 - om3_eliminated), finite even at C33=0),
-  S/2 = 1/2[ k1(x11 Rn2 - x12 Rn1) + w'_i(x11 x_{i;2}-x12 x_{i;1}) + (w_{i|1}x_{i;2}-w_{i|2}x_{i;1}) ].
-On healthy walls (C33~1) a large penalty pins om3 to its eliminated value (recovering the
-general result); where C33=0 the residual drops om3 (constrains om_b instead) and om3 is set
-by its own curvature stiffness -- no singularity.  PEN sweeps the penalty weight.
+  S/2 = 1/2[ k1(x11 Rn2 - x12 Rn1) + w'_i(x11 x_{i;2}-x12 x_{i;1}) + (w_{i|1}x_{i;2}-w_{i|2}x_{i;1}) ],
+enforced as a penalty (assemble_segment_indep) or a Lagrange-multiplier
+constraint (assemble_constraint).  On healthy walls (C33~1) this pins om3 to its
+eliminated value; where C33=0 the residual constrains om_b instead and om3 is
+set by its own curvature stiffness -- no singularity.
 
-Boundary: reuse the validated 5-DOF rings (ring_general) for dofs [0..4]; om3 (dof 5) is left
-FREE at the boundary (natural BC).
+Shear scheme constraint: with the independent omega_3, both transverse-shear
+rows carry algebraic drilling content that Dvorkin-Bathe assumed-strain tying
+ALIASES -- 'full' (untied) integration is the default; tied variants are ablation.
+
+Boundary: reuse the validated 5-DOF rings (ring_general) for dofs [0..4]; om3
+(dof 5) is left FREE at the boundary (natural BC).
+
+Public entry points: assemble_segment_indep, assemble_constraint,
+build_C_Psi_segment6, quad_ops_indep.
 """
 import numpy as np
-from .segment_element import _bilinear, dirichlet_solve
+from .segment_element import _bilinear
 from .segment_element_general import _surf_frame
 
 NDOF6 = 6
 
 
 def quad_ops_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0):
-    """8-strain 6-DOF operators + drilling-residual DR at (xi,eta).
-    Returns BDe(6,4),BDh(6,24),BDl(6,24), BGe(2,4),BGh(2,24),BGl(2,24),
-            DRe(4),DRh(24),DRl(24), dA."""
+    """Evaluate the 8-strain 6-DOF operators and drilling-residual rows at one
+    parent point of one element.
+
+    In:
+      X: (4,3) float, element node coordinates.
+      e3m: (3,) float, reference material normal (orients the surface frame).
+      xi, eta: float, parent coordinates in [-1,1].
+      k22: float, unused here (signature parity with the general element).
+      cross: (2,) int, cross-section coordinate indices.
+      ax: int, beam-axis coordinate index.
+      kg: float, unused here (signature parity).
+    Out:
+      BDe (6,4), BDh (6,24), BDl (6,24): membrane/curvature operators on the
+        beam strains eb, fluctuation w_s, and axial derivative w_s'.
+      BGe (2,4), BGh (2,24), BGl (2,24): transverse-shear operators.
+      DRe (4,), DRh (24,), DRl (24,): drilling-residual rows.
+      dA: float, area Jacobian.
+    """
     N, D1, D2, dA, c = _surf_frame(X, e3m, xi, eta, cross, ax)
     x11, x12 = c["x11"], c["x12"]
     xi1 = np.array([x11, c["x21"], c["x31"]])            # x_{i;1}
@@ -100,9 +123,7 @@ def quad_ops_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0):
         BGh[1, o + 5] += -x31 * N[a]                    # -C13 om3
 
     # ---------------- DRILLING RESIDUAL DR = C33 om3 + C3b om_b - S/2 (finite) -------------
-    # twist column: -(x11 Rn2 - x12 Rn1)/2 == +(x2 y2 + x3 y3)/2 by the direction-cosine
-    # identity y2 = x12 x31 - x11 x32, y3 = x11 x22 - x12 x21 (Omega3_new simplification;
-    # verified to 1e-16 in verify_indep_shear).  Kept in Rn form to match eq. A-derivation.
+    # twist column: -(x11 Rn2 - x12 Rn1)/2 == +(x2 y2 + x3 y3)/2 (direction-cosine identity); kept in Rn form
     DRe[1] = -0.5 * (x11 * Rn2 - x12 * Rn1)
     for a in range(4):
         o = n * a
@@ -121,20 +142,26 @@ _TIE_G23 = [(0.0, -1.0), (0.0, 1.0)]
 
 
 def _mitc_shear_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0, scheme="mitc4_g23"):
-    """Tied (assumed-strain) transverse-shear BGh rows (2 x 4*NDOF6) at (xi,eta).
+    """Tied (assumed-strain) transverse-shear BGh rows at (xi, eta).
 
-    With the INDEPENDENT drilling omega_3 the gamma_13 row is ALGEBRAIC in omega_3 on
-    flat walls (x_{3;2} omega_3 -- the role omega_2 plays prismatically), so tying it
-    removes the director penalization (hourglass; GA3 -29/-47% on the thin square).
+    With the INDEPENDENT drilling omega_3 the gamma_13 row is ALGEBRAIC in omega_3
+    on flat walls, so naive tying de-penalizes the director (hourglass).
     Schemes:
-      'mitc4_wonly' : FIELD-CONSISTENT partial tying -- tie BOTH rows at the standard
-                      Dvorkin-Bathe points but keep every ROTATION column (om1,om2,om3)
-                      at its full-integration (Gauss-point) value.  Removes the
-                      w-gradient/rotation order mismatch (the locking pairing) without
-                      de-penalizing the algebraic director content.  The general-case
-                      safeguard.
+      'mitc4_wonly' : tie BOTH rows at the Dvorkin-Bathe points but keep every
+                      ROTATION column (om1,om2,om3) at its full-integration value.
       'mitc4_g23'   : tie only the gamma_23 row (prismatic-element analogue).
       'mitc4_both'  : naive full tying (ablation only -- aliases the drilling shear).
+
+    In:
+      X: (4,3) float, element node coordinates.
+      e3m: (3,) float, reference material normal.
+      xi, eta: float, parent coordinates in [-1,1].
+      k22, kg: float, passed through to quad_ops_indep (unused there).
+      cross: (2,) int, cross-section coordinate indices.
+      ax: int, beam-axis coordinate index.
+      scheme: str, 'mitc4_wonly' | 'mitc4_g23' | 'mitc4_both'.
+    Out:
+      BGt: (2, 24) tied transverse-shear operator rows on w_s.
     """
     ops = quad_ops_indep(X, e3m, xi, eta, k22, cross, ax, kg)
     r23 = [quad_ops_indep(X, e3m, tx, te, k22, cross, ax, kg)[4][1:2, :] for (tx, te) in _TIE_G23]
@@ -154,15 +181,24 @@ def _mitc_shear_indep(X, e3m, xi, eta, k22, cross, ax, kg=0.0, scheme="mitc4_g23
 
 
 # ---------------- BATCHED operator evaluation (vectorized over elements) ----------------
-# The scalar quad_ops_indep above is kept for external diagnostics/verification;
-# the assembly below evaluates the same closed-form operators for ALL elements at
-# once per quadrature point -- the per-element Python loop dominated the shell
-# wall time (5760 quad_ops_indep calls ~ 5 s of the 7 s square-thin solve).
+# The scalar quad_ops_indep above is kept for external diagnostics/verification.
 
 
 def _surf_frame_batch(Xe, e3e, xi, eta, cross, ax):
-    """Batched _surf_frame: Xe (ne,4,3), e3e (ne,3) -> N (4,), D1/D2 (ne,4),
-    dA (ne,), direction-cosine dict of (ne,) arrays.  Same algebra per element."""
+    """Batched _surf_frame: surface frame, surface derivatives, and direction
+    cosines for all elements at one parent point (same algebra per element).
+
+    In:
+      Xe: (ne,4,3) float, element node coordinates.
+      e3e: (ne,3) float, reference material normals (fix the frame sign).
+      xi, eta: float, parent coordinates in [-1,1].
+      cross: (2,) int, cross-section coordinate indices.
+      ax: int, beam-axis coordinate index.
+    Out:
+      N: (4,) shape functions; D1, D2: (ne,4) surface derivatives;
+      dA: (ne,) area Jacobians; c: dict of (ne,) direction-cosine arrays
+        (x11..x32, y1..y3, x2, x3).
+    """
     N, dNx, dNe = _bilinear(xi, eta)
     Jxi = np.einsum('a,eaj->ej', dNx, Xe)
     Jeta = np.einsum('a,eaj->ej', dNe, Xe)
@@ -190,9 +226,19 @@ def _surf_frame_batch(Xe, e3e, xi, eta, cross, ax):
 
 
 def quad_ops_indep_batch(Xe, e3e, xi, eta, cross, ax):
-    """Batched quad_ops_indep (same rows; k22/kg do not enter these operators).
-    Returns BDe (ne,6,4), BDh/BDl (ne,6,24), BGe (ne,2,4), BGh/BGl (ne,2,24),
-    DRe (ne,4), DRh/DRl (ne,24), dA (ne,)."""
+    """Batched quad_ops_indep: same operator rows for all elements at once
+    (k22/kg do not enter these operators).
+
+    In:
+      Xe: (ne,4,3) float, element node coordinates.
+      e3e: (ne,3) float, reference material normals.
+      xi, eta: float, parent coordinates in [-1,1].
+      cross: (2,) int, cross-section coordinate indices.
+      ax: int, beam-axis coordinate index.
+    Out:
+      BDe (ne,6,4), BDh/BDl (ne,6,24), BGe (ne,2,4), BGh/BGl (ne,2,24),
+      DRe (ne,4), DRh/DRl (ne,24), dA (ne,).
+    """
     N, D1, D2, dA, c = _surf_frame_batch(Xe, e3e, xi, eta, cross, ax)
     ne = Xe.shape[0]
     x11, x12 = c["x11"], c["x12"]
@@ -264,8 +310,18 @@ def quad_ops_indep_batch(Xe, e3e, xi, eta, cross, ax):
 
 
 def _tie_rows_batch(Xe, e3e, cross, ax):
-    """Shear rows at the Dvorkin-Bathe tying points, once per element set (they do
-    not depend on the quadrature point; the scalar path re-evaluated them per GP)."""
+    """Evaluate the shear operator rows at the four Dvorkin-Bathe tying points,
+    once per element set (they do not depend on the quadrature point).
+
+    In:
+      Xe: (ne,4,3) float, element node coordinates.
+      e3e: (ne,3) float, reference material normals.
+      cross: (2,) int, cross-section coordinate indices.
+      ax: int, beam-axis coordinate index.
+    Out:
+      dict with keys 'g13m','g13p','g23m','g23p', each (ne,1,24): BGh row 0
+      at (-1,0)/(+1,0) and row 1 at (0,-1)/(0,+1).
+    """
     return {
         "g13m": quad_ops_indep_batch(Xe, e3e, -1.0, 0.0, cross, ax)[4][:, 0:1, :],
         "g13p": quad_ops_indep_batch(Xe, e3e, 1.0, 0.0, cross, ax)[4][:, 0:1, :],
@@ -275,7 +331,17 @@ def _tie_rows_batch(Xe, e3e, cross, ax):
 
 
 def _shear_batch(xi, eta, scheme, BGh_gauss, tie):
-    """Batched tied shear rows at (xi, eta) -- mirrors _mitc_shear_indep."""
+    """Batched tied transverse-shear rows at (xi, eta); mirrors _mitc_shear_indep.
+
+    In:
+      xi, eta: float, parent coordinates in [-1,1].
+      scheme: str, 'mitc4_wonly' | 'mitc4_g23' | 'mitc4_both'.
+      BGh_gauss: (ne,2,24) untied shear rows at this Gauss point.
+      tie: dict from _tie_rows_batch.
+    Out:
+      BGt: (ne,2,24) tied shear rows; for 'mitc4_wonly' the rotation columns
+      stay at their full-integration values.
+    """
     g23 = 0.5 * (1.0 - eta) * tie["g23m"] + 0.5 * (1.0 + eta) * tie["g23p"]
     if scheme in ("mitc4_both", "mitc4_wonly"):
         g13 = 0.5 * (1.0 - xi) * tie["g13m"] + 0.5 * (1.0 + xi) * tie["g13p"]
@@ -292,9 +358,15 @@ def _shear_batch(xi, eta, scheme, BGh_gauss, tie):
 
 
 def _d_scale(D_by):
-    """Characteristic ABD stiffness magnitude = max |diag(D)| over layups.  The drilling
-    penalty is set to beta*this so it is dimensionally commensurate with the elastic
-    stiffness (enforces DR=0 without the ill-conditioning of an over-large absolute pen)."""
+    """Characteristic ABD stiffness magnitude: max |diag(D)| over all layups.
+
+    In:
+      D_by: dict or sequence of (6,6) ABD matrices, keyed/indexed by subdomain.
+    Out:
+      float, max absolute diagonal entry over all layups.
+    Note: the drilling penalty is set to beta*this so it is dimensionally
+    commensurate with the elastic stiffness (avoids penalty ill-conditioning).
+    """
     keys = D_by.keys() if isinstance(D_by, dict) else range(len(D_by))
     return max(float(np.max(np.abs(np.diag(np.asarray(D_by[k]))))) for k in keys)
 
@@ -302,13 +374,32 @@ def _d_scale(D_by):
 def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, ax,
                            kg_e=None, pen=None, pen_beta=0.1, dof_map=None,
                            shear="full", sparse=False):
-    """6-DOF assembly with the finite drilling-residual penalty pen*DR^2.
-    pen defaults to pen_beta * max|diag(D)| (D-scaled; robust across materials/thickness).
-    shear: 'full' (default) integrates both transverse-shear rows untied -- with the
-    INDEPENDENT omega_3 both rows carry algebraic drilling content that Dvorkin-Bathe
-    assumed-strain interpolation ALIASES (square thin: 'mitc4_both' -31/-50% GA3,
-    'mitc4_g23' -15/-30% GA2, vs 'full' -4..-6%), and no transverse-shear locking is
-    observed untied (circle: full==tied to 0.2%).  Tied variants kept for the ablation."""
+    """Assemble the 6-DOF segment energy blocks with the finite drilling-residual
+    penalty pen*DR^2.
+
+    In:
+      nodes: (Nn,3) float, node coordinates.
+      quads: (ne,4) int, element connectivity.
+      subdom: (ne,) int, subdomain (layup) id per element.
+      e3s: (ne,3) float, reference material normals.
+      D_by: {subdomain: (6,6)} ABD matrices.
+      G_by: {subdomain: (2,2)} transverse-shear stiffnesses.
+      k22_e: (ne,) float, unused in the batched operators (signature parity).
+      cross: (2,) int, cross-section coordinate indices.
+      ax: int, beam-axis coordinate index.
+      kg_e: optional (ne,) float, unused (signature parity).
+      pen: float, drilling penalty weight; default pen_beta * max|diag(D)|.
+      pen_beta: float, penalty scale relative to the ABD magnitude.
+      dof_map: optional (Nn,) int, node -> dof-node index (wrapped strips).
+      shear: 'full' (default) | 'mitc4_wonly' | 'mitc4_g23' | 'mitc4_both'.
+      sparse: bool, return CSR for the square ndof x ndof blocks.
+    Out:
+      Dhh (ndof,ndof), Dhe (ndof,4), Dee (4,4), Dhl (ndof,ndof),
+      Dll (ndof,ndof), Dle (ndof,4), with ndof = 6*(max(dof_map)+1);
+      square blocks CSR when sparse=True.
+    Note: with the independent omega_3, Dvorkin-Bathe tying aliases the algebraic
+    drilling shear -- keep shear='full'; tied variants are ablation only.
+    """
     if pen is None:
         pen = pen_beta * _d_scale(D_by)
     if dof_map is None:
@@ -344,26 +435,34 @@ def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, 
         GBe = np.einsum('eij,ejb->eib', Gm, BGe)
         DBl = np.einsum('eij,ejb->eib', De, BDl)
         GBl = np.einsum('eij,ejb->eib', Gm, BGl)
-        Ehh += w * (np.einsum('eia,eib->eab', BDh, DB) + np.einsum('eia,eib->eab', BGt, GB)
-                    + pen * DRh[:, :, None] * DRh[:, None, :])
-        Ehe += w * (np.einsum('eia,eib->eab', BDh, DBe) + np.einsum('eia,eib->eab', BGt, GBe)
-                    + pen * DRh[:, :, None] * DRe[:, None, :])
-        Dee += np.einsum('e,eab->ab', dA,
-                         np.einsum('eia,eib->eab', BDe, DBe) + np.einsum('eia,eib->eab', BGe, GBe)
-                         + pen * DRe[:, :, None] * DRe[:, None, :])
-        Ehl += w * (np.einsum('eia,eib->eab', BDh, DBl) + np.einsum('eia,eib->eab', BGt, GBl)
-                    + pen * DRh[:, :, None] * DRl[:, None, :])
-        Ell += w * (np.einsum('eia,eib->eab', BDl, DBl) + np.einsum('eia,eib->eab', BGl, GBl)
-                    + pen * DRl[:, :, None] * DRl[:, None, :])
-        Ele += w * (np.einsum('eia,eib->eab', BDl, DBe) + np.einsum('eia,eib->eab', BGl, GBe)
-                    + pen * DRl[:, :, None] * DRe[:, None, :])
+        if pen != 0.0:
+            Ehh += w * (np.einsum('eia,eib->eab', BDh, DB) + np.einsum('eia,eib->eab', BGt, GB)
+                        + pen * DRh[:, :, None] * DRh[:, None, :])
+            Ehe += w * (np.einsum('eia,eib->eab', BDh, DBe) + np.einsum('eia,eib->eab', BGt, GBe)
+                        + pen * DRh[:, :, None] * DRe[:, None, :])
+            Dee += np.einsum('e,eab->ab', dA,
+                             np.einsum('eia,eib->eab', BDe, DBe) + np.einsum('eia,eib->eab', BGe, GBe)
+                             + pen * DRe[:, :, None] * DRe[:, None, :])
+            Ehl += w * (np.einsum('eia,eib->eab', BDh, DBl) + np.einsum('eia,eib->eab', BGt, GBl)
+                        + pen * DRh[:, :, None] * DRl[:, None, :])
+            Ell += w * (np.einsum('eia,eib->eab', BDl, DBl) + np.einsum('eia,eib->eab', BGl, GBl)
+                        + pen * DRl[:, :, None] * DRl[:, None, :])
+            Ele += w * (np.einsum('eia,eib->eab', BDl, DBe) + np.einsum('eia,eib->eab', BGl, GBe)
+                        + pen * DRl[:, :, None] * DRe[:, None, :])
+        else:
+            Ehh += w * (np.einsum('eia,eib->eab', BDh, DB) + np.einsum('eia,eib->eab', BGt, GB))
+            Ehe += w * (np.einsum('eia,eib->eab', BDh, DBe) + np.einsum('eia,eib->eab', BGt, GBe))
+            Dee += np.einsum('e,eab->ab', dA,
+                             np.einsum('eia,eib->eab', BDe, DBe) + np.einsum('eia,eib->eab', BGe, GBe))
+            Ehl += w * (np.einsum('eia,eib->eab', BDh, DBl) + np.einsum('eia,eib->eab', BGt, GBl))
+            Ell += w * (np.einsum('eia,eib->eab', BDl, DBl) + np.einsum('eia,eib->eab', BGl, GBl))
+            Ele += w * (np.einsum('eia,eib->eab', BDl, DBe) + np.einsum('eia,eib->eab', BGl, GBe))
 
     Dhe = np.zeros((ndof, 4)); Dle = np.zeros((ndof, 4))
     np.add.at(Dhe, g.reshape(-1), Ehe.reshape(-1, 4))
     np.add.at(Dle, g.reshape(-1), Ele.reshape(-1, 4))
     if sparse:
-        # COO triplets from the per-element 24x24 blocks (dense ndof x ndof would be
-        # TB at ~1e6 DOF); duplicates summed by tocsr().  Dhe/Dle stay dense (thin).
+        # COO triplets from per-element 24x24 blocks (dense infeasible at ~1e6 DOF); duplicates summed by tocsr(); Dhe/Dle stay dense (thin)
         from scipy.sparse import coo_matrix
         rr = np.broadcast_to(g[:, :, None], (ne, 24, 24)).ravel()
         cc = np.broadcast_to(g[:, None, :], (ne, 24, 24)).ravel()
@@ -384,21 +483,30 @@ def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
     """Weak drilling-constraint operators for the Lagrange multiplier field.
 
     lam_space='elem' (default): one PIECEWISE-CONSTANT multiplier per element,
-      <DR>_e = 0 -- the inf-sup-stable choice (an equal-order nodal multiplier
-      over-constrains under refinement: square thin GA2/GA3 drift -1/-2% ->
-      -17/-9% from NC=24 to NC=96, the classical LBB failure of equal-order
-      multiplier spaces; the element-constant space removes the drift).
-    lam_space='node': one multiplier per node, <N_a DR> = 0 (kept for the ablation).
-    lam_space='elem_nofold': element-constant multipliers, EXCLUDING elements adjacent
-      to a FOLD line (nodes where incident-element normals disagree > 30 deg).  The
-      drilling constraint is derived on a smooth surface patch; across a slope
-      discontinuity the C0-shared fields cannot satisfy both walls' symmetry rows
-      simultaneously, and the growing number of fold-line rows (~1/h) produces the
-      linear-in-1/h over-constraint drift seen on the square (GA2 -1 -> -17%).
-    dof_map (optional): node -> dof-node index (wrapped prismatic strip, as in the
-    ring SG).  With a dof_map the local index vector contains REPEATED dofs, so the
-    accumulation uses np.add.at (fancy-index += silently drops duplicates).
-    Returns G (P x 6Nd) on w_s, Gl (P x 6Nd) on w_s', Ge (P x 4) on eb."""
+      <DR>_e = 0 -- the inf-sup-stable choice (equal-order nodal multipliers
+      over-constrain under refinement: classical LBB failure).
+    lam_space='node': one multiplier per node, <N_a DR> = 0 (ablation only).
+    lam_space='elem_nofold': element-constant multipliers, EXCLUDING elements
+      adjacent to a FOLD line (incident-element normals disagree > 30 deg),
+      where the C0-shared fields cannot satisfy both walls' symmetry rows.
+
+    In:
+      nodes: (Nn,3) float, node coordinates.
+      quads: (nq,4) int, element connectivity.
+      subdom: (nq,) int, subdomain ids (unused here; signature parity).
+      e3s: (nq,3) float, reference material normals.
+      k22_e: (nq,) float, per-element k22 (scalar 'node' path only).
+      cross: (2,) int, cross-section coordinate indices.
+      ax: int, beam-axis coordinate index.
+      kg_e: optional (nq,) float, per-element kg (scalar 'node' path only).
+      lam_space: 'elem' | 'node' | 'elem_nofold'.
+      dof_map: optional (Nn,) int, node -> dof-node index (wrapped prismatic
+        strip); repeated dofs require np.add.at (fancy-index += drops duplicates).
+      sparse: bool, return CSR G/Gl.
+    Out:
+      G (P,6Nd) on w_s, Gl (P,6Nd) on w_s', Ge (P,4) on eb, where P is the
+      number of multiplier rows and Nd = max(dof_map)+1.
+    """
     Nn = len(nodes)
     if dof_map is None:
         dof_map = np.arange(Nn)
@@ -431,8 +539,7 @@ def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
     gpv = 1.0 / np.sqrt(3.0)
     gp = [(-gpv, -gpv), (gpv, -gpv), (gpv, gpv), (-gpv, gpv)]
     if lam_space.startswith("elem"):
-        # batched: accumulate the element-integrated DR rows for all elements at
-        # once (the scalar per-element loop dominated the constraint assembly)
+        # batched: element-integrated DR rows for all elements at once
         nodes = np.asarray(nodes, float); quadsA = np.asarray(quads, int)
         ne = len(quadsA)
         Xe = nodes[quadsA]; e3e = np.asarray(e3s, float)
@@ -478,7 +585,17 @@ def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
 
 
 def build_C_Psi_segment6(nodes, quads, cross):
-    """6-DOF rigid-body kernel/constraints (om3 column = 0: drilling is not a rigid mode)."""
+    """Build the rigid-body kernel constraint rows C and null-space modes Psi for
+    the 6-DOF segment (om3 column = 0: drilling is not a rigid mode).
+
+    In:
+      nodes: (Nn,3) float, node coordinates.
+      quads: (ne,4) int, element connectivity.
+      cross: (2,) int, cross-section coordinate indices.
+    Out:
+      C: (4, 6*Nn) area-weighted constraint rows on dofs [w1,w2,w3,om1].
+      Psi: (6*Nn, 4) rigid modes (3 translations + axial rotation).
+    """
     nodes = np.asarray(nodes, float); quads = np.asarray(quads, int)
     Nn = len(nodes); ndof = NDOF6 * Nn
     C = np.zeros((4, ndof)); Psi = np.zeros((ndof, 4))

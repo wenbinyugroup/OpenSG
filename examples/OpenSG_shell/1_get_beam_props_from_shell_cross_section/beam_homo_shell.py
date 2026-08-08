@@ -15,7 +15,10 @@ in the yaml's `reference` field.
 #                       V0/V1, strip geometry, layup dbs (consumed by example 2)
 #   C6                  (6, 6) Timoshenko [eps11 gam12 gam13 kap1 kap2 kap3]
 #                       = VABS diagonal order [EA GA2 GA3 GJ EI2 EI3]
-#   <name>_beam_Timo.out, <name>_mesh.png, <name>_orient.png   the outputs
+#   <name>_shell_Timo.out   Timoshenko stiffness + compliance (SwiftComp .K
+#                       layout, timed) -- written by build_rm_bundle
+#   <name>_shell_ABDG.out   per-section RM plate laws, same layout
+#   <name>_mesh.png, <name>_orient.png   the figures
 # ----------------------------------------------------------------------------
 """
 import time
@@ -44,10 +47,6 @@ print("shell 1-D SG: %s_shell.yaml  (reference=%s, wall G=%s)  [%.1f s]"
 print("beam 6x6  [eps11 gam12 gam13 kappa1 kappa2 kappa3]  (Timoshenko):")
 print(C6)
 print("diagonal: " + "  ".join("%s=%.5g" % (LBL[i], C6[i, i]) for i in range(6)))
-np.savetxt(name + "_beam_Timo.out", C6, fmt="%16.8e",
-           header="beam Timoshenko 6x6 [eps11 gam12 gam13 kappa1 kappa2 kappa3]"
-                  " (RM 6-DOF shell ring, MITC g23, MSG wall G) from the 1-D shell"
-                  " SG %s_shell.yaml, reference=%s" % (name, B["ref"]))
 
 # ---- section mesh PNG: ring contour colored by layup (shell convention) ----
 corners = np.asarray(B["corners"]); cells = np.asarray(B["red_cells"])
@@ -72,4 +71,5 @@ plt.close(fig)
 
 # ---- compulsory e1/e2/e3 orientation PNG ----
 auto_emit(name + "_shell.yaml", out_png=name + "_orient.png")
-print("wrote %s_beam_Timo.out (+ %s_mesh.png, %s_orient.png)" % (name, name, name))
+print("wrote %s_shell_Timo.out + %s_shell_ABDG.out (.K layout)"
+      " + %s_mesh.png, %s_orient.png" % (name, name, name, name))

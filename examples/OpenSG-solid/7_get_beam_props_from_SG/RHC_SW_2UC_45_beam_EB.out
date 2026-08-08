@@ -1,5 +1,0 @@
-# beam 4x4 [eps11 kappa1 kappa2 kappa3] (EULER-BERNOULLI: the shared kernel's 4 macro modes; the Timoshenko/KKT engine of Beam_solid.py is the pending port) from the 2D SG RHC_SW_2UC_45.yaml
-  9.89926177e+06   1.29903788e+01   3.09846147e+00  -5.46112458e+00
-  6.14069973e-01   2.97745363e+08  -3.18625280e+06  -7.31201530e+03
- -8.90201262e+00  -3.18566194e+06   2.18957447e+09  -9.58924371e+04
- -2.33537310e+00  -6.99015833e+03  -9.58490017e+04   9.28992811e+08

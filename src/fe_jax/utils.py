@@ -13,25 +13,9 @@ from typing import Any, Literal
 import inspect
 
 
-def debug_print(x):
-    prev_frame = inspect.currentframe().f_back
-    # prev_fame_info = inspect.getframeinfo(prev_frame)
-    callers_local_vars = prev_frame.f_locals.items()
-    x_names = [var_name for var_name, var_val in callers_local_vars if var_val is x]
-    x_name = x_names[0] if len(x_names) > 0 else "<non-named value>"
-    jax.debug.print(
-        "{a}, shape={b} = \n{c}",
-        # "From {d} line {e}:\n {a}, shape={b} = \n{c}",
-        a=x_name,
-        b=x.shape,
-        c=x,
-        # d=prev_fame_info.filename,
-        # e=prev_fame_info.lineno,
-    )
-
-
 def is_required(fn, arg_name) -> bool:
-    """Helper function to query if an argument is required by a function given the argument name."""
+    """Helper function to query if an argument is required by a function given the argument name.
+    """
     s = inspect.signature(fn)
     return arg_name in s.parameters.keys()
 
@@ -120,11 +104,9 @@ def shard_across_local_devices(
 
     else:
         return (sharded_slice,)
+    
 
-
-def slice_for_local_sharding(
-    array: np.ndarray[Any, np.dtype] | jnp.ndarray, axis: int = 0
-):
+def slice_for_local_sharding(array: np.ndarray[Any, np.dtype] | jnp.ndarray, axis: int = 0):
     """
     TODO document
     """
@@ -151,6 +133,55 @@ def slice_for_local_sharding(
         return (shard_slice,)
 
 
+
+def build_dirichlet_arrays(
+    point_indices: NPArray_1_D_int64,
+    component: int,
+    value: float,
+) -> tuple[NPArray_2_D2_uint64, NPArray_1_D_float64]:
+    """
+    Builds arrays that describe dirichlet boundary conditions.
+
+    Returns tuple of:
+      Array that is (# of constrained DoFs, 2) with each row being (point index, component of solution)
+      Array with shape (# of constrained DoFs,) with each row being the value
+    """
+    dirichlet_bcs = np.zeros(shape=(point_indices.shape[0], 2), dtype=np.uint64)
+    dirichlet_bcs[-1][:, 0] = point_indices
+    dirichlet_bcs[-1][:, 1] = component
+    dirichlet_values = value * np.ones(
+        shape=(dirichlet_bcs[-1].shape[0],), dtype=np.float64
+    )
+    return (dirichlet_bcs, dirichlet_values)
+
+
+def build_dirichlet_arrays_from_lists(
+    point_indices: list[NPArray_1_D_int64],
+    components: list[int],
+    values: list[float],
+) -> tuple[NPArray_2_D2_uint64, NPArray_1_D_float64]:
+    """
+    Builds arrays that describe dirichlet boundary conditions.
+
+    Returns tuple of:
+      Array that is (# of constrained DoFs, 2) with each row being (point index, component of solution)
+      Array with shape (# of constrained DoFs,) with each row being the value
+    """
+    dirichlet_bcs = []
+    dirichlet_values = []
+    for i in range(len(point_indices)):
+        dirichlet_bcs.append(
+            np.zeros(shape=(point_indices[i].shape[0], 2), dtype=np.uint64)
+        )
+        dirichlet_bcs[-1][:, 0] = point_indices[i]
+        dirichlet_bcs[-1][:, 1] = components[i]
+        dirichlet_values.append(
+            values[i] * np.ones(shape=(dirichlet_bcs[-1].shape[0],))
+        )
+    return (np.vstack(dirichlet_bcs), np.concat(dirichlet_values))
+
+
+
 def rank2_tensor_to_voigt(tensor: jnp.ndarray) -> jnp.ndarray:
     """
     Converts 2nd rank tensor to Voigt notation.
@@ -164,7 +195,7 @@ def rank2_tensor_to_voigt(tensor: jnp.ndarray) -> jnp.ndarray:
     tensor   : dense 3d-array with shape (..., N_qp, N_eps)
     """
     if tensor.shape[-1] == 1:  # 1D
-        return tensor[..., [0], [0]]
+        return tensor
     elif tensor.shape[-1] == 2:  # 2D
         voigt = tensor[..., [0, 1, 0], [0, 1, 1]]
         return voigt.at[..., 2].multiply(2.0)
@@ -189,13 +220,15 @@ def rank2_voigt_to_tensor(voigt: jnp.ndarray) -> jnp.ndarray:
     -------
     tensor   : dense 4d-array with shape (N_e, N_qp, N_x, N_x)
     """
+    
     if voigt.shape[-1] == 1:  # 1D
-        return voigt[..., [0]].reshape((*voigt.shape[:-1], 1, 1))
+        return voigt
     elif voigt.shape[-1] == 3:  # 2D
         # 0  1  2
         # xx yy xy
         return voigt[..., [0, 2, 2, 1]].reshape((*voigt.shape[:-1], 2, 2))
-    elif voigt.shape[2] == 6:  # 3D
+    elif voigt.shape[-1] == 6:  # 3D
+    #elif voigt.shape[2] == 6:  # 3D
         # 0  1  2  3  4  5
         # xx yy zz yz xz xy
         return voigt[..., [0, 5, 4, 5, 1, 3, 4, 3, 2]].reshape(
@@ -203,19 +236,3 @@ def rank2_voigt_to_tensor(voigt: jnp.ndarray) -> jnp.ndarray:
         )
     else:
         raise RuntimeError("Invalid Voigt notation size.")
-
-
-def tensor_to_voigt_indices(tensor_shape: tuple[int, ...]) -> tuple[int, ...]:
-    """
-    Returns the indices for converting a tensor to Voigt notation.
-    """
-    if tensor_shape[-1] == 1:  # 1D
-        return ((0,),)
-    elif tensor_shape[-1] == 2:  # 2D
-        return ((0, 2), (2, 1))
-    elif tensor_shape[-1] == 3:  # 3D
-        return ((0, 5, 4), (5, 1, 3), (4, 3, 2))
-    else:
-        raise RuntimeError(
-            "The tensor must be 1D, 2D or 3D to convert to Voigt notation."
-        )

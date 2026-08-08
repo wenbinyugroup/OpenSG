@@ -7,24 +7,22 @@ input), split file-per-concern:
                      sparse/KKT solvers
     sg_homo.py       homogenization drivers + plate_homo_2d
     sg_dehom.py      recovery kernels + plate_dehom_2d, export_gauss
-Examples import opensg_solid.sg_homo / sg_dehom directly.  The beam
-(n_model=1) Timoshenko/KKT machinery was lifted from the OneDrive
-Beam_solid.py (Claude_code/); provenance lives in the sg_* docstrings.
+Examples import opensg_solid.sg_homo / sg_dehom directly.
 
 This package __init__ carries the process-level setup every submodule
 relies on:
-- the legacy fe_jax core on sys.path ($FE_JAX_CORE, default
-  ~/OpenSG_2.0) -- import the engine THROUGH the package;
+- the fe_jax FE core: bundled at src/fe_jax (importable whenever this
+  package is); the $FE_JAX_CORE environment variable prepends an
+  external checkout to sys.path to override the bundled copy;
 - the x64 switch, LOAD-BEARING (see rm_plate/__init__.py);
-- the persistent JAX compilation cache (the original SSDM script's
-  setup): cold runs pay each XLA compile once, warm runs load the
-  binaries from $JAX_COMPILATION_CACHE_DIR (default
-  ~/.cache/opensg_jax)."""
+- the persistent JAX compilation cache: cold runs pay each XLA compile
+  once, warm runs load binaries from $JAX_COMPILATION_CACHE_DIR
+  (default ~/.cache/opensg_jax)."""
 import os
 import sys
 
-_FE_CORE = os.environ.get("FE_JAX_CORE", os.path.expanduser("~/OpenSG_2.0"))
-if _FE_CORE not in sys.path:
+_FE_CORE = os.environ.get("FE_JAX_CORE")
+if _FE_CORE and _FE_CORE not in sys.path:
     sys.path.insert(0, _FE_CORE)
 
 import jax

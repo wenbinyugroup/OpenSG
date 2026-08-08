@@ -24,7 +24,19 @@ E1_COL, E2_COL, E3_COL = "#e31a1c", "#1f78b4", "#000000"   # red / blue / black
 
 
 def frame_report(nodes, cells, e1, e2, e3, tol=1e-6):
-    """Numeric orientation-consistency check. Returns (ok, text)."""
+    """Numeric per-element frame check: unit norms, orthogonality, right-handedness.
+    Expectations are CYLINDER-specific: e1 must be axial (+x) and e3 the inward
+    radial normal (toward the axis in the y-z plane).
+
+    In:
+        nodes: (N,3) float array of mesh node coordinates.
+        cells: iterable of per-element node-index sequences (C elements).
+        e1, e2, e3: (C,3) per-element frame vectors.
+        tol: float, accepted but unused (pass thresholds are hard-coded 1e-6/0.99/0.999).
+    Out:
+        ok: bool, True if all checks pass.
+        txt: str, one-line summary ending in "OK" or "CHECK".
+    """
     e1 = np.asarray(e1); e2 = np.asarray(e2); e3 = np.asarray(e3)
     cent = np.array([nodes[list(c)].mean(axis=0) for c in cells])
     n1 = np.linalg.norm(e1, axis=1); n2 = np.linalg.norm(e2, axis=1); n3 = np.linalg.norm(e3, axis=1)
@@ -43,12 +55,32 @@ def frame_report(nodes, cells, e1, e2, e3, tol=1e-6):
 
 
 def _set_equal_3d(ax, pts):
+    """Set an equal-aspect 3-D box on the axes from the data extents.
+
+    In:
+        ax: matplotlib 3-D Axes.
+        pts: (N,3) array; per-axis ranges become the box aspect (zero range -> 1).
+    Out:
+        None (mutates ax).
+    """
     r = (pts.max(0) - pts.min(0)); r[r == 0] = 1.0
     ax.set_box_aspect(r)
 
 
 def orientation_png(nodes, cells, e1, e2, e3, out_png, title="", step=1, scale=None):
-    """3-D quiver of the per-cell frame at element centroids (precheck byproduct)."""
+    """3-D quiver plot of the per-cell (e1,e2,e3) frame at element centroids.
+
+    In:
+        nodes: (N,3) node coordinates.
+        cells: iterable of per-element node-index sequences (C elements).
+        e1, e2, e3: (C,3) per-element frame vectors (red/blue/black arrows).
+        out_png: str, output PNG path.
+        title: str, axes title.
+        step: int, plot every step-th element.
+        scale: float or None, arrow length; None -> 12% of the bbox diagonal.
+    Out:
+        str: out_png (file written at 130 dpi, figure closed).
+    """
     nodes = np.asarray(nodes)
     cent = np.array([nodes[list(c)].mean(axis=0) for c in cells])
     if scale is None:
@@ -68,7 +100,17 @@ def orientation_png(nodes, cells, e1, e2, e3, out_png, title="", step=1, scale=N
 
 
 def orientation_png_ring(ring_nodes, ring_cells, e2, e3, out_png, title=""):
-    """2-D (y,z) quiver of a boundary ring's in-plane frame at edge midpoints."""
+    """2-D (y,z) quiver of a boundary ring's in-plane e2/e3 frame at edge midpoints.
+
+    In:
+        ring_nodes: (N,3) ring node coordinates.
+        ring_cells: iterable of per-edge node-index sequences (C edges).
+        e2, e3: (C,3) per-edge frame vectors; only their y,z components are drawn.
+        out_png: str, output PNG path.
+        title: str, axes title.
+    Out:
+        str: out_png (file written at 130 dpi, figure closed).
+    """
     rn = np.asarray(ring_nodes)
     mid = np.array([rn[list(c)].mean(axis=0) for c in ring_cells])
     fig, ax = plt.subplots(figsize=(6, 6))

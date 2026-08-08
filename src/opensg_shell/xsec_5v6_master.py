@@ -6,11 +6,10 @@ Two RM cross-section (boundary-ring) formulations, BOTH tying only gamma_23:
   B = 5-DOF drilling-ELIMINATED MITC element        -> segment_element_general.ring_general(shear="mitc4_g23")
 compared against the 2-D solid cross-section 6x6 (VABS-convention .txt), per Timo term.
 
-Cases: single-cell tube, two-cell (webbed) tube, IEA-22 r=0.2 and r=0.3 boundary rings.
 All rings referenced at the contour CENTROID (center_ref=True), matching the centroidal
-2-D solid reference.  Prints full 6x6 %err for both formulations + saves an npz per case.
+2-D solid reference.
 
-    python xsec_5v6_master.py
+Public entry points: load_ring, load_solid, ring_6dof, ring_5dof, pct, show.
 """
 import os
 import sys
@@ -107,39 +106,3 @@ def show(name, S, So, C6, C5):
         print("  %-20s %%err diag: %s" % (tagn, "  ".join("%s %+6.2f" % (LBL[i], e[i]) for i in range(6))))
 
 
-if __name__ == "__main__":          # demo/validation study -- runs ONLY when this file is executed
-    #                                 directly; importing load_ring/ring_6dof no longer triggers it.
-    IB = os.path.join(TWP, "iea22_blade", "data")
-    SC = os.path.join(TWP, "single_cell_tube", "data")
-    TC = os.path.join(TWP, "two_cell_tube", "data")
-
-    CASES = [
-        ("single_tube", os.path.join(SC, "shell_center.yaml"), os.path.join(SC, "C6_solid_314.txt")),
-        ("two_cell_tube", os.path.join(TC, "tube2cell_thin.yaml"), os.path.join(TC, "C6_solid_tube2cell_thin.txt")),
-        ("iea_r020", os.path.join(IB, "shell_r020.yaml"), os.path.join(IB, "C6_solid_r020.txt")),
-        ("iea_r030", os.path.join(IB, "shell_r030.yaml"), os.path.join(IB, "C6_solid_r030.txt")),
-    ]
-
-    os.makedirs(OUT, exist_ok=True)
-    summary = {}
-    for name, shell, solid in CASES:
-        if not (os.path.exists(shell) and os.path.exists(solid)):
-            print("SKIP %s (missing %s or %s)" % (name, shell, solid))
-            continue
-        R = load_ring(shell)
-        So = load_solid(solid)
-        C6 = ring_6dof(R)
-        C5 = ring_5dof(R)
-        print("\n=== %s : %d nodes, %d cells, %d web cells ===" % (name, len(R["rx"]), len(R["cells"]), R["nweb"]))
-        show(name, R, So, C6, C5)
-        np.savez(os.path.join(OUT, "%s.npz" % name), solid=So, c6dof=C6, c5dof=C5,
-                 err6=pct(C6, So), err5=pct(C5, So))
-        summary[name] = (So, C6, C5)
-
-    print("\n\n=================== SUMMARY: diagonal %err (6-DOF Lagrange | 5-DOF MITC) ===================")
-    print("%-14s %s" % ("case", "  ".join("%-14s" % L for L in LBL)))
-    for name, (So, C6, C5) in summary.items():
-        e6 = [100.0 * (C6[i, i] - So[i, i]) / So[i, i] for i in range(6)]
-        e5 = [100.0 * (C5[i, i] - So[i, i]) / So[i, i] for i in range(6)]
-        print("%-14s %s" % (name, "  ".join("%+5.1f|%+5.1f  " % (e6[i], e5[i]) for i in range(6))))
-    print("\nwrote npz per case ->", OUT)

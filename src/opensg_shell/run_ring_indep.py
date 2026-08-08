@@ -6,7 +6,8 @@ Ring = one-quad-deep prismatic strip with the top node row DOF-mapped onto the b
 drilling constraint is enforced by element-constant Lagrange multipliers and the rigid
 modes by the standard KKT rows.  All matrices are per-unit-length (/h).
 
-    python run_ring_indep.py       # square + circle thin, iso + m45, L ring vs solid
+Public entry points: ring_indep (constrained 6-DOF ring solve), main (shear-scheme
+comparison study).
 """
 import os, sys, json
 import numpy as np
@@ -132,7 +133,3 @@ def main():
                 e = [100 * (S[i, i] - So[i, i]) / So[i, i] for i in range(6)]
                 print("%-26s %+6.1f %+7.1f %+7.1f %+6.1f %+6.1f %+6.1f" % (nm, *e))
             print()
-
-
-if __name__ == "__main__":
-    main()

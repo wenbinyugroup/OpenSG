@@ -132,7 +132,16 @@ def solve_boundary_yaml(yaml_path, center_ref=True, shear="mitc_both"):
 
 
 def _material_by_section(sections, materials, center_ref=True):
-    """ABD (centre-ref) + transverse-shear G per layup section (keyed by section index)."""
+    """Build the plate ABD and transverse-shear stiffness for each layup section.
+
+    In:
+        sections: list of section dicts, each with 'layup' = [[mat_name, ply_t, angle_deg], ...].
+        materials: list of material dicts, each with 'name' and 'elastic' {E, G, nu}.
+        center_ref: bool; True parallel-axis shifts each ABD to the laminate mid-surface.
+    Out:
+        D_by: dict {section index: (6,6) ABD matrix}.
+        G_by: dict {section index: (2,2) transverse-shear stiffness}.
+    """
     matmap = {mm["name"]: {"E": mm["elastic"]["E"], "G": mm["elastic"]["G"], "nu": mm["elastic"]["nu"]}
               for mm in materials}
     D_by, G_by = {}, {}
@@ -242,9 +251,3 @@ def main(npz_path):
           " (ndof = 5 x %d ring nodes)" % (left["V0"].shape[0] // 5))
     print("\nPART 2 (2-D MITC4 RM segment + V0/V1 span-invariance check): next.")
     return left, right
-
-
-if __name__ == "__main__":
-    npz = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "out", "seg_iso_hR0.1.npz")
-    main(npz)

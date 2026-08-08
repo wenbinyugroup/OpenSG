@@ -1,16 +1,12 @@
-"""sg_dehom.py -- dehomogenization of the general SG engine, split out
-of rm_plate_2D.py: the SSDM Gauss-point recovery kernel (n_model 2/3),
-the Beam_solid.py Timoshenko recovery chain (n_model 1), the public
-plate_dehom_2d, and the Gauss exports.
+"""sg_dehom.py -- dehomogenization of the general SG engine: the SSDM
+Gauss-point recovery kernel (n_model 2/3), the generalized-Timoshenko
+beam recovery chain (n_model 1), the public dehom_fields /
+plate_dehom_2d entries, and the Gauss exports.
 
-PROVENANCE.  _element_dehomo_kernel is VERBATIM from the SSDM plate
-model; build_recovery_matrix / compute_fluctuations_gpu /
-get_Rsig_matrix / recover_gauss_point_fields are the Beam_solid.py
-lifts (recover_gauss_point_fields additionally returns the recovered
-strain -- the plate_dehom_2d/export_gauss contract).  The batched SSDM
-recovery is wrapped in a module-level jit so repeated dehom calls in
-one process (and, via the persistent cache, across processes) do not
-re-trace.
+The recovery kernels are verbatim ports of validated references; the
+batched SSDM recovery is wrapped in a module-level jit so repeated
+dehom calls in one process (and, via the persistent cache, across
+processes) do not re-trace.
 
 Output order everywhere: SwiftComp (xx, yy, zz, yz, xz, xy).  The
 OpenSG dehom FILES <prefix>.SM/.EM/.U follow the rm_plate_1D
@@ -72,6 +68,25 @@ def _element_dehomo_kernel(
     dphi_dxi_qnp: jnp.ndarray, phi_qn: jnp.ndarray,
     epsilon_bar_H: jnp.ndarray, n_model: int, n_sg: int
 ):
+    """Single-element Gauss-point recovery: local strain
+    (Gamma_h V0 + Ge) @ epsilon_bar and its stress C @ strain.
+
+    In:
+        V0_ndH: (N, 3, H) element fluctuation modes, H = 6 for
+            plate/solid, 4 for beam macro modes.
+        x_nd: (N, d) element node coordinates, d = SG dimension.
+        C_ss: (6, 6) element stiffness.
+        dphi_dxi_qnp: (Q, N, p) parametric basis gradients.
+        phi_qn: (Q, N) basis values.
+        epsilon_bar_H: (H,) macro strain state.
+        n_model: 1 beam / 2 plate / 3 solid.
+        n_sg: SG spatial dimension.
+    Out:
+        Gamma_qs: (Q, 6) local strain, SwiftComp order.
+        Sigma_qs: (Q, 6) local stress, SwiftComp order.
+    Gradients are zero-padded so a d-dim SG occupies the LAST d slots
+    of (x, y, z).
+    """
     J_qdp = jnp.einsum("nd,qnp->qdp", x_nd, dphi_dxi_qnp)
     G_qpd = jnp.linalg.inv(J_qdp)
     dphi_dx_qnd = jnp.einsum("qpd,qnp->qnd", G_qpd, dphi_dxi_qnp)
@@ -133,8 +148,23 @@ def _element_dehomo_kernel(
 @partial(jax.jit, static_argnames=["n_model", "n_sg"])
 def _dehom_batch(periodic_cells_en, V0, x_end, C_ess, dphi_dxi_qnp,
                  phi_qn, epsilon_bar, n_model, n_sg):
-    """All-element SSDM recovery, jitted once per (shape, n_model, n_sg);
-    epsilon_bar is traced, so new load cases reuse the compiled kernel."""
+    """All-element SSDM recovery (vmap of _element_dehomo_kernel),
+    jitted once per (shape, n_model, n_sg); epsilon_bar is traced, so
+    new load cases reuse the compiled kernel.
+
+    In:
+        periodic_cells_en: (E, N) periodic connectivity.
+        V0: (n_unique, H) fluctuation solution.
+        x_end: (E, N, d) element-node coordinates.
+        C_ess: (E, 6, 6) per-element stiffness.
+        dphi_dxi_qnp: (Q, N, p) parametric basis gradients.
+        phi_qn: (Q, N) basis values.
+        epsilon_bar: (H,) macro strain state.
+        n_model, n_sg: static ints (1/2/3 model; SG dimension).
+    Out:
+        Gamma_eqs: (E, Q, 6) strain, SwiftComp order.
+        Sigma_eqs: (E, Q, 6) stress, SwiftComp order.
+    """
     get_element_V0 = jax.vmap(transform_global_unraveled_to_element_node,
                               in_axes=(None, 1, None), out_axes=-1)
     V0_endH = get_element_V0(periodic_cells_en, V0, 3)
@@ -170,29 +200,29 @@ def build_recovery_matrix(st):
 
 @jax.jit
 def compute_fluctuations_gpu(Deff_srt, st, V0, V1):
-    """Successive-derivative generalized-Timoshenko recovery ladder,
-    VERBATIM from Beam_solid.py (the WORKING reference -- its core
-    computation is kept untouched by decision).
+    """Successive-derivative generalized-Timoshenko recovery ladder
+    (product-rule chain F' = R F seeded with F_1d = Comp @ st): builds
+    the shear-corrected states and warping displacement fields for
+    beam (n_model 1) dehomogenization.
 
-    st is the sectional STRAIN 6-vector [eps11, 2g12, 2g13, k1, k2, k3]:
-    the zeroth-order warping and Gamma_eps use st_m = [eps11, k1, k2,
-    k3] directly, and the recovered stress integrates back to
-    Deff @ st on the classical channels (RHC closures: ext 7e-4,
-    twist 3e-7, bend2 9e-10).
-
-    USAGE (what the as-lifted chain supports): drive the recovery with
-    states whose stress rides the CLASSICAL channels (extension, twist,
-    bending, and their combinations).  The transverse-shear entries
-    st[1], st[2] are recovery-inert here: the ladder is the VABS
-    refined-theory product-rule chain (F' = R(eps+e1) F,
-    F'' = R F' + R' F, ..., eps^(n) = Comp @ F^(n), with
-    build_recovery_matrix the intrinsic-equilibrium operator), but it
-    is SEEDED with F_1d = Comp @ st -- a compliance-scaled vector
-    (~1e-9 of Deff @ st), so the derivative states that would carry the
-    shear stress (the Q = dM/dx bending gradient) are negligible and a
-    pure-shear st recovers ~zero stress (measured).  The refined-theory
-    seed would be the force state Deff @ st; that deviation is
-    DOCUMENTED, not applied."""
+    In:
+        Deff_srt: (6, 6) effective Timoshenko stiffness.
+        st: (6,) sectional STRAIN [eps11, 2g12, 2g13, k1, k2, k3].
+        V0: (N_primal, 4) zeroth-order warping modes.
+        V1: (N_primal, 4) first-order warping modes.
+    Out:
+        w_1: (N_primal,) zeroth-order warping, V0 @ st_m_final.
+        w1s_1: (N_primal,) first-order warping, V1 @ st_cl1_final.
+        w1s_2: (N_primal,) first-order warping at the
+            second-derivative state, V1 @ st_cl2_final.
+        w_2: (N_primal,) zeroth-order warping at the first-derivative
+            state, V0 @ st_cl1_final.
+        st_m_final: (4,) shear-corrected classical state
+            [eps11, k1, k2, k3].
+    Constraint: with the compliance seed the transverse-shear entries
+    st[1], st[2] are recovery-inert -- drive only states whose stress
+    rides the classical channels (extension, twist, bending).
+    """
     Comp_srt = jnp.linalg.inv(Deff_srt)
     st_m = jnp.array([st[0], st[3], st[4], st[5]], dtype=jnp.float64)
 
@@ -259,11 +289,30 @@ def recover_gauss_point_fields(
     dehomo_data, C_ess1, reduced_periodic_cells, phi_qn, x_end,
     elem_rotation, n_model, n_sg
 ):
-    """Gauss-point strain/stress recovery of the beam chain
-    (Beam_solid.py; lifted with the strain added to the returns).
-    C_ess1 = the per-ELEMENT pre-elem-rotation stiffness -- stress comes
-    out in the element frame the strain was rotated into (identity
-    elem_rotation -> the global SG frame, matching the plate dehom)."""
+    """Gauss-point strain/stress recovery of the beam chain from the
+    warping fields of compute_fluctuations_gpu.
+
+    In:
+        w_1, w1s_1, w1s_2, w_2: (N_primal,) warping displacement
+            fields (compute_fluctuations_gpu outputs).
+        st_m_final: (4,) shear-corrected classical state.
+        dehomo_data: dict {dphi_dx (E, Q, N, D), Ge (E, Q, 6, H),
+            dV_q (E, Q)} from assembly.
+        C_ess1: (E, 6, 6) or (E, Q, 6, 6) per-element
+            PRE-elem-rotation stiffness.
+        reduced_periodic_cells: (E, N) reduced connectivity.
+        phi_qn: (Q, N) basis values.
+        x_end: (E, N, d) element-node coordinates.
+        elem_rotation: (E, 9) flattened per-element DC matrices.
+        n_model, n_sg: static ints.
+    Out:
+        x_q: (E, Q, d) Gauss-point coordinates.
+        st_3D_elem: (E, Q, 6) strain rotated into the element frame.
+        stress_3D_local: (E, Q, 6) stress = C_ess1 @ strain.
+    Stress comes out in the frame the strain was rotated into
+    (identity elem_rotation -> the global SG frame, matching the
+    plate dehom).
+    """
     dphi_dx = dehomo_data["dphi_dx"]
     Ge = dehomo_data["Ge"]
     E_elem, Q, N_nodes, D = dphi_dx.shape

@@ -1,28 +1,20 @@
-"""dehom_rm.py -- RM-CONSISTENT thin-walled dehomogenization.
+"""RM-consistent thin-walled dehomogenization.
 
-The paper's homogenization is the Reissner-Mindlin ring (mitc_rm_segment/run_ring_indep.py
-::ring_indep, shear='mitc4_g23'): a C0 Lagrange 6-DOF element (independent drilling omega_3)
-with MITC-tied gamma_23.  The *dehomogenization* must use the SAME model -- not the
-Kirchhoff-Love C1 Hermite shell (opensg_jax/fe_jax/msg_dehom.py).  This module rebuilds
-step-1 on the RM ring:
+Step-1 recovery is rebuilt on the SAME Reissner-Mindlin ring used for the homogenization
+(C0 Lagrange 6-DOF element with independent drilling omega_3, MITC-tied gamma_23), with the
+same element operators (quad_ops_indep / _mitc_shear_indep), so it is the exact
+energy-consistent adjoint of the RM 6x6 assembly:
 
     st  = C6_RM^{-1} FF                       (RM Timoshenko 6x6 inverse)
     a1,a2,a3,a4 = V0 st_m, V1 st_cl1, V1 st_cl2, V0 st_cl1   (RM warping combos)
     s6 = BDe st_m + BDh (a1+a2) + BDl (a4+a3)  -> [e11,e22,2e12,k11,k22,2k12]
     s2 = BGe st_m + BGt (a1+a2) + BGl (a4+a3)  -> [2g13,2g23]  (BGt = MITC-tied g23)
 
-with the SAME element operators (quad_ops_indep / _mitc_shear_indep) that assembled the RM
-6x6.  This is the exact adjoint of the RM homogenization (mirrors assemble_segment_indep),
-so it is energy-consistent AND -- unlike the KL bundle -- it carries the wall transverse
-shears (2g13, 2g23), so sigma13/sigma23 are recovered from the physical per-element wall
-shear, not a section-level approximation.
+Unlike the Kirchhoff-Love bundle, the recovery carries the wall transverse shears
+(2g13, 2g23).  Step 2 (plate through-thickness SG) reuses the opensg_jax plate machinery.
 
-STEP 2 (plate through-thickness SG) and STEP 3 (shear-flow sigma13/23) reuse the existing
-opensg_jax plate machinery unchanged.
+Public entry points: build_rm_bundle, disp_at_points, stress_at_points.
 """
-import os
-import sys
-
 import numpy as np
 import yaml
 import jax.numpy as jnp
@@ -39,7 +31,17 @@ from .fe_jax.msg_transverse_shear import transverse_shear_stiffness
 
 
 def _strip(rx3, cells, ax):
-    """Reconstruct the one-quad-deep prismatic strip EXACTLY as ring_indep does."""
+    """Reconstruct the one-quad-deep prismatic strip mesh EXACTLY as ring_indep does.
+
+    In:
+        rx3: (m,3) float, ring node coordinates.
+        cells: (n_el,2) int, ring line-element connectivity.
+        ax: int, beam-axis index (0/1/2) the strip is extruded along.
+    Out:
+        nodes: (2m,3) float, strip node coordinates (ring + extruded copy).
+        quads: (n_el,4) int, quad connectivity [a, b, m+b, m+a].
+        h: float, extrusion length (mean ring element length).
+    """
     rx3 = np.asarray(rx3, float); m = len(rx3)
     h = float(np.mean(np.linalg.norm(rx3[cells[:, 1]] - rx3[cells[:, 0]], axis=1)))
     ez = np.zeros(3); ez[ax] = 1.0
@@ -51,18 +53,23 @@ def _strip(rx3, cells, ax):
 def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
     """Homogenize with the RM ring and package everything the two-step dehom needs.
 
-    ``ref`` defaults to ``None`` = read the reference from the yaml's ``reference`` field -- the
-    SINGLE source of truth, chosen once when the 1-D yaml is created (emit_opensg_yaml's ``fraction``:
-    0.5->"center", 0.0->"oml"); absent -> "center".  So the RM homogenization AND dehom automatically
-    follow whatever reference the yaml was built at.  center = mid-surface (frac=0.5, the default); the
-    BeamDyn 6x6 / FF are center-ref too, so the dehom stress/disp recovery stays consistent
-    (stress_at_points converts the mid-ref depth to the plate OML depth via frac).  Pass an explicit
-    ``ref="oml"``/``"center"`` only to override the yaml.
+    ``ref=None`` reads the reference surface from the yaml's ``reference`` field -- the single
+    source of truth, set when the 1-D yaml is created (absent -> "center" = mid-surface) -- so
+    homogenization and dehom follow the same reference; pass an explicit ``ref`` only to override.
 
-    Returns a bundle dict with the RM Timoshenko 6x6 ``Timo`` (=C6_RM), the RM warping
-    ``V0``/``V1`` (6m x 4), the strip geometry, the per-element layup, and the plate-SG
-    layup_db / material_db (reused from solve_tw_from_yaml -- geometry-independent, keyed
-    by layup name).
+    In:
+        shell_yaml: str, path to the 1-D shell section yaml.
+        ref: None | "center" | "oml" | "oml_flip" | "iml", reference-surface override.
+        shear: str, RM transverse-shear tying scheme passed to ring_indep.
+        g_source: str, wall transverse-shear source: "msg" (Yu-2002 LS projection) or
+            "whitney" (complementary-energy shear flow).
+    Out:
+        dict bundle: "Timo" (6,6) RM Timoshenko matrix; "V0"/"V1" (6m,4) warping modes;
+        "corners" (m,2) section contour coords; "red_cells" (n_el,2) connectivity;
+        "rx3" (m,3), "re3" (n_el,3), "k22" (n_el,) ring geometry; "ax" int beam axis;
+        "cross" axis pair; "strip" (nodes, quads, h); "layup_per_elem" list of layup
+        names per element; "layup_db"/"material_db" plate-SG databases (by-name,
+        geometry-free); "frac" float; "ref" str; "g_source" str.
     """
     import time as _time
     _t0 = _time.perf_counter()
@@ -70,15 +77,11 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
     if ref is None:                                       # single source of truth: yaml records its ref
         ref = d.get("reference", "center")                # (set at 1-D-yaml creation; absent -> center)
     R = load_ring_ref(shell_yaml, ref)
-    # THE single initial-stage reference decision: everything below (ring laminate reference via
-    # load_ring_ref above, plate-SG z_ref for the MSG G / recovery warping, the KL layup_db frac,
-    # the emitted ABD yaml, and the recovery depth conversion in stress_at_points) follows ``frac``.
+    # Single reference decision: ring laminate ref, plate-SG z_ref, layup_db frac, emitted ABD,
+    # and the recovery depth conversion in stress_at_points ALL follow ``frac``.
     frac = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}.get(ref, 0.0)
-    # wall transverse-shear source: "msg" (DEFAULT since 2026-07-21, SwiftComp-like Yu-2002 LS
-    # projection, msg_rm_plate.rm_plate_msg) or "whitney" (legacy complementary-energy shear flow).
-    # Section 6x6 is insensitive (<=0.02% at IEA r=0.2) but the MSG G is the theory-consistent value.
-    # (G_msg itself is reference-independent -- validated -- but the SG carries the recovery warping,
-    # so its z_ref must sit at the chosen reference surface.)
+    # G_msg is reference-independent, but the SG carries the recovery warping, so its z_ref
+    # must sit at the chosen reference surface.
     G_by = list(R["G_by"])
     if g_source == "msg":
         from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
@@ -105,8 +108,7 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
     layup_per_elem = [sec_names[int(si)] for si in R["rsub"]]
     # reuse the KL bundle ONLY for the by-name plate layup_db + material_db (geometry-free)
     kl = solve_tw_from_yaml(shell_yaml, frac=frac)
-    # compulsory: emit the per-station ABD yaml at the SAME reference (once, cached) for reuse
-    # by dehom + shell buckling
+    # emit the per-station ABD yaml at the SAME reference (once, cached) for dehom + shell buckling
     try:
         import os as _os
         from .emit_abd import emit_station_abd
@@ -116,13 +118,15 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
             emit_station_abd(shell_yaml, _ay, station=_tag,
                              ref="mid" if ref == "center" else "oml")
     except Exception:
+        # intentional best-effort: ABD yaml emission failure must not abort the bundle build
         pass
     # OpenSG default: SwiftComp-format timed .out for the beam model too
     from opensg_solid.sg_homo import write_sc_K
     write_sc_K(_os2.path.splitext(shell_yaml)[0] + "_Timo.out", C6,
                solve_time=_time.perf_counter() - _t0,
-               model="msg-shell beam model (Timoshenko 6x6,"
-                     " [ext sh2 sh3 twist bend2 bend3])", constants=False)
+               model="msg-shell beam model"
+                     " [ext sh2 sh3 twist bend2 bend3]",
+               constants=False, name="Timoshenko")
     return {"Timo": C6, "V0": np.asarray(V0), "V1": np.asarray(V1),
             "corners": R["rx"][:, R["cross"]], "red_cells": np.asarray(R["cells"]),
             "rx3": np.asarray(R["rx"]), "re3": np.asarray(R["re3"]), "k22": np.asarray(R["k22"]),
@@ -133,13 +137,22 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
 
 
 def _rm_shell_strain(B, e, xi, st_m, aA, aB, s2_scheme="mitc4_g23"):
-    """The 8 RM shell strains at element ``e``, arc ``xi`` in [0,1]:
-    s6=[e11,e22,2e12,k11,k22,2k12], s2=[2g13,2g23].
+    """Evaluate the 8 RM shell strains of element ``e`` at arc coordinate ``xi``.
 
-    ``s2_scheme`` sets the tying used for the RECOVERED transverse shear s2: 'mitc4_g23'
-    matches the homogenization (only g23 tied; g13 raw carries flat-wall drilling), while
-    'mitc4_both' returns the drilling-free (tied) transverse shear on both rows -- the
-    physical wall shear for stress recovery."""
+    In:
+        B: dict, RM bundle from build_rm_bundle.
+        e: int, ring element index.
+        xi: float in [0,1], arc coordinate along the element.
+        st_m: (6,) macro beam strain.
+        aA: (6m,) nodal warping w.
+        aB: (6m,) nodal warping derivative w'.
+        s2_scheme: str, tying for the RECOVERED transverse shear: "mitc4_g23" matches the
+            homogenization (only g23 tied; raw g13 carries flat-wall drilling), "mitc4_both"
+            ties both rows -- the drilling-free physical wall shear for stress recovery.
+    Out:
+        s6: (6,) [e11, e22, 2e12, k11, k22, 2k12].
+        s2: (2,) [2g13, 2g23].
+    """
     nodes, quads, _ = B["strip"]
     Xe = nodes[quads[e]]; e3e = B["re3"][e]
     xq = 2.0 * float(xi) - 1.0                                   # arc [0,1] -> element [-1,1]
@@ -156,6 +169,18 @@ def _rm_shell_strain(B, e, xi, st_m, aA, aB, s2_scheme="mitc4_g23"):
 
 
 def _macro_fields(B, beam_force_vabs=None, beam_strain=None):
+    """Solve the macro beam strain and assemble the nodal RM warping fields.
+
+    In:
+        B: dict, RM bundle from build_rm_bundle.
+        beam_force_vabs: (6,) beam force/moment in VABS order, or None.
+        beam_strain: (6,) beam strain, or None (exactly one of the two must be given).
+    Out:
+        st: (6,) macro beam strain (given or C6^{-1} @ force).
+        st_m: (6,) macro strain from _macro_recovery.
+        aA: (6m,) nodal warping w  = V0 st_m + V1 st_cl1.
+        aB: (6m,) nodal warping w' = V0 st_cl1 + V1 st_cl2.
+    """
     C6 = np.asarray(B["Timo"])
     if (beam_strain is None) == (beam_force_vabs is None):
         raise ValueError("provide exactly one of beam_force_vabs or beam_strain")
@@ -168,13 +193,21 @@ def _macro_fields(B, beam_force_vabs=None, beam_strain=None):
 
 
 def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None, director=True):
-    """RM-recovered warping DISPLACEMENT (u1,u2,u3) at query points.  The RM shell warping w=V0 st_m
-    + V1 st_cl1 carries the mid-surface displacement (first 3 DOF) and the director rotation (last 3
-    DOF, omega).  A point at through-thickness depth z from the reference contour moves as the RM
-    kinematics dictate: u(z) = u_mid + z (omega x e3).  With ``director`` the depth term is included
-    (needed for through-thickness paths); the circumferential path lies on the contour (z~=0) so it
-    is unaffected.  Both RM and VABS warping are orthogonal to the rigid/classical modes, so they are
-    directly comparable."""
+    """RM-recovered warping displacement (u1,u2,u3) at query points.
+
+    RM kinematics: u(z) = u_mid + z (omega x e3), with u_mid the mid-surface warping
+    (first 3 nodal DOF) and omega the director rotation (last 3 DOF).
+
+    In:
+        B: dict, RM bundle from build_rm_bundle.
+        points_2d: (P,2) float, query points (y2, y3) in the section plane.
+        beam_force_vabs: (6,) beam force/moment in VABS order, or None.
+        beam_strain: (6,) beam strain, or None (exactly one of the two must be given).
+        director: bool, include the z*(omega x e3) depth term (needed for
+            through-thickness paths; on-contour points z~=0 are unaffected).
+    Out:
+        (P,3) float, warping displacement [u1,u2,u3] per point.
+    """
     pts = np.atleast_2d(np.asarray(points_2d, float))
     st, st_m, aA, aB = _macro_fields(B, beam_force_vabs, beam_strain)
     wn = np.asarray(aA).reshape(-1, 6)                       # per-node [u1,u2,u3,om1,om2,om3]
@@ -197,17 +230,22 @@ def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None, directo
 
 
 def _flow_nodal_avg(B, st_m, aA, aB):
-    """Nodal (patch) average of the two contour-DERIVATIVE strain rows, 2eps12
-    (row 2) and 2k12 (row 5), along the element chains.
+    """Nodal (patch) average of the contour-derivative strain rows 2eps12 (row 2)
+    and 2k12 (row 5) along the element chains.
 
-    The RM ring is a linear 2-node element, so any strain row carrying the
-    contour derivative of the warping is element-piecewise -- it oscillates
-    about the smooth field (measured on iea_s10: element-to-element jumps of
-    32% of the mean on row 2 and 182% on row 5, vs ~10% for the macro terms).
-    Standard derivative-field recovery: average the element-midpoint values at
-    shared nodes (only where exactly 2 elements meet -- junction nodes keep
-    one-sided values), then interpolate linearly.  Rows 0,1,3,4 are NOT
-    touched: their region-boundary jumps are physical."""
+    Element-midpoint values are averaged only at nodes shared by exactly 2 elements
+    (junction nodes keep one-sided values); rows 0,1,3,4 are NOT touched -- their
+    region-boundary jumps are physical.
+
+    In:
+        B: dict, RM bundle from build_rm_bundle.
+        st_m: (6,) macro beam strain.
+        aA: (6m,) nodal warping w.
+        aB: (6m,) nodal warping derivative w'.
+    Out:
+        emid: (n_el,2) element-midpoint [2eps12, 2k12].
+        nodal: (n_nd,2) nodal averages; NaN where node degree != 2.
+    """
     rc = np.asarray(B["red_cells"]); nodes, quads, _h = B["strip"]
     n_el = rc.shape[0]; n_nd = int(rc.max()) + 1
     emid = np.zeros((n_el, 2))
@@ -229,19 +267,34 @@ def _flow_nodal_avg(B, st_m, aA, aB):
 def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
                      frame="global", n_per_layer=2, elem_order=2, rm_shear=False,
                      s2_scheme="mitc4_g23", flow_avg=False):
-    """RM two-step dehom: 3-D stress at arbitrary section coords (y2,y3).
+    """RM two-step dehom: 3-D stress/strain at arbitrary section coordinates (y2, y3).
 
-    Mirrors msg_dehom.stress_at_points but with the RM shell-strain recovery (step 1).  The
-    in-plane sigma11/22/12 and sigma33 match VABS as with the KL dehom, but now from the RM
-    (C0, MITC-g23) element, consistent with the paper's homogenization.
+    Step 1 recovers the RM (C0, MITC-g23) shell strains consistent with the ring
+    homogenization; step 2 evaluates the plate through-thickness SG (plate_stress_at_depth).
 
-    ``rm_shear``: OFF by default.  The RM warping DOES carry the wall transverse shear s2, but
-    the local *constitutive* recovery sigma13=G13*g13 is NOT physical for a spar cap -- the
-    cap's transverse shear is an equilibrium (shear-flow) effect, so the constitutive parabola
-    over-predicts ~20x and has the wrong through-thickness shape regardless of the tying
-    scheme (validated: sweep_rm_shear.py).  A correct sigma13/23 needs the equilibrium
-    shear-flow q(s), which is a separate development.  Left OFF so the shipped stress is the
-    validated in-plane field (sigma13/23 = plate plane-stress limit, as in the KL dehom)."""
+    In:
+        B: dict, RM bundle from build_rm_bundle.
+        points_2d: (P,2) float, query points (y2, y3) in the section plane.
+        beam_force_vabs: (6,) beam force/moment in VABS order, or None.
+        beam_strain: (6,) beam strain, or None (exactly one of the two must be given).
+        frame: str, output frame: "global" (section), "material" (ply), else plate (wall).
+        n_per_layer: int, through-thickness elements per ply in the plate SG.
+        elem_order: int, plate-SG element order.
+        rm_shear: bool, add constitutive transverse-shear recovery to sigma13/23.  OFF by
+            default: sigma13=G13*g13 is not physical where the wall shear is an equilibrium
+            (shear-flow) effect, so shipped sigma13/23 is the plate plane-stress limit.
+        s2_scheme: str, MITC tying for the recovered transverse shear (see _rm_shell_strain).
+        flow_avg: bool, nodally average the contour-derivative rows 2eps12/2k12.
+    Out:
+        dict with:
+            "stress": (P,6) Voigt [S11,S22,S33,S23,S13,S12] in ``frame``.
+            "strain": (P,6) Voigt strains in ``frame``.
+            "elem": (P,) int, ring element each point projected onto.
+            "xi": (P,) float, arc coordinate in [0,1] on that element.
+            "depth": (P,) float, signed depth from the reference contour.
+            "proj": (P,2) float, projected point on the contour.
+            "macro": (6,) macro beam strain used.
+    """
     pts = np.atleast_2d(np.asarray(points_2d, float))
     st, st_m, aA, aB = _macro_fields(B, beam_force_vabs, beam_strain)
     corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"])
@@ -275,11 +328,8 @@ def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
                 v0 = _nodal[c0, kk] if np.isfinite(_nodal[c0, kk]) else _emid[e, kk]
                 v1 = _nodal[c1, kk] if np.isfinite(_nodal[c1, kk]) else _emid[e, kk]
                 s6[row] = (1.0 - xi) * v0 + xi * v1
-        # The RM ring reference is the frac-surface (mid-surface for center-ref, frac=0.5) but the
-        # plate through-thickness SG (plate_stress_at_depth) measures depth from the OML (0..h).  So
-        # convert the ring depth z (signed from the frac-ref) to the OML depth, and shift the shell
-        # membrane strain from the frac-ref to the OML so the z*curvature term stays consistent.
-        # Without this, all z<0 (outer-half) points are clamped to the OML ply -> wrong through-thickness.
+        # Convert the signed ring depth z (from the frac-ref surface) to the plate-SG OML depth
+        # (0..h) and shift the membrane strain to the OML so the z*curvature term stays consistent.
         hth = float(warp[layups[e]]['node_x'][-1])
         frac = float(B.get('frac', 0.0))
         z_oml = z + frac * hth

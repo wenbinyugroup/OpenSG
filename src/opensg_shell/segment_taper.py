@@ -215,9 +215,9 @@ def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
 
     from opensg_solid.sg_homo import write_sc_K
     write_sc_K(base + "_Timo.out", S6, solve_time=solve_time,
-               model="msg-shell tapered/aperiodic segment (Timoshenko 6x6,"
-                     " boundary V0/V1 Dirichlet, L=%.6g)" % Lz,
-               constants=False)
+               model="msg-shell tapered/aperiodic segment"
+                     " (boundary V0/V1 Dirichlet, L=%.6g)" % Lz,
+               constants=False, name="Timoshenko")
     out = dict(S6=S6, C6L=rings["L"]["C6"], C6R=rings["R"]["C6"], L=Lz,
                solve_time=solve_time)
     if return_full:

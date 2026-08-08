@@ -120,29 +120,33 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
 
     Xe = nd[el]
     gd = (NDOF6*inv[el][:, :, None]
-          + np.arange(NDOF6)[None, None, :]).reshape(ne, 24)
-    rowsI, colsJ, vals = [], [], []
+          + np.arange(NDOF6)[None, None, :]).reshape(ne, 24).astype(np.int32)
     Dhe = np.zeros((ndof, 6))
     Dee = np.zeros((6, 6))
     A11 = De[0, 0]
     A_surf = 0.0
+    Ke_acc = np.zeros((ne, 24, 24))
+    Fe_acc = np.zeros((ne, 24, 6))
     for xi, eta in _GPTS:
         B, Bg, Dr, dA = solid_fluct_ops_batch(Xe, e3, xi, eta, [1, 2], 0)
         BDe6, BGe6, _ = solid_macro_ops_batch(Xe, e3, xi, eta, [1, 2], 0)
-        Ke = np.einsum('e,eia,ij,ejb->eab', dA, B, De, B) \
-            + np.einsum('e,eia,ij,ejb->eab', dA, Bg, Gm, Bg) \
-            + drill_pen*A11*np.einsum('e,ea,eb->eab', dA, Dr, Dr)
-        Fe = np.einsum('e,eia,ij,ejb->eab', dA, B, De, BDe6) \
-            + np.einsum('e,eia,ij,ejb->eab', dA, Bg, Gm, BGe6)
-        Dee += np.einsum('e,eia,ij,ejb->ab', dA, BDe6, De, BDe6) \
-            + np.einsum('e,eia,ij,ejb->ab', dA, BGe6, Gm, BGe6)
-        rowsI.append(np.repeat(gd, 24, 1).ravel())
-        colsJ.append(np.tile(gd, (1, 24)).ravel())
-        vals.append(Ke.ravel())
-        np.add.at(Dhe, gd.ravel(), Fe.reshape(-1, 6))
+        w = dA[:, None, None]
+        DB = np.einsum('ij,ejb->eib', De, B)*w
+        GB = np.einsum('ij,ejb->eib', Gm, Bg)*w
+        DBe = np.einsum('ij,ejb->eib', De, BDe6)*w
+        GBe = np.einsum('ij,ejb->eib', Gm, BGe6)*w
+        Ke_acc += np.einsum('eia,eib->eab', B, DB) \
+            + np.einsum('eia,eib->eab', Bg, GB) \
+            + (drill_pen*A11)*(dA[:, None, None]*Dr[:, :, None]*Dr[:, None, :])
+        Fe_acc += np.einsum('eia,eib->eab', B, DBe) \
+            + np.einsum('eia,eib->eab', Bg, GBe)
+        Dee += np.einsum('eia,eib->ab', BDe6, DBe) \
+            + np.einsum('eia,eib->ab', BGe6, GBe)
         A_surf += float(dA.sum())
-    K = sp.csr_matrix((np.concatenate(vals),
-                       (np.concatenate(rowsI), np.concatenate(colsJ))),
+    np.add.at(Dhe, gd.ravel(), Fe_acc.reshape(-1, 6))
+    K = sp.csr_matrix((Ke_acc.ravel(),
+                       (np.repeat(gd, 24, 1).ravel(),
+                        np.tile(gd, (1, 24)).ravel())),
                       shape=(ndof, ndof))
 
     if boundary == "periodic":
@@ -157,7 +161,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         R = np.zeros((ndof + 3, 6))
         R[:ndof] = -Dhe
         lu = spla.splu(A)
-        V0 = np.column_stack([lu.solve(R[:, c]) for c in range(6)])[:ndof]
+        V0 = lu.solve(R)[:ndof]
         n_bnd = 0
     else:
         # boundary solution mapped to boundary nodes: zero translational
@@ -172,8 +176,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         free = np.setdiff1d(np.arange(ndof), bd)
         lu = spla.splu(K[free][:, free].tocsc())
         V0 = np.zeros((ndof, 6))
-        V0[free] = np.column_stack([lu.solve(-Dhe[free][:, c])
-                                    for c in range(6)])
+        V0[free] = lu.solve(-Dhe[free])
     Deff = Dee + V0.T @ Dhe
     Deff = 0.5*(Deff + Deff.T)
     if omega is None:

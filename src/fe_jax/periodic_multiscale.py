@@ -1,132 +1,163 @@
-"""periodic_multiscale.py -- periodic local->global sparse assembly map.
-
-Verbatim from the working single-file MSG driver (JAX_BICGoptimize_current.py +
-fe_jax/periodic_multiscale.py): the map pairs opposite bounding-box faces and
-re-points the element connectivity at the MASTER nodes, so periodicity is
-carried by the assembly map itself -- every scatter/gather lands on the master
-DOF and no constraint rows are needed.
-
-Which faces get paired depends on BOTH the SG dimension (n_sg) and the macro
-model (n_model = 1 beam / 2 plate / 3 solid):
-
-    n_sg = 1, n_model = 3   pair x
-    n_sg = 2, n_model = 3   pair x and y          (2-D SG -> 3-D solid)
-    n_sg = 2, n_model = 2   pair x only           (y = through-thickness, free)
-    n_sg = 3, n_model = 3   pair x, y and z
-    n_sg = 3, n_model = 2   pair x and y          (z = thickness, free)
-    n_sg = 3, otherwise     pair x only           (beam: axial only)
-
-A free (unpaired) direction is what makes an isolated cross-section a FREE SG.
-"""
-import numpy as np
-import jax.numpy as jnp
-from scipy.spatial.distance import cdist
-
-
 def mesh_to_periodic_sparse_assembly_map(
     V: int,
-    cells,
-    points,
+    cells: jnp.ndarray,
+    points: jnp.ndarray,
     n_model: int,
     ndof_per_node: int = 3,
     atol=1e-6,
 ):
     dof_map_np = np.array(periodic_map(points, n_model, atol))
     master_nodes = dof_map_np[:][::ndof_per_node] // ndof_per_node
-    master_nodes = master_nodes.astype(np.uint64)
+    master_nodes = master_nodes.astype(np.uint64) 
 
-    # --- THE COMPRESSION STEP ---
-    # 1. Find the strictly unique master nodes (the reduced set)
+    # --- THE NEW COMPRESSION STEP ---
+    # 1. Find the strictly unique master nodes (This is exactly your reduced set)
     unique_masters = np.unique(master_nodes)
-
-    # 2. Translation array: Full Node ID -> Reduced Node ID
+    
+    # 2. Create a translation array: Full Node ID -> Reduced Node ID
     full_to_reduced = np.full(V, -1, dtype=np.int32)
-    full_to_reduced[unique_masters] = np.arange(len(unique_masters),
-                                                dtype=np.int32)
-
+    full_to_reduced[unique_masters] = np.arange(len(unique_masters), dtype=np.int32)
+    
     # 3. Map the original cells: Slave -> Master -> Reduced
+    # master_nodes[cells] gets the master ID. 
+    # full_to_reduced[...] converts it to the 0-indexed reduced space.
     reduced_periodic_cells = full_to_reduced[master_nodes[cells]]
+    # --------------------------------
 
     return jnp.array(reduced_periodic_cells, dtype=jnp.int32), dof_map_np
-
-
+        
 def periodic_map(points, n_model, atol=1e-6, ndof_per_node=3):
-    points = np.asarray(points)
     min_xyz = np.min(points, axis=0)
-    max_xyz = np.max(points, axis=0)
+    max_xyz = np.max(points, axis=0) 
     num_nodes = len(points)
     dof_map = np.arange(num_nodes)
-    n_sg = points.shape[1]
+    n_sg=points.shape[1]
+    if n_sg == 1 and n_model==3:
+        left_points = np.isclose(points[:, 0], min_xyz[0], atol=1e-6).nonzero()[0]
+        right_points = np.isclose(points[:, 0], max_xyz[0], atol=1e-6).nonzero()[0]
 
-    def make_map_boundary(atol_):
+        # Calculate Box Dimensions for 1D
+        Lx = max_xyz[0] - min_xyz[0]
+        
         def map_boundary(slaves, masters, shift_vec):
-            if len(slaves) == 0:
-                return
+            if len(slaves) == 0: return # Handle empty sets if boundary is empty
+            
+            slave_pts = points[slaves]
+            master_pts = points[masters]
+            target_pos = slave_pts - shift_vec
+            
+            dists = cdist(target_pos, master_pts)
+            nearest_idx = np.argmin(dists, axis=1)
+            min_dists = dists[np.arange(len(dists)), nearest_idx]
+            
+            if not np.all(min_dists < atol):
+                raise ValueError("Geometric mismatch on periodic boundary")
+                
+            # Update the global map
+            dof_map[slaves] = masters[nearest_idx]
+
+        # 1. Map Right -> Left (Shift x by Lx)
+        map_boundary(right_points, left_points, np.array([Lx]))
+        
+    elif n_sg==2:
+        left_points = np.isclose(points[:, 0], min_xyz[0], atol=1e-6).nonzero()[0]
+        right_points = np.isclose(points[:, 0], max_xyz[0], atol=1e-6).nonzero()[0]
+        bottom_points = np.isclose(points[:, 1], min_xyz[1], atol=1e-6).nonzero()[0]
+        top_points = np.isclose(points[:, 1], max_xyz[1], atol=1e-6).nonzero()[0]
+
+        # Calculate Box Dimensions
+        Lx = max_xyz[0] - min_xyz[0]
+        Ly = max_xyz[1] - min_xyz[1]
+        def map_boundary(slaves, masters, shift_vec):
             slave_pts = points[slaves]
             master_pts = points[masters]
             target_pos = slave_pts - shift_vec
             dists = cdist(target_pos, master_pts)
             nearest_idx = np.argmin(dists, axis=1)
             min_dists = dists[np.arange(len(dists)), nearest_idx]
-            if not np.all(min_dists < atol_):
-                raise ValueError("Geometric mismatch on periodic boundary "
-                                 "with shift %s (max %.2e)"
-                                 % (shift_vec, float(np.max(min_dists))))
+            
+            if not np.all(min_dists < atol):
+                raise ValueError("Geometric mismatch on periodic boundary")
+                
+            # Update the global map
             dof_map[slaves] = masters[nearest_idx]
-        return map_boundary
+        if n_model==3: 
+            # 1. Map Right -> Left (Shift x by -Lx)
+            map_boundary(right_points, left_points, np.array([Lx, 0.0]))
+            # 2. Map Top -> Bottom (Shift y by -Ly)
+            map_boundary(top_points, bottom_points, np.array([0.0, Ly]))
+        elif n_model==2:
+            # 2. Map Top -> Bottom (Shift y by -Ly)
+            map_boundary(right_points, left_points, np.array([Lx, 0.0]))
+            
+        #  while True:
+        #      new_map = dof_map[dof_map]
+        #      if np.array_equal(new_map, dof_map):
+        #          break # Everything is fully resolved!
+        #      dof_map = new_map    
+        for _ in range(n_sg):
+            dof_map = dof_map[dof_map]
+    elif n_sg==3:
+        left_points = np.isclose(points[:, 0], min_xyz[0], atol=1e-6).nonzero()[0]
+        right_points = np.isclose(points[:, 0], max_xyz[0], atol=1e-6).nonzero()[0]
+        bottom_points = np.isclose(points[:, 1], min_xyz[1], atol=1e-6).nonzero()[0]
+        top_points = np.isclose(points[:, 1], max_xyz[1], atol=1e-6).nonzero()[0]
+        back_points = np.isclose(points[:, 2], min_xyz[2], atol=1e-6).nonzero()[0]
+        front_points = np.isclose(points[:, 2], max_xyz[2], atol=1e-6).nonzero()[0]
+        num_nodes = len(points)
+        dof_map = np.arange(num_nodes)
 
-    map_boundary = make_map_boundary(atol)
-    lo = [np.isclose(points[:, d], min_xyz[d], atol=1e-6).nonzero()[0]
-          for d in range(n_sg)]
-    hi = [np.isclose(points[:, d], max_xyz[d], atol=1e-6).nonzero()[0]
-          for d in range(n_sg)]
-    L = max_xyz - min_xyz
+        # Calculate Box Dimensions for 3D
+        Lx = max_xyz[0] - min_xyz[0]
+        Ly = max_xyz[1] - min_xyz[1]
+        Lz = max_xyz[2] - min_xyz[2]
+        
+        def map_boundary(slaves, masters, shift_vec):
+            if len(slaves) == 0: return # Handle empty sets if boundary is empty
+            
+            slave_pts = points[slaves]
+            master_pts = points[masters]
+            target_pos = slave_pts - shift_vec
 
-    def shift(d):
-        s = np.zeros(n_sg); s[d] = L[d]
-        return s
-
-    if n_sg == 1:
-        if n_model == 3:
-            map_boundary(hi[0], lo[0], shift(0))
-    elif n_sg == 2:
-        if n_model == 3:                      # 2-D SG -> 3-D solid: both
-            map_boundary(hi[0], lo[0], shift(0))
-            map_boundary(hi[1], lo[1], shift(1))
-        elif n_model == 2:                    # plate: in-plane only
-            map_boundary(hi[0], lo[0], shift(0))
-    elif n_sg == 3:
-        if n_model == 3:
-            map_boundary(hi[0], lo[0], shift(0))
-            map_boundary(hi[1], lo[1], shift(1))
-            map_boundary(hi[2], lo[2], shift(2))
-        elif n_model == 2:
-            map_boundary(hi[0], lo[0], shift(0))
-            map_boundary(hi[1], lo[1], shift(1))
+            dists = cdist(target_pos, master_pts)
+            nearest_idx = np.argmin(dists, axis=1)
+            min_dists = dists[np.arange(len(dists)), nearest_idx]
+            mask = min_dists >= atol
+            if np.any(mask):
+                num_fail = np.sum(mask)
+                max_err = np.max(min_dists)
+                print(f"FAILED: {num_fail} nodes unmatched. Max distance: {max_err}")
+                # Print the first few coordinates that failed to help you find them in your mesher
+                print(f"Sample failed target pos: {target_pos[mask][0]}")
+                raise ValueError(f"Geometric mismatch on periodic boundary with shift {shift_vec}")
+            if not np.all(min_dists < atol):
+                raise ValueError(f"Geometric mismatch on periodic boundary with shift {shift_vec}")
+                
+            dof_map[slaves] = masters[nearest_idx]
+            
+        if n_model==3:
+             # 1. Map Right -> Left (Shift X)
+             map_boundary(right_points, left_points, np.array([Lx, 0.0, 0.0]))
+             # 2. Map Top -> Bottom (Shift Y)
+             map_boundary(top_points, bottom_points, np.array([0.0, Ly, 0.0]))
+             # 3. Map Front -> Back (Shift Z)
+             map_boundary(front_points, back_points, np.array([0.0, 0.0, Lz]))
+          
+        elif n_model==2:
+             # 2. Map Right -> Left (Shift X)
+             map_boundary(right_points, left_points, np.array([Lx, 0.0, 0.0]))
+             # 3. Map Top -> Bottom (Shift Y)
+             map_boundary(top_points, bottom_points, np.array([0.0, Ly, 0.0]))
+            
         else:
-            map_boundary(hi[0], lo[0], shift(0))
-
-    for _ in range(n_sg):
-        dof_map = dof_map[dof_map]
-
-    node_periodic_map = jnp.array(dof_map)
-    master_nodes = node_periodic_map
+             # 2. Map Right -> Left (Shift X)
+             map_boundary(right_points, left_points, np.array([Lx, 0.0, 0.0]))
+             
+        for _ in range(n_sg):
+            dof_map = dof_map[dof_map]
+    
+    node_periodic_map= jnp.array(dof_map)
+    master_nodes = node_periodic_map  
     dof_offsets = jnp.arange(ndof_per_node)
-    master_dof_indices = (master_nodes[:, None] * ndof_per_node
-                          + dof_offsets[None, :])
+    master_dof_indices = master_nodes[:, None] * ndof_per_node + dof_offsets[None, :]    
     return master_dof_indices.flatten()
-
-
-def apply_pbc_reduction(K_full, R_full, dof_map_full):
-    """Condense K (N,N) -> (M,M) and R (N,) -> (M,) onto the unique master DOFs
-    (K_red = L^T K L by scatter-add through the dof map)."""
-    unique_dofs = jnp.unique(dof_map_full)
-
-    R_accum = jnp.zeros_like(R_full).at[dof_map_full].add(R_full)
-    R_reduced = R_accum[unique_dofs]
-
-    K_col_reduced = jnp.zeros_like(K_full).at[:, dof_map_full].add(K_full)
-    K_total = jnp.zeros_like(K_col_reduced).at[dof_map_full, :].add(K_col_reduced)
-    K_reduced = K_total[jnp.ix_(unique_dofs, unique_dofs)]
-
-    return K_reduced, R_reduced, unique_dofs

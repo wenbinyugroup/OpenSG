@@ -31,6 +31,14 @@ from .orient_check import frame_report, orientation_png, orientation_png_ring
 
 
 def load_segment_yaml(path):
+    """Load a segment YAML file, preferring the fast C loader when available.
+
+    In:
+        path: str -- path to the segment YAML file.
+    Out:
+        dict -- parsed YAML (nodes, elements, sets, sections,
+        elementOrientations, materials).
+    """
     try:
         return yaml.load(open(path), Loader=yaml.CLoader)
     except AttributeError:
@@ -38,14 +46,16 @@ def load_segment_yaml(path):
 
 
 def subdomain_ids(seg):
+    """Map every element to the index of the element set (layup) that contains it.
+
+    In:
+        seg: dict -- parsed segment YAML with 'elements' and 'sets'/'element'.
+    Out:
+        np.ndarray int32 (Ne,) -- element-set (subdomain) index per element.
+    """
     ne = len(seg["elements"])
     subdom = np.zeros(ne, dtype=np.int32)
-    # OpenSG Shell_3D_Taper files use 0-INDEXED element ids in the sets (matching
-    # their 0-indexed connectivity); our cylinder generator writes 1-indexed.
-    # Detect: a label of 0 can only be 0-indexed.  (The old unconditional lab-1
-    # shifted every label one element spanwise, corrupting exactly the LAST strip
-    # -> R-boundary ring labels shifted one position along the hoop while L stayed
-    # correct -- see ref_bar_urc_shell_spar_mislabel.)
+    # Element-set labels may be 0- or 1-indexed; auto-detect (a label of 0 can only be 0-indexed).
     labs_min = min(min(es["labels"]) for es in seg["sets"]["element"] if es["labels"])
     off = 0 if labs_min == 0 else 1
     for i, es in enumerate(seg["sets"]["element"]):
@@ -55,7 +65,14 @@ def subdomain_ids(seg):
 
 
 def _free_edges(quads):
-    """free edge = used by exactly one quad; returns (free list, edge->owner-quad)."""
+    """Find the free edges of the mesh: edges used by exactly one quad.
+
+    In:
+        quads: list of list[int] -- 0-indexed node ids per element (any length).
+    Out:
+        free: list of (int, int) -- sorted node-id pairs of the free edges.
+        owner: dict {(int, int): int} -- edge pair -> owning quad index.
+    """
     cnt = Counter(); owner = {}
     for qi, q in enumerate(quads):
         m = len(q)
@@ -67,7 +84,14 @@ def _free_edges(quads):
 
 
 def _components(free):
-    """connected components (node lists) of the free-edge graph."""
+    """Compute the connected components of the free-edge graph.
+
+    In:
+        free: list of (int, int) -- free-edge node pairs.
+    Out:
+        comps: list of list[int] -- node ids of each connected component.
+        adj: dict {int: list[int]} -- node -> neighbouring node ids.
+    """
     adj = defaultdict(list)
     for a, b in free:
         adj[a].append(b); adj[b].append(a)
@@ -88,7 +112,21 @@ def _components(free):
 
 def _write_boundary_yaml(comp, oedges, oq, nodes, ori, subdom, sections, ax_idx, materials, path):
     """Write one end cross-section as a 1-D YAML in the FEniCS _create_1Dyaml layout.
-    `oedges` = oriented (tangent~e2) edges; `oq` = parent quad per edge."""
+
+    In:
+        comp: list[int] -- node ids of this cross-section.
+        oedges: list of (int, int) -- oriented edges (tangent aligned with parent e2).
+        oq: list[int] -- parent quad index per edge.
+        nodes: np.ndarray (N,3) -- global node coordinates.
+        ori: np.ndarray (Ne,9) -- 9-component orientation per parent quad.
+        subdom: np.ndarray int32 (Ne,) -- element-set index per quad.
+        sections: list[dict] -- section (layup) definitions from the segment YAML.
+        ax_idx: int -- beam-axis coordinate index (0/1/2).
+        materials: list[dict] -- material definitions from the segment YAML.
+        path: str -- output YAML path.
+    Out:
+        (int, int) -- (node count, edge count) written.
+    """
     loc = {n: i for i, n in enumerate(comp)}
     cross = [j for j in range(3) if j != ax_idx]
     d_nodes = [[float(nodes[n, cross[0]]), float(nodes[n, cross[1]]), float(nodes[n, ax_idx])] for n in comp]
@@ -115,13 +153,20 @@ def _write_boundary_yaml(comp, oedges, oq, nodes, ori, subdom, sections, ax_idx,
 
 
 def extract(seg_yaml, out_npz, write_yaml=False, plot="auto"):
-    """Extract the two end cross-sections into an .npz bundle (the solver runs the
-    boundary Timoshenko IN-MEMORY from this bundle -- see solve_boundary_bundle).
-    write_yaml=True additionally writes each end as a 1-D cross-section YAML
-    (FEniCS _create_1Dyaml layout) -- only needed for inspection / FEniCS diff.
-    plot: True = always draw the e1/e2/e3 orientation PNGs; 'auto' (default) = draw
-    only the ones not already on disk (the matplotlib 3-D quivers cost ~1.5 s and
-    dominated repeated solves); False = never."""
+    """Extract the two end cross-sections of a shell segment into an .npz bundle;
+    the solver runs the boundary Timoshenko in-memory from it (solve_boundary_bundle).
+
+    In:
+        seg_yaml: str -- path to the segment YAML.
+        out_npz: str -- output .npz bundle path.
+        write_yaml: bool -- also write each end as a 1-D cross-section YAML
+            (FEniCS _create_1Dyaml layout); only needed for inspection/diff.
+        plot: True | 'auto' | False -- draw the e1/e2/e3 orientation PNGs
+            always / only when not already on disk / never.
+    Out:
+        str -- out_npz path; bundle keys: seg_x/_cells/_subdom/_e1/_e2/_e3,
+        {L,R}_x/_cells/_subdom/_e1/_e2/_e3/_node2seg, materials, sections, axis.
+    """
     seg = load_segment_yaml(seg_yaml)
     nodes = np.array(seg["nodes"], dtype=float)
     quads = [list(map(int, e)) for e in seg["elements"]]
@@ -169,9 +214,8 @@ def extract(seg_yaml, out_npz, write_yaml=False, plot="auto"):
     for side in ("L", "R"):
         comp = ends[side]; cset = set(comp)
         loc = {n: i for i, n in enumerate(comp)}
-        # ORIENT each free edge so its tangent aligns with the parent quad's e2
-        # (hoop tangent) -- otherwise the sorted-tuple direction is arbitrary and the
-        # curvature-coupling terms (k22, macro Rn) flip inconsistently per element.
+        # Orient each free edge so its tangent aligns with the parent quad's e2 (hoop);
+        # otherwise curvature-coupling terms (k22, macro Rn) flip inconsistently per element.
         oedges, oq = [], []
         for e in free:
             if e[0] in cset and e[1] in cset:
@@ -204,13 +248,3 @@ def extract(seg_yaml, out_npz, write_yaml=False, plot="auto"):
     np.savez(out_npz, **bundle)
     print("wrote", out_npz)
     return out_npz
-
-
-if __name__ == "__main__":
-    # usage: boundary_from_yaml.py <segment.yaml> [out.npz] [--yaml]
-    #   --yaml : also write the 1-D boundary YAML files (default: in-memory bundle only)
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    seg_yaml = args[0] if len(args) > 0 else "meshes/seg_iso_hR0.1.yaml"
-    out_npz = args[1] if len(args) > 1 else os.path.join(
-        "out", os.path.splitext(os.path.basename(seg_yaml))[0] + "_direct.npz")
-    extract(seg_yaml, out_npz, write_yaml="--yaml" in sys.argv)

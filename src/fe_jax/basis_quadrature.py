@@ -10,11 +10,11 @@ from basix import (
     make_quadrature,
 )
 
-from flax import struct
+from dataclasses import dataclass
 from typing import Any
 
 
-@struct.dataclass
+@dataclass
 class FiniteElementType:
     """
     Defines the properties of a finite element formulation used to compute the basis
@@ -55,9 +55,9 @@ def eval_basis_and_derivatives(
         degree=fe_type.basis_degree,
         lagrange_variant=fe_type.lagrange_variant,
     )
-    r = np.array(e.tabulate(n=1, x=xi_qp))
+    r = np.array(e.tabulate(n=1, x=xi_qp))  #e.tabulate(degree, points): (derivatives, points, basis functions, value dimension)
 
-    return (r[0, :, :, 0], r[1:3, :, :, 0].transpose((1, 2, 0)))
+    return (r[0, :, :, 0], r[1:, :, :, 0].transpose((1, 2, 0))) # (phi_qn, dphi_dxi_qnp)
 
 
 def get_quadrature(

@@ -6,7 +6,6 @@ from typing import Callable
 from .utils import rank2_tensor_to_voigt, rank2_voigt_to_tensor
 
 
-@jax.tree_util.Partial
 @jax.jit
 def st_venant_kirchhoff(F_qdd: jnp.ndarray, material_params_qm: jnp.ndarray):
     """
@@ -54,7 +53,6 @@ def st_venant_kirchhoff(F_qdd: jnp.ndarray, material_params_qm: jnp.ndarray):
     return stress_qdd
 
 
-@jax.tree_util.Partial
 @jax.jit
 def mooney_rivlin(F_qdd: jnp.ndarray, material_params_qm: jnp.ndarray):
     """
@@ -92,7 +90,6 @@ def mooney_rivlin(F_qdd: jnp.ndarray, material_params_qm: jnp.ndarray):
         raise RuntimeError("Deformation Gradient must be at most 3D")
     return stress_qdd
 
-@jax.tree_util.Partial
 @jax.jit
 def hyperelasticity_residual(
     u_nd: jnp.ndarray,
@@ -100,7 +97,6 @@ def hyperelasticity_residual(
     dphi_dxi_qnp: jnp.ndarray,
     W_q: jnp.ndarray,
     material_params_qm: jnp.ndarray,
-    internal_state_qi: jnp.ndarray,
     constitutive_model: Callable,
 ):
     """
@@ -140,4 +136,4 @@ def hyperelasticity_residual(
     det_JxW_q = jnp.einsum("q,q->q", det_J_q, W_q)
     R_nd = jnp.einsum("qnd,q->nd", grad_dphi_dx_stress_qnd, det_JxW_q)
 
-    return R_nd, internal_state_qi
+    return R_nd

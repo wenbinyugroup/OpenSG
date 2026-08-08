@@ -32,6 +32,7 @@ tutorials/taper_segment_aperiodic
 :caption: Theory & conventions
 
 theory
+architecture
 ```
 
 ## Validation status

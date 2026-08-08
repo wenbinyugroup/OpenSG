@@ -10,7 +10,9 @@ YAML; the one-time SwiftComp conversion is the separate helper:
 #   angles              (3,) deg per material (0.0 = none)
 #   r                   sg_homo.plate_homo_2d result dict
 #   r["C_eff"]          (6, 6) plate ABD [N11 N22 N12 M11 M22 M12]
-#   <name>_plate_ABD.out, <name>_mesh.png   the outputs
+#   <name>.out          Classical Plate stiffness + compliance (SwiftComp
+#                       .K layout, timed) -- written by the solver
+#   <name>_mesh.png     the mesh figure
 # ----------------------------------------------------------------------------
 """
 import numpy as np
@@ -36,7 +38,5 @@ r = plate_homo_2d(name + ".yaml", material_param=material_param,
 np.set_printoptions(precision=5)
 print("plate 6x6  [N11 N22 N12 M11 M22 M12]:")
 print(r["C_eff"])
-np.savetxt(name + "_plate_ABD.out", r["C_eff"], fmt="%16.8e",
-           header="plate 6x6 [N11 N22 N12 M11 M22 M12] from the %dD SG %s"
-                  % (r["n_sg"], name))
-print("wrote %s_plate_ABD.out (+ %s_mesh.png)" % (name, name))
+print("wrote %s.out (Classical Plate stiffness + compliance, .K layout)"
+      " + %s_mesh.png" % (name, name))

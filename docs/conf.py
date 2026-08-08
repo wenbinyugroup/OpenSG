@@ -7,7 +7,7 @@ project = "OpenSG-2.0"
 author = "Akshat Bagla"
 copyright = "2026, Akshat Bagla"
 
-extensions = ["myst_parser"]
+extensions = ["myst_parser", "sphinxcontrib.mermaid"]
 myst_enable_extensions = ["dollarmath", "amsmath", "colon_fence",
                           "deflist", "attrs_inline"]
 

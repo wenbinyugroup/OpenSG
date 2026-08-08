@@ -8,17 +8,16 @@ dehomogenize a through-thickness 1-D SG without writing any Python.
                           [--u2d U1 U2 U3] [--qtop q q1 q2 q11 q12 q22]
                           [--qbot ...] [--n-per-ply N] [--base PREFIX]
 
-(equivalently ``python -m rm_plate.cli_rm_plate ...`` from the repo).
+(equivalently ``python -m opensg_solid.rm_plate_1D.cli_rm_plate ...``).
 
 homo    prints the labeled 8x8 ABDG and its compliance; --out writes
         PREFIX_8x8.out.
 plot    writes the SG mesh figure (defaults next to the YAML).
 dehom   the VABS-style recovery: from resultants (--FF, converted through the
-        8x8) or plate strains (--strain), with the transverse-shear gradients
-        built from Q1/Q2 exactly as the manual's load case 2, plus optional
-        face-pressure ladders (--qtop/--qbot, load case 4).  Writes
-        PREFIX.SM / .EM / .U / .out: material-frame stress, strain, and the
-        Eq.-65 displacement (u_2d from --u2d) at n-per-ply stations per ply.
+        8x8) or plate strains (--strain), plus optional face-pressure
+        ladders (--qtop/--qbot, load case 4).  Writes PREFIX.SM / .EM / .U /
+        .out: material-frame stress, strain, and the Eq.-65 displacement
+        (u_2d from --u2d) at n-per-ply stations per ply.
 
 Functions
 ---------
@@ -31,7 +30,8 @@ Variables (dehom)
 -----------------
 FF, E6      the 8-resultant vector and the 6 plate strains (E6 = S6 FF[:6]
             when --FF is given; FF = ABDG strain when --strain is given)
-dE1, dE2    the load-case-2 gradients S6 [0,0,0,Q1,0,0] and S6 [0,0,0,0,Q2,0]
+dE1, dE2    None here: a single FF station fixes no strain gradients, so the
+            recovery is classical (gradients need an FF field, rm_dehom_dat)
 qt6, qb6    the face-pressure ladders (None when the flags are absent)
 zs          recovery stations: n-per-ply points per ply, faces included
 rows        per-station (z, 6 values) tables written to the output files;
@@ -62,7 +62,14 @@ def _load(yaml_path):
 
 
 def _mat8(M, rows):
-    """The labeled matrix block used in every text output."""
+    """Format a square matrix as labeled text lines for the .out files.
+
+    In:
+        M: (n, n) array-like, matrix to print.
+        rows: sequence of n str, row/column labels.
+    Out:
+        list of str: header line plus one labeled row per matrix row (%14.6e).
+    """
     out = ["        " + "".join("%14s" % k for k in rows)]
     for k, row in zip(rows, np.asarray(M)):
         out.append("%7s " % k + "".join("%14.6e" % v for v in row))
@@ -70,6 +77,14 @@ def _mat8(M, rows):
 
 
 def cmd_homo(a):
+    """Subcommand 'homo': print the labeled 8x8 ABDG and its compliance.
+
+    In:
+        a: argparse.Namespace with yaml (SG YAML path) and out (optional
+           output prefix; when set, also writes PREFIX_8x8.out).
+    Out:
+        int: exit code (0 ok, 2 if the transverse-shear fit is not SPD).
+    """
     inp, r = _load(a.yaml)
     if r["ABDG"] is None:
         print("ERROR: the transverse-shear fit is not SPD -- inspect the layup")
@@ -94,12 +109,35 @@ def cmd_homo(a):
 
 
 def cmd_plot(a):
+    """Subcommand 'plot': write the SG mesh figure.
+
+    In:
+        a: argparse.Namespace with yaml (SG YAML path) and png (optional
+           output path; default next to the YAML).
+    Out:
+        int: exit code (0).
+    """
     png = plot_plate_sg(a.yaml, png_path=a.png)
     print("wrote %s" % png)
     return 0
 
 
 def cmd_dehom(a):
+    """Subcommand 'dehom': recover through-thickness 3-D stress, strain and
+    displacement; writes PREFIX.SM / .EM / .U / .out (ply/material frame).
+
+    In:
+        a: argparse.Namespace with yaml (SG YAML path), FF (8 resultants) or
+           strain (8 plate strains) [mutually exclusive], u2d (3 plate
+           displacements), qtop/qbot (6 face-pressure ladder coefficients or
+           None), n_per_ply (int stations per ply), base (output prefix or
+           None -> YAML path without extension).
+    Out:
+        int: exit code (0 ok, 2 if the transverse-shear fit is not SPD).
+
+    A single FF station fixes no strain gradients, so dE1 = dE2 = None
+    (classical recovery); gradient-aware recovery requires an FF field.
+    """
     inp, r = _load(a.yaml)
     if r["ABDG"] is None:
         print("ERROR: non-SPD transverse-shear fit -- inspect the layup")
@@ -113,12 +151,6 @@ def cmd_dehom(a):
         eps = np.asarray(a.strain, float)
         FF = ABDG @ eps
         E6 = eps[:6]
-    # A single FF station fixes NO gradients: the equilibrium closure
-    # (dE1 = S6 [0,0,0,Q1,0,0] from M11,1 = Q1) is REMOVED -- it is
-    # indeterminate as a general closure (5 equations for 30 gradient
-    # components).  FD over an FF field (rm_dehom_dat / the .ff driver) is
-    # the only gradient source; one station -> classical recovery.  Q1/Q2
-    # in the FF are reported but do not enter the recovery here.
     dE1 = None
     dE2 = None
     qt6 = np.asarray(a.qtop, float) if a.qtop else None
@@ -131,11 +163,6 @@ def cmd_dehom(a):
                                      a.n_per_ply) for k in range(len(thick))])
     SM = []; EM = []; UU = []
     for z in zs:
-        # frame="material" is the core default now: Sig comes back
-        # rotation_6x6(-th) @ sig and Gam rotation_6x6(th).T @ gam.  (The
-        # old manual rotation here applied the STRESS matrix to the strain
-        # too -- the engineering-shear factor of 2 was misplaced in .EM;
-        # the core's R_eps fixes that.)
         Gam, Sig, _ = msgrm_strain_at_depth(r, z, E6, dE1, dE2,
                                             qt6=qt6, qb6=qb6)
         w = msgrm_warping_at_depth(r, z, E6, dE1, dE2, qt6=qt6, qb6=qb6)
@@ -158,13 +185,14 @@ def cmd_dehom(a):
     lines = ["OpenSG-RM dehomogenization  (%s)" % os.path.abspath(a.yaml),
              "FF     = [" + ", ".join("%g" % v for v in FF) + "]  (" +
              ", ".join(_FFL) + ")",
-             "E6     = [" + ", ".join("%.6g" % v for v in E6) + "]",
-             "dE1    = [" + ", ".join("%.6g" % v for v in dE1) + "]   (Q1 route)",
-             "dE2    = [" + ", ".join("%.6g" % v for v in dE2) + "]   (Q2 route)",
-             "qtop   = %s" % ("none" if qt6 is None else qt6.tolist()),
-             "qbot   = %s" % ("none" if qb6 is None else qb6.tolist()),
-             "u_2d   = %s" % (list(a.u2d),),
-             "outputs: %s.SM / .EM / .U  (%d stations)" % (base, len(zs))]
+             "E6     = [" + ", ".join("%.6g" % v for v in E6) + "]"]
+    if dE1 is not None:
+        lines += ["dE1    = [" + ", ".join("%.6g" % v for v in dE1) + "]   (Q1 route)",
+                  "dE2    = [" + ", ".join("%.6g" % v for v in dE2) + "]   (Q2 route)"]
+    lines += ["qtop   = %s" % ("none" if qt6 is None else qt6.tolist()),
+              "qbot   = %s" % ("none" if qb6 is None else qb6.tolist()),
+              "u_2d   = %s" % (list(a.u2d),),
+              "outputs: %s.SM / .EM / .U  (%d stations)" % (base, len(zs))]
     txt = "\n".join(lines)
     print(txt)
     with open(base + ".out", "w") as f:
@@ -173,6 +201,13 @@ def cmd_dehom(a):
 
 
 def main(argv=None):
+    """Console entry point: parse arguments and dispatch to the subcommand.
+
+    In:
+        argv: list of str or None (None -> sys.argv[1:]).
+    Out:
+        int: exit code returned by the subcommand handler.
+    """
     ap = argparse.ArgumentParser(
         prog="opensg-rm-plate",
         description="OpenSG-RM plate: homogenize / plot / dehomogenize a "

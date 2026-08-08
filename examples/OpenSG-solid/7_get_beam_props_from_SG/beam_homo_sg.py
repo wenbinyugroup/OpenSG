@@ -13,7 +13,9 @@ EB 4x4 [eps11 kappa1 kappa2 kappa3] rides along in r["C_eff_EB"].
 #   r                   sg_homo.plate_homo_2d result dict
 #   r["C_eff"]          (6, 6) Timo [eps11 gam12 gam13 kap1 kap2 kap3]
 #   r["C_eff_EB"]       (4, 4) classical EB [eps11 kap1 kap2 kap3]
-#   <name>_beam_Timo.out, <name>_mesh.png   the outputs
+#   <name>.out          Timoshenko stiffness + compliance (SwiftComp .K
+#                       layout, timed) -- written by the solver
+#   <name>_mesh.png     the mesh figure
 # ----------------------------------------------------------------------------
 """
 import numpy as np
@@ -39,8 +41,5 @@ print("beam 6x6  [eps11 gam12 gam13 kappa1 kappa2 kappa3]  (Timoshenko):")
 print(r["C_eff"])
 print("beam 4x4  [eps11 kappa1 kappa2 kappa3]  (EB, same run):")
 print(r["C_eff_EB"])
-np.savetxt(name + "_beam_Timo.out", r["C_eff"], fmt="%16.8e",
-           header="beam Timoshenko 6x6 [eps11 gam12 gam13 kappa1 kappa2"
-                  " kappa3] (Beam_solid KKT engine) from the %dD SG %s"
-                  % (r["n_sg"], name))
-print("wrote %s_beam_Timo.out (+ %s_mesh.png)" % (name, name))
+print("wrote %s.out (Timoshenko stiffness + compliance, .K layout)"
+      " + %s_mesh.png" % (name, name))

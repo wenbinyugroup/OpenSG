@@ -22,26 +22,50 @@ def mesh_to_periodic_sparse_assembly_map(
     ndof_per_node: int = 6,
     atol=1e-6,
 ):
+    """Build the reduced (periodic) cell connectivity plus the per-DOF master map.
+
+    In:
+        V: int, number of mesh nodes.
+        cells: (C,nn) int array, element connectivity in full node ids.
+        points: (V,n_sg) float array of node coordinates.
+        n_model: int, macro-model dimension (selects which faces are tied).
+        ndof_per_node: int, DOFs per node (6 for shell: w1,w2,w3,om1,om2,om3).
+        atol: float, geometric tolerance for matching periodic partner nodes.
+    Out:
+        reduced_periodic_cells: jnp.int32 (C,nn), connectivity renumbered to the
+            reduced set of unique master nodes.
+        dof_map_np: np.ndarray (V*ndof_per_node,), master DOF index for every DOF.
+    """
     dof_map_np = np.array(periodic_map(points, n_model, atol, ndof_per_node))
     master_nodes = dof_map_np[:][::ndof_per_node] // ndof_per_node
     master_nodes = master_nodes.astype(np.uint64)
 
-    # --- THE COMPRESSION STEP ---
-    # 1. Find the strictly unique master nodes (the reduced set)
     unique_masters = np.unique(master_nodes)
 
-    # 2. Translation array: Full Node ID -> Reduced Node ID
     full_to_reduced = np.full(V, -1, dtype=np.int32)
     full_to_reduced[unique_masters] = np.arange(len(unique_masters),
                                                 dtype=np.int32)
 
-    # 3. Map the original cells: Slave -> Master -> Reduced
     reduced_periodic_cells = full_to_reduced[master_nodes[cells]]
 
     return jnp.array(reduced_periodic_cells, dtype=jnp.int32), dof_map_np
 
 
 def periodic_map(points, n_model, atol=1e-6, ndof_per_node=6):
+    """Per-DOF periodic master map: every slave-boundary DOF is pointed at its master DOF.
+
+    Ties hi-face nodes to lo-face nodes along each periodic SG direction (which
+    directions tie depends on n_model); DOFs are global components, so the tie
+    is a plain index map -- no transformation matrix is formed.
+
+    In:
+        points: (V,n_sg) float array of node coordinates.
+        n_model: int, macro-model dimension controlling which directions are periodic.
+        atol: float, max distance for a shifted slave to match its master.
+        ndof_per_node: int, DOFs per node.
+    Out:
+        jnp.ndarray (V*ndof_per_node,): flattened master DOF index for every DOF.
+    """
     points = np.asarray(points)
     min_xyz = np.min(points, axis=0)
     max_xyz = np.max(points, axis=0)
@@ -79,9 +103,7 @@ def periodic_map(points, n_model, atol=1e-6, ndof_per_node=6):
             map_boundary(hi[0], lo[0], shift(0))
     elif n_sg == 2:
         if n_model == 3:
-            # 1. Map Right -> Left (Shift x by Lx)
             map_boundary(hi[0], lo[0], shift(0))
-            # 2. Map Top -> Bottom (Shift y by Ly)
             map_boundary(hi[1], lo[1], shift(1))
         elif n_model == 2:
             map_boundary(hi[0], lo[0], shift(0))
@@ -96,6 +118,8 @@ def periodic_map(points, n_model, atol=1e-6, ndof_per_node=6):
         else:
             map_boundary(hi[0], lo[0], shift(0))
 
+    # Repeated dof_map[dof_map] collapses slave->slave chains (edge/corner nodes
+    # tied through multiple faces) onto their final master.
     for _ in range(n_sg):
         dof_map = dof_map[dof_map]
 

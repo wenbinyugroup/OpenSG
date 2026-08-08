@@ -1,16 +1,14 @@
 """solid_props.py -- equivalent 3-D SOLID properties from the shell cross-section SG.
 
-THE formulation is the author's "MSG shell solid properties" document (OneDrive
-`opensg_shell solid properties/MSG_shell_solid_properties.pdf`, consolidated from the
-handwritten `Final formulation 2`): the same RM shell SG and fluctuation operators as
-the Timoshenko ring, homogenized into classical 3-D elasticity.
+The same RM shell SG and fluctuation operators as the Timoshenko ring,
+homogenized into classical 3-D elasticity.  Public entry points:
+build_solid_bundle (yaml -> C3D bundle) and ring_solid (assembled KKT solve).
 
     eps_shell = Gamma_e * ebar + Gamma_h * w
     ebar = [G11, G22, G33, 2G23, 2G13, 2G12]   (1 = beam axis, 2/3 = cross axes)
     w    = [w1, w2, w3 | om1, om2, om3]
 
-
-FE process (document Section 6): one KKT solve for V0 with the 4-mode rigid kernel;
+FE process: one KKT solve for V0 with the 4-mode rigid kernel;
 D_eff = Dee + V0^T Dhe (6x6); C3D = D_eff / w_SG.  No V1 step.
 
 # ----------------------------------------------------------------------------
@@ -119,8 +117,15 @@ def solid_fluct_ops_batch(Xe, e3e, xi, eta, cross, ax):
 
 
 def _tie_rows_solid(Xe, e3e, cross, ax):
-    """Dvorkin-Bathe tying rows: only g23 is tied for a cross-section
-    (g13 stays at the Gauss value)."""
+    """Dvorkin-Bathe MITC tying rows for the solid route: only g23 is tied
+    for a cross-section (g13 stays at the Gauss value).
+
+    In:  Xe: (ne, 4, 3) float quad corner coordinates per element;
+         e3e: (ne, 3) float wall normal per element;
+         cross: (2,) int indices of the two cross-section axes;
+         ax: int index of the axial direction.
+    Out: dict {"g23m", "g23p"}: (ne, 1, 24) float g23 Gamma_h rows sampled
+         at tying points (0, -1) and (0, +1)."""
     f = lambda xi, eta: solid_fluct_ops_batch(Xe, e3e, xi, eta, cross, ax)[1]
     return {"g23m": f(0.0, -1.0)[:, 1:2, :], "g23p": f(0.0, 1.0)[:, 1:2, :]}
 
@@ -210,8 +215,14 @@ def _rot_inplane(C, th_deg):
 
 
 def wall_solid_law(sections, materials):
-    """Cw_by: per section the through-thickness-integrated UN-CONDENSED wall
-    law  sum_k t_k * C_ply(theta_k),  wall Voigt [11,22,nn,2n,1n,12].
+    """Per-section through-thickness-integrated UN-CONDENSED wall law
+    sum_k t_k * C_ply(theta_k), wall Voigt [11,22,nn,2n,1n,12].
+
+    In:  sections: list of yaml section dicts, each with "layup" =
+         [[material_name, thickness, angle_deg], ...];
+         materials: list of yaml material dicts with E/G/nu (possibly under
+         an "elastic" key).
+    Out: list of (6, 6) float, one t*C per section.
     This is the law the e_nn completion contracts with."""
     mats = {str(m["name"]): m for m in materials}
     out = []
@@ -304,11 +315,21 @@ def _wall_normal_integrand(d2, ABD, G):
 
 
 def junction_census_correction(inv, Cw_by, t_by, D_by, G_by):
-    """Junction census: on each overlap block A_j = t_A t_B / sin(theta) swap
-    the walls' condensed law for the full un-condensed 3-D law,
+    """Junction census correction to Dee: on each wall-overlap block
+    A_j = t_A t_B / sin(theta) swap the walls' condensed law for the full
+    un-condensed 3-D law,
         dDee = A_j C_j  -  sum_i w_i (t_other/sin) W_i,     normal block only,
     C_j = mean of the two walls' per-volume un-condensed laws rotated to the
-    section frame (Q columns: axial, tangent, normal)."""
+    section frame (Q columns: axial, tangent, normal).
+
+    In:  inv: junction_inventory output, [{"node": int, "walls":
+         [(section, tangent2d, weight)]}];
+         Cw_by: list of (6, 6) float wall t*C per section (wall_solid_law);
+         t_by: list of float total wall thickness per section;
+         D_by: list of (6, 6) float wall ABD per section;
+         G_by: list of (2, 2) float wall transverse-shear law per section.
+    Out: dD (6, 6) float additive Deff correction; only the normal (1..3)
+         block is nonzero."""
     dD = np.zeros((6, 6))
     for J in inv:
         ws = J["walls"]
@@ -586,12 +607,8 @@ def ring_solid(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     A[:M, :M] = Dhh; A[:M, M:naug] = Gc.T; A[M:naug, :M] = Gc
     A[:M, naug:] = C6.T; A[naug:, :M] = C6
     R0 = np.zeros((naug + nk, 6)); R0[:M] = -Dhe6         # zero macro drilling column
-    # The kernel rows pin the rigid modes, but [Dhh; Gc] also has a null
-    # direction per node along the drilling rotation (om3 enters no strain row
-    # and the element-constant multipliers do not span it).  Those directions
-    # carry no load -- Dhe6 is orthogonal to them -- so the minimum-norm
-    # least-squares solution is the physical one, whereas an LU factorization
-    # of the rank-deficient KKT returns garbage (it produced a negative C44).
+    # lstsq min-norm is load-bearing: the drilling null-space makes an LU
+    # solve of the rank-deficient KKT unreliable (do NOT swap for a direct solve).
     V0 = np.linalg.lstsq(A, R0, rcond=None)[0][:naug]
     Deff = Dee6 + V0[:M].T @ Dhe6
     Deff = 0.5 * (Deff + Deff.T)
@@ -617,24 +634,34 @@ def elastic_constants(C3D):
 
 
 def write_abdg_out(out_path, sections, D_by, G_by):
-    """Write the wall 8x8 ABDG law per section:  [A B; B^T D] (6x6) + G (2x2).
-    Emitted by default on every msg_shell homogenization."""
+    """Write each section's wall plate law in the SwiftComp .K layout: the
+    8x8 Reissner-Mindlin ABDG = [[A B 0; B^T D 0; 0 0 G]] stiffness and its
+    compliance per section, no engineering constants.
+
+    In:  out_path str; sections list of yaml section dicts; D_by, G_by
+         per-section ABD (6, 6) and transverse-shear G (2, 2)
+    Out: the .out file at out_path; returns out_path (str)."""
+    from opensg_solid.sg_homo import _knum
     with open(out_path, "w") as f:
-        f.write("# wall ABDG laws, one block per section\n")
-        f.write("# ABD rows [eps11 eps22 2eps12 | K11 K22 K12+K21]; G rows"
-                " [2g13 2g23]\n")
+        f.write(" OpenSG msg-shell wall plate laws, one block per section\n"
+                " rows [eps11 eps22 2eps12 | K11 K22 K12+K21 | 2g13 2g23]\n")
         for si, sec in enumerate(sections):
             name = sec.get("elementSet", "section_%d" % si)
             lay = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
-            ABD = np.asarray(D_by[si], float)
-            G = np.asarray(G_by[si], float)
-            f.write("# ==== section %d: %s  layup %s ====\n" % (si, name, lay))
-            f.write("# ---- ABD (6x6) ----\n")
-            for i in range(6):
-                f.write(" ".join("%16.8e" % ABD[i, j] for j in range(6)) + "\n")
-            f.write("# ---- G (2x2) ----\n")
-            for i in range(2):
-                f.write(" ".join("%16.8e" % G[i, j] for j in range(2)) + "\n")
+            ABDG = np.zeros((8, 8))
+            ABDG[:6, :6] = np.asarray(D_by[si], float)
+            ABDG[6:, 6:] = np.asarray(G_by[si], float)
+            S = np.linalg.inv(ABDG)
+            f.write("\n section %d: %s  layup %s\n" % (si, name, lay))
+            f.write(" The Effective Reissner-Mindlin Plate Stiffness Matrix\n"
+                    " --------------------------------------------\n")
+            for i in range(8):
+                f.write("".join(_knum(ABDG[i, j]) for j in range(8)) + "\n")
+            f.write("\n The Effective Reissner-Mindlin Plate Compliance"
+                    " Matrix\n"
+                    " --------------------------------------------\n")
+            for i in range(8):
+                f.write("".join(_knum(S[i, j]) for j in range(8)) + "\n")
     return out_path
 
 
@@ -670,72 +697,14 @@ def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg",
     import os as _os
     write_abdg_out(_os.path.splitext(shell_yaml)[0] + "_ABDG.out",
                    d["sections"], R["D_by"], G_by)
-    # e_nn channel: NOT included.  min_{w, free e_nn} (un-condensed energy)
-    # = min_w (sigma_nn=0 condensed energy) -- the ABD law already contains the
-    # pointwise thickness relaxation the solid performs through Dhe^T V0.
-    # Freezing e_nn in Gamma_e without a Gamma_h partner double-counts that
-    # energy (square: C23 +368%, C22/C33 +37%, verified 08/2026).  Cw_by stays
-    # available for a future constrained thickness-stretch (junction) study.
+    # e_nn channel NOT included: the condensed ABD already carries the
+    # pointwise thickness relaxation; freezing e_nn in Gamma_e without a
+    # Gamma_h partner double-counts that energy.
     Deff, V0 = ring_solid(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], G_by,
                           R["k22"], R["ax"], R["cross"], shear=shear,
                           lam_space="elem", return_fields=True, periodic=periodic)
     jinfo = None
-    if False:                                    # (rotational/rigid-block
-        # correction removed -- thin-shell rigid-shear argument deferred)
-        # bending-regime correction: the finite corner block moves as a rigid
-        # body with the junction node (rotational-spring / rigid-joint-size
-        # effect).  Penalty on the FLUCTUATION only: w_n = w_J + om_J x dr,
-        # om_n = om_J for nodes inside the block footprint (|r - r_J| <=
-        # t_other/2).  Dee/Dhe untouched; the mesh must resolve t_other/2.
-        t_by = [sum(float(p[1]) for p in sec["layup"]) for sec in d["sections"]]
-        inv = junction_inventory(R["rx"], R["cells"], R["rsub"], R["cross"])
-        rxm = np.asarray(R["rx"], float)
-        m_ = len(rxm)
-        if periodic:
-            from .periodic_multiscale import mesh_to_periodic_sparse_assembly_map
-            rc_, _ = mesh_to_periodic_sparse_assembly_map(
-                m_, np.arange(m_)[:, None], rxm[:, R["cross"]], 3, NDOF6)
-            nmast = np.asarray(rc_, int).ravel()
-        else:
-            nmast = np.arange(m_)
-        _dv = R["D_by"].values() if isinstance(R["D_by"], dict) else R["D_by"]
-        A11m = max(float(np.asarray(v).reshape(6, 6)[0, 0]) for v in _dv)
-        h_el = float(np.mean(np.linalg.norm(
-            rxm[np.asarray(R["cells"])[:, 1]]
-            - rxm[np.asarray(R["cells"])[:, 0]], axis=1)))
-        P_w = 1.0e3*A11m/h_el
-        uniqm = np.unique(nmast)                 # assembler compacts to masters
-        Kpen = np.zeros((NDOF6*len(uniqm), NDOF6*len(uniqm)))
-        npen = 0
-        for J in inv:
-            nJ = J["node"]
-            rho = max(t_by[s] for s, _, _ in J["walls"])/2.0
-            for n_ in range(m_):
-                dr = rxm[n_] - rxm[nJ]
-                if n_ == nJ or np.linalg.norm(dr) > rho + 1e-12:
-                    continue
-                sJ = NDOF6*int(np.searchsorted(uniqm, nmast[nJ]))
-                sn = NDOF6*int(np.searchsorted(uniqm, nmast[n_]))
-                Cm = np.zeros((6, 12))       # dofs [wJ omJ | wn omn]
-                X = np.array([[0, -dr[2], dr[1]], [dr[2], 0, -dr[0]],
-                              [-dr[1], dr[0], 0]])
-                Cm[0:3, 6:9] = np.eye(3)
-                Cm[0:3, 0:3] = -np.eye(3)
-                Cm[0:3, 3:6] = -X
-                Cm[3:6, 9:12] = rho*np.eye(3)
-                Cm[3:6, 3:6] = -rho*np.eye(3)
-                Kb = P_w*(Cm.T @ Cm)
-                ix = np.r_[sJ:sJ+3, sJ+3:sJ+6, sn:sn+3, sn+3:sn+6]
-                Kpen[np.ix_(ix, ix)] += Kb
-                npen += 1
-        Deff, V0 = ring_solid(R["rx"], R["cells"], R["rsub"], R["re3"],
-                              R["D_by"], G_by, R["k22"], R["ax"], R["cross"],
-                              shear=shear, lam_space="elem",
-                              return_fields=True, periodic=periodic,
-                              Dhh_extra=Kpen)
-        jinfo = {"n_junctions": len(inv), "n_pen_nodes": npen,
-                 "inventory": inv}
-    elif junction == "census":
+    if junction == "census":
         # sigma_nn is blocked on the t_A x t_B wall-overlap blocks: swap the
         # condensed wall law for the full 3-D law there (normal block only;
         # junction shear relaxes with the joint and is left to the walls)

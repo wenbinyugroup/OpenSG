@@ -75,9 +75,7 @@ _E1 = np.zeros((6, 6)); _E1[0, 3] = _E1[1, 4] = _E1[5, 5] = 1.0
 
 _BUCKETS = {}
 
-# Relative singular-value cutoff for the truncated-SVD minimum-norm solve of the U* least
-# squares (the "sigma_i = 0" test of Ascher & Greif Sec. 8.2).  The U* system is rank 26 of
-# 27; its null singular value sits ~1e-16 of the largest, so anything in 1e-14..1e-10 works.
+# Relative SV cutoff for the truncated-SVD minimum-norm U* least-squares solve (rank 26 of 27).
 _LS_RCOND = 1e-12
 
 
@@ -152,13 +150,7 @@ def _bucket(nlay: int, n_per_layer: int, p: int) -> Dict[str, Any]:
         x_left = layer_bot[jlayer] + jsub * he - z_ref         # (n_elem,) element bottom x3
         Ck = C_layers[jlayer]                                  # (n_elem,6,6)
 
-        # nodal x3 grid (== _node_grid) + trapezoid weights for the TILT
-        # projection: w -> w - x3 <x3 w>/<x3^2> on the IN-PLANE components.
-        # Built here (not in _pack) so the V2 drivers below can use the SAME
-        # detilted columns the recovery uses -- the V2 natural BC then cancels
-        # the Gamma_l face traction of exactly the columns fed to Gamma_l,
-        # keeping the recovered face sigma_33 exact (see _detilt_inplane for
-        # the tilt rule itself).
+        # x3 grid + tilt weights: the V2 drivers must use the SAME detilted columns as the recovery
         offs_p = jnp.arange(p) / p
         x_nodes = jnp.concatenate(
             [(x_left[:, None] + he[:, None] * offs_p[None, :]).reshape(-1),
@@ -240,21 +232,11 @@ def _bucket(nlay: int, n_per_layer: int, p: int) -> Dict[str, Any]:
         w_dof_n = jnp.repeat(w_node, 3)                        # <.> weights on the dofs
         psi_nk = jkernel_nk / jnp.sqrt(h)                      # Eq. (31): psi^T H psi = I3
         Hpsi_nk = w_dof_n[:, None] * psi_nk                    # H @ psi  (n, k)
-        # Eq. (34) solved DIRECTLY as the Lagrange-multiplier saddle-point system:
-        #   [[D_hh, H psi], [psi^T H, 0]] [V; Lam] = [-rhs; 0]
-        # the multiplier row reproduces Eq. (35) automatically (Lam = -psi^T rhs: zero at
-        # zeroth order since Gamma_h of a constant vanishes, = -S_a/sqrt(h) at first
-        # order), and the constraint row enforces <w_i> = 0 exactly, so Eq. (39) is
-        # built into the solve.  scl balances the two blocks for conditioning only.
+        # Eq. (34) as a KKT saddle point: <w_i> = 0 exact (Eq. 39); scl is conditioning-only
         scl = jnp.max(jnp.abs(jnp.diag(D_hh_nn)))
         KKT = jnp.block([[D_hh_nn, scl * Hpsi_nk],
                          [scl * Hpsi_nk.T, jnp.zeros((3, 3))]])
-        # ONE factorization shared by all 18 unit load cases (the zeroth- and first-order
-        # problems differ only in the forcing).  All three formulations give bit-identical
-        # results; timings under the outer laminate vmap (min of paired interleaved trials,
-        # shared machine) put this one ~15-25% ahead of two independent multi-RHS solves,
-        # with one lu_solve vmapped per load-case column the slowest of the three -- so the
-        # case columns are kept as a matrix (level-3 BLAS) rather than vmapped individually.
+        # ONE factorization for all 18 load cases; keep the case columns as a matrix (level-3 BLAS)
         lu_piv = lu_factor(KKT)
 
         def solve_constrained(rhs):
@@ -266,11 +248,7 @@ def _bucket(nlay: int, n_per_layer: int, p: int) -> Dict[str, Any]:
             return lu_solve(lu_piv, jnp.vstack([-rhs, jnp.zeros((3, rhs.shape[1]))]))[:ndofs]
 
         # zeroth order (Eq. 39-40): V0 columns per unit plate strain; A6 = classical ABD.
-        # The multiplier vanishes identically here: kernel^T D_he = <(Gamma_h kernel)^T C
-        # Gamma_eps> = 0 because Gamma_h of a through-thickness constant is zero.  So no
-        # correction to the forcing is needed at zeroth order (kept as a check below).
-        # The CONSTRAINT row is still load-bearing: it selects the unique V0 with <w>=0,
-        # and that gauge propagates into D_abar (D_hla @ kernel != 0) and hence into G.
+        # The <w>=0 constraint row is load-bearing: the V0 gauge propagates into D_abar and G.
         V0_ns = solve_constrained(D_he_ns)
         A6_ss = D_ee_ss + V0_ns.T @ D_he_ns
 
@@ -311,9 +289,7 @@ def _bucket(nlay: int, n_per_layer: int, p: int) -> Dict[str, Any]:
         M0_tt = blocks(jnp.zeros((2, 2)), jnp.zeros((2, 6)), jnp.zeros((2, 6)))  # == H exactly
         b0_q = -M0_tt.ravel()
         Amat_qm = jnp.stack([blocks(*unit).ravel() + b0_q for unit in junits], axis=1)
-        # Column equilibration: the X-columns scale like A^2 (~1e13) and the c-columns like
-        # S (~1e9), a ~1e4 spread that pushes cond(Amat) to ~5e19.  Scaling each column to
-        # unit norm brings it to ~8e15.  Only the redundant constants move; X is invariant.
+        # Column equilibration to unit norms; only the redundant constants move, X is invariant.
         cs_m = jnp.linalg.norm(Amat_qm, axis=0)
         cs_m = jnp.where(cs_m == 0, 1.0, cs_m)
 
@@ -330,15 +306,7 @@ def _bucket(nlay: int, n_per_layer: int, p: int) -> Dict[str, Any]:
         G_gg = jnp.linalg.inv(X_gg)                            # Eq. (61) transverse-shear G
 
         # ---- second-order warping V2 (Eq. 64), for the Eq. (65)-(66) recovery only ----
-        # Energy collection (README sec. 4):
-        #     2 Pi2* = V2^T E V2 + 2 V2^T (Dbar21 e,11 + Dbar22 e,12 + Dbar23 e,22)
-        #     Dbar21 = (D_hl1 - D_hl1^T) V1bar1 - D_l1l1 V0
-        #     Dbar22 = (D_hl1 - D_hl1^T) V1bar2 + (D_hl2 - D_hl2^T) V1bar1
-        #              - (D_l1l2 + D_l1l2^T) V0
-        #     Dbar23 = (D_hl2 - D_hl2^T) V1bar2 - D_l2l2 V0
-        # V2's energy content is O((h/l)^4): A6/G untouched; V2 exists purely to
-        # recover the through-thickness fields at their leading order.
-        #
+        # V2 energy is O((h/l)^4): A6/G untouched; V2 exists purely for through-thickness recovery.
         # V1bar = V1 + kernel c_a (Eq. 58; the c_a genuinely enter: D_hla@kernel != 0)
         c1_ks = jnp.zeros((3, 6)).at[:2].set(c1_is)
         c2_ks = jnp.zeros((3, 6)).at[:2].set(c2_is)
@@ -346,12 +314,8 @@ def _bucket(nlay: int, n_per_layer: int, p: int) -> Dict[str, Any]:
         V12bar_ns = V12_ns + jkernel_nk @ c2_ks
         V11barD_ns = detilt_cols(V11bar_ns)                    # detilted value-use variants
         V12barD_ns = detilt_cols(V12bar_ns)
-        # TWO V2 VARIANTS -- the source must MATCH the recovery's Gamma_l columns
-        # (else the V2 natural BC misses the Gamma_l face traction by the +-0.73q0
-        # tilt mode), and the two consistent pairs split by output row family:
-        # D-chain (detilted) serves the in-plane stress rows, T-chain (tilted)
-        # the through-thickness rows.  Falsification sweep, gate results and the
-        # row-split rationale: README sec. 4.
+        # TWO V2 VARIANTS -- the source must MATCH the recovery's Gamma_l columns:
+        # D-chain (detilted) = in-plane stress rows, T-chain (tilted) = through-thickness rows.
         D21D_ns = (D_hl1_nn - D_hl1_nn.T) @ V11barD_ns - D_l1l1_nn @ V0_ns
         D22D_ns = ((D_hl1_nn - D_hl1_nn.T) @ V12barD_ns + (D_hl2_nn - D_hl2_nn.T) @ V11barD_ns
                    - (D_l1l2_nn + D_l1l2_nn.T) @ V0_ns)
@@ -366,11 +330,7 @@ def _bucket(nlay: int, n_per_layer: int, p: int) -> Dict[str, Any]:
         V21t_ns = V2_n6s[:, 18:24]; V22t_ns = V2_n6s[:, 24:30]; V23t_ns = V2_n6s[:, 30:]
 
         # ---- LOAD COLUMNS (Yu Eqs. 29/45/64): the pressure-driven warping ladder ----
-        # Unit face traction -> one entry at that face node's w3 dof; TWO columns
-        # (top/bottom) so split-face loads compose.  First order: E V1L = -L on the
-        # same LU; second order (V2L quintets): q,a drivers (D_hla - D_hla^T) V1L,
-        # q,ab drivers -D_lalb V1L.  Signs fixed by the machine-exact face checks.
-        # History and rationale: README sec. 5.
+        # Unit face traction -> one w3-dof entry per face; signs are load-bearing, do NOT flip.
         Lt_n = jnp.zeros(ndofs).at[ndofs - 1].set(-1.0)        # top-node w3 dof
         Lb_n = jnp.zeros(ndofs).at[2].set(1.0)                 # bottom-node w3 dof
         V1L_n2 = solve_constrained(jnp.stack([Lt_n, Lb_n], axis=1))
@@ -464,9 +424,7 @@ def _pack(out: Sequence, thick: Sequence[float], angles_deg: Sequence[float], C_
         ABDG[:6, :6] = A6
         ABDG[6:, 6:] = G
     node_x = _node_grid(thick, n_per_layer, p, float(fraction) * sum(thick))
-    # Ustar_rel (the U*-fit residual) is deliberately NOT in the public dict
-    # (removed 2026-08-04 on request): it is a fit diagnostic, not a model
-    # quantity -- consumers that reported it now compute or skip it.
+    # Ustar_rel (the U*-fit residual) is deliberately NOT in the public dict: fit diagnostic only.
     return {"A6": A6, "G_msg": (G if spd else None), "ABDG": ABDG, "X": X, "H": H,
             "V0": V0, "V11": V11, "V12": V12,
             "V11bar": V11b, "V12bar": V12b, "V21": V21, "V22": V22, "V23": V23,
@@ -648,12 +606,7 @@ def msgrm_strain_at_depth(obj: Dict[str, Any],          # the rm_plate_msg resul
     C = np.asarray(obj["C_layers"][k])
     Sig = C @ Gam
     if np.any(dE11) or np.any(dE12) or np.any(dE22):
-        # ROW SPLIT of the second-order recovery: the through-thickness
-        # stress rows (33, 23, 13 = Voigt 2, 3, 4) come from the TILTED
-        # chain, whose (source, Gamma_l) pair keeps the face tractions
-        # exact AND the cross-ply interior sigma33 correct; the in-plane
-        # rows keep the detilted chain (raw tilt would double-count z*phi
-        # there).  See the source-block comment in _bucket.single.
+        # ROW SPLIT: rows 33/23/13 (Voigt 2:5) from the TILTED chain; in-plane rows stay detilted
         Gam_t = Gamma_h @ w_t + Gamma_eps @ E6 + Gamma_l1 @ g1t + Gamma_l2 @ g2t
         Sig_t = C @ Gam_t
         Sig = Sig.copy(); Gam = Gam.copy()
@@ -792,9 +745,7 @@ def msgrm_strain_at_depth_batch(obj: Dict[str, Any],       # rm_plate_msg result
     Sig = np.einsum("nij,nj->ni", C, Gam)
 
     if second:
-        # ROW SPLIT: rows 33/23/13 come from the TILTED chain (see the scalar
-        # function and README sec. 4 -- the source/Gamma_l pairing that keeps
-        # the face tractions exact and the cross-ply interior sigma33 right)
+        # ROW SPLIT: rows 33/23/13 come from the TILTED chain (see msgrm_strain_at_depth)
         w_t, g1_t, g2_t = chain("V11bar", "V12bar", ("V21t", "V22t", "V23t"))
         Gam_t = strain(w_t, g1_t, g2_t)
         Sig_t = np.einsum("nij,nj->ni", C, Gam_t)

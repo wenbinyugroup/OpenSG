@@ -11,18 +11,16 @@ Run:  python 1d_sg.py [layup_db.yaml]
 """
 import os
 import sys
+import time
 
 import numpy as np
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = HERE
-while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
-    ROOT = os.path.dirname(ROOT)
-sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from opensg_solid.rm_plate_1D.segment_plate import plate_sg_yaml, read_plate_sg_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
+from opensg_solid.sg_homo import write_sc_K
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS SCRIPT
@@ -76,6 +74,7 @@ plate_sg_yaml(yml, layup, material_db, n_per_layer=n_per_layer,
               elem_order=elem_order, fraction=fraction)
 
 # ---- homogenize ------------------------------------------------------------
+t0 = time.perf_counter()
 inp = read_plate_sg_yaml(yml)
 r = rm_plate_msg(inp["thick"], inp["angles"], inp["mat_names"],
                  inp["material_db"], n_per_layer=n_per_layer,
@@ -85,20 +84,17 @@ M = np.asarray(r["A6"] if model == 0 else r["ABDG"])
 rho_h = sum(inp["material_db"][m]["rho"] * t
             for m, t in zip(inp["mat_names"], inp["thick"]))
 
-# ---- output ----------------------------------------------------------------
+# ---- output: SwiftComp .K layout (stiffness + compliance, timed) -----------
 out = os.path.splitext(DB)[0] + "_plate_homo.out"
-with open(out, "w") as f:
-    f.write("OpenSG plate homogenization of %s\n"
-            % os.path.basename(yml))
-    f.write("%d plies, h = %.6f m, reference fraction = %g\n"
-            % (len(inp["thick"]), sum(inp["thick"]), fraction))
-    f.write("model %d: %s\n\n"
-            % (model, "classical 6x6 ABD" if model == 0
-               else "shear-refined 8x8 ABDG"))
-    f.write("rows/cols: %s\n" % ", ".join(ROWS[:n]))
-    for row in M:
-        f.write(" ".join("%14.6e" % v for v in row) + "\n")
-    f.write("\nsection mass rho*h = %.6f kg/m^2\n" % rho_h)
+write_sc_K(out, M, solve_time=time.perf_counter() - t0,
+           model="msg-solid plate model from %s: %d plies, h = %.6f m,"
+                 " fraction = %g, rho*h = %.6f kg/m^2, rows [%s]"
+                 % (os.path.basename(yml), len(inp["thick"]),
+                    sum(inp["thick"]), fraction, rho_h,
+                    " ".join(ROWS[:n])),
+           constants=False,
+           name="Classical Plate" if model == 0
+                else "Reissner-Mindlin Plate")
 
 print("%s + %s  ->  %s" % (os.path.basename(DB), os.path.basename(yml),
                            os.path.basename(out)))

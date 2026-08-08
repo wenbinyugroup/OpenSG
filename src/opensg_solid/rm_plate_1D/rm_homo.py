@@ -1,37 +1,19 @@
-"""rm_homo.py -- the GENERAL layup_db-driven OpenSG-RM plate homogenization,
-promoted to the core from the ex5 pipeline (examples/opensg-rm_dynamic/ex5/
-1d_sg.py) because nothing in it is example-specific.
+"""rm_homo.py -- layup_db-driven OpenSG-RM plate homogenization.
 
     layup_db.yaml  ->  1dsg.yaml (+ .png)  ->  <db-stem>_plate_homo.out
                                                + the rm_plate_msg result dict
 
 The YAML is the single user input: reference fraction, materials (with
 density), stacking sequence, and model = 0 (classical 6x6 ABD) or 1
-(shear-refined 8x8 ABDG).  See the ex5 layup_db.yaml for the documented
-format.
+(shear-refined 8x8 ABDG).
 
 Use as a module:
     from opensg_solid.rm_plate_1D.rm_homo import homogenize_layup_db
     r = homogenize_layup_db("layup_db.yaml")        # writes the three files
 or from the command line:
-    python -m rm_plate.rm_homo <layup_db.yaml>
+    python -m opensg_solid.rm_plate_1D.rm_homo <layup_db.yaml>
 
-# ----------------------------------------------------------------------------
-# ALL VARIABLES USED IN THIS MODULE
-# ----------------------------------------------------------------------------
-#   ROWS          row/col labels: 3 membrane strains, 3 curvatures, 2 shears
-#   load_layup_db(path) -> dict with every number float-coerced (the PyYAML
-#                 "128.0e9 is a string" trap) and the layup unpacked to the
-#                 mat_names/thick/angles lists rm_plate_msg wants
-#   homogenize_layup_db(path, out_dir=None, write=True) -> the rm_plate_msg
-#                 result dict r (A6, ABDG, the V0/V11/V12 warping ladders);
-#                 when write is True also writes 1dsg.yaml/.png next to the
-#                 db (or into out_dir) and <db-stem>_plate_homo.out
-#   db, model, fraction, mesh, n_per_layer, elem_order, material_db, layup
-#                 the parsed pieces of the YAML
-#   yml, inp, r   the SG mesh file, its parsed-back dict, the homo result
-#   n, M, rho_h   printed size (6 or 8), the matrix, the section mass rho*h
-# ----------------------------------------------------------------------------
+ROWS: row/col labels -- 3 membrane strains, 3 curvatures, 2 transverse shears.
 """
 import os
 
@@ -45,7 +27,21 @@ ROWS = ("e11", "e22", "g12", "k11", "k22", "k12", "2g13", "2g23")
 
 
 def load_layup_db(path):
-    """Parse layup_db.yaml with every number coerced to float."""
+    """Parse a layup_db.yaml with every number coerced to float
+    (PyYAML can read values such as 128.0e9 as strings).
+
+    In:
+        path: str, path to the layup_db YAML.
+    Out:
+        dict with keys:
+            db: dict, the raw parsed YAML
+            model: int, 0 = classical 6x6 ABD, 1 = shear-refined 8x8 ABDG
+            fraction: float, reference-surface fraction
+            n_per_layer: int, elements per ply
+            elem_order: int, element order
+            material_db: dict, name -> {E, G, nu, rho, full_name}
+            layup: dict with mat_names/thick/angles lists (bottom->top).
+    """
     db = yaml.safe_load(open(path))
     material_db = {k: {"E": [float(v) for v in m["E"]],
                        "G": [float(v) for v in m["G"]],
@@ -64,12 +60,16 @@ def load_layup_db(path):
 
 
 def homogenize_layup_db(path, out_dir=None, write=True):
-    """The full homo chain of the ex5 pipeline, callable from anywhere.
+    """Homogenize the layup described by a layup_db.yaml.
 
-    Returns the rm_plate_msg result dict (A6, ABDG and the nodal warping
-    ladders the dehomogenization rides on).  When `write` is True, also
-    writes 1dsg.yaml + 1dsg.png next to the db (or into out_dir) and the
-    <db-stem>_plate_homo.out matrix file."""
+    In:
+        path: str, layup_db YAML path.
+        out_dir: str or None, output directory (default: the db's directory).
+        write: bool, when True write 1dsg.yaml + 1dsg.png and the
+               <db-stem>_plate_homo.out matrix file.
+    Out:
+        dict: the rm_plate_msg result (A6, ABDG, nodal warping ladders).
+    """
     path = os.path.abspath(path)
     d = load_layup_db(path)
     out_dir = out_dir or os.path.dirname(path)
@@ -108,9 +108,3 @@ def homogenize_layup_db(path, out_dir=None, write=True):
                 f.write(" ".join("%14.6e" % v for v in row) + "\n")
             f.write("\nsection mass rho*h = %.6g kg/m^2\n" % rho_h)
     return r
-
-
-if __name__ == "__main__":
-    import sys
-    homogenize_layup_db(sys.argv[1] if len(sys.argv) > 1 else "layup_db.yaml")
-    print("done")

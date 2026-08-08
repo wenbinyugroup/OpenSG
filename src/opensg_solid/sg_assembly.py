@@ -1,25 +1,14 @@
 """sg_assembly.py -- element kernels, periodic assembly, preconditioners
-and linear solvers of the general SG engine.
+and linear solvers of the general SG engine (n_model: 1 beam, 2 plate,
+3 solid; Voigt order xx yy zz yz xz xy throughout).
 
-PROVENANCE (plate/solid, n_model 2/3).  _element_residual_single_case,
-calculate_RHS_and_Ke_batch_periodic, ebe_jacobian_product_periodic,
-apply_block_precond, compute_block_inv_diag, estimate_max_eigenvalue,
-apply_chebyshev_precond, compute_homogenized_constants are VERBATIM
-from the working SSDM plate model (Dehom_plate_plots_SSDM.py) --
-globals lifted into arguments, nothing else.
+The SSDM kernel set (_element_residual_single_case through
+compute_homogenized_constants) and the beam KKT assembly are verbatim
+ports of validated reference implementations; their numerical output is
+bit-gated -- do not modify code lines.
 
-PROVENANCE (beam, n_model 1).  assemble_system_matrices (energy_hh/he/ee
-+ the l-chain energy_ll/hl/le, sparse Dhh),
-build_lagrange_constraint_matrix, compress_periodic_cells_jax,
-assemble_rigid_body_ops, solve_fluctuation_field (augmented KKT) are
-lifted from the OneDrive Beam_solid.py (Claude_code/Beam_solid.py;
-adaptations noted per function: repo material interface upstream,
-pypardiso with scipy SuperLU fallback, (y2, y3) = the LAST two SG
-coordinates in build_lagrange_constraint_matrix).
-
-THE FE CORE.  The periodic maps and scatter/gather transforms come from
-the legacy fe_jax core, resolved by opensg_solid/__init__ via
-$FE_JAX_CORE (default ~/OpenSG_2.0).
+The periodic maps and scatter/gather transforms come from the fe_jax
+core, resolved by opensg_solid/__init__ via $FE_JAX_CORE.
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS MODULE  (axis suffixes: e element, n elem-node,
@@ -82,6 +71,22 @@ def _element_residual_single_case(
     phi_qn: jnp.ndarray, W_q: jnp.ndarray, C_ss: jnp.ndarray,
     epsilon_bar: jnp.ndarray = jnp.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 ):
+    """Element internal-force residual for one macro strain case:
+    R = int B^T C (eps(u) + epsilon_bar) dV over the element.
+
+    In:
+        u_nd: (N, 3) element nodal fluctuation displacement.
+        x_nd: (N, d) element node coordinates, d = SG dimension 1/2/3.
+        dphi_dxi_qnp: (Q, N, p) parametric basis gradients.
+        phi_qn: (Q, N) basis values (unused here; shared signature).
+        W_q: (Q,) quadrature weights.
+        C_ss: (6, 6) element stiffness, Voigt xx yy zz yz xz xy.
+        epsilon_bar: (6,) macro strain added at every quadrature point.
+    Out:
+        (N, 3) nodal residual.
+    Gradients are zero-padded so a d-dim SG occupies the LAST d slots
+    of (x, y, z).
+    """
     J_qdp = jnp.einsum("nd,qnp->qdp", x_nd, dphi_dxi_qnp)
     G_qpd = jnp.linalg.inv(J_qdp)
     det_J_q = jnp.linalg.det(J_qdp)
@@ -122,6 +127,24 @@ def calculate_RHS_and_Ke_batch_periodic(
     W_q: jnp.ndarray, C_ess: jnp.ndarray, periodic_cells,
     u_g_flat: jnp.ndarray, n_model: int, n_sg: int
 ):
+    """Periodic-assembled case RHS and per-element tangent stiffness
+    for the fluctuation solve (one residual per macro mode of Ge).
+
+    In:
+        x_end: (E, N, d) element-node coordinates.
+        dphi_dxi_qnp: (Q, N, p) parametric basis gradients.
+        phi_qn: (Q, N) basis values.
+        W_q: (Q,) quadrature weights.
+        C_ess: (E, 6, 6) per-element stiffness.
+        periodic_cells: (E, N) master-node (periodic) connectivity.
+        u_g_flat: (n_unique,) unraveled dof vector (zero seed).
+        n_model: static int, 1 beam / 2 plate / 3 solid.
+        n_sg: static int, SG spatial dimension.
+    Out:
+        rhs_matrix: (n_unique, H) case RHS, H = 4 beam / 6 plate,
+            solid; rows 0:3 zeroed (pinned dofs).
+        J_uu_batch: (E, N*3, N*3) element tangent stiffness (jacfwd).
+    """
     if n_model == 1:
         mask_ones_1d = jnp.zeros((6, 4)).at[0, 0].set(1.0)
         mask_y2 = jnp.zeros((6, 4)).at[0, 3].set(-1.0).at[4, 1].set(1.0)
@@ -195,6 +218,18 @@ def calculate_RHS_and_Ke_batch_periodic(
 
 def ebe_jacobian_product_periodic(J_uu, periodic_cells, n_unique_u,
                                   z_u: jnp.ndarray):
+    """Matrix-free element-by-element product y = K z through the
+    periodic scatter/gather (no global matrix formed).
+
+    In:
+        J_uu: (E, N*3, N*3) element tangent blocks.
+        periodic_cells: (E, N) master-node connectivity.
+        n_unique_u: int, total unique periodic dofs.
+        z_u: (n_unique_u,) input vector.
+    Out:
+        (n_unique_u,) product; entries 0:3 copied from z_u (pinned
+        dofs act as identity rows).
+    """
     z_u_enu = transform_global_unraveled_to_element_node(periodic_cells, z_u)
     _, N, U = z_u_enu.shape
     z_u_local = z_u_enu.reshape(-1, N * U)
@@ -209,6 +244,17 @@ def ebe_jacobian_product_periodic(J_uu, periodic_cells, n_unique_u,
 
 @partial(jax.jit, static_argnames=["n_unique_u"])
 def apply_block_precond(inv_blocks, n_unique_u, x_reduced):
+    """Block-Jacobi preconditioner apply: per-node 3x3 inverse-block
+    multiply.
+
+    In:
+        inv_blocks: (nodes, 3, 3) inverse diagonal blocks
+            (compute_block_inv_diag).
+        n_unique_u: static int, vector length (jit signature only).
+        x_reduced: (n_unique_u,) vector to precondition.
+    Out:
+        (n_unique_u,) preconditioned vector.
+    """
     x_nodes = x_reduced.reshape(-1, 3)
     precond_nodes = jnp.einsum('nij,nj->ni', inv_blocks, x_nodes)
     return precond_nodes.ravel()
@@ -216,6 +262,17 @@ def apply_block_precond(inv_blocks, n_unique_u, x_reduced):
 
 @partial(jax.jit, static_argnames=["n_unique"])
 def compute_block_inv_diag(J_uu, periodic_cells, n_unique):
+    """Assemble and invert the per-node 3x3 diagonal blocks of the
+    periodic global stiffness (block-Jacobi setup).
+
+    In:
+        J_uu: (E, N*3, N*3) element tangent blocks.
+        periodic_cells: (E, N) master-node connectivity.
+        n_unique: static int, total unique periodic dofs.
+    Out:
+        (n_unique//3, 3, 3) inverse blocks; a 1e-8 identity shift
+        regularizes empty or singular blocks.
+    """
     E, n_u, _ = J_uu.shape
     N = n_u // 3
     J_uu_reshaped = J_uu.reshape(E, N, 3, N, 3)
@@ -230,7 +287,17 @@ def compute_block_inv_diag(J_uu, periodic_cells, n_unique):
 
 
 def estimate_max_eigenvalue(A_op, M_op, b_col, num_iters=15):
-    """Power method on M^-1 A for the Chebyshev bounds."""
+    """Power-method estimate of the largest eigenvalue of M^-1 A
+    (upper Chebyshev bound).
+
+    In:
+        A_op: callable, v -> A v.
+        M_op: callable, v -> M^-1 v (preconditioner apply).
+        b_col: (n,) shape/dtype template for the start vector.
+        num_iters: int, power iterations.
+    Out:
+        scalar eigenvalue estimate, inflated by 1.05 for safety.
+    """
     v = jnp.ones_like(b_col)
     v = v / jnp.linalg.norm(v)
 
@@ -247,6 +314,22 @@ def estimate_max_eigenvalue(A_op, M_op, b_col, num_iters=15):
 
 def apply_chebyshev_precond(inv_blocks, n_unique_u, eig_max, eig_min, A_op,
                             degree, x_reduced):
+    """Chebyshev-polynomial preconditioner: `degree` block-Jacobi
+    smoothed Richardson steps at the Chebyshev shifts on
+    [eig_min, eig_max].
+
+    In:
+        inv_blocks: (nodes, 3, 3) block-Jacobi inverse blocks.
+        n_unique_u: int, vector length (forwarded to
+            apply_block_precond).
+        eig_max, eig_min: floats, spectrum bounds of the
+            preconditioned operator.
+        A_op: callable, v -> A v.
+        degree: int, polynomial degree (number of steps).
+        x_reduced: (n,) vector to precondition.
+    Out:
+        (n,) approximate A^-1 x_reduced.
+    """
     d = (eig_max + eig_min) / 2.0
     c = (eig_max - eig_min) / 2.0
     i = jnp.arange(1, degree + 1)
@@ -268,6 +351,22 @@ def compute_homogenized_constants(
     x_end: jnp.ndarray, dphi_dxi_qnp: jnp.ndarray, phi_qn: jnp.ndarray,
     W_q: jnp.ndarray, C_ess: jnp.ndarray, n_model: int, n_sg: int
 ):
+    """Direct (fluctuation-free) part of the homogenized matrix,
+    D_bar = int Ge^T C Ge dV, plus the SG measure omega.
+
+    In:
+        x_end: (E, N, d) element-node coordinates.
+        dphi_dxi_qnp: (Q, N, p) parametric basis gradients.
+        phi_qn: (Q, N) basis values.
+        W_q: (Q,) quadrature weights.
+        C_ess: (E, 6, 6) per-element stiffness.
+        n_model: static int, 1 beam / 2 plate / 3 solid.
+        n_sg: static int, SG spatial dimension.
+    Out:
+        D_bar: (H, H) direct integral, H = 4 beam / 6 plate, solid.
+        omega: scalar SG measure (solid: integrated volume;
+            plate/beam: coordinate spans per n_sg; 1.0 fallback).
+    """
     if n_model == 3:
         def _get_vol(x_nd):
             J_qdp = jnp.einsum("nd,qnp->qdp", x_nd, dphi_dxi_qnp)
