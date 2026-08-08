@@ -15,7 +15,8 @@ G = E/(2*(1+nu))
 
 r = plate_homo_2d(SC, material_param=jnp.array([(E, E, E, G, G, G,
                                                  nu, nu, nu)]),
-                  angles=jnp.array([0.0]), n_model=3, workdir=".", plot=True)
+                  angles=jnp.array([0.0]), n_model=3, workdir=".", plot=True,
+                  boundary="periodic")   # SwiftComp .K digit-parity mode
 C = np.asarray(r["C_eff"])
 C = 0.5*(C + C.T)
 om = float(r["omega"])

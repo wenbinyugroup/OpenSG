@@ -59,6 +59,29 @@ Digit-for-digit on both samples, to seven significant figures on every entry. Th
 is cubic to five digits and every symmetry-forbidden coupling sits four to five orders below the
 diagonal, which is the health check on the all-directions periodic tie.
 
+### Boundary treatment on the solid route
+
+`plate_homo_2d` takes the same `boundary` argument; `None` resolves to `"aperiodic"` for the
+3-D SG solid model and `"periodic"` for every other route (the sample runners above pass
+`boundary="periodic"` explicitly to keep the digit-parity gate). Solid elements carry only
+translations, so aperiodic clamps every DOF of the bounding-box-face nodes. Same `.sc`, per
+unit cell, MPa:
+
+| term | aperiodic (S1) | periodic (S1) | % | aperiodic (S2) | periodic (S2) | % |
+|---|---|---|---|---|---|---|
+| $C_{11}$ | 12977.0 | 10190.2 | +27.3 | 2810.3 | 2303.2 | +22.0 |
+| $C_{12}$ | 5423.6 | 5646.1 | −3.9 | 1548.6 | 1612.1 | −3.9 |
+| $C_{44}$ | 5546.0 | 4519.6 | +22.7 | 1300.4 | 1106.7 | +17.5 |
+| solve | 146 s | 150 s | | 52 s | 52 s | |
+
+The bias is much larger than the shell route's (+7 %) because the clamped set is much larger:
+the solid sheet meets the cube faces in 2-D patches — 17 610 of 116 851 nodes (15 %) for
+Sample 1 against 720 of 13 536 (5 %) for the shell traces — and on the solid route aperiodic
+is **not** faster (the periodic tie merges only face pairs, so the factorized size barely
+changes). Periodic is the exact treatment for a periodic medium; aperiodic is the right model
+only when the SG genuinely is not periodic. Full table:
+`examples/OpenSG-solid/6_get_solid_props_from_3D_SG/boundary_compare.dat`.
+
 ## Shell route — the 3-D shell SG
 
 `shell_sg3d` solves the same equivalent-continuum problem when the microstructure is a **thin

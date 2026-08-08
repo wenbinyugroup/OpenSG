@@ -84,6 +84,15 @@ Aperiodic is a **kinematic upper bound** on one cell (its error is a boundary
 layer at the clamped faces) and it is *faster* than periodic (the Dirichlet
 rows leave the factorization, and there is no tie map or Lagrange border).
 
+The solid route has the same switch: `opensg_solid.plate_homo_2d(...,
+boundary=...)`, where `None` resolves to `"aperiodic"` for the 3-D SG solid
+model (`n_sg = 3`, `n_model = 3`) and `"periodic"` for every other route
+(beam KKT and the CG solver are periodic-only). Solid elements carry only
+the three translations, so the Dirichlet set is simply every DOF of the
+bounding-box-face nodes — there is no rotation-clamping subtlety. In
+`_homo_direct` the boundary DOFs replace the first-node pin (identity rows,
+zero RHS), which also removes the rigid modes.
+
 **Benchmarking:** digit-parity comparisons against SwiftComp `.K` and any
 unit-cell property you report as *the* effective stiffness still require
 `boundary="periodic"` — pass it explicitly. Aperiodic is the right treatment
@@ -97,6 +106,9 @@ cells).
 the rank-one theorem); do not use it for reported properties.
 `shell_sg3d(...)` takes `boundary="aperiodic"` by default (user convention);
 pass `boundary="periodic"` for unit-cell benchmarks.
+`plate_homo_2d(...)` takes `boundary=None`, resolving to `"aperiodic"` only
+for the 3-D SG solid model; the TPMS sample runners pass
+`boundary="periodic"` explicitly to keep the SwiftComp digit-parity gate.
 
 ## Choosing the cell — the one thing still on the user
 

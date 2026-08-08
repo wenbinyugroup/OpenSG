@@ -150,7 +150,8 @@ def full_homogenization_pipeline(
 
 
 def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
-                 periodic_cells, unique_dofs, n_unique, n_model, n_sg):
+                 periodic_cells, unique_dofs, n_unique, n_model, n_sg,
+                 bdofs=None):
     """Direct-sparse variant of full_homogenization_pipeline (the
     default): SAME element kernels and the SAME pinned-first-node system
     the EBE operator applies (rows 0:3 -> identity, zero RHS), assembled
@@ -159,7 +160,10 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     solver error enters second order -- the CG(1e-6) and direct answers
     agree beyond the reported digits (validated on the RHC gates).
     Measured on the RHC plate SG: the per-column CG was 130 s of the
-    138 s run; this path removes it."""
+    138 s run; this path removes it.
+    bdofs (aperiodic mode): global DOFs pinned to ZERO fluctuation
+    (w = 0 Dirichlet on the boundary nodes) INSTEAD of the first-node
+    pin -- the connectivity is then the raw mesh, not the periodic map."""
     Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
         u_0_g[unique_dofs], n_model, n_sg)
@@ -171,12 +175,21 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     rows = np.repeat(dof_map, n_ed, axis=1).ravel()
     cols = np.tile(dof_map, (1, n_ed)).ravel()
     data = np.asarray(J_euu).ravel()
-    keep = rows >= 3                    # pinned rows 0:3 -> unit diagonal
-    rows = np.concatenate([rows[keep], np.arange(3)])
-    cols = np.concatenate([cols[keep], np.arange(3)])
-    data = np.concatenate([data[keep], np.ones(3)])
+    if bdofs is None:
+        keep = rows >= 3                # pinned rows 0:3 -> unit diagonal
+        pin = np.arange(3)
+    else:                               # pinned rows = boundary DOFs
+        pinmask = np.zeros(n_unique, bool)
+        pinmask[np.asarray(bdofs, np.int64)] = True
+        keep = ~pinmask[rows]
+        pin = np.where(pinmask)[0]
+    rows = np.concatenate([rows[keep], pin])
+    cols = np.concatenate([cols[keep], pin])
+    data = np.concatenate([data[keep], np.ones(len(pin))])
     A_csr = csr_matrix((data, (rows, cols)), shape=(n_unique, n_unique))
     RHS = -np.asarray(Dhe)              # rows 0:3 already zeroed
+    if bdofs is not None:
+        RHS[pin] = 0.0                  # w = 0 on the boundary nodes
     V0_matrix = jnp.asarray(_sparse_direct_solve(A_csr, RHS))
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
     D_bar, omega = compute_homogenized_constants(
@@ -500,7 +513,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     elem_rotation=None,                 # (E, 9) per-element DCs
                     solver: str = "direct",             # "direct" | "cg"
                     shear_refined: bool = False,        # + RM G 2x2 (n_model=2)
-                    plot: bool = True                   # write <base>_mesh.png
+                    plot: bool = True,                  # write <base>_mesh.png
+                    boundary: Optional[str] = None      # 'aperiodic'|'periodic'
                     ) -> Dict[str, Any]:
     """Homogenize ONE structure gene (1-D/2-D/3-D .sc) to the macro law.
 
@@ -519,7 +533,16 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     warping ladder (plate_shear_ladder) -> r["G_msg"] (2x2), r["ABDG"]
     (8x8 [[A6, 0], [0, G]]), r["A6_ladder"]; derivation status per SG
     dimension: see plate_shear_ladder.
-    sc_path may also be an ALREADY-PARSED sc dict (laminate_to_sg)."""
+    sc_path may also be an ALREADY-PARSED sc dict (laminate_to_sg).
+    boundary: None resolves to 'aperiodic' for the 3-D SG solid model
+    (n_sg = 3, n_model = 3) and 'periodic' for every other route.
+    'periodic' ties opposite faces/edges/corners (the SwiftComp-parity
+    mode -- pass it explicitly for unit-cell benchmarks).  'aperiodic' is
+    the boundary-solution treatment: the macro/affine field mapped onto
+    the boundary prescribes ZERO fluctuation (w = 0 Dirichlet) on every
+    bounding-box-face node; it forbids the rank-one affine fields of a
+    free SG, fixes the rigid modes, and is a kinematic upper bound on a
+    single cell (Rules/periodicity_in_solid_props.md)."""
     if isinstance(sc_path, dict):
         base = os.path.join(workdir if workdir is not None else ".",
                             "laminate_sg")
@@ -557,8 +580,28 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     x_end = mesh_to_jax(vertices=points, cells=cells)
     V = points.shape[0]
 
-    periodic_cells_en, dof_map_np = mesh_to_periodic_sparse_assembly_map(
-        V, cells, points, n_model, atol=1e-6)
+    # boundary resolution: 3-D SG solid props default to the aperiodic
+    # (boundary-solution Dirichlet) treatment; every other route stays
+    # periodic (Rules/periodicity_in_solid_props.md)
+    if boundary is None:
+        boundary = "aperiodic" if (n_sg == 3 and n_model == 3) \
+            else "periodic"
+    if boundary == "periodic":
+        periodic_cells_en, dof_map_np = mesh_to_periodic_sparse_assembly_map(
+            V, cells, points, n_model, atol=1e-6)
+        bdofs = None
+    else:
+        if n_model == 1 or solver == "cg":
+            raise ValueError("boundary='aperiodic' supports the plate/solid "
+                             "models with solver='direct'")
+        # boundary solution mapped to the boundary nodes: zero fluctuation
+        # (w = 0, Dirichlet) on every bounding-box-face node of the SG
+        periodic_cells_en, dof_map_np = cells, np.arange(V*3)
+        pts = np.asarray(points)
+        box0, box1 = pts.min(0), pts.max(0)
+        tol = 1e-6*float(np.max(box1 - box0))
+        onb = ((np.abs(pts - box0) < tol) | (np.abs(pts - box1) < tol)).any(1)
+        bdofs = (3*np.where(onb)[0][:, None] + np.arange(3)).ravel()
 
     if n_model == 1:
         return _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
@@ -578,16 +621,22 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     n_unique = len(unique_dofs)
 
     u_0_g_full = jnp.zeros(shape=(V * 3))
-    homo = _homo_direct if solver == "direct" \
-        else full_homogenization_pipeline
-    C_eff, V0_matrix, omega = homo(
-        x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
-        periodic_cells_en, unique_dofs, n_unique, n_model, n_sg)
+    if solver == "direct":
+        C_eff, V0_matrix, omega = _homo_direct(
+            x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+            periodic_cells_en, unique_dofs, n_unique, n_model, n_sg,
+            bdofs=bdofs)
+    else:
+        C_eff, V0_matrix, omega = full_homogenization_pipeline(
+            x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+            periodic_cells_en, unique_dofs, n_unique, n_model, n_sg)
 
     r = {"C_eff": np.asarray(C_eff), "V0": V0_matrix, "C_ess": C_ess,
          "x_end": x_end, "phi_qn": phi_qn, "dphi_dxi_qnp": dphi_dxi_qnp,
          "W_q": W_q, "periodic_cells_en": periodic_cells_en,
          "n_sg": n_sg, "n_model": n_model, "omega": float(omega),
+         "boundary": boundary,
+         "n_boundary_nodes": 0 if bdofs is None else len(bdofs)//3,
          "sc": sc}
 
     if shear_refined:
@@ -620,8 +669,11 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     _mdl = {1: "msg-solid beam model (Timoshenko 6x6)",
             2: "msg-solid plate model (ABD)",
             3: "msg-solid 3D elastic model"}.get(n_model, "msg-solid")
+    _bc = ("periodic" if r.get("boundary", "periodic") == "periodic"
+           else "aperiodic: w=0 on %d boundary nodes"
+                % r["n_boundary_nodes"])
     write_sc_K(base + ".out", np.asarray(r["C_eff"]),
                solve_time=r["solve_time"],
-               model="%s, omega %.8g" % (_mdl, float(r["omega"])),
+               model="%s, omega %.8g, %s" % (_mdl, float(r["omega"]), _bc),
                constants=(n_model == 3))
     return r
