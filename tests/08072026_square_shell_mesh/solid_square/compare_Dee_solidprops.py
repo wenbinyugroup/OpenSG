@@ -14,13 +14,13 @@ import jax
 import jax.numpy as jnp
 import yaml as _yaml
 
-from opensg_shell.oml_ring import load_ring_ref
-from opensg_shell.solid_props import assemble_solid_macro, NDOF6
-from opensg_shell.emit_abd import material_db_from_yaml
+from opensg_shell.sg_mesh import load_ring_ref
+from opensg_shell.sg_homo import assemble_solid_macro, NDOF6
+from opensg_shell.sg_materials import material_db_from_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
 from opensg_solid.sg_materials import (build_material_C, rotate_C_with_matrix,
                                        elem_rotation_from_yaml)
-from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+from opensg_shell.sg_periodicity import mesh_to_periodic_sparse_assembly_map
 
 ############### User Input #################################
 SOLID_YAML = "../square_tube_2Dsolid_t1only.yaml"

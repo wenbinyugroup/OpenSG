@@ -19,12 +19,12 @@ Run (from this folder):  python diag_periodic_shell.py
 import numpy as np
 import yaml as _yaml
 
-from opensg_shell.oml_ring import load_ring_ref
-from opensg_shell.segment_indep import (assemble_segment_indep,
+from opensg_shell.sg_mesh import load_ring_ref
+from opensg_shell.sg_assembly import (assemble_segment_indep,
                                         assemble_constraint, NDOF6)
-from opensg_shell.solid_props import assemble_solid_macro
+from opensg_shell.sg_homo import assemble_solid_macro
 from opensg_shell.fe_jax.msg_rm_timo import build_C_Psi
-from opensg_shell.periodic_multiscale import periodic_node_map
+from opensg_shell.sg_periodicity import periodic_node_map
 
 ############### User Input #################################
 YAML = "square_tube_shell.yaml"     # written by square_tube_periodic.py
@@ -37,7 +37,7 @@ ax, cross = R["ax"], R["cross"]
 G_by = list(R["G_by"])
 d_sh = _yaml.safe_load(open(YAML))
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-from opensg_shell.emit_abd import material_db_from_yaml
+from opensg_shell.sg_materials import material_db_from_yaml
 _mdb = material_db_from_yaml(d_sh["materials"])
 for si, sec in enumerate(d_sh["sections"]):
     _pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]

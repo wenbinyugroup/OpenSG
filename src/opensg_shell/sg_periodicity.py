@@ -1,5 +1,8 @@
-"""periodic_multiscale.py (msg_shell) -- periodic local->global sparse assembly
+"""sg_periodicity.py (msg_shell) -- periodic local->global sparse assembly
 map for a SHELL mesh, 2-D SG / solid macro model (n_model = 3).
+
+Merged from: periodic_multiscale.py (formerly periodic_multiscale.py; content
+unchanged).
 
 Replication of the solid-side fe_jax/periodic_multiscale.py: same two
 functions, same signatures, same body; the only change is ndof_per_node = 6,

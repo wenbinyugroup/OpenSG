@@ -15,7 +15,7 @@ Run (from this folder):  python strain_channels.py
 import numpy as np
 
 from opensg_shell import build_solid_bundle
-from opensg_shell.solid_props import (solid_fluct_ops_batch,
+from opensg_shell.sg_homo import (solid_fluct_ops_batch,
                                       solid_macro_ops_batch, NDOF6)
 
 ############### User Input #################################
@@ -74,11 +74,11 @@ D_by = {int(k): v for k, v in enumerate([np.asarray(d) for d in
     if "D_by" in B else None
 
 # rebuild the strip exactly as ring_solid does
-from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
-from opensg_shell.oml_ring import load_ring_ref
+from opensg_shell.sg_periodicity import mesh_to_periodic_sparse_assembly_map
+from opensg_shell.sg_mesh import load_ring_ref
 R = load_ring_ref("_chan.yaml", "center")
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-from opensg_shell.emit_abd import material_db_from_yaml
+from opensg_shell.sg_materials import material_db_from_yaml
 import yaml as _yaml
 d_sh = _yaml.safe_load(open("_chan.yaml"))
 _mdb = material_db_from_yaml(d_sh["materials"])

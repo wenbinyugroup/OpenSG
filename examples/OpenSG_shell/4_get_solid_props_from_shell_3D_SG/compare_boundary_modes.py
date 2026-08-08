@@ -20,7 +20,7 @@ import shutil
 import numpy as np
 import yaml as _yaml
 
-from opensg_shell.shell_sg3d import shell_sg3d
+from opensg_shell.sg_homo import shell_sg3d
 
 YAML = "schwarz_p_3Dshell.yaml"
 T = float(_yaml.safe_load(open(YAML))["sections"][0]["layup"][0][1])

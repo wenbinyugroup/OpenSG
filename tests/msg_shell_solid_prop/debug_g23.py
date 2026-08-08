@@ -24,11 +24,11 @@ Run (from this folder):  python debug_g23.py
 """
 import numpy as np
 
-from opensg_shell.solid_props import (solid_macro_ops_batch, ring_solid,
+from opensg_shell.sg_homo import (solid_macro_ops_batch, ring_solid,
                                       build_solid_bundle, GBAR_ORDER)
-from opensg_shell.segment_indep import quad_ops_indep_batch, _surf_frame_batch
-import opensg_shell.solid_props as SP
-from opensg_shell.oml_ring import load_ring_ref
+from opensg_shell.sg_assembly import quad_ops_indep_batch, _surf_frame_batch
+import opensg_shell.sg_homo as SP
+from opensg_shell.sg_mesh import load_ring_ref
 
 R, t, nc = 1.0, 0.03, 144
 A_cell = np.pi * R**2

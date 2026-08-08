@@ -25,7 +25,7 @@ Run (from this folder):
     python run_taper_segment.py
 """
 import numpy as np
-from opensg_shell.segment_taper import segment_timo_from_3dyaml
+from opensg_shell.sg_homo import segment_timo_from_3dyaml
 
 CASES = ["iso_hR0.1", "aniso_hR0.1"]
 

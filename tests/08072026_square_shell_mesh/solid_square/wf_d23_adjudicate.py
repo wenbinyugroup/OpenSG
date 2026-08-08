@@ -27,7 +27,7 @@ import time
 import numpy as np
 
 from opensg_shell import build_solid_bundle
-from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+from opensg_shell.sg_periodicity import mesh_to_periodic_sparse_assembly_map
 
 E, nu = 70.0e9, 0.30
 G_iso = E/(2*(1 + nu))

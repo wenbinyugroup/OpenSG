@@ -1,4 +1,4 @@
-## t = 0.036457   aperiodic: 720 free-face nodes clamped, ndof 81216, 72.3 s   periodic: ndof 79056, 96.3 s
+## t = 0.036457   aperiodic: 720 free-face nodes clamped, ndof 81216, 42.3 s   periodic: ndof 79056, 66.5 s
 #  term      aperiodic      periodic     %diff
    C11         2375.89       2225.31    +6.767
    C22         2375.92       2225.28    +6.770
@@ -10,7 +10,7 @@
    C55         1078.32       1041.01    +3.585
    C66         1078.61       1040.93    +3.620
 
-## t = 0.129330   aperiodic: 720 free-face nodes clamped, ndof 81216, 71.2 s   periodic: ndof 79056, 95.3 s
+## t = 0.129330   aperiodic: 720 free-face nodes clamped, ndof 81216, 42.2 s   periodic: ndof 79056, 65.4 s
 #  term      aperiodic      periodic     %diff
    C11         9881.00       8916.81   +10.813
    C22         9881.00       8916.85   +10.813

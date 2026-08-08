@@ -2,7 +2,7 @@
 
 **Applies to:** every route that homogenizes a structure gene to an equivalent
 3-D solid (`n_model = 3`) — the solid engines (`opensg_solid`, and the original
-JAX_BICGoptimize single script) and **msg_shell** (`opensg_shell.solid_props`,
+JAX_BICGoptimize single script) and **msg_shell** (`opensg_shell.sg_homo`,
 `build_solid_bundle` / `ring_solid`).
 
 ## The rule
@@ -23,7 +23,7 @@ When periodicity is used, it is not partial and not per-direction:
 
 The tie is applied exactly as `fe_jax/periodic_multiscale.py` does it for the
 solid architecture — the same function, the same switch, mirrored for the shell
-in `opensg_shell/periodic_multiscale.py` with 6 DOFs per node instead of 3:
+in `opensg_shell/sg_periodicity.py` with 6 DOFs per node instead of 3:
 
 ```
 periodic_map(points, n_model, atol, ndof_per_node)
@@ -64,7 +64,7 @@ periodic faces returns the material's own isotropic stiffness exactly
 
 ## The aperiodic (boundary-solution Dirichlet) mode
 
-`opensg_shell.shell_sg3d(yaml, boundary=...)` takes `"periodic"` (default) or
+`opensg_shell.sg_homo(yaml, boundary=...)` takes `"periodic"` (default) or
 `"aperiodic"`. Aperiodic maps the boundary solution — for a unit cell, the
 macro/affine field itself — onto the boundary nodes: zero **translational**
 fluctuation (`w1 = w2 = w3 = 0`, Dirichlet) on every bounding-box-face node,

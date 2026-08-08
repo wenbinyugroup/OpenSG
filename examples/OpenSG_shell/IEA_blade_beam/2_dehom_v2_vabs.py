@@ -56,7 +56,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from opensg_shell import build_rm_bundle, _macro_fields, _rm_shell_strain
-from opensg_shell.segment_indep import quad_ops_indep
+from opensg_shell.sg_assembly import quad_ops_indep
 from opensg_shell.fe_jax.msg_dehom import _macro_recovery
 from opensg_solid.rm_plate_1D.msg_rm_plate import (
     rm_plate_msg, msgrm_strain_at_depth, msgrm_strain_at_depth_batch)

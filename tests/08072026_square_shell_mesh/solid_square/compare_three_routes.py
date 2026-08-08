@@ -18,7 +18,7 @@ Run (from this folder):  python compare_three_routes.py
 import numpy as np
 
 from opensg_shell import build_solid_bundle
-from opensg_shell.solid_props import elastic_constants
+from opensg_shell.sg_homo import elastic_constants
 
 ############### User Input #################################
 a, t_w, nseg = 1.0, 0.03, 10       # midline side, wall thickness, elems/side

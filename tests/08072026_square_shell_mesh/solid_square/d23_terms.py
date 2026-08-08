@@ -9,7 +9,7 @@ Run (from this folder):  python d23_terms.py
 """
 import numpy as np
 
-from opensg_shell.solid_props import solid_macro_ops_batch
+from opensg_shell.sg_homo import solid_macro_ops_batch
 
 ROWS = ["eps11", "eps22", "2eps12", "K11", "K22", "K12+K21", "2g13", "2g23"]
 

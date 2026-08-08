@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from opensg_shell import build_solid_bundle, GBAR_ORDER
-from opensg_shell.solid_props import elastic_constants
+from opensg_shell.sg_homo import elastic_constants
 
 ############### User Input #################################
 a_sq = 1.0               # centerline square side

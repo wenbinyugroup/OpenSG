@@ -14,8 +14,8 @@ Run (from this folder):  python line_Dee_test.py
 import numpy as np
 import jax.numpy as jnp
 
-from opensg_shell.solid_props import solid_macro_ops_batch
-from opensg_shell.emit_abd import material_db_from_yaml
+from opensg_shell.sg_homo import solid_macro_ops_batch
+from opensg_shell.sg_materials import material_db_from_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
 from opensg_solid.sg_materials import build_material_C
 

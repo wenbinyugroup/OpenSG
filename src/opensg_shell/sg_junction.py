@@ -1,4 +1,13 @@
-"""Level-2 junction law: local 2-D corner micro-solve, general laminate.
+"""sg_junction.py (msg_shell) -- Level-2 junction law: local corner/micro-cell
+solves that correct the shell lattice for sub-shell junction physics.
+
+Merged from: junction_micro.py (formerly junction_micro.py; deferred
+intra-package imports rewritten to the consolidated modules: solid_props ->
+.sg_homo, solve_segment_jax / emit_abd -> .sg_materials, segment_element ->
+.sg_assembly, periodic_multiscale -> .sg_periodicity).
+
+junction_micro.py -- Level-2 junction law: local 2-D corner micro-solve,
+general laminate.
 
 Public entry points: corner_micro_law (patch-subtraction law, topologies
 L/T/X) and microcell_law (periodic mini-lattice law).  Both compute the
@@ -23,7 +32,7 @@ to the section frame, which legitimately populates the section 2e23 row.
 """
 import numpy as np
 
-from .solid_props import _C_from_eng, _rot_inplane, _voigt_rotate
+from .sg_homo import _C_from_eng, _rot_inplane, _voigt_rotate
 
 
 def _ply_C_wall(mat, ang_deg):
@@ -102,7 +111,7 @@ def stack_shell_law(stack, sections, materials, g_source="msg", frac=0.5):
       D6: (6,6) ndarray -- summed ABD
       G2: (2,2) ndarray -- summed transverse-shear law
     """
-    from .solve_segment_jax import _material_by_section
+    from .sg_materials import _material_by_section
     D6 = np.zeros((6, 6))
     G2 = np.zeros((2, 2))
     for sec, mir in stack:
@@ -115,7 +124,7 @@ def stack_shell_law(stack, sections, materials, g_source="msg", frac=0.5):
         Gk = np.asarray(G_by[0], float)
         if g_source == "msg":
             from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-            from .emit_abd import material_db_from_yaml
+            from .sg_materials import material_db_from_yaml
             pl = [[str(p[0]), float(p[1]), float(p[2])] for p in s["layup"]]
             rr = rm_plate_msg([p[1] for p in pl], [p[2] for p in pl],
                               [p[0] for p in pl],
@@ -477,8 +486,8 @@ def _shell_patch(topo, tA, tB, Ls, secA, secB, D_by, G_by):
       (3,3) ndarray -- mutual-energy matrix over local normal channels
       [e11, e22, e33]
     """
-    from .solid_props import (assemble_solid_macro, assemble_solid_strip,
-                              NDOF6)
+    from .sg_homo import (assemble_solid_macro, assemble_solid_strip,
+                          NDOF6)
     h_el = min(tA, tB)/2.0
     nA = max(4, int(round(Ls/h_el)))
 
@@ -600,9 +609,9 @@ def microcell_law(stackA, stackB, sections, materials, D_by, G_by,
       info: dict -- Lm, n_tris, D_shell_mini, D_solid_mini, nd, tris, own,
             shell_pts, shell_cells
     """
-    from .solid_props import ring_solid
-    from .segment_element import compute_k22
-    from .periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+    from .sg_homo import ring_solid
+    from .sg_assembly import compute_k22
+    from .sg_periodicity import mesh_to_periodic_sparse_assembly_map
 
     mats = {str(m["name"]): m for m in materials}
     tsecs = [sum(float(p[1]) for p in s["layup"]) for s in sections]

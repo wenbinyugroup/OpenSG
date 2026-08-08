@@ -1,7 +1,7 @@
 """Two-step SHELL dehomogenization: beam FF -> RM shell section strains -> MSG-RM
 through-thickness stress recovery (the production OpenSG-TW pipeline, msgrm_dehom route).
 
-step 1 (section, opensg_shell.dehom_rm): st = C6^-1 FF and the RM warping recombination
+step 1 (section, opensg_shell.sg_dehom): st = C6^-1 FF and the RM warping recombination
   (_macro_fields), then per element the 6 shell strains [e11 e22 2e12 k11 k22 2k12]
   (_rm_shell_strain) plus the span/arc strain gradients dE1/dE2 (quad_ops_indep;
   arc gradient from LAYUP-BOUNDARY-AWARE nodal averaging -- no differencing across
@@ -34,7 +34,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from opensg_shell import build_rm_bundle, _macro_fields, _rm_shell_strain
-from opensg_shell.segment_indep import quad_ops_indep
+from opensg_shell.sg_assembly import quad_ops_indep
 from opensg_shell.fe_jax.msg_dehom import _macro_recovery
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
 

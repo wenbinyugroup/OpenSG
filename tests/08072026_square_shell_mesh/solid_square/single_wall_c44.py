@@ -14,11 +14,11 @@ Run (from this folder):  python single_wall_c44.py
 """
 import numpy as np
 
-from opensg_shell.solid_props import ring_solid
-from opensg_shell.oml_ring import load_ring_ref
-from opensg_shell.emit_abd import material_db_from_yaml
+from opensg_shell.sg_homo import ring_solid
+from opensg_shell.sg_mesh import load_ring_ref
+from opensg_shell.sg_materials import material_db_from_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+from opensg_shell.sg_periodicity import mesh_to_periodic_sparse_assembly_map
 import yaml as _yaml
 
 ############### User Input #################################

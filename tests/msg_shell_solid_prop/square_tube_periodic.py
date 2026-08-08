@@ -22,8 +22,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from opensg_shell import build_solid_bundle, GBAR_ORDER
-from opensg_shell.solid_props import elastic_constants
-from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+from opensg_shell.sg_homo import elastic_constants
+from opensg_shell.sg_periodicity import mesh_to_periodic_sparse_assembly_map
 
 
 def node_master_map(pts, n_model=3, ndof=6):

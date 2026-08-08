@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml as _yaml
 
-from opensg_shell.shell_sg3d import shell_sg3d
+from opensg_shell.sg_homo import shell_sg3d
 
 r = shell_sg3d("schwarz_p_3Dshell.yaml")   # omega = SG surface area (default)
 C = r["C3D"]

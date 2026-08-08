@@ -28,9 +28,9 @@ Run (from this folder):  python beam_Dee_analytic.py
 import numpy as np
 import yaml as _yaml
 
-from opensg_shell.oml_ring import load_ring_ref
-from opensg_shell.segment_indep import assemble_segment_indep
-from opensg_shell.emit_abd import material_db_from_yaml
+from opensg_shell.sg_mesh import load_ring_ref
+from opensg_shell.sg_assembly import assemble_segment_indep
+from opensg_shell.sg_materials import material_db_from_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
 
 ############### User Input #################################

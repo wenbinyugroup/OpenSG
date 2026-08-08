@@ -4,7 +4,7 @@ The classical msg-shell analysis meshes only the cross-section contour (a 1-D
 ring) and enforces periodicity along the beam axis. A **tapered** segment has
 no such periodicity — its two end cross-sections differ. `opensg_shell`
 handles this with the aperiodic segment pipeline
-(`opensg_shell.segment_taper`), the msg-shell counterpart of the
+(`opensg_shell.sg_homo`), the msg-shell counterpart of the
 OpenSG-FEniCSx boundary flow:
 
 1. **Boundary extraction** — the two end cross-sections are found
@@ -29,7 +29,7 @@ OpenSG-FEniCSx boundary flow:
    length $L$.
 
 ```python
-from opensg_shell.segment_taper import segment_timo_from_3dyaml
+from opensg_shell.sg_homo import segment_timo_from_3dyaml
 
 r = segment_timo_from_3dyaml("seg_iso_hR0.1.yaml")   # 3-D shell yaml in, ...
 r["S6"]            # segment Timoshenko 6x6

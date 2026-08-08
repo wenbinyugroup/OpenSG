@@ -1,5 +1,10 @@
-"""RM-consistent thin-walled dehomogenization.
+"""RM-consistent thin-walled dehomogenization: two-step recovery of 3-D
+stress/strain and warping displacement from the RM ring homogenization bundle.
+Merged from: dehom_rm.py (build_rm_bundle and _strip moved to sg_homo; the
+bundle consumed here is produced by sg_homo.build_rm_bundle).
 
+dehom_rm.py -- RM-consistent thin-walled dehomogenization
+---------------------------------------------------------
 Step-1 recovery is rebuilt on the SAME Reissner-Mindlin ring used for the homogenization
 (C0 Lagrange 6-DOF element with independent drilling omega_3, MITC-tied gamma_23), with the
 same element operators (quad_ops_indep / _mitc_shear_indep), so it is the exact
@@ -13,127 +18,18 @@ energy-consistent adjoint of the RM 6x6 assembly:
 Unlike the Kirchhoff-Love bundle, the recovery carries the wall transverse shears
 (2g13, 2g23).  Step 2 (plate through-thickness SG) reuses the opensg_jax plate machinery.
 
-Public entry points: build_rm_bundle, disp_at_points, stress_at_points.
+Public entry points: disp_at_points, stress_at_points (bundle from
+sg_homo.build_rm_bundle).
 """
 import numpy as np
-import yaml
 import jax.numpy as jnp
 
-from .segment_indep import quad_ops_indep, _mitc_shear_indep          # RM 8-strain operator
-from .run_ring_indep import ring_indep                                 # RM ring solver
-from .oml_ring import load_ring_ref                                    # OML/center ring loader
-from .fe_jax.msg_hermite import solve_tw_from_yaml          # layup_db / material_db by name
+from .sg_assembly import quad_ops_indep, _mitc_shear_indep          # RM 8-strain operator
 from .fe_jax.msg_dehom import (_macro_recovery, _project_point,
                                          _voigt_to_tensor, _tensor_to_voigt)
 from .fe_jax.msg_materials import (compute_ABD_matrix, plate_stress_at_depth,
                                              rotation_6x6)
 from .fe_jax.msg_transverse_shear import transverse_shear_stiffness
-
-
-def _strip(rx3, cells, ax):
-    """Reconstruct the one-quad-deep prismatic strip mesh EXACTLY as ring_indep does.
-
-    In:
-        rx3: (m,3) float, ring node coordinates.
-        cells: (n_el,2) int, ring line-element connectivity.
-        ax: int, beam-axis index (0/1/2) the strip is extruded along.
-    Out:
-        nodes: (2m,3) float, strip node coordinates (ring + extruded copy).
-        quads: (n_el,4) int, quad connectivity [a, b, m+b, m+a].
-        h: float, extrusion length (mean ring element length).
-    """
-    rx3 = np.asarray(rx3, float); m = len(rx3)
-    h = float(np.mean(np.linalg.norm(rx3[cells[:, 1]] - rx3[cells[:, 0]], axis=1)))
-    ez = np.zeros(3); ez[ax] = 1.0
-    nodes = np.vstack([rx3, rx3 + h * ez])
-    quads = np.array([[a, b, m + b, m + a] for a, b in cells], dtype=int)
-    return nodes, quads, h
-
-
-def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
-    """Homogenize with the RM ring and package everything the two-step dehom needs.
-
-    ``ref=None`` reads the reference surface from the yaml's ``reference`` field -- the single
-    source of truth, set when the 1-D yaml is created (absent -> "center" = mid-surface) -- so
-    homogenization and dehom follow the same reference; pass an explicit ``ref`` only to override.
-
-    In:
-        shell_yaml: str, path to the 1-D shell section yaml.
-        ref: None | "center" | "oml" | "oml_flip" | "iml", reference-surface override.
-        shear: str, RM transverse-shear tying scheme passed to ring_indep.
-        g_source: str, wall transverse-shear source: "msg" (Yu-2002 LS projection) or
-            "whitney" (complementary-energy shear flow).
-    Out:
-        dict bundle: "Timo" (6,6) RM Timoshenko matrix; "V0"/"V1" (6m,4) warping modes;
-        "corners" (m,2) section contour coords; "red_cells" (n_el,2) connectivity;
-        "rx3" (m,3), "re3" (n_el,3), "k22" (n_el,) ring geometry; "ax" int beam axis;
-        "cross" axis pair; "strip" (nodes, quads, h); "layup_per_elem" list of layup
-        names per element; "layup_db"/"material_db" plate-SG databases (by-name,
-        geometry-free); "frac" float; "ref" str; "g_source" str.
-    """
-    import time as _time
-    _t0 = _time.perf_counter()
-    d = yaml.safe_load(open(shell_yaml))
-    if ref is None:                                       # single source of truth: yaml records its ref
-        ref = d.get("reference", "center")                # (set at 1-D-yaml creation; absent -> center)
-    R = load_ring_ref(shell_yaml, ref)
-    # Single reference decision: ring laminate ref, plate-SG z_ref, layup_db frac, emitted ABD,
-    # and the recovery depth conversion in stress_at_points ALL follow ``frac``.
-    frac = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}.get(ref, 0.0)
-    # G_msg is reference-independent, but the SG carries the recovery warping, so its z_ref
-    # must sit at the chosen reference surface.
-    G_by = list(R["G_by"])
-    if g_source == "msg":
-        from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-        from .emit_abd import material_db_from_yaml
-        _mdb = material_db_from_yaml(d["materials"])
-        for si, sec in enumerate(d["sections"]):
-            _pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
-            _h = sum(p[1] for p in _pl)
-            _rr = rm_plate_msg([p[1] for p in _pl], [p[2] for p in _pl], [p[0] for p in _pl],
-                               _mdb, fraction=frac)
-            if _rr["G_msg"] is not None:
-                G_by[si] = np.asarray(_rr["G_msg"])
-    from .solid_props import write_abdg_out
-    import os as _os2
-    write_abdg_out(_os2.path.splitext(shell_yaml)[0] + "_ABDG.out",
-                   d["sections"], R["D_by"], G_by)
-    C6, V0, V1 = ring_indep(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], G_by,
-                            R["k22"], R["ax"], R["cross"], shear=shear, lam_space="elem",
-                            return_fields=True)
-    C6 = 0.5 * (C6 + C6.T)
-    nodes, quads, h = _strip(R["rx"], R["cells"], R["ax"])
-
-    sec_names = [s["elementSet"] for s in d["sections"]]
-    layup_per_elem = [sec_names[int(si)] for si in R["rsub"]]
-    # reuse the KL bundle ONLY for the by-name plate layup_db + material_db (geometry-free)
-    kl = solve_tw_from_yaml(shell_yaml, frac=frac)
-    # emit the per-station ABD yaml at the SAME reference (once, cached) for dehom + shell buckling
-    try:
-        import os as _os
-        from .emit_abd import emit_station_abd
-        _tag = _os.path.splitext(_os.path.basename(shell_yaml))[0]
-        _ay = _os.path.join(_os.path.dirname(shell_yaml) or ".", "abd", _tag + "_abd.yaml")
-        if not _os.path.exists(_ay):
-            emit_station_abd(shell_yaml, _ay, station=_tag,
-                             ref="mid" if ref == "center" else "oml")
-    except Exception:
-        # intentional best-effort: ABD yaml emission failure must not abort the bundle build
-        pass
-    # OpenSG default: SwiftComp-format timed .out for the beam model too
-    from opensg_solid.sg_homo import write_sc_K
-    write_sc_K(_os2.path.splitext(shell_yaml)[0] + "_Timo.out", C6,
-               solve_time=_time.perf_counter() - _t0,
-               model="msg-shell beam model"
-                     " [ext sh2 sh3 twist bend2 bend3]",
-               constants=False, name="Timoshenko")
-    return {"Timo": C6, "V0": np.asarray(V0), "V1": np.asarray(V1),
-            "corners": R["rx"][:, R["cross"]], "red_cells": np.asarray(R["cells"]),
-            "rx3": np.asarray(R["rx"]), "re3": np.asarray(R["re3"]), "k22": np.asarray(R["k22"]),
-            "ax": int(R["ax"]), "cross": list(R["cross"]), "strip": (nodes, quads, h),
-            "layup_per_elem": layup_per_elem, "layup_db": kl["layup_db"],
-            "material_db": kl["material_db"], "frac": frac, "ref": ref,
-            "g_source": g_source}
 
 
 def _rm_shell_strain(B, e, xi, st_m, aA, aB, s2_scheme="mitc4_g23"):

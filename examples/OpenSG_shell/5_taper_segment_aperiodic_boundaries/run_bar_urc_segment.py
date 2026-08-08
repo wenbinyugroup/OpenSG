@@ -18,7 +18,7 @@ ratio  : (S_ii - R_ii)/(L_ii - R_ii); a value in [0, 1] means the segment
 Run (from this folder):  python run_bar_urc_segment.py
 """
 import numpy as np
-from opensg_shell.segment_taper import segment_timo_from_3dyaml
+from opensg_shell.sg_homo import segment_timo_from_3dyaml
 
 YAML = "BAR_URC_numEl_52_segment_12.yaml"
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]

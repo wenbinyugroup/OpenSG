@@ -6,7 +6,7 @@ single ply) and writes the 6x6 C3D plus the 9 engineering constants.
 
 PERIODIC by default, per Rules/periodicity_in_solid_props.md: opposite face
 edges and the corners of the 2-D SG are tied through the shell periodic
-assembly map (opensg_shell.periodic_multiscale), the mirror of the solid side's
+assembly map (opensg_shell.sg_periodicity), the mirror of the solid side's
 fe_jax/periodic_multiscale.py.  Periodicity rides in the local->global assembly
 map, so no constraint rows are added.
 
@@ -24,7 +24,7 @@ import time
 import numpy as np
 
 from opensg_shell import build_solid_bundle, GBAR_ORDER
-from opensg_shell.solid_props import elastic_constants
+from opensg_shell.sg_homo import elastic_constants
 
 ############### User Input #################################
 YAML = "../square_tube_1Dshell.yaml"

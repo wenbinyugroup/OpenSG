@@ -16,7 +16,7 @@ import time
 import numpy as np
 
 from opensg_shell import build_solid_bundle, GBAR_ORDER
-from opensg_shell.solid_props import elastic_constants
+from opensg_shell.sg_homo import elastic_constants
 
 case = sys.argv[1]
 meta = json.load(open("inputs_meta.json"))[case]

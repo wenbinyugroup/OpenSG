@@ -17,7 +17,7 @@ Run (from this folder):  python crosscell_thin_sweep.py
 import numpy as np
 
 from opensg_shell import build_solid_bundle
-from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+from opensg_shell.sg_periodicity import mesh_to_periodic_sparse_assembly_map
 
 ############### User Input #################################
 L = 1.0

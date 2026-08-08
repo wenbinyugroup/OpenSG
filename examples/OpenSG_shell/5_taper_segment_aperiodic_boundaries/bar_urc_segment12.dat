@@ -1,5 +1,5 @@
 # BAR-URC tapered shell segment 12: aperiodic-boundary Timoshenko 6x6
-# L=3.45293   solve 15.8 s
+# L=3.45293   solve 15.9 s
 # segment S6
   1.487716e+10   5.069631e+06  -2.865011e+05   2.018784e+07   2.419746e+08  -4.178956e+09
   5.069631e+06   6.098229e+08  -4.454148e+07  -4.585160e+07  -3.411636e+06  -1.534413e+07

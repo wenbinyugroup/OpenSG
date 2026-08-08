@@ -1,30 +1,25 @@
 """opensg_shell -- the MSG SHELL engine (Reissner-Mindlin shell SGs ->
-beam / equivalent-solid macro models), split file-per-concern:
+beam / equivalent-solid macro models), split file-per-concern like
+opensg_solid:
 
-    xsec_5v6_master.py / oml_ring.py  1-D ring yaml loaders (load_ring /
-                                      load_ring_ref, reference conventions)
-    segment_element.py,
-    segment_element_general.py,
-    segment_indep.py                  shell element operators + assembly
-                                      (production 6-DOF drilling element)
-    run_ring_indep.py                 ring homogenization -> Timoshenko 6x6
-                                      (+ V0/V1 warping fields)
-    dehom_rm.py                       build_rm_bundle driver + RM two-step
-                                      dehomogenization
-    solid_props.py                    equivalent 3-D solid from the
-                                      cross-section SG (+ junction census)
-    junction_micro.py                 junction micro/microcell corrections
-    shell_sg3d.py                     3-D shell SG -> equivalent solid
-                                      (TPMS-class; boundary periodic|aperiodic)
-    segment_taper.py,
-    boundary_from_yaml.py             aperiodic/tapered segment pipeline
-                                      (boundary V0/V1 Dirichlet)
-    emit_abd.py                       per-station wall-law ABDG emitter
-    periodic_multiscale.py            periodic assembly map (6 DOF/node)
-    orient_check.py                   orientation-frame reports / PNGs
-    fe_jax/                           msg_* kernels: materials/ABD, RM
-                                      operators, Timoshenko finalization
-                                      (msg_solver), KL bundle, recovery
+    sg_mesh.py         SG input loaders (1-D ring / 3-D segment yaml,
+                       reference conventions), topological boundary
+                       extraction, orientation-frame reports and PNGs
+    sg_materials.py    per-section ABD 6x6 + transverse-shear G 2x2 laws,
+                       per-station wall-law ABDG emitter
+    sg_assembly.py     shell element operators + assembly: the production
+                       6-DOF drilling element, 5-DOF general element,
+                       MITC tying, k22/kg corrections, Dirichlet solvers
+    sg_periodicity.py  periodic assembly map (6 DOF/node)
+    sg_homo.py         homogenization drivers: ring -> Timoshenko 6x6,
+                       RM bundle, cross-section -> equivalent 3-D solid,
+                       3-D shell SG -> C3D, aperiodic/tapered segment
+    sg_dehom.py        RM two-step dehomogenization / recovery
+    sg_junction.py     junction micro/microcell corrections
+    fe_jax/            msg_* kernels: materials/ABD, RM operators,
+                       Timoshenko finalization (msg_solver), KL bundle,
+                       recovery, orientation plot
+    helper/            format converters
 
 Every model writes a timed SwiftComp-layout .out; examples own all paths
 (yaml in -> .out back).
@@ -37,13 +32,13 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from .xsec_5v6_master import load_ring, ring_6dof, ring_5dof, LBL          # noqa: E402
-from .oml_ring import load_ring_ref                                        # noqa: E402
-from .run_ring_indep import ring_indep                                     # noqa: E402
-from .dehom_rm import (build_rm_bundle, stress_at_points, disp_at_points,  # noqa: E402
+from .sg_mesh import (load_ring, ring_6dof, ring_5dof, LBL,                # noqa: E402
+                      load_ring_ref)
+from .sg_homo import (ring_indep, build_rm_bundle, build_solid_bundle,     # noqa: E402
+                      ring_solid, elastic_constants, GBAR_ORDER,
+                      shell_sg3d, segment_timo_from_3dyaml)
+from .sg_dehom import (stress_at_points, disp_at_points,                   # noqa: E402
                        _macro_fields, _rm_shell_strain)
-from .emit_abd import emit_station_abd, load_station_abd                   # noqa: E402
+from .sg_materials import emit_station_abd, load_station_abd               # noqa: E402
 from .fe_jax.msg_rm_timo import timoshenko_rm                              # noqa: E402
 from .fe_jax.orient_plot import plot_orient, auto_emit                     # noqa: E402
-from .solid_props import (build_solid_bundle, ring_solid,                  # noqa: E402
-                          elastic_constants, GBAR_ORDER)

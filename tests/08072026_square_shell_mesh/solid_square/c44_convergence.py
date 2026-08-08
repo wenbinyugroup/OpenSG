@@ -17,7 +17,7 @@ Run (from this folder):  python c44_convergence.py
 import numpy as np
 
 from opensg_shell import build_solid_bundle
-from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+from opensg_shell.sg_periodicity import mesh_to_periodic_sparse_assembly_map
 
 ############### User Input #################################
 a = 1.0

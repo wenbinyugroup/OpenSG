@@ -8,8 +8,8 @@ Run (from this folder):  python debug_g23_tying.py
 """
 import numpy as np
 
-import opensg_shell.solid_props as SP
-from opensg_shell.segment_indep import _surf_frame_batch
+import opensg_shell.sg_homo as SP
+from opensg_shell.sg_assembly import _surf_frame_batch
 from opensg_shell import build_solid_bundle
 
 _orig = SP.solid_macro_ops_batch

@@ -8,8 +8,8 @@ import numpy as np
 import yaml as _yaml
 
 from opensg_shell import build_solid_bundle
-from opensg_shell.oml_ring import load_ring_ref
-from opensg_shell.solid_props import ring_solid
+from opensg_shell.sg_mesh import load_ring_ref
+from opensg_shell.sg_homo import ring_solid
 
 ############### User Input #################################
 R, r, t = 0.10, 0.05, 0.005
@@ -85,7 +85,7 @@ print("  %-6s" % "Deoso" + "".join("%10.2f" % v for v in DEO_SO))
 make_yaml(20, "_deo_c.yaml")
 Rr = load_ring_ref("_deo_c.yaml", "center")
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-from opensg_shell.emit_abd import material_db_from_yaml
+from opensg_shell.sg_materials import material_db_from_yaml
 d_c = _yaml.safe_load(open("_deo_c.yaml"))
 Gmsg = np.asarray(rm_plate_msg([t], [0.0], ["alu"],
                                material_db_from_yaml(d_c["materials"]),

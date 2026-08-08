@@ -7,7 +7,7 @@ solid $6\times6$. OpenSG covers this from both sides:
 | route | input | solver |
 |---|---|---|
 | **msg-solid** | 3-D solid SG (tets/hexes) | `opensg_solid.sg_homo.plate_homo_2d(..., n_model=3)` |
-| **msg-shell** | 3-D **shell** SG (a thin sheet meshed as shell elements) | `opensg_shell.shell_sg3d.shell_sg3d(...)` |
+| **msg-shell** | 3-D **shell** SG (a thin sheet meshed as shell elements) | `opensg_shell.sg_homo.shell_sg3d(...)` |
 
 Both routes default to **periodic**: opposite faces, edges and corners tied through the sparse
 periodic assembly map. Both also take a `boundary` argument whose `"aperiodic"` option (the
@@ -94,7 +94,7 @@ residual, and a three-translation kernel. Shell edges shared by more than two el
 detected as **junction lines**; a smooth TPMS has none.
 
 ```python
-from opensg_shell.shell_sg3d import shell_sg3d
+from opensg_shell.sg_homo import shell_sg3d
 
 r = shell_sg3d("schwarz_p_3Dshell.yaml")                        # boundary="periodic" (default)
 r = shell_sg3d("schwarz_p_3Dshell.yaml", boundary="aperiodic")  # non-periodic SGs (explicit)

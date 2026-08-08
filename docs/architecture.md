@@ -17,14 +17,14 @@ input file.
 
 ```{mermaid}
 flowchart TD
-    Y1["1-D shell yaml<br/>(nodes, elements, layups, materials)"] --> LR["oml_ring.load_ring_ref<br/>contour arrays + ABD/G per section"]
-    LR --> MB["solve_segment_jax._material_by_section<br/>ABD 6x6 (chosen reference) + G 2x2"]
+    Y1["1-D shell yaml<br/>(nodes, elements, layups, materials)"] --> LR["sg_mesh.load_ring_ref<br/>contour arrays + ABD/G per section"]
+    LR --> MB["sg_materials._material_by_section<br/>ABD 6x6 (chosen reference) + G 2x2"]
     MB --> GMSG["opensg_solid rm_plate_msg<br/>MSG (Yu-2002 LS) wall G"]
-    LR --> K22["segment_element.compute_k22<br/>hoop curvature per edge"]
-    GMSG --> RI["run_ring_indep.ring_indep<br/>6-DOF ring, drilling Lagrange, MITC g23"]
+    LR --> K22["sg_assembly.compute_k22<br/>hoop curvature per edge"]
+    GMSG --> RI["sg_homo.ring_indep<br/>6-DOF ring, drilling Lagrange, MITC g23"]
     K22 --> RI
-    RI --> ASM["segment_indep.assemble_segment_indep<br/>strip energy blocks Dhh..Dle (/h)"]
-    RI --> CON["segment_indep.assemble_constraint<br/>drilling rows Gc/Gl/Ge"]
+    RI --> ASM["sg_assembly.assemble_segment_indep<br/>strip energy blocks Dhh..Dle (/h)"]
+    RI --> CON["sg_assembly.assemble_constraint<br/>drilling rows Gc/Gl/Ge"]
     ASM --> LU["one LU of the KKT<br/>V0 = LU \ (-Dhe)"]
     CON --> LU
     LU --> V1["fe_jax.msg_solver.prepare_v1_rhs<br/>V1 = LU \ b(V0)"]
@@ -36,12 +36,12 @@ flowchart TD
 
 ```{mermaid}
 flowchart TD
-    Y2["3-D shell segment yaml"] --> EX["boundary_from_yaml.extract<br/>free edges -> two end rings + node2seg"]
+    Y2["3-D shell segment yaml"] --> EX["sg_mesh.extract<br/>free edges -> two end rings + node2seg"]
     EX --> BY[["boundary 1-D yamls (L, R)<br/>+ orientation PNGs"]]
     EX --> RL["ring_indep (side L)<br/>C6L, V0, V1"]
     EX --> RR["ring_indep (side R)<br/>C6R, V0, V1"]
     EX --> SA["assemble_segment_indep + constraint<br/>full 3-D quad mesh, drilling saddle point"]
-    RL --> DIR["segment_taper._boundary_dirichlet<br/>ring V0/V1 -> Dirichlet on end nodes"]
+    RL --> DIR["sg_homo._boundary_dirichlet<br/>ring V0/V1 -> Dirichlet on end nodes"]
     RR --> DIR
     SA --> SLV["dirichlet_factor: one interior LU<br/>V0 then V1 (shared factorization)"]
     DIR --> SLV
@@ -53,8 +53,8 @@ flowchart TD
 
 ```{mermaid}
 flowchart TD
-    Y3["3-D shell SG yaml (TPMS-class)"] --> SG3["shell_sg3d.shell_sg3d"]
-    SG3 --> PM["periodic_multiscale map<br/>faces+edges+corners tied (default)"]
+    Y3["3-D shell SG yaml (TPMS-class)"] --> SG3["sg_homo.shell_sg3d"]
+    SG3 --> PM["sg_periodicity map<br/>faces+edges+corners tied (default)"]
     SG3 --> AP["aperiodic: w = 0 Dirichlet<br/>on bounding-box nodes (on request)"]
     PM --> KAS["batched Gamma_h / Gamma_e assembly<br/>sparse K, Dhe, Dee"]
     AP --> KAS

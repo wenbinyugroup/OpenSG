@@ -12,9 +12,9 @@ Run (from this folder):  python solid_d23_adjudicate.py
 import numpy as np
 import yaml as _yaml
 
-from opensg_shell.solid_props import _C_from_eng
-from opensg_shell.junction_micro import _voigt_rotate
-from opensg_shell.periodic_multiscale import mesh_to_periodic_sparse_assembly_map
+from opensg_shell.sg_homo import _C_from_eng
+from opensg_shell.sg_junction import _voigt_rotate
+from opensg_shell.sg_periodicity import mesh_to_periodic_sparse_assembly_map
 
 ############### User Input #################################
 YAML = "../square_tube_2Dsolid.yaml"     # fiber-baked orientations

@@ -13,9 +13,9 @@ import numpy as np
 import yaml as _yaml
 
 from opensg_shell import build_solid_bundle
-from opensg_shell.oml_ring import load_ring_ref
-from opensg_shell.junction_micro import microcell_law
-from opensg_shell.emit_abd import material_db_from_yaml
+from opensg_shell.sg_mesh import load_ring_ref
+from opensg_shell.sg_junction import microcell_law
+from opensg_shell.sg_materials import material_db_from_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
 
 ############### User Input #################################
