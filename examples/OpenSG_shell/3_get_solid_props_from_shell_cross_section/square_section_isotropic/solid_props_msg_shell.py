@@ -18,9 +18,14 @@ use for n_model = 3, so the two routes are directly comparable.
 #   B["C3D"]            (6, 6) equivalent solid stiffness,
 #                       order [e11 e22 e33 2e23 2e13 2e12]
 #   square_solid_msg_shell.out      the output
+#   square_tube_mesh.png            the 1-D SG mesh figure
 # ----------------------------------------------------------------------------
 """
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
+import yaml as _yaml
 
 from opensg_shell import build_solid_bundle, GBAR_ORDER
 from opensg_shell.sg_homo import elastic_constants
@@ -60,3 +65,21 @@ with open(OUT, "w") as f:
     for k in KEYS:
         f.write("%-5s %16.8e\n" % (k, cons[k]))
 print("wrote %s" % OUT)
+
+d = _yaml.safe_load(open(YAML))
+row = lambda r: " ".join(str(x) for x in
+                         (r if isinstance(r, list) else [r])).split()
+nd = np.array([[float(v) for v in row(r)][:2] for r in d["nodes"]])
+el = np.array([[int(v) for v in row(r)] for r in d["elements"]]) - 1
+fig, ax = plt.subplots(figsize=(5.5, 5.5))
+for i, j in el:
+    ax.plot([nd[i, 0], nd[j, 0]], [nd[i, 1], nd[j, 1]], "-",
+            color="0.25", lw=1.4)
+ax.plot(nd[:, 0], nd[:, 1], ".", ms=3, color="crimson")
+ax.set_aspect("equal")
+ax.set_xlabel("y2 (m)")
+ax.set_ylabel("y3 (m)")
+plt.tight_layout()
+plt.savefig("square_tube_mesh.png", dpi=150)
+plt.close(fig)
+print("wrote square_tube_mesh.png")

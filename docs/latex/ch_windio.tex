@@ -15,11 +15,56 @@ most important thing to understand before running anything. OpenSG never runs
 the blade dynamics. It produces the sectional constitutive law that the beam
 solver needs, and it consumes the sectional loads that the beam solver returns.
 
+Figure~\ref{fig:windio:pipeline} is the entire round trip drawn as one data
+flow: which file you edit, which function consumes it, what that function hands
+on, and which file it leaves behind. Read it once before running anything --
+the two dashed edges in the middle are the only place where the chain leaves
+OpenSG, and everything above and below them is reproducible from the shipped
+example directory. The rest of this chapter walks the same graph stage by stage,
+with a smaller tree at the head of each stage that opens up the box.
+
+\begin{figure}[htbp]
+\captree{
+  \node[inputnode] (w) {windIO blade description\\ \texttt{IEA-22-280-RWT.yaml}\\ v1 or v2, auto-detected};
+  \node[funcnode, below=of w] (io) {\texttt{opensg\_io.load\_blade}\\ \texttt{opensg\_io.build\_cross\_section}\\ \texttt{opensg\_io.emit\_opensg\_yaml}};
+  \node[outnode, below=of io] (ys) {\texttt{iea\_s00\_shell.yaml} through\\ \texttt{iea\_s50\_shell.yaml}\\ one ring SG per span station};
+  \node[funcnode, below=of ys] (rm) {\texttt{sg\_homo.build\_rm\_bundle}\\ \texttt{sg\_mesh.load\_ring\_ref},\\ \texttt{rm\_plate\_msg} wall $\mathbf{G}$,\\ \texttt{sg\_homo.ring\_indep}: $\mathbf{V}_0$, $\mathbf{V}_1$};
+  \node[outnode, below=of rm] (to) {\texttt{iea\_s10\_shell\_Timo.out}\\ \texttt{iea\_s10\_shell\_ABDG.out}\\ Timoshenko $6\times6$ per station};
+  \node[outnode, below=of to] (tab) {\texttt{iea51\_beam\_props.dat}\\ the spanwise table, 49 stations};
+  \node[funcnode, below=of tab] (bd) {\texttt{opensg\_io.openfast\_io}:\\ \texttt{timo\_to\_beamdyn}\\ \texttt{write\_beamdyn\_blade}};
+
+  \node[outnode, right=20mm of w] (bdf) {\texttt{blade\_BeamDyn\_Blade.dat}\\ BeamDyn blade input;\\ the mass block is yours};
+  \node[datanode, below=of bdf] (ext) {\textbf{external}: the OpenFAST\\ BeamDyn run, outside OpenSG};
+  \node[inputnode, below=of ext] (ff) {\texttt{ff51\_rmc\_reform.dat}\\ per-station sectional loads\\ $[F_1\,F_2\,F_3\,M_1\,M_2\,M_3]$};
+  \node[funcnode, below=of ff] (da) {step 5a, the section:\\ \texttt{sg\_dehom.\_macro\_fields}\\ \texttt{sg\_dehom.\_rm\_shell\_strain}};
+  \node[outnode, below=of da] (pf) {\texttt{iea\_s10\_elem\_plate\_forces.dat}\\ $\mathbf{F}_6 = \mathbf{A}_6\,\mathbf{s}_6$ per element};
+  \node[funcnode, below=of pf] (db) {step 5b, the wall:\\ \texttt{msg\_rm\_plate.rm\_plate\_msg}\\ \texttt{msgrm\_strain\_at\_depth\_batch}};
+  \node[outnode, below=of db] (sig) {\texttt{iea\_s10\_dehom\_v2.txt}\\ \texttt{iea\_s10\_dehom\_v2.npz}\\ recovered 3-D wall stress};
+
+  \draw[capedge] (w) -- (io);   \draw[capedge] (io) -- (ys);
+  \draw[capedge] (ys) -- (rm);  \draw[capedge] (rm) -- (to);
+  \draw[capedge] (to) -- (tab); \draw[capedge] (tab) -- (bd);
+  \draw[capedge] (bd.east) -- ++(0.55,0) |- (bdf.west);
+  \draw[capedge2] (bdf) -- (ext);  \draw[capedge2] (ext) -- (ff);
+  \draw[capedge] (ff) -- (da);  \draw[capedge] (da) -- (pf);
+  \draw[capedge] (pf) -- (db);  \draw[capedge] (db) -- (sig);
+}
+\caption{The whole blade round trip as one data flow. The left column is
+         stages 1 to 3, the right column stages 3 to 5, and the two dashed
+         edges are the OpenFAST BeamDyn run, which OpenSG neither contains nor
+         launches. Yellow nodes are files you edit, blue nodes are functions
+         that run, grey nodes are quantities that pass between them, and green
+         nodes are files written to disk.}
+\label{fig:windio:pipeline}
+\end{figure}
+
 \begin{table}[htbp]
 \centering
 \small
 \caption{The five stages of the round trip, and which tool owns each one.}
 \label{tab:windio:stages}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{clll}
 \toprule
 Stage & What happens & Tool & Driver \\
@@ -81,6 +126,24 @@ data, so published beam properties can be pulled in as a validation reference.
 Its own README is explicit that it does not run windIO or OpenFAST; it reads
 those formats so you do not have to hand-build the structure gene.
 
+The four functions and the fork between the two output forms:
+
+\captree{
+  \node[inputnode] (b) {windIO blade\\ \texttt{IEA-22-280-RWT.yaml}};
+  \node[funcnode, below=of b] (lb) {\texttt{opensg\_io.load\_blade}\\ windIO v1 or v2, auto-detected};
+  \node[funcnode, below=of lb] (bx) {\texttt{opensg\_io.build\_cross\_section}\\ outer shape, layup stacks and the\\ material database interpolated to $r/R$};
+  \node[datanode, below=of bx] (cs) {\texttt{cs}: one cross-section};
+  \node[funcnode, below=of cs] (ey) {\texttt{opensg\_io.emit\_opensg\_yaml}};
+  \node[outnode, below=of ey] (y1) {\texttt{iea\_s10\_shell.yaml}\\ the 1-D shell SG read\\ by stages 2 and 5};
+  \node[funcnode, right=6mm of cs] (ep) {\texttt{opensg\_io.emit\_prevabs}\\ then PreVABS meshes it};
+  \node[outnode, below=of ep] (y2) {2-D solid cross-section\\ $\rightarrow$ \texttt{iea\_s10.sg.SM}, the VABS\\ reference that validates stage 5};
+
+  \draw[capedge] (b) -- (lb);  \draw[capedge] (lb) -- (bx);
+  \draw[capedge] (bx) -- (cs); \draw[capedge] (cs) -- (ey);
+  \draw[capedge] (ey) -- (y1);
+  \draw[capedge2] (cs) -- (ep); \draw[capedge2] (ep) -- (y2);
+}
+
 \subsection*{Installing it}
 
 \begin{lstlisting}[style=shellst]
@@ -104,7 +167,7 @@ shell YAML needed for stages 2 through 5 is written by pure Python.
 One CLI handles any of the supported inputs. It writes a set of stations in a
 single call:
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\footnotesize]
 python scripts/opensg_io.py BAR_URC.yaml out --name bar --stations 0.3 0.5 0.7 --solid
 \end{lstlisting}
 
@@ -119,7 +182,7 @@ PreVABS XML and runs PreVABS to build the 2-D solid section. Omit
 The API is what you script a 51-station blade with, and it is what generated
 the station files used in the rest of this chapter:
 
-\begin{lstlisting}[style=opensg,caption={Building one station's 1-D shell SG and its PreVABS twin.}]
+\begin{lstlisting}[style=opensg,caption={Building one station's 1-D shell SG and its PreVABS twin.},basicstyle=\ttfamily\footnotesize]
 from opensg_io import load_blade, build_cross_section, emit_opensg_yaml, emit_prevabs
 
 blade = load_blade("IEA-22-280-RWT.yaml")      # windIO v1 or v2, auto-detected
@@ -215,12 +278,29 @@ by MITC, and the MSG (Yu 2002 least-squares) wall transverse-shear law
 $\mathbf{G}$. The ring warping problem is solved for the four Euler--Bernoulli
 modes $\mathbf{V}_0$ and the Timoshenko correction $\mathbf{V}_1$, and the
 energy is condensed to the beam $6\times6$ in the VABS strain order
-\[
+\widematrix{
   \boldsymbol{\varepsilon} =
   \begin{bmatrix} \varepsilon_{11} & \gamma_{12} & \gamma_{13} &
                   \kappa_1 & \kappa_2 & \kappa_3 \end{bmatrix}^{\mathsf T},
-\]
+}
 whose diagonal is $[\,EA\;\;GA_2\;\;GA_3\;\;GJ\;\;EI_2\;\;EI_3\,]$.
+
+One call does all of it, but it is worth knowing what that call chains together,
+because every intermediate in the following tree is an entry of the returned
+bundle that stage 5 reads back:
+
+\captree{
+  \node[inputnode] (y) {\texttt{iea\_s10\_shell.yaml}\\ its own \texttt{reference: center}};
+  \node[funcnode, below=of y] (lr) {\texttt{sg\_mesh.load\_ring\_ref}\\ contour \texttt{rx}, \texttt{cells}, \texttt{rsub}, \texttt{re3}, \texttt{ax}, \texttt{cross};\\ it calls \texttt{sg\_materials.\_material\_by\_section}\\ for the wall ABD $6\times6$ and $\mathbf{G}$ per section,\\ and \texttt{sg\_assembly.compute\_k22} for \texttt{k22}};
+  \node[funcnode, below=of lr] (gm) {\texttt{msg\_rm\_plate.rm\_plate\_msg}\\ the MSG wall $\mathbf{G}$ replaces the\\ Whitney one when \texttt{g\_source="msg"}};
+  \node[funcnode, below=of gm] (ri) {\texttt{sg\_homo.ring\_indep}\\ one KKT factorization, two solves:\\ $\mathbf{V}_0$ then $\mathbf{V}_1$, then\\ \texttt{finalize\_v1\_and\_compute\_deff}};
+  \node[outnode, below=of ri] (o1) {\texttt{iea\_s10\_shell\_Timo.out} (\texttt{write\_sc\_K})\\ \texttt{iea\_s10\_shell\_ABDG.out} (\texttt{write\_abdg\_out})\\ \texttt{abd/iea\_s10\_shell\_abd.yaml}\\ (\texttt{sg\_materials.emit\_station\_abd})};
+  \node[datanode, right=6mm of ri] (bu) {the bundle \texttt{B}:\\ \texttt{Timo}, \texttt{V0}, \texttt{V1}, \texttt{strip},\\ \texttt{layup\_db}, \texttt{material\_db},\\ \texttt{frac} $\rightarrow$ stage 5};
+
+  \draw[capedge] (y) -- (lr);  \draw[capedge] (lr) -- (gm);
+  \draw[capedge] (gm) -- (ri);
+  \draw[capedge] (ri) -- (o1); \draw[capedge] (ri) -- (bu);
+}
 
 \subsection*{What you edit}
 
@@ -274,6 +354,7 @@ after reading the matrix out of it.
 \small
 \caption{Files written by a single-station homogenization run.}
 \label{tab:windio:stage2out}
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lll}
 \toprule
 File & Written by & Content \\
@@ -398,7 +479,7 @@ rows, verbatim from the file:
 \caption{Selected rows of \texttt{iea51\_beam\_props.dat}. Stiffnesses in N
          ($EA$, $GA_2$, $GA_3$) and N$\cdot$m$^2$ ($GJ$, $EI_2$, $EI_3$).}
 \label{tab:windio:props}
-\setlength{\tabcolsep}{4.5pt}
+\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lrrrrrr}
 \toprule
 $\eta = r/R$ & $EA$ & $GA_2$ & $GA_3$ & $GJ$ & $EI_2$ & $EI_3$ \\
@@ -506,6 +587,23 @@ with a \texttt{station\_total} equal to the number of entries you supplied,
 station. Verify the resulting file against the BeamDyn documentation for the
 OpenFAST version you are running before trusting it.
 
+Drawn as a data flow, with the two dashed edges marking the part OpenSG does
+not perform:
+
+\captree{
+  \node[datanode] (ks) {\texttt{K\_timo\_list}: the per-station\\ \texttt{B["Timo"]} $6\times6$, VABS order};
+  \node[funcnode, below=of ks] (t2b) {\texttt{openfast\_io.timo\_to\_beamdyn}\\ symmetric permutation of rows and\\ columns, \texttt{q = [1, 2, 0, 4, 5, 3]}};
+  \node[funcnode, below=of t2b] (wbb) {\texttt{openfast\_io.write\_beamdyn\_blade}\\ \texttt{station\_total}, \texttt{damp\_type} $=1$,\\ a stiffness block then a mass block\\ for every station};
+  \node[inputnode, right=6mm of wbb] (ml) {\texttt{M\_list}: your own\\ sectional mass matrices;\\ omitted means a $6\times6$\\ of zeros per station};
+  \node[outnode, below=of wbb] (bdf) {\texttt{blade\_BeamDyn\_Blade.dat}};
+  \node[datanode, below=of bdf] (run) {\textbf{external}: the OpenFAST\\ BeamDyn run, installed\\ and driven by you};
+  \node[inputnode, below=of run] (ffo) {the per-station sectional\\ loads that come back as\\ the stage 4 table};
+
+  \draw[capedge] (ks) -- (t2b);  \draw[capedge] (t2b) -- (wbb);
+  \draw[capedge] (ml) -- (wbb);  \draw[capedge] (wbb) -- (bdf);
+  \draw[capedge2] (bdf) -- (run); \draw[capedge2] (run) -- (ffo);
+}
+
 \subsection*{The mass matrix is yours}
 
 \texttt{write\_beamdyn\_blade} takes \texttt{M\_list} as an \emph{optional}
@@ -549,7 +647,7 @@ input to recovery. \texttt{ff51\_rmc\_reform.dat} is such a table. It has one
 comment header line and 51 data rows, one per station. The header and the first
 data rows, verbatim:
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\tiny]
 # eta F1 F2 F3 M1 M2 M3 (RM CENTER-ref BeamDyn, VABS order)
 0.00000000e+00 -6.44900592e-06 -2.39422988e-08 2.23607775e+06 1.21251850e+06 -1.12030544e+08 -4.11329552e-07
 2.00000000e-02 2.07495361e+03 7.56198425e+01 2.15497000e+06 1.21427150e+06 -1.05899552e+08 2.54692651e+03
@@ -561,7 +659,7 @@ Columns 2 through 4 are the forces $F_1$, $F_2$, $F_3$ in N; columns 5 through 7
 are the moments $M_1$, $M_2$, $M_3$ in N$\cdot$m. The row used by the
 single-station scripts is row 10:
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\tiny]
 2.00000000e-01 4.19268867e+04 8.26739746e+03 1.46733512e+06 1.21914500e+06 -6.01849720e+07 3.04264594e+05
 \end{lstlisting}
 
@@ -577,7 +675,7 @@ rather than a physical load.
 A converter turns the table into an annotated YAML and pulls one station out of
 it:
 
-\begin{lstlisting}[style=opensg,caption={ff51\_rmc\_reform.yaml: the FF table as a self-describing file.}]
+\begin{lstlisting}[style=opensg,caption={ff51\_rmc\_reform.yaml: the FF table as a self-describing file.},basicstyle=\ttfamily\footnotesize]
 from opensg_shell.helper.ff_to_yaml import convert, station_ff
 
 d = convert("ff51_rmc_reform.dat")                      # writes ff51_rmc_reform.yaml
@@ -592,7 +690,7 @@ either by nearest $\eta$ or by row index. The resulting
 \texttt{ff51\_rmc\_reform.yaml} records the convention explicitly next to the
 data, which is what makes the file readable months later:
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\scriptsize]
 source: ff51_rmc_reform.dat
 convention:
   order: [F1, F2, F3, M1, M2, M3]
@@ -606,6 +704,20 @@ stations:
   eta: 0.2
   FF: [41926.8867, 8267.39746, 1467335.12, 1219145.0, -60184972.0, 304264.594]
 \end{lstlisting}
+
+The whole of stage 4 is therefore a short chain, and the only thing it decides
+is which row of the table stage 5 will use:
+
+\captree{
+  \node[inputnode] (d) {\texttt{ff51\_rmc\_reform.dat}\\ 51 rows:\\ \texttt{eta F1 F2 F3 M1 M2 M3}};
+  \node[funcnode, below=of d] (cv) {\texttt{ff\_to\_yaml.convert}\\ raises if fewer than seven columns};
+  \node[outnode, below=of cv] (yy) {\texttt{ff51\_rmc\_reform.yaml}\\ order, frame and units recorded\\ next to the data};
+  \node[funcnode, below=of yy] (sf) {\texttt{ff\_to\_yaml.station\_ff}\\ selected by nearest \texttt{eta} or by \texttt{row}};
+  \node[datanode, below=of sf] (fv) {\texttt{FF} $(6,)$ and $\eta$ for one\\ station $\rightarrow$ stage 5};
+
+  \draw[capedge] (d) -- (cv);  \draw[capedge] (cv) -- (yy);
+  \draw[capedge] (yy) -- (sf); \draw[capedge] (sf) -- (fv);
+}
 
 \section{Stage 5: dehomogenization back to 3-D wall stress}
 \label{sec:windio:stage5}
@@ -628,15 +740,15 @@ nodal RM warping fields $\mathbf{w} = \mathbf{V}_0\bar{\boldsymbol{\varepsilon}}
 + \mathbf{V}_1\boldsymbol{\varepsilon}'$ and their derivatives, and
 \texttt{\_rm\_shell\_strain(B, e, xi, st\_m, aA, aB)} evaluates, for ring
 element \texttt{e} at arc coordinate \texttt{xi}, the six shell strains
-\[
+\widematrix{
   \mathbf{s}_6 = \begin{bmatrix} \varepsilon_{11} & \varepsilon_{22} &
   2\varepsilon_{12} & \kappa_{11} & \kappa_{22} & 2\kappa_{12}\end{bmatrix}.
-\]
+}
 That wall's own MSG ABD turns them into the \textbf{plate reaction forces}
-\[
+\widematrix{
   \mathbf{F}_6 = \mathbf{A}_6\,\mathbf{s}_6 =
   \begin{bmatrix} N_{11} & N_{22} & N_{12} & M_{11} & M_{22} & M_{12}\end{bmatrix},
-\]
+}
 the interface quantity handed down to the plate SG.
 
 \emph{Step 5b, the wall} (\texttt{opensg\_solid.rm\_plate\_1D}).
@@ -660,6 +772,22 @@ jump and must never be differenced across. Passing the second gradients as well
 (\texttt{dE11}, \texttt{dE12}, \texttt{dE22}) selects the second-order (V2)
 recovery, the rung that can in principle carry the transverse pair
 $\sigma_{33}$, $\sigma_{13}$ that first order cannot.
+
+The two steps and the interface file between them:
+
+\captree{
+  \node[inputnode] (bb) {the bundle \texttt{B} of stage 2\\ and \texttt{FF} of stage 4};
+  \node[funcnode, below=of bb] (mf) {\texttt{sg\_dehom.\_macro\_fields}\\ $\bar{\boldsymbol{\varepsilon}} = \mathbf{C}_6^{-1}\mathbf{FF}$, then\\ $\mathbf{w} = \mathbf{V}_0\bar{\boldsymbol{\varepsilon}} + \mathbf{V}_1\boldsymbol{\varepsilon}'$};
+  \node[funcnode, below=of mf] (rs) {\texttt{sg\_dehom.\_rm\_shell\_strain}\\ $\mathbf{s}_6$ per element; the gradients from\\ \texttt{sg\_assembly.quad\_ops\_indep} and\\ \texttt{msg\_dehom.\_macro\_recovery}};
+  \node[outnode, below=of rs] (pf) {\texttt{iea\_s10\_elem\_plate\_forces.dat}\\ $\mathbf{F}_6 = \mathbf{A}_6\,\mathbf{s}_6$, 310 rows};
+  \node[funcnode, below=of pf] (rp) {\texttt{msg\_rm\_plate.rm\_plate\_msg}\\ one through-thickness SG per\\ layup, built once at \texttt{fraction=frac}};
+  \node[funcnode, below=of rp] (sd) {\texttt{msgrm\_strain\_at\_depth\_batch}\\ 3-D strain and stress at depth $z$,\\ \texttt{frame="material"} by default};
+  \node[outnode, below=of sd] (ou) {\texttt{iea\_s10\_dehom\_v2.txt}\\ \texttt{iea\_s10\_dehom\_v2.npz}\\ \texttt{iea\_s10\_report.txt}\\ \texttt{iea\_s10\_v2\_section.png}};
+
+  \draw[capedge] (bb) -- (mf); \draw[capedge] (mf) -- (rs);
+  \draw[capedge] (rs) -- (pf); \draw[capedge] (pf) -- (rp);
+  \draw[capedge] (rp) -- (sd); \draw[capedge] (sd) -- (ou);
+}
 
 \subsection*{What you edit}
 
@@ -711,7 +839,7 @@ File & Content \\
 The first two data rows of \texttt{iea\_s10\_elem\_plate\_forces.dat} show what
 the interface quantity looks like in practice:
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\footnotesize]
 # per-element PLATE REACTION FORCES from the RM shell beam model (Timo), eta=0.20
 # elem  y2(m) y3(m)  e11 e22 2e12 k11 k22 2k12  N11 N22 N12(N/m) M11 M22 M12(N)
      0  4.677080e+00  1.048036e-01  5.426575e-04 -1.683049e-04  5.685206e-04 ...
@@ -879,7 +1007,7 @@ component over the whole section, in the ply material frame, goes to
          component over the whole section, ply frame, in MPa. Column order
          follows the file header.}
 \label{tab:windio:peak}
-\setlength{\tabcolsep}{4.5pt}
+\setlength{\tabcolsep}{3pt}
 \begin{tabular}{lrrrrrr}
 \toprule
 $\eta = r/R$ & $\sigma_{11}$ & $\sigma_{22}$ & $\sigma_{33}$ & $\sigma_{23}$ & $\sigma_{13}$ & $\sigma_{12}$ \\

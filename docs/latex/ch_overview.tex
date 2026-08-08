@@ -44,8 +44,7 @@ file, \texttt{opensg\_solid.sg\_homo.write\_sc\_K}, and it is called from inside
 the solver source, not from the example scripts, so no run can forget it. A
 minimal session looks like this:
 
-\begin{lstlisting}[style=opensg,caption={The whole contract in four lines.}]
-\texttt{.out} file is written as a side effect of the call.}]
+\begin{lstlisting}[style=opensg,caption={The whole contract: the .out file is written as a side effect of the call.},basicstyle=\ttfamily\footnotesize]
 from opensg_shell import build_rm_bundle
 
 B = build_rm_bundle("iea_s10_shell.yaml")   # writes iea_s10_shell_Timo.out
@@ -428,7 +427,42 @@ information), \texttt{linear\_elasticity}, and \texttt{profiling}.
 
 Four routes are described here in the order a new user meets them. Each is a
 sequence of calls that the entry function makes on your behalf; you only ever
-call the entry function.
+call the entry function. Figure~\ref{fig:pipelines} puts all four side by side:
+one input file, one entry function, one \texttt{.out} file per branch.
+
+\begin{figure}[htbp]
+\captree{
+  \node[funcnode] (f1) {\texttt{sg\_homo.build\_rm\_bundle}\\ \texttt{sg\_mesh.load\_ring\_ref} (it calls\\ \texttt{\_material\_by\_section} and\\ \texttt{compute\_k22}) $\rightarrow$ \texttt{rm\_plate\_msg}\\ $\rightarrow$ \texttt{sg\_homo.ring\_indep}};
+  \node[inputnode, left=5mm of f1] (r1) {1-D shell SG ring YAML\\ \texttt{iea\_s10\_shell.yaml}};
+  \node[outnode, right=5mm of f1] (o1) {\texttt{iea\_s10\_shell\_Timo.out}\\ \texttt{iea\_s10\_shell\_ABDG.out}\\ the Timoshenko $6\times6$};
+
+  \node[funcnode, below=8mm of f1] (f2) {\texttt{sg\_homo.segment\_timo\_from\_3dyaml}\\ \texttt{sg\_mesh.extract} end rings $\rightarrow$\\ \texttt{ring\_indep} per side $\rightarrow$\\ \texttt{\_boundary\_dirichlet} $\rightarrow$\\ \texttt{dirichlet\_factor}};
+  \node[inputnode, left=5mm of f2] (r2) {3-D shell segment YAML\\ \texttt{BAR\_URC\_numEl\_52\_}\\ \texttt{segment\_12.yaml}};
+  \node[outnode, right=5mm of f2] (o2) {\texttt{BAR\_URC\_numEl\_52\_}\\ \texttt{segment\_12\_Timo.out}\\ per unit length, $L$ in the banner};
+
+  \node[funcnode, below=8mm of f2] (f3) {\texttt{sg\_homo.shell\_sg3d}\\ one wall law for every element,\\ junction-edge count, periodic or\\ aperiodic boundary, one \texttt{splu}};
+  \node[inputnode, left=5mm of f3] (r3) {3-D shell SG YAML\\ \texttt{schwarz\_p\_3Dshell.yaml}};
+  \node[outnode, right=5mm of f3] (o3) {\texttt{schwarz\_p\_3Dshell\_C3D.out}\\ the equivalent solid $6\times6$,\\ per unit-cell volume};
+
+  \node[funcnode, below=8mm of f3] (f4) {\texttt{sg\_homo.plate\_homo\_2d}\\ \texttt{load\_sg\_input} $\rightarrow$ \texttt{\_cell\_basis} $\rightarrow$\\ \texttt{get\_heterogeneous\_C\_matrix} $\rightarrow$\\ \texttt{\_beam\_homo\_kkt} (\texttt{n\_model} 1) or\\ \texttt{\_homo\_direct} (\texttt{n\_model} 2, 3)};
+  \node[inputnode, left=5mm of f4] (r4) {solid SG, a SwiftComp \texttt{.sc}\\ or a YAML:\\ \texttt{RHC\_SW\_2UC\_45.yaml}};
+  \node[outnode, right=5mm of f4] (o4) {\texttt{RHC\_SW\_2UC\_45.out}\\ \texttt{n\_model} 1 named Timoshenko;\\ 2 Classical Plate (or the\\ Reissner-Mindlin one if\\ \texttt{shear\_refined}); 3 the 3-D law};
+
+  \draw[capedge] (r1) -- (f1); \draw[capedge] (f1) -- (o1);
+  \draw[capedge] (r2) -- (f2); \draw[capedge] (f2) -- (o2);
+  \draw[capedge] (r3) -- (f3); \draw[capedge] (f3) -- (o3);
+  \draw[capedge] (r4) -- (f4); \draw[capedge] (f4) -- (o4);
+}
+\caption{The four pipelines, one row each: the three msg-shell routes and the
+         msg-solid driver whose \texttt{n\_model} argument selects the macro
+         model. Yellow is the file you edit, blue the entry function with the
+         calls it makes in order, green the \texttt{.out} file it leaves
+         behind. All four \texttt{.out} files are written by the one writer
+         \texttt{opensg\_solid.sg\_homo.write\_sc\_K}, which is why they share
+         a single layout; the \texttt{\_ABDG.out} companion of the ring route
+         is the one exception, written by \texttt{write\_abdg\_out}.}
+\label{fig:pipelines}
+\end{figure}
 
 \subsection{msg-shell: 1-D ring $\rightarrow$ Timoshenko $6\times6$}
 \label{sec:pipe-ring}
@@ -656,8 +690,7 @@ answer.
 
 The msg-solid engine has a single public entry,
 
-\begin{lstlisting}[style=opensg,caption={The msg-solid driver signature.}]
-\texttt{n\_model} selects which macro strain set is built.}]
+\begin{lstlisting}[style=opensg,caption={The msg-solid driver signature: n\_model selects which macro strain set is built.},basicstyle=\ttfamily\footnotesize]
 from opensg_solid.sg_homo import plate_homo_2d
 
 r = plate_homo_2d(sc_path,               # a .sc or .yaml SG file

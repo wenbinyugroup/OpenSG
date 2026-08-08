@@ -11,6 +11,95 @@ produces, the exact ordering of the strain and force components in each, the
 function that computes it, the input file you edit, the command you type, and
 the file the answer is written to.
 
+The map is short. Every law in this chapter is one path through
+the tree below: an SG of a given dimension, a model choice made either by the
+\texttt{n\_model} argument of the solid engine or by which
+\texttt{opensg\_shell} entry point is called, the macro law that comes back, and
+the \texttt{.out} file it is written to. Solid lines are the default path of
+each entry point; dashed lines are the alternative model choices that reuse the
+same input file.
+
+\captree{
+\node[funcnode, text width=41mm] (f0)
+  {\texttt{opensg\_solid.rm\_plate\_1D}\\ \texttt{.msg\_rm\_plate.rm\_plate\_msg}\\
+   \texttt{model:} 0 or 1};
+\node[inputnode, text width=29mm, left=5mm of f0] (i0)
+  {\texttt{layup\_db.yaml}\\ 1-D SG: one laminate};
+\node[datanode, text width=25mm, right=5mm of f0] (d0)
+  {ABD $6\times6$ or\\ ABDG $8\times8$};
+\node[outnode, text width=33mm, right=5mm of d0] (o0)
+  {\texttt{<db>\_plate\_homo.out}};
+\node[funcnode, text width=41mm, below=of f0] (f1)
+  {\texttt{opensg\_solid.sg\_homo}\\ \texttt{.plate\_homo\_2d},
+   \texttt{n\_model=1}\\ $\to$ \texttt{\_beam\_homo\_kkt}
+   (needs \texttt{n\_sg} $\ge$ 2)};
+\node[funcnode, text width=41mm, below=of f1] (f2)
+  {\texttt{opensg\_solid.sg\_homo}\\ \texttt{.plate\_homo\_2d},
+   \texttt{n\_model=2}\\ optionally \texttt{shear\_refined=True} $\to$
+   \texttt{plate\_shear\_ladder}};
+\node[funcnode, text width=41mm, below=of f2] (f3)
+  {\texttt{opensg\_solid.sg\_homo}\\ \texttt{.plate\_homo\_2d},
+   \texttt{n\_model=3}};
+\node[inputnode, text width=29mm, left=5mm of f2] (i1)
+  {solid SG\\ \texttt{<sg>.sc} or \texttt{<sg>.yaml}\\ \texttt{n\_sg} = 1, 2 or 3};
+\node[datanode, text width=25mm, right=5mm of f1] (d1)
+  {Timoshenko $6\times6$\\ (+ EB $4\times4$)};
+\node[datanode, text width=25mm, right=5mm of f2] (d2)
+  {ABD $6\times6$ or\\ ABDG $8\times8$};
+\node[datanode, text width=25mm, right=5mm of f3] (d3)
+  {3-D solid $6\times6$\\ + eng.\ constants};
+\node[outnode, text width=33mm, right=5mm of d1] (o1) {\texttt{<sg>.out}};
+\node[outnode, text width=33mm, right=5mm of d2] (o2) {\texttt{<sg>.out}};
+\node[outnode, text width=33mm, right=5mm of d3] (o3) {\texttt{<sg>.out}};
+\node[funcnode, text width=41mm, below=of f3] (f4)
+  {\texttt{opensg\_shell.sg\_homo}\\ \texttt{.build\_rm\_bundle} $\to$
+   \texttt{ring\_indep}};
+\node[funcnode, text width=41mm, below=of f4] (f5)
+  {\texttt{opensg\_shell.sg\_homo}\\ \texttt{.build\_solid\_bundle} $\to$
+   \texttt{ring\_solid}};
+\node[inputnode, text width=29mm, left=5mm of f4] (i2)
+  {1-D shell SG\\ \texttt{iea\_s10\_shell.yaml}\\ cross-section contour};
+\node[datanode, text width=25mm, right=5mm of f4] (d4)
+  {Timoshenko $6\times6$\\ + wall $8\times8$ per section};
+\node[outnode, text width=33mm, right=5mm of d4] (o4)
+  {\texttt{<yaml>\_Timo.out}\\ \texttt{<yaml>\_ABDG.out}};
+\node[datanode, text width=25mm, right=5mm of f5] (d5) {3-D solid $6\times6$};
+\node[outnode, text width=33mm, right=5mm of d5] (o5)
+  {\texttt{<yaml>\_C3D.out}};
+\node[funcnode, text width=41mm, below=of f5] (f6)
+  {\texttt{opensg\_shell.sg\_homo}\\ \texttt{.shell\_sg3d}};
+\node[funcnode, text width=41mm, below=of f6] (f7)
+  {\texttt{opensg\_shell.sg\_homo}\\ \texttt{.segment\_timo\_from\_3dyaml}};
+\node[inputnode, text width=29mm, left=5mm of f6] (i3)
+  {3-D shell SG \texttt{.yaml}\\ surface mesh, or\\ tapered segment};
+\node[datanode, text width=25mm, right=5mm of f6] (d6) {3-D solid $6\times6$};
+\node[outnode, text width=33mm, right=5mm of d6] (o6)
+  {\texttt{<yaml>\_C3D.out}};
+\node[datanode, text width=25mm, right=5mm of f7] (d7)
+  {Timoshenko $6\times6$};
+\node[outnode, text width=33mm, right=5mm of d7] (o7)
+  {\texttt{<yaml>\_Timo.out}};
+\draw[capedge] (i0) -- (f0);  \draw[capedge] (f0) -- (d0);
+\draw[capedge] (d0) -- (o0);
+\draw[capedge2] (i1) -- (f1); \draw[capedge] (i1) -- (f2);
+\draw[capedge2] (i1) -- (f3);
+\draw[capedge] (f1) -- (d1);  \draw[capedge] (d1) -- (o1);
+\draw[capedge] (f2) -- (d2);  \draw[capedge] (d2) -- (o2);
+\draw[capedge] (f3) -- (d3);  \draw[capedge] (d3) -- (o3);
+\draw[capedge] (i2) -- (f4);  \draw[capedge2] (i2) -- (f5);
+\draw[capedge] (f4) -- (d4);  \draw[capedge] (d4) -- (o4);
+\draw[capedge] (f5) -- (d5);  \draw[capedge] (d5) -- (o5);
+\draw[capedge] (i3) -- (f6);  \draw[capedge2] (i3) -- (f7);
+\draw[capedge] (f6) -- (d6);  \draw[capedge] (d6) -- (o6);
+\draw[capedge] (f7) -- (d7);  \draw[capedge] (d7) -- (o7);
+}
+
+Every one of those files is printed by \texttt{write\_sc\_K}, except the
+per-section wall law \texttt{<yaml>\_ABDG.out}, which
+\texttt{write\_abdg\_out} writes block by block in the same number format. In
+both cases the title above the matrix names the law, so the tree above and
+Table~\ref{tab:outnames} together identify any output file the code produces.
+
 Two conventions hold throughout and are worth internalising before reading any
 matrix.
 
@@ -92,7 +181,7 @@ $\{F_1\;F_2\;F_3\;M_1\;M_2\;M_3\}$ in which the shipped blade load table
 \texttt{ff51\_rmc\_reform.dat} is written (its header reads
 \verb|# eta F1 F2 F3 M1 M2 M3 (RM CENTER-ref BeamDyn, VABS order)|). The law is
 
-\begin{equation}
+\widematrix{
 \begin{Bmatrix} F_1 \\ F_2 \\ F_3 \\ M_1 \\ M_2 \\ M_3 \end{Bmatrix}
 =
 \begin{bmatrix}
@@ -105,8 +194,7 @@ S_{16} & S_{26} & S_{36} & S_{46} & S_{56} & S_{66}
 \end{bmatrix}
 \begin{Bmatrix} \bar\epsilon_{11} \\ \gamma_{12} \\ \gamma_{13} \\
 \kappa_{1} \\ \kappa_{2} \\ \kappa_{3} \end{Bmatrix}.
-\label{eq:timo}
-\end{equation}
+}
 
 The matrix is fully populated in general --- a composite blade section couples
 extension to bending and twist --- but its diagonal carries the familiar
@@ -157,13 +245,25 @@ Section~\ref{sec:wallabdg}. The driver additionally saves the bare $6\times6$
 as \texttt{iea\_s10\_beam\_Timo.out} and the ring mesh figure
 \texttt{iea\_s10\_ring\_mesh.png}.
 
-For the IEA-22 blade station at $r/R = 0.20$ that $6\times6$ has the diagonal
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.86\linewidth]{\FIGDIR/shell_xsec_mesh.png}
+\caption{The one-dimensional shell SG solved by \texttt{build\_rm\_bundle}: the
+IEA-22 blade cross-section at $r/R = 0.20$, 307 contour nodes and 310 two-node
+line elements along the wall mid-surface, coloured by \texttt{sets: element}
+entry. The Timoshenko $6\times6$ beam law whose diagonal is quoted in this
+section is this mesh's answer, written to \texttt{iea\_s10\_shell\_Timo.out}.}
+\label{fig:const-shellxsec}
+\end{figure}
 
-\begin{equation}
+For the IEA-22 blade station at $r/R = 0.20$ --- the SG of
+Figure~\ref{fig:const-shellxsec} --- that $6\times6$ has the diagonal
+
+\widematrix{
 \mathrm{diag}(\mathbf S) =
 \left[\,2.7661\times10^{10},\;7.1861\times10^{8},\;4.2174\times10^{8},\;
 2.4376\times10^{9},\;3.5144\times10^{10},\;6.8130\times10^{10}\,\right]
-\end{equation}
+}
 
 in SI units, so $EA = 27.7$ GN, $EI_3 = 68.1$ GN$\cdot$m$^2$ edgewise against
 $EI_2 = 35.1$ GN$\cdot$m$^2$ flapwise, and $GJ = 2.44$ GN$\cdot$m$^2$. The
@@ -205,19 +305,26 @@ r = plate_homo_2d(name + ".yaml", material_param=material_param,
 This writes \texttt{RHC\_SW\_2UC\_45.out} with banner
 \verb| OpenSG msg-solid beam model, omega 1| and the mesh figure
 \texttt{RHC\_SW\_2UC\_45\_mesh.png} (Figure~\ref{fig:rhcmesh}). Its diagonal is
-$[\,9.8993\times10^{6},\;1.9075\times10^{6},\;9.3619\times10^{5},\;
-2.9775\times10^{8},\;2.1896\times10^{9},\;9.2899\times10^{8}\,]$ in the input
-units (N and N$\cdot$mm$^2$, since the SG is in millimetres and the moduli in
-MPa).
+
+\widematrix{
+\mathrm{diag}(\mathbf S) =
+\left[\,9.8993\times10^{6},\;1.9075\times10^{6},\;9.3619\times10^{5},\;
+2.9775\times10^{8},\;2.1896\times10^{9},\;9.2899\times10^{8}\,\right]
+}
+
+in the input units (N and N$\cdot$mm$^2$, since the SG is in millimetres and the
+moduli in MPa).
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.72\textwidth]{\FIGDIR/rhc_2dsg_mesh.png}
-\caption{The two-dimensional honeycomb SG \texttt{RHC\_SW\_2UC\_45}, the same
-mesh used by the beam ($n_{\mathrm{model}}=1$), plate ($2$) and solid ($3$)
-examples. Colours are the three material sets of the \texttt{.yaml}: the
-$+45$ and $-45$ composite plies of the cell walls and the isotropic
-face sheets.}
+\includegraphics[width=0.72\linewidth]{\FIGDIR/rhc_2dsg_mesh.png}
+\caption{The two-dimensional honeycomb solid SG \texttt{RHC\_SW\_2UC\_45}, run
+here with $n_{\mathrm{model}} = 1$: the Timoshenko $6\times6$ beam law whose
+diagonal is quoted in this section is this mesh's answer, written to
+\texttt{RHC\_SW\_2UC\_45.out}. The same mesh is the SG of the plate
+($n_{\mathrm{model}} = 2$) and solid ($3$) examples. Colours are the three
+material sets of the \texttt{.yaml}: the $+45$ and $-45$ composite plies of the
+cell walls and the isotropic face sheets.}
 \label{fig:rhcmesh}
 \end{figure}
 
@@ -284,7 +391,7 @@ $6\times6$; that identity is the standing verification of the route.
 The classical plate model pairs three membrane stress resultants and three
 moment resultants with three membrane strains and three curvatures:
 
-\begin{equation}
+\widematrix{
 \begin{Bmatrix} N_{11} \\ N_{22} \\ N_{12} \\ M_{11} \\ M_{22} \\ M_{12} \end{Bmatrix}
 =
 \begin{bmatrix} \mathbf A & \mathbf B \\[2pt] \mathbf B^{\mathsf T} & \mathbf D \end{bmatrix}
@@ -292,8 +399,7 @@ moment resultants with three membrane strains and three curvatures:
 \kappa_{11} \\ \kappa_{22} \\ \kappa_{12} \end{Bmatrix},
 \qquad
 \mathbf A, \mathbf B, \mathbf D \in \mathbb R^{3\times3}.
-\label{eq:abd}
-\end{equation}
+}
 
 The row order \verb|[N11 N22 N12 M11 M22 M12]| is stated in the module header
 of \texttt{src/opensg\_solid/sg\_homo.py} and echoed by the driver in
@@ -317,13 +423,26 @@ $D_{22} = 5.7011\times10^{7}$, $D_{66} = 4.6026\times10^{7}$ N$\cdot$mm. The
 $\mathbf B$ block is at the $10^{0}$ level against an $\mathbf A$ of $10^{5}$,
 i.e.\ the cell is symmetric about its own mid-surface to solver precision.
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.72\linewidth]{\FIGDIR/rhc_2dsg_mesh.png}
+\caption{The same two-dimensional honeycomb cell SG \texttt{RHC\_SW\_2UC\_45} as
+Figure~\ref{fig:rhcmesh}, run here with $n_{\mathrm{model}} = 2$: the classical
+plate ABD $6\times6$ whose leading entries are quoted in this section is this
+mesh's answer, written to \texttt{RHC\_SW\_2UC\_45.out} under the title
+\texttt{The Effective Classical Plate Stiffness Matrix}. Only the model choice
+changes between this run and the beam run of
+Section~\ref{sec:timo}; the SG is byte-identical.}
+\label{fig:rhcplate}
+\end{figure}
+
 \subsection{Reissner--Mindlin plate law}
 
 The shear-refined model adds the transverse-shear pair. The strain vector grows
 to eight components and the resultant vector gains the two transverse shear
 forces $Q_1$ and $Q_2$:
 
-\begin{equation}
+\widematrix{
 \begin{Bmatrix} \mathbf N \\ \mathbf M \\ \mathbf Q \end{Bmatrix}
 =
 \begin{bmatrix}
@@ -335,12 +454,11 @@ forces $Q_1$ and $Q_2$:
 \qquad
 \boldsymbol\gamma = \{\,2\gamma_{13}\;\;2\gamma_{23}\,\}^{\mathsf T},
 \qquad
-\mathbf Q = \{\,Q_1\;\;Q_2\,\}^{\mathsf T},
-\label{eq:abdg}
-\end{equation}
+\mathbf Q = \{\,Q_1\;\;Q_2\,\}^{\mathsf T}.
+}
 
-with $\boldsymbol\varepsilon$ and $\boldsymbol\kappa$ exactly the first and
-second triples of Eq.~\eqref{eq:abd}.
+Here $\boldsymbol\varepsilon$ and $\boldsymbol\kappa$ are exactly the first and
+second triples of the classical law above.
 
 The zero off-diagonal blocks are structural, not an approximation of
 convenience. The code assembles the $8\times8$ as \verb|ABDG[:6,:6] = A6| and
@@ -411,8 +529,10 @@ because the stack is symmetric about \texttt{fraction: 0.5}; change that to
 \caption{The through-thickness one-dimensional structure gene of the Nayak
 Example-5 sandwich written by \texttt{1d\_sg.py}: eight graphite/epoxy face
 plies over a HEREX C70.130 foam core, with the mid-surface reference
-(\texttt{fraction: 0.5}) marked. This mesh is the SG whose solution is the
-$8\times8$ of Eq.~\eqref{eq:abdg}.}
+(\texttt{fraction: 0.5}) marked. This is the SG whose solution is the
+Reissner--Mindlin ABDG $8\times8$ whose $A$, $D$ and $G$ entries are quoted in
+this section, written by \texttt{rm\_plate\_msg} to
+\texttt{layup\_db\_plate\_homo.out}.}
 \label{fig:plate1dsg}
 \end{figure}
 
@@ -450,7 +570,7 @@ When the macro model is ordinary three-dimensional elasticity, the SG returns a
 $6\times6$ anisotropic stiffness in the Voigt order $[11\;22\;33\;23\;13\;12]$
 with engineering shear strains:
 
-\begin{equation}
+\widematrix{
 \begin{Bmatrix}
 \sigma_{11} \\ \sigma_{22} \\ \sigma_{33} \\ \sigma_{23} \\ \sigma_{13} \\ \sigma_{12}
 \end{Bmatrix}
@@ -461,8 +581,7 @@ with engineering shear strains:
 2\bar\Gamma_{23} \\ 2\bar\Gamma_{13} \\ 2\bar\Gamma_{12}
 \end{Bmatrix},
 \qquad \mathbf C^{\,\mathrm{3D}} \in \mathbb R^{6\times6}.
-\label{eq:c3d}
-\end{equation}
+}
 
 Internally the solid engine stores strain and stress in the SwiftComp order
 $(xx, yy, zz, yz, xz, xy)$, which is the same list. On the msg-shell routes
@@ -481,16 +600,16 @@ formulas coded in \texttt{write\_sc\_K} (and mirrored on the shell side by
 \texttt{opensg\_shell.sg\_homo.elastic\_constants}, which also returns
 $\mathrm{cond}(\mathbf C)$):
 
-\begin{equation}
+\widematrix{
 E_1 = \frac{1}{S_{11}},\quad E_2 = \frac{1}{S_{22}},\quad E_3 = \frac{1}{S_{33}},
 \qquad
 G_{12} = \frac{1}{S_{66}},\quad G_{13} = \frac{1}{S_{55}},\quad G_{23} = \frac{1}{S_{44}},
-\end{equation}
-\begin{equation}
+}
+\widematrix{
 \nu_{12} = -\frac{S_{12}}{S_{11}},\qquad
 \nu_{13} = -\frac{S_{13}}{S_{11}},\qquad
 \nu_{23} = -\frac{S_{23}}{S_{22}}.
-\end{equation}
+}
 
 The word \emph{approximated} in the printed heading is load-bearing. These nine
 numbers reproduce $\mathbf C^{\,\mathrm{3D}}$ exactly only if that matrix is
@@ -640,13 +759,17 @@ costs nothing extra --- the choice is physical, not computational.
 \caption{The Schwarz-P TPMS three-dimensional shell SG solved by
 \texttt{shell\_sg3d}: 13536 nodes, 26360 shell elements, and zero junction
 edges (a smooth TPMS has every edge interior, so the junction treatment never
-fires). The banner of the \texttt{.out} reports all three counts.}
+fires). The banner of the \texttt{.out} reports all three counts. This is the
+SG behind Table~\ref{tab:bcshell}: every number there is an entry of this
+mesh's equivalent 3-D solid $6\times6$, the law \texttt{shell\_sg3d} writes to
+\texttt{<yaml>\_C3D.out}.}
 \label{fig:schwarz}
 \end{figure}
 
 \subsection{A worked solid law: the TPMS Sample\_1 cell}
 
-The reference case for Eq.~\eqref{eq:c3d} on the solid engine is
+The reference case for the equivalent 3-D law of this section on the solid
+engine is
 \texttt{examples/OpenSG-solid/6\_get\_solid\_props\_from\_3D\_SG/sample\_1}:
 
 \begin{lstlisting}[style=shellst]
@@ -705,7 +828,7 @@ A second, independent validation of the same law is
 \texttt{examples/OpenSG-solid/5\_get\_solid\_props\_from\_SG}
 (Figure~\ref{fig:udcomp}), a UD fibre/matrix square cell meshed with 801 nodes
 and 1536 triangles. It ships a self-contained constant-strain-triangle driver
-that solves Eq.~\eqref{eq:c3d} under generalized plane strain with periodic
+that solves the same $6\times6$ law under generalized plane strain with periodic
 faces and writes \texttt{UDcomp\_2D\_Deff.out} plus
 \texttt{UDcomp\_2D\_constants\_vs\_paper.dat}. Its nine constants reproduce the
 ASC-23 Table II Model-3 values ($E_1 = 167.2553$ GPa, $E_2 = E_3 = 11.4136$
@@ -716,9 +839,12 @@ $0.002\,\%$ on every entry.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.55\textwidth]{\FIGDIR/udcomp_2dsg_mesh.png}
-\caption{The UD fibre/matrix two-dimensional SG of
-\texttt{examples/OpenSG-solid/5\_get\_solid\_props\_from\_SG}, whose equivalent
-3-D law reproduces the published nine constants to $0.002\,\%$.}
+\caption{The UD fibre/matrix two-dimensional solid SG of
+\texttt{examples/OpenSG-solid/5\_get\_solid\_props\_from\_SG}, 801 nodes and
+1536 constant-strain triangles. The equivalent 3-D solid $6\times6$ of this
+section is this mesh's law, written to \texttt{UDcomp\_2D\_Deff.out}; the nine
+constants quoted in this section are its orthotropic-approximation block, and
+they reproduce the published values to $0.002\,\%$.}
 \label{fig:udcomp}
 \end{figure}
 
@@ -743,12 +869,13 @@ The file header states the row convention verbatim:
 
 so the block structure is the same
 $[[\mathbf A,\mathbf B,\mathbf 0],[\mathbf B^{\mathsf T},\mathbf D,\mathbf 0],
-[\mathbf 0,\mathbf 0,\mathbf G]]$ as Eq.~\eqref{eq:abdg}, with the shell
+[\mathbf 0,\mathbf 0,\mathbf G]]$ as the Reissner--Mindlin plate law of
+Section~\ref{sec:plate}, with the shell
 operators' twisting measure $K_{12}+K_{21}$ in the sixth slot rather than
 $\kappa_{12}$. Each block is preceded by its section identity and full layup,
 for example the first block of \texttt{iea\_s10\_shell\_ABDG.out}:
 
-\begin{Verbatim}[fontsize=\footnotesize,frame=single]
+\begin{Verbatim}[fontsize=\tiny]
  section 0: layup_0  layup [['gelcoat', 0.0005, 0.0], ['glass_triax', 0.00300294, 0.0],
                             ['glass_uniax', 0.02609467, 0.0], ['glass_triax', 0.00300294, 0.0]]
 \end{Verbatim}
@@ -761,6 +888,13 @@ $G_{11} = 8.2828865\times10^{7}$ N/m and
 $G_{22} = 9.8804474\times10^{7}$ N/m, with a non-zero coupling block
 ($B_{11} = 3.1172920\times10^{5}$ N) because the stack --- gelcoat, triax,
 uniax, triax --- is not symmetric about the mid-surface.
+
+There is no separate mesh figure for these blocks, because there are two meshes
+behind them and both are already shown. Section 0 is one element set of the
+cross-section SG of Figure~\ref{fig:const-shellxsec}, and the block itself is
+the solution of the through-thickness one-dimensional SG of that set's layup,
+built by \texttt{rm\_plate\_msg} exactly as in Figure~\ref{fig:plate1dsg}. One
+$8\times8$ per section is the entire wall-law export.
 
 Two facts about how these blocks are built matter when comparing them against
 hand calculations.
@@ -839,14 +973,21 @@ python 2_dehom_v2_vabs.py
 
 \paragraph{Step 2a --- beam to wall (\texttt{opensg\_shell}).}
 The macro beam strain follows from inverting the Timoshenko law of
-Eq.~\eqref{eq:timo}, $\mathbf{st} = \mathbf C_6^{-1}\,\mathbf{FF}$, with
+Section~\ref{sec:timo}, $\mathbf{st} = \mathbf C_6^{-1}\,\mathbf{FF}$, with
 \texttt{FF} the six beam force and moment components in VABS order read from
 the load table \texttt{ff51\_rmc\_reform.dat}. For the IEA-22 station at
 $r/R = 0.20$ that row is
-$\mathbf{FF} = [\,4.1927\times10^{4},\;8.2674\times10^{3},\;
+
+\widematrix{
+\mathbf{FF} = \left[\,4.1927\times10^{4},\;8.2674\times10^{3},\;
 1.4673\times10^{6},\;1.2191\times10^{6},\;-6.0185\times10^{7},\;
-3.0426\times10^{5}\,]$ in N and N$\cdot$m, i.e.\ a flapwise-moment-dominated
-state. \texttt{\_macro\_fields} recombines the ring warping modes $V_0$ and
+3.0426\times10^{5}\,\right]
+}
+
+in N and N$\cdot$m, i.e.\ a flapwise-moment-dominated state. The SG being
+recovered is the cross-section of Figure~\ref{fig:const-shellxsec}, the same
+mesh that produced the $6\times6$ being inverted here.
+\texttt{\_macro\_fields} recombines the ring warping modes $V_0$ and
 $V_1$ into the nodal fields $w = V_0\,\mathbf{st}_m + V_1\,\mathbf{st}_{c1}$ and
 $w' = V_0\,\mathbf{st}_{c1} + V_1\,\mathbf{st}_{c2}$, and
 \texttt{\_rm\_shell\_strain} then evaluates, per ring element, the six shell
@@ -862,9 +1003,10 @@ the interface quantity handed to the plate SG:
 \label{eq:f6}
 \end{equation}
 
-These are exactly the resultants of Eq.~\eqref{eq:abd}: the beam model has
-handed each wall a plate problem. They are written to
-\texttt{<name>\_elem\_plate\_forces.dat}, one row per ring element, with columns
+These are exactly the resultants of the classical plate law of
+Section~\ref{sec:plate}: the beam model has handed each wall a plate problem.
+They are written to \texttt{<name>\_elem\_plate\_forces.dat}, one row per ring
+element, with columns
 
 \begin{Verbatim}[fontsize=\footnotesize,frame=single]
 elem  y2(m) y3(m)  e11 e22 2e12 k11 k22 2k12  N11 N22 N12(N/m) M11 M22 M12(N)
@@ -970,8 +1112,8 @@ export_gauss(r, Gam, Sig, "RHC_SW_2UC_45_dehom", U_eqd=U)
 homogenized: the six plate strains
 $[\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;\kappa_{11}\;
 \kappa_{22}\;2\kappa_{12}]$ for \texttt{n\_model=2}, the six macro strains of
-Eq.~\eqref{eq:c3d} for \texttt{n\_model=3}, or the six Timoshenko beam strains
-of Eq.~\eqref{eq:timo} for \texttt{n\_model=1}. The beam case is run by
+Section~\ref{sec:solid} for \texttt{n\_model=3}, or the six Timoshenko beam
+strains of Section~\ref{sec:timo} for \texttt{n\_model=1}. The beam case is run by
 \texttt{examples/OpenSG-solid/8\_get\_beam\_dehom\_from\_SG/beam\_dehom\_sg.py},
 whose shipped state is
 \verb|epsilon_bar = jnp.array([0.001, 0.0, 0.0, 0.0, 0.01, 0.0])|, i.e.\ a unit

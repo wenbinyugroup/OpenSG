@@ -47,6 +47,29 @@ The example is \texttt{examples/OpenSG\_shell/1\_get\_beam\_props\_from\_shell\_
 and the input is \texttt{iea\_s10\_shell.yaml}: station $r/R = 0.20$ of the
 IEA-22 MW reference blade.
 
+The whole capability is the chain below: one YAML in, one ring solve, four
+files out.
+
+\captree{
+  \node[inputnode] (y) {shell yaml\\ \texttt{iea\_s10\_shell.yaml}\\ nodes, elements, sections,\\ elementOrientations, \texttt{reference}};
+  \node[funcnode, right=of y] (lr) {\texttt{sg\_mesh.load\_ring\_ref}\\ contour, connectivity, wall\\ normals, \texttt{k22}, laminate \texttt{D\_by};\\ \texttt{reference} $\to$ \texttt{frac}};
+  \node[funcnode, below=of lr] (gm) {\texttt{msg\_rm\_plate.rm\_plate\_msg}\\ MSG wall shear block \texttt{G}\\ ($2\times2$), one per layup};
+  \node[outnode, right=of gm] (abdg) {\texttt{iea\_s10\_shell\_ABDG.out}\\ $8\times8$ wall law per layup\\ (\texttt{sg\_homo.write\_abdg\_out})};
+  \node[funcnode, below=of gm] (ri) {\texttt{sg\_homo.ring\_indep}\\ one-quad-deep prismatic strip,\\ 6 DOF/node, element-constant\\ drilling multipliers, \texttt{mitc4\_g23}};
+  \node[datanode, below=of ri] (bun) {bundle: \texttt{Timo} $(6,6)$,\\ \texttt{V0}/\texttt{V1} $(6m,4)$, \texttt{strip},\\ \texttt{layup\_db}, \texttt{frac}};
+  \node[outnode, right=of bun] (timo) {\texttt{iea\_s10\_shell\_Timo.out}\\ Timoshenko $6\times6$, timed\\ (\texttt{write\_sc\_K})};
+  \node[outnode, below=of bun] (abdy) {\texttt{abd/iea\_s10\_shell\_abd.yaml}\\ (\texttt{sg\_materials.emit\_station\_abd};\\ written only if absent)};
+  \node[outnode, right=of abdy] (png) {\texttt{iea\_s10\_mesh.png} (driver),\\ \texttt{iea\_s10\_orient.png}\\ (\texttt{orient\_plot.auto\_emit})};
+  \draw[capedge] (y) -- (lr);
+  \draw[capedge] (lr) -- (gm);
+  \draw[capedge] (gm) -- (abdg);
+  \draw[capedge] (gm) -- (ri);
+  \draw[capedge] (ri) -- (bun);
+  \draw[capedge] (bun) -- (timo);
+  \draw[capedge] (bun) -- (abdy);
+  \draw[capedge2] (bun) -- (png);
+}
+
 \subsection{What a 1-D shell SG is}
 
 A \textbf{1-D shell structure gene} is the contour of the cross-section: a chain
@@ -197,14 +220,14 @@ The wall constitutive law is therefore the $8\times8$ Reissner--Mindlin plate la
 \mathbf{B} & \mathbf{D} & \mathbf{0}\\
 \mathbf{0} & \mathbf{0} & \mathbf{G}
 \end{bmatrix},
-\qquad
-\bar{\varepsilon} =
+\label{eq:shell-abdg}
+\end{equation}
+driven by the eight-component generalized wall strain
+\widematrix{\bar{\varepsilon} =
 \begin{bmatrix}
 \varepsilon_{11} & \varepsilon_{22} & 2\varepsilon_{12} &
 K_{11} & K_{22} & K_{12}+K_{21} & 2\gamma_{13} & 2\gamma_{23}
-\end{bmatrix}^{T},
-\label{eq:shell-abdg}
-\end{equation}
+\end{bmatrix}^{T},}
 with exactly that row grouping printed in the header of
 \texttt{iea\_s10\_shell\_ABDG.out}:
 \texttt{rows [eps11 eps22 2eps12 | K11 K22 K12+K21 | 2g13 2g23]}.
@@ -340,7 +363,7 @@ $[\varepsilon_{11}\;\gamma_{12}\;\gamma_{13}\;\kappa_1\;\kappa_2\;\kappa_3]$
 (extension, the two transverse shears, twist, and the two bending curvatures,
 which is the VABS ordering):
 
-\begin{Verbatim}[fontsize=\footnotesize,frame=single,framesep=4pt]
+\begin{Verbatim}[fontsize=\tiny,frame=single,framesep=4pt]
  The Effective Timoshenko Stiffness Matrix
  --------------------------------------------
      2.7660599E+010    -1.7230658E-005     4.6650498E-006     5.4020232E-006     1.6686413E+009    -2.0773040E+009
@@ -403,9 +426,36 @@ actually needs. The example is
 \texttt{examples/OpenSG\_shell/2\_get\_beam\_dehom\_from\_shell\_cross\_section}
 and runs on the same \texttt{iea\_s10\_shell.yaml}.
 
+The chain below is the whole recovery. Note that it starts by rebuilding the
+\emph{same} bundle as Section~\ref{sec:shell-beam}: nothing about the
+discretization is re-derived for the recovery.
+
+\captree{
+  \node[inputnode] (y) {shell yaml\\ \texttt{iea\_s10\_shell.yaml}};
+  \node[funcnode, right=of y] (brb) {\texttt{opensg\_shell.build\_rm\_bundle}\\ the identical ring solve:\\ \texttt{Timo}, \texttt{V0}, \texttt{V1}, \texttt{layup\_db},\\ \texttt{material\_db}, \texttt{frac}};
+  \node[inputnode, below=of y] (ff) {beam loads\\ \texttt{ff51\_rmc\_reform.dat}\\ row 10, VABS order,\\ centre-referenced};
+  \node[funcnode, below=of brb] (mf) {\texttt{sg\_dehom.\_macro\_fields}\\ $\mathrm{st}=\mathbf{C}_6^{-1}FF$; nodal warping\\ $w=V_0\mathrm{st}_m+V_1\mathrm{st}_{c1}$ and $w'$};
+  \node[funcnode, below=of mf] (rs) {\texttt{sg\_dehom.\_rm\_shell\_strain}\\ + \texttt{sg\_assembly.quad\_ops\_indep}\\ per element: 6 shell strains\\ at mid-arc, span gradient \texttt{dE1e}};
+  \node[datanode, right=of rs] (grad) {layup-boundary-aware nodal\\ average $\to$ arc gradient \texttt{dE2e}};
+  \node[funcnode, below=of rs] (pm) {\texttt{msg\_rm\_plate.rm\_plate\_msg}\\ one 1-D MSG-RM plate SG\\ per layup (6 here)};
+  \node[funcnode, below=of pm] (sd) {\texttt{msg\_rm\_plate.msgrm\_strain\_at\_depth}\\ 310 elements $\times$ 9 depths\\ $\to$ 3-D Voigt stress, ply angle};
+  \node[outnode, right=of sd] (txt) {\texttt{iea\_s10\_dehom\_shell.txt}\\ 2790 rows, 6 stresses (MPa)\\ \texttt{iea\_s10\_dehom\_stress.png}\\ \texttt{iea\_s10\_cap\_tt.png}};
+  \node[outnode, below=of txt] (vtk) {\texttt{write\_dehom\_vtk.py} $\to$\\ \texttt{iea\_s10\_dehom\_shell.vtk}\\ exploded through-thickness quads};
+  \draw[capedge] (y) -- (brb);
+  \draw[capedge] (brb) -- (mf);
+  \draw[capedge] (ff) -- (mf);
+  \draw[capedge] (mf) -- (rs);
+  \draw[capedge] (rs) -- (grad);
+  \draw[capedge] (rs) -- (pm);
+  \draw[capedge] (grad) -- (pm);
+  \draw[capedge] (pm) -- (sd);
+  \draw[capedge] (sd) -- (txt);
+  \draw[capedge2] (txt) -- (vtk);
+}
+
 \subsection{The input the user edits}
 
-\begin{lstlisting}[style=opensg,caption={The user-input block of beam\_dehom\_shell.py.}]
+\begin{lstlisting}[style=opensg,caption={The user-input block of beam\_dehom\_shell.py.},basicstyle=\ttfamily\footnotesize]
 ############### User Input #################################
 name = "iea_s10"                  # reads <name>_shell.yaml
 ff_file = "ff51_rmc_reform.dat"   # beam FF per station (# eta F1 F2 F3 M1 M2 M3)
@@ -420,13 +470,10 @@ stress_frame = "material"         # "material" (ply axes) | "plate" (wall axes)
 spanwise station, the first column $\eta = r/R$ and the remaining six the beam
 force and moment resultants, in the same VABS order and the same SI units (N,
 N$\cdot$m) as the $6\times6$. Row 10 is
-\begin{equation}
-FF = \begin{bmatrix}
+\widematrix{FF = \begin{bmatrix}
 4.1927\times10^{4} & 8.2674\times10^{3} & 1.4673\times10^{6} &
 1.2191\times10^{6} & -6.0185\times10^{7} & 3.0426\times10^{5}
-\end{bmatrix},
-\label{eq:shell-ff}
-\end{equation}
+\end{bmatrix},}
 a 60\,MN$\cdot$m flapwise moment with a 1.47\,MN flapwise shear, which is what
 dominates everything that follows. The forces must be referred to the same axis
 as the stiffness: this table is center-referenced, matching
@@ -474,7 +521,7 @@ The driver evaluates \texttt{n\_depth = 9} ply-interior stations per element, at
 $\zeta = (k + \tfrac12)/9$ with $\zeta = 0$ at the OML and $\zeta = 1$ at the
 IML, giving $310 \times 9 = 2790$ recovery points.
 
-\begin{lstlisting}[style=opensg,caption={The recovery chain in miniature: one element, one depth.}]
+\begin{lstlisting}[style=opensg,caption={The recovery chain in miniature: one element, one depth.},basicstyle=\ttfamily\footnotesize]
 import numpy as np
 from opensg_shell import build_rm_bundle, _macro_fields, _rm_shell_strain
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
@@ -516,7 +563,7 @@ file & content \\
 
 The driver reports the peak as
 
-\begin{Verbatim}[fontsize=\small,frame=single,framesep=4pt]
+\begin{Verbatim}[frame=single,framesep=4pt,fontsize=\scriptsize]
 peak |sigma11| = 318.18 MPa at (y2, y3) = (-0.677, 1.311), zeta = 0.06  [material frame]
 \end{Verbatim}
 
@@ -524,17 +571,29 @@ peak |sigma11| = 318.18 MPa at (y2, y3) = (-0.677, 1.311), zeta = 0.06  [materia
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.82\textwidth]{\FIGDIR/shell_dehom_stress.png}
+\includegraphics[width=0.86\linewidth]{\FIGDIR/pv_shell_dehom_s11.png}\\[2mm]
+\includegraphics[width=0.86\linewidth]{\FIGDIR/pv_shell_dehom_s12.png}
 \caption{Recovered $\sigma_{11}$ (top) and $\sigma_{12}$ (bottom) over the
-cross-section, all 2790 recovery points, in MPa. Points sit slightly off the
-contour because each one is displaced from the mid-surface by its own depth $z$
-along the wall normal, which is why the cap points reach $y_3 = 1.311$\,m while
-the contour stops at $1.273$\,m.}
+cross-section, in MPa, rendered from
+\texttt{iea\_s10\_dehom\_shell.vtk}. These are \emph{conformal exploded-mesh}
+contours: \texttt{write\_dehom\_vtk.py} emits one filled quad per contour
+element per through-thickness interval $\zeta \in [k/9,\,(k+1)/9]$, so the 310
+elements become $310\times 9 = 2790$ patches carrying 11\,160 points of their
+own. Each patch is flat-shaded with the stress of its own recovery station as
+\texttt{CELL\_DATA}, so no value is averaged across an element boundary or onto
+a shared node, and because the nine intervals tile the full layup thickness $h$
+the wall is drawn at its true thickness rather than as a line.}
 \label{fig:shell-dehom-stress}
 \end{figure}
 
 The axial stress is confined almost entirely to the two spar caps, exactly as a
 flap-dominated load state should be.
+
+The VTK file is not written by \texttt{beam\_dehom\_shell.py} itself. The
+sibling script \texttt{write\_dehom\_vtk.py} imports that driver, so the physics
+is not duplicated, and re-packages its recovered values as the exploded quad
+grid; \texttt{docs/latex/render\_pv.py} then renders the two panels above with
+\texttt{pvpython}.
 
 \begin{table}[htbp]
 \centering
@@ -548,8 +607,8 @@ maximum $\sigma_{11}$ & $+314.461$ MPa & element 150, \texttt{layup\_4}, $(y_2,y
 maximum $|\sigma_{12}|$ & $5.573$ MPa & element 11, \texttt{layup\_0}, $(y_2,y_3) = (3.895, 0.335)$ \\
 \bottomrule
 \end{tabular}
-\caption{Extremes of \texttt{iea\_s10\_dehom\_shell.txt} under the load state of
-Eq.~\eqref{eq:shell-ff}.}
+\caption{Extremes of \texttt{iea\_s10\_dehom\_shell.txt} under the load state
+$FF$ of row 10 of \texttt{ff51\_rmc\_reform.dat}.}
 \label{tab:shell-dehom-extremes}
 \end{table}
 
@@ -635,14 +694,37 @@ This is the MSG thin-walled (MSG-TW) equivalent-continuum problem, and it is wha
 you want for a cellular solid, a lattice, or any prismatic microstructure whose
 walls are thin.
 
+Every case in this section is a two-command run, and the two commands are the
+two input nodes of the chain below: a generator that writes the 1-D shell YAML,
+then a driver that calls \texttt{build\_solid\_bundle} on it.
+
+\captree{
+  \node[inputnode] (gen) {generator, e.g.\\ \texttt{make\_deo\_cellular\_yamls.py}\\ wall lengths $l$, $h$, angle $\theta$,\\ thickness $t$, \texttt{nseg}};
+  \node[inputnode, below=of gen] (y) {1-D shell yaml, e.g.\\ \texttt{deo\_cellular\_+15\_1Dshell.yaml}\\ \texttt{reference: center}};
+  \node[funcnode, right=of y] (bsb) {\texttt{opensg\_shell.build\_solid\_bundle}\\ \texttt{cell\_area} $=\omega$ (else convex\\ hull of the contour), \texttt{periodic=True}};
+  \node[funcnode, below=of bsb] (lr) {\texttt{sg\_mesh.load\_ring\_ref} +\\ \texttt{msg\_rm\_plate.rm\_plate\_msg}\\ wall $8\times8$ with the MSG \texttt{G}};
+  \node[outnode, right=of lr] (abdg) {\texttt{deo\_cellular\_+15\_1Dshell\_ABDG.out}\\ (\texttt{sg\_homo.write\_abdg\_out})};
+  \node[funcnode, below=of lr] (rs) {\texttt{sg\_homo.ring\_solid}\\ \texttt{sg\_periodicity.mesh\_to\_periodic\_sparse\_assembly\_map}\\ ties faces, edges, corners;\\ \texttt{assemble\_solid\_strip} +\\ \texttt{assemble\_solid\_macro}};
+  \node[datanode, below=of rs] (deff) {\texttt{D\_eff} $(6,6)$ per unit length,\\ \texttt{C3D} $=$ \texttt{D\_eff}/\texttt{cell\_area}\\ on \texttt{GBAR\_ORDER}};
+  \node[outnode, right=of deff] (c3d) {\texttt{deo\_cellular\_+15\_1Dshell\_C3D.out}\\ (\texttt{write\_sc\_K}, timed)};
+  \node[outnode, below=of deff] (dat) {\texttt{deo\_cellular\_+15\_msg\_shell.out},\\ \texttt{deo\_cellular\_compare.dat},\\ \texttt{deo\_cellular\_+15\_mesh.png}};
+  \node[outnode, right=of dat] (ec) {\texttt{square\_solid\_msg\_shell.out}\\ $6\times6$ plus 9 engineering constants\\ (\texttt{sg\_homo.elastic\_constants})};
+  \draw[capedge] (gen) -- (y);
+  \draw[capedge] (y) -- (bsb);
+  \draw[capedge] (bsb) -- (lr);
+  \draw[capedge] (lr) -- (abdg);
+  \draw[capedge] (lr) -- (rs);
+  \draw[capedge] (rs) -- (deff);
+  \draw[capedge] (deff) -- (c3d);
+  \draw[capedge] (deff) -- (dat);
+  \draw[capedge2] (deff) -- (ec);
+}
+
 The strain order is the solid Voigt order
-\begin{equation}
-\bar{\Gamma} = \begin{bmatrix}
+\widematrix{\bar{\Gamma} = \begin{bmatrix}
 \bar\Gamma_{11} & \bar\Gamma_{22} & \bar\Gamma_{33} &
 2\bar\Gamma_{23} & 2\bar\Gamma_{13} & 2\bar\Gamma_{12}
-\end{bmatrix}^{T},
-\label{eq:shell-gbar}
-\end{equation}
+\end{bmatrix}^{T},}
 with axis 1 along the prismatic direction. That string is returned in the bundle
 under the key \texttt{order} and exported as \texttt{GBAR\_ORDER}.
 
@@ -656,7 +738,7 @@ discards. That distinction is the entire point of the benchmarks below.
 
 \subsection{The driver}
 
-\begin{lstlisting}[style=opensg,caption={The one call for equivalent-solid properties from a cross-section SG.}]
+\begin{lstlisting}[style=opensg,caption={The one call for equivalent-solid properties from a cross-section SG.},basicstyle=\ttfamily\footnotesize]
 from opensg_shell import build_solid_bundle
 
 b = build_solid_bundle("cell_1Dshell.yaml", cell_area=A_cell)
@@ -692,7 +774,7 @@ Four sub-folders live under
 Each is a two-command run: a generator that writes the 1-D shell YAML, then the
 driver that homogenizes it.
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\footnotesize]
 cd examples/OpenSG_shell/3_get_solid_props_from_shell_cross_section/deo_cellular_solid
 python make_deo_cellular_yamls.py
 python deo_cellular_solid_props.py
@@ -705,6 +787,29 @@ and \texttt{nseg = 10} elements per wall of length $l$. The driver then computes
 the cell area itself from the wall angle,
 \texttt{area = (2*l*np.cos(th))*(2*(h + l*np.sin(th)))}, and passes it as
 \texttt{cell\_area}.
+
+Every driver in this folder redraws the 1-D SG it just solved, straight from the
+\texttt{nodes} and \texttt{elements} blocks of its own YAML, so
+Figures~\ref{fig:deo-cellular-mesh}, \ref{fig:deo-square-mesh}
+and~\ref{fig:deo-square-tube-mesh} are the meshes the numbers came from and not
+sketches.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.47\linewidth]{\FIGDIR/deo_cellular_p15_mesh.png}\hfill
+\includegraphics[width=0.47\linewidth]{\FIGDIR/deo_cellular_m15_mesh.png}
+\caption{The two cellular 1-D shell SGs, written as
+\texttt{deo\_cellular\_+15\_mesh.png} and \texttt{deo\_cellular\_-15\_mesh.png}
+by \texttt{deo\_cellular\_solid\_props.py}. Left: the hexagonal cell at
+$\theta = +15^\circ$, whose inclined walls splay outward. Right: the re-entrant
+(auxetic) cell at $\theta = -15^\circ$, whose inclined walls fold inward, which
+is what reverses the sign of $C_{13}$ and $C_{23}$. Both are the periodic double
+cell of nine walls: one full vertical column of length $h = 10$ cm, two
+box-clipped column halves, two full inclined walls of length $l = 10$ cm and
+four clipped inclined stubs, all $t = 5$ mm aluminium at \texttt{nseg = 10}
+elements per wall of length $l$. Node dots mark the two-node line elements.}
+\label{fig:deo-cellular-mesh}
+\end{figure}
 
 \subsubsection{Cellular solid, $\theta = +15^\circ$ (paper Table 1)}
 
@@ -773,6 +878,25 @@ Run from \texttt{deo\_hierarchical\_square}. The generator
 \texttt{make\_deo\_square\_yaml.py} carries \texttt{R, r, t = 0.10, 0.05, 0.005}
 and \texttt{nseg = 10}, the same aluminium.
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.47\linewidth]{\FIGDIR/deo_hier_square_mesh.png}\hfill
+\includegraphics[width=0.47\linewidth]{\FIGDIR/deo_composite_square_mesh.png}
+\caption{The two square-lattice 1-D shell SGs. Left: the hierarchical square
+(\texttt{deo\_square\_mesh.png}, from \texttt{deo\_square\_solid\_props.py}) --
+a closed inner square of half-side $r = 5$ cm built from eight half-walls, plus
+four ligaments running out to the cell boundary at $\pm R = \pm 10$ cm, twelve
+walls in all at $t = 5$ mm and \texttt{nseg = 10} elements per wall. Right: the
+composite square (\texttt{deo\_composite\_square\_mesh.png}, from
+\texttt{deo\_composite\_square\_props.py}) -- a $25.4\times25.4$ mm cell with
+two horizontal walls at $y_3 = \pm 5.84$ mm and one vertical wall spanning the
+full cell height through the centre, generated as seven segments of
+\texttt{nseg = 16} elements each, every wall a $[15]_8$ laminate of
+$t = 1.016$ mm. Both are axis-aligned $0/90$ lattices, which is why both lose
+the membrane part of $C_{23}$.}
+\label{fig:deo-square-mesh}
+\end{figure}
+
 \begin{table}[htbp]
 \centering
 \small
@@ -817,7 +941,8 @@ Run from \texttt{deo\_composite\_square}. The cell is $25.4\times25.4$ mm, so th
 driver passes \texttt{cell\_area = L2*L2} with \texttt{L2 = 25.4e-3}; horizontal
 segments sit at $y_3=\pm5.84$ mm with one vertical segment through the centre,
 and every wall is a $[15]_8$ laminate of $t = 1.016$ mm with $E_1 = 141.96$,
-$E_2 = E_3 = 9.79$, $G = 6.136$ GPa, $\nu = 0.42$.
+$E_2 = E_3 = 9.79$, $G = 6.136$ GPa, $\nu = 0.42$. The right panel of
+Figure~\ref{fig:deo-square-mesh} is that mesh.
 
 \begin{table}[htbp]
 \centering
@@ -866,6 +991,19 @@ with \texttt{python solid\_props\_msg\_shell.py}; it writes
 \texttt{square\_solid\_msg\_shell.out} with the $6\times6$ and the nine
 engineering constants obtained from \texttt{elastic\_constants(C)}.
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.47\linewidth]{\FIGDIR/deo_square_tube_mesh.png}
+\caption{The isotropic square-tube 1-D shell SG, written by
+\texttt{solid\_props\_msg\_shell.py} as \texttt{square\_tube\_mesh.png}. A
+single closed cell: four straight walls on the midline of a square of side
+$a = 1$ m, wall thickness $t_w = 0.03$ m carried as material data, centre
+reference. This is the one case whose measure is the wall material area
+$4at_w$ rather than a bounding-box area, which is what makes it directly
+comparable with a 2-D solid run of the same tube.}
+\label{fig:deo-square-tube-mesh}
+\end{figure}
+
 \subsection{Why $C_{23}$ vanishes on axis-aligned lattices}
 
 For a wall at angle $\varphi$ the only $\Gamma_e$ entries carrying weight in
@@ -896,7 +1034,8 @@ square, and they are off by default.
 A structure gene periodic in \textbf{all three} directions -- a triply-periodic
 minimal surface (TPMS) unit cell, a lattice block, any 3-D microstructure whose
 material is a thin sheet -- homogenizes to the same equivalent 3-D solid
-$6\times6$ of Eq.~\eqref{eq:shell-gbar}. \texttt{shell\_sg3d} solves it when the
+$6\times6$, on the same solid Voigt order $\bar{\Gamma}$ of
+Section~\ref{sec:shell-solid-xsec}. \texttt{shell\_sg3d} solves it when the
 microstructure is a thin sheet meshed as a \emph{surface}: the wall carries the
 RM $8\times8$ law, so thickness is a parameter rather than a remesh.
 
@@ -908,7 +1047,33 @@ elements are detected as \textbf{junction lines} and reported as
 \texttt{n\_junction\_edges}; a smooth TPMS has none.
 
 The example is
-\texttt{examples/OpenSG\_shell/4\_get\_solid\_props\_from\_shell\_3D\_SG}.
+\texttt{examples/OpenSG\_shell/4\_get\_solid\_props\_from\_shell\_3D\_SG}, and
+its data flow is the chain below. The only branch point is the \texttt{boundary}
+argument.
+
+\captree{
+  \node[inputnode] (msh) {gmsh 2.2 triangle mesh\\ \texttt{schwarz\_p\_D2\_shell.msh}\\ plus \texttt{T}, \texttt{E}, \texttt{nu}};
+  \node[funcnode, right=of msh] (mk) {\texttt{make\_schwarz\_yaml.py}\\ per-triangle frame $e_3$ = unit normal,\\ $e_2$ along edge 1, $e_1=e_2\times e_3$;\\ one ply \texttt{[alu, T, 0.0]}};
+  \node[inputnode, below=of mk] (y) {3-D shell yaml\\ \texttt{schwarz\_p\_3Dshell.yaml}\\ 13\,536 nodes, 26\,360 tris};
+  \node[funcnode, below=of y] (s3d) {\texttt{sg\_homo.shell\_sg3d}\\ \texttt{boundary="periodic"} (default)\\ or \texttt{"aperiodic"}; \texttt{omega=}};
+  \node[funcnode, below=of s3d] (mat) {\texttt{sg\_materials.\_material\_by\_section}\\ + \texttt{msg\_rm\_plate.rm\_plate\_msg}\\ wall $6\times6$ \texttt{De} and MSG \texttt{Gm};\\ junction-line count};
+  \node[funcnode, below=of mat] (ops) {\texttt{sg\_homo.solid\_fluct\_ops\_batch}\\ + \texttt{sg\_homo.solid\_macro\_ops\_batch}\\ 4 Gauss points $\to$ \texttt{K}, \texttt{Dhe}, \texttt{Dee}};
+  \node[datanode, right=of ops] (tie) {\texttt{sg\_periodicity.mesh\_to\_periodic\_sparse\_assembly\_map}\\ (periodic) \emph{or} bounding-box\\ $w=0$ Dirichlet (aperiodic)};
+  \node[datanode, below=of ops] (v0) {\texttt{splu} solve $\to$ \texttt{V0};\\ \texttt{D\_eff} $=$ \texttt{Dee} $+$ \texttt{V0}$^T$\texttt{Dhe};\\ \texttt{C3D} $=$ \texttt{D\_eff}$/\omega$};
+  \node[outnode, right=of v0] (out) {\texttt{schwarz\_p\_3Dshell\_C3D.out}\\ per unit-cell volume, timed\\ (\texttt{write\_sc\_K})};
+  \node[outnode, below=of v0] (png) {\texttt{schwarz\_p\_mesh.png}\\ (\texttt{schwarz\_solid\_props.py})};
+  \node[outnode, right=of png] (cmp) {\texttt{compare\_boundary\_modes.py} $\to$\\ \texttt{schwarz\_t0.036457\_periodic.out}\\ (one per mode), \texttt{boundary\_compare.dat}};
+  \draw[capedge] (msh) -- (mk);
+  \draw[capedge] (mk) -- (y);
+  \draw[capedge] (y) -- (s3d);
+  \draw[capedge] (s3d) -- (mat);
+  \draw[capedge] (mat) -- (ops);
+  \draw[capedge] (tie) -- (ops);
+  \draw[capedge] (ops) -- (v0);
+  \draw[capedge] (v0) -- (out);
+  \draw[capedge] (v0) -- (png);
+  \draw[capedge2] (out) -- (cmp);
+}
 
 \begin{figure}[htbp]
 \centering
@@ -948,7 +1113,7 @@ python schwarz_solid_props.py
 python compare_boundary_modes.py
 \end{lstlisting}
 
-\begin{lstlisting}[style=opensg,caption={The two boundary treatments of shell\_sg3d.}]
+\begin{lstlisting}[style=opensg,caption={The two boundary treatments of shell\_sg3d.},basicstyle=\ttfamily\scriptsize]
 from opensg_shell.sg_homo import shell_sg3d
 
 r = shell_sg3d("schwarz_p_3Dshell.yaml")                        # boundary="periodic" (default)
@@ -1082,6 +1247,30 @@ handles this by replacing the axial periodic condition with Dirichlet data taken
 from the two ends. The input is no longer a 1-D ring but a genuine 3-D surface
 mesh of a slice of the beam.
 
+\captree{
+  \node[inputnode] (y) {3-D shell segment yaml\\ \texttt{meshes/seg\_iso\_hR0.1.yaml} or\\ \texttt{BAR\_URC\_numEl\_52\_segment\_12.yaml}\\ quads, sections, materials};
+  \node[funcnode, below=of y] (ex) {\texttt{sg\_mesh.extract}\\ free edges (one owner quad),\\ connected components, axis from the\\ two most separated centroids};
+  \node[outnode, right=of ex] (byaml) {\texttt{seg\_iso\_hR0.1\_boundaries.npz}\\ carrying \texttt{L\_node2seg}, \texttt{R\_node2seg};\\ \texttt{boundary\_seg\_iso\_hR0.1\_boundaries\_L.yaml} and \texttt{\_R.yaml};\\ three \texttt{orient\_*.png}};
+  \node[funcnode, below=of ex] (ri) {\texttt{sg\_homo.ring\_indep}, once per side\\ $\to$ \texttt{C6}, \texttt{V0}, \texttt{V1} (6 DOF/node,\\ drilling $\omega_3$ included)};
+  \node[funcnode, below=of ri] (asm) {\texttt{sg\_assembly.assemble\_segment\_indep}\\ \texttt{Dhh}, \texttt{Dhe}, \texttt{Dee}, \texttt{Dhl}, \texttt{Dll}, \texttt{Dle}\\ (\texttt{shear="full"}, \texttt{pen=0})};
+  \node[funcnode, right=of asm] (con) {\texttt{sg\_assembly.assemble\_constraint}\\ $\to$ \texttt{Gc}, \texttt{Gl}, \texttt{Ge};\\ \texttt{sg\_homo.\_augment\_drilling};\\ \texttt{build\_C\_Psi\_segment6}};
+  \node[funcnode, below=of asm] (sol) {\texttt{sg\_assembly.dirichlet\_factor} once,\\ then \texttt{dirichlet\_solve\_fac} twice:\\ \texttt{V0} then \texttt{V1}, shared factorization,\\ ring fields as the end Dirichlet data};
+  \node[datanode, below=of sol] (s6) {\texttt{msg\_solver.prepare\_v1\_rhs} +\\ \texttt{finalize\_v1\_and\_compute\_deff}\\ $\to$ \texttt{S6} $(6,6)$, each block $/L$};
+  \node[outnode, right=of s6] (out) {\texttt{seg\_iso\_hR0.1\_Timo.out}\\ SwiftComp layout, timed\\ (\texttt{write\_sc\_K})};
+  \node[outnode, below=of s6] (dat) {\texttt{seg\_ring\_identity.dat} (driver)\\ \texttt{bar\_urc\_segment12.dat}};
+  \draw[capedge] (y) -- (ex);
+  \draw[capedge] (ex) -- (byaml);
+  \draw[capedge] (ex) -- (ri);
+  \draw[capedge] (ri) -- (asm);
+  \draw[capedge] (asm) -- (con);
+  \draw[capedge] (asm) -- (sol);
+  \draw[capedge] (con) -- (sol);
+  \draw[capedge] (ri.west) -- ++(-5mm,0) |- (sol.west);
+  \draw[capedge] (sol) -- (s6);
+  \draw[capedge] (s6) -- (out);
+  \draw[capedge] (s6) -- (dat);
+}
+
 The pipeline has four stages:
 
 \begin{enumerate}
@@ -1156,7 +1345,7 @@ construction, so the segment $6\times6$ must reproduce the ring $6\times6$.}
 For the validation case, \texttt{make\_cylinder\_segment.py} generates the
 surface mesh. Its parameter block is the whole user interface:
 
-\begin{lstlisting}[style=opensg,caption={The parameter block of make\_cylinder\_segment.py.}]
+\begin{lstlisting}[style=opensg,caption={The parameter block of make\_cylinder\_segment.py.},basicstyle=\ttfamily\footnotesize]
 R  = 1.0            # wall mid-surface radius [m]
 NC = 160            # circumferential quads
 NL = 3              # axial quads over the segment (>=2 so an interior ring exists)

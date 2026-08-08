@@ -126,6 +126,37 @@ measures. Row and column order is
 \texttt{[e11 e22 g12 k11 k22 k12 2g13 2g23]}, and that string is printed in the
 banner of every \texttt{.out} so a file can always be read without the manual.
 
+The whole capability is one file you edit and five functions that run. The SG
+mesh is written to disk and read back before the solve, so the mesh file --- not
+the database --- is what the homogenization actually sees.
+
+\captree{
+  \node[inputnode] (y) {\texttt{layup\_db.yaml}\\
+    \texttt{model}, \texttt{fraction}, \texttt{mesh},\\
+    \texttt{materials}, \texttt{layup}};
+  \node[funcnode, below=of y] (f1) {\texttt{segment\_plate.plate\_sg\_yaml}\\
+    the through-thickness node grid,\\
+    \texttt{n\_per\_layer} elements per ply};
+  \node[outnode, right=of f1] (o1) {\texttt{1dsg.yaml}\\ \texttt{1dsg.png}};
+  \node[funcnode, below=of f1] (f2)
+    {\texttt{segment\_plate.read\_plate\_sg\_yaml}\\
+     the mesh back as thick, angles,\\ mat\_names, material\_db};
+  \node[funcnode, below=of f2] (f3) {\texttt{msg\_rm\_plate.rm\_plate\_msg}\\
+    warping ladder \texttt{V0}, \texttt{V11}, \texttt{V12}};
+  \node[datanode, below=of f3] (d1) {\texttt{r["A6"]} $6\times6$ ABD\\
+    \texttt{r["ABDG"]} $8\times8$ at \texttt{model: 1}};
+  \node[funcnode, below=of d1] (f4) {\texttt{sg\_homo.write\_sc\_K}\\
+    stiffness, compliance, banner, timing};
+  \node[outnode, right=of f4] (o2) {\texttt{layup\_db\_plate\_homo.out}};
+  \draw[capedge] (y) -- (f1);
+  \draw[capedge] (f1) -- (o1);
+  \draw[capedge] (o1) -- (f2);
+  \draw[capedge] (f2) -- (f3);
+  \draw[capedge] (f3) -- (d1);
+  \draw[capedge] (d1) -- (f4);
+  \draw[capedge] (f4) -- (o2);
+}
+
 \subsection{The input you edit}
 
 Everything lives in \texttt{layup\_db.yaml}. The script reads that file and
@@ -211,7 +242,7 @@ The \texttt{.out} opens with a banner that records the whole run, then the
 matrix whose title follows \texttt{model} --- \texttt{Reissner-Mindlin Plate}
 here, \texttt{Classical Plate} at \texttt{model: 0}:
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\tiny,breaklines=true]
  OpenSG msg-solid plate model from 1dsg.yaml: 9 plies, h = 0.152400 m, fraction = 0.5, rho*h = 30.251400 kg/m^2, rows [e11 e22 g12 k11 k22 k12 2g13 2g23]
 
  The Effective Reissner-Mindlin Plate Stiffness Matrix
@@ -323,6 +354,45 @@ matrix-vector product, \texttt{jax.vmap}-ed over the whole field. The plate
 strains come from the section law itself,
 $\mathbf{E}_6 = \mathbf{A}_6^{-1}\mathbf{F}_6$, so a recovery never bypasses the
 homogenization.
+
+Both drivers of this section --- the single station of \texttt{rm\_dehom.py} and
+the whole field of \texttt{rm\_dehom\_ff.py} --- walk the same core functions in
+\texttt{opensg\_solid.rm\_plate\_1D.rm\_dehom}. They differ only in where the
+42-driver vector comes from.
+
+\captree{
+  \node[inputnode] (i1) {\texttt{1dsg.yaml}\\
+    the 1-D SG of Section~\ref{sec:solid-plate1d}};
+  \node[funcnode, below=of i1] (f1) {\texttt{rm\_dehom.load\_sg}\\
+    \texttt{read\_plate\_sg\_yaml}, then\\
+    \texttt{rm\_plate\_msg} re-run;\\
+    \texttt{S6} = inverse of \texttt{A6}};
+  \node[inputnode, right=of f1] (i2) {\texttt{F6}, \texttt{Q2v} in the USER\\
+    INPUT block, \emph{or} a\\ \texttt{.ff} station table plus the\\
+    \texttt{dehom:} block of \texttt{layup\_db.yaml}};
+  \node[funcnode, below=of f1] (f2) {\texttt{rm\_dehom.z\_stations}\\
+    \texttt{rm\_dehom.build\_ops}\\
+    \texttt{TE}, \texttt{TS} $(n_z,6,42)$, \texttt{TW} $(n_z,3,42)$};
+  \node[funcnode, below=of f2] (f3) {\texttt{rm\_dehom.assemble\_driver},\\
+    or \texttt{np.gradient} on a lattice /\\
+    \texttt{rm\_dehom.mls\_gradients} on a cloud};
+  \node[datanode, below=of f3] (d1) {\texttt{Eps}, \texttt{Sig}, \texttt{Warp}
+    per depth\\ then the \texttt{Q1}/\texttt{Q2} rescale};
+  \node[funcnode, below=of d1] (f4)
+    {\texttt{rm\_dehom.material\_rotations}\\ laminate frame to ply frame};
+  \node[funcnode, below=of f4] (f5) {\texttt{rm\_dehom.write\_field}\\
+    \texttt{rm\_dehom.write\_vtk}};
+  \node[outnode, right=of f5] (o1) {\texttt{1dsg\_dehom.SM/.EM/.U/.vtk}\\
+    or \texttt{<ff stem>\_ff.SM/.EM/.U}\\ and \texttt{<ff stem>\_ff\_gauss.vtk}};
+  \draw[capedge] (i1) -- (f1);
+  \draw[capedge] (f1) -- (f2);
+  \draw[capedge] (f2) -- (f3);
+  \draw[capedge] (i2) -- (f3);
+  \draw[capedge] (f3) -- (d1);
+  \draw[capedge] (d1) -- (f4);
+  \draw[capedge] (f4) -- (f5);
+  \draw[capedge] (f5) -- (o1);
+}
 
 Which driver feeds which component is the thing to understand before choosing an
 input.
@@ -510,6 +580,31 @@ reference surface}. Four conventions matter when you read the files.
   the internal SG Voigt order $(11, 22, 33, 23, 13, 12)$ on write.
 \end{itemize}
 
+The \texttt{\_ff\_gauss.vtk} is the file to open when you want to look at the
+result rather than read it. Figure~\ref{fig:solid-pv1dsg} is the shipped table
+recovered and rendered straight out of it.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.47\linewidth]{\FIGDIR/pv_plate_1dsg_s11.png}\hfill
+\includegraphics[width=0.47\linewidth]{\FIGDIR/pv_plate_1dsg_s13.png}
+\caption{ParaView renders of the recovered field on the SG, produced from the
+shipped \texttt{ex5\_shell\_S8R\_field\_ff\_gauss.vtk} by
+\texttt{docs/latex/render\_pv.py}. Left: the \texttt{S11} array, $\sigma_{11}$
+in Pa, colour scale $\pm5.23\times10^{10}$; right: the \texttt{S13} array,
+$\sigma_{13}$ in Pa, colour scale $\pm8.38\times10^{8}$. The grid points
+\emph{are} the recovery stations --- the $40\times40$ in-plane lattice times the
+45 SG-element Gauss depths --- so each coloured value is one recovered
+Gauss-point value, drawn with flat shading and never averaged across an element
+boundary. The camera looks down the thickness axis, so the visible face is the
+outermost Gauss depth. $\sigma_{11}$ there follows the sin-sin pressure of the
+\texttt{dehom: loads:} block and peaks at the plate centre; $\sigma_{13}$ is
+near zero on the full-field scale, because the transverse shear must vanish at
+the traction-free face, and changes sign across mid-span in $x$ following the
+$\cos(\pi x/a)$ gradient of that same load.}
+\label{fig:solid-pv1dsg}
+\end{figure}
+
 \subsection{What it is validated against}
 
 The accuracy table in
@@ -562,6 +657,51 @@ homogenizes it to the plate ABD with \texttt{n\_model=2}. Opposite faces, edges
 and corners are tied through the sparse periodic map;
 \texttt{boundary="periodic"} is the default and is the correct treatment for a
 periodic medium.
+
+Everything below the runner happens inside the single \texttt{plate\_homo\_2d}
+call, in this order.
+
+\captree{
+  \node[inputnode] (i1) {\texttt{RHC\_SW\_2UC\_45.yaml}\\
+    the 2-D cell SG (a SwiftComp\\ \texttt{.sc} is converted once by\\
+    \texttt{helper.sc\_to\_yaml.convert})};
+  \node[funcnode, below=of i1] (f1) {\texttt{sg\_homo.plate\_homo\_2d}\\
+    $\rightarrow$ \texttt{sg\_mesh.load\_sg\_input}\\
+    \texttt{dim}, \texttt{nodes}, \texttt{cells},
+    \texttt{mat\_id}, \texttt{scale}};
+  \node[funcnode, right=of f1] (p1) {\texttt{sg\_mesh.plot\_sg\_mesh}};
+  \node[funcnode, below=of f1] (f2) {\texttt{fe\_jax.setup.}\\
+    \texttt{mesh\_to\_periodic\_sparse\_assembly\_map}\\
+    ties opposite faces, edges, corners};
+  \node[outnode, right=of f2] (op) {\texttt{RHC\_SW\_2UC\_45\_mesh.png}};
+  \node[funcnode, below=of f2] (f3)
+    {\texttt{sg\_materials.get\_heterogeneous\_C\_matrix}\\
+     \texttt{C\_ess} $(E,6,6)$, rebuilt from\\
+     \texttt{material\_param} and \texttt{angles}};
+  \node[inputnode, right=of f3] (i2) {\texttt{n\_model = 2}, \texttt{name},\\
+    \texttt{material\_param}, \texttt{angles}\\ in \texttt{plate\_homo\_2dsg.py}};
+  \node[funcnode, below=of f3] (f4) {\texttt{sg\_homo.\_homo\_direct}\\
+    six unit macro states, one sparse\\
+    factorization $\rightarrow$ \texttt{V0}, \texttt{C\_eff}, \texttt{omega}};
+  \node[funcnode, right=of f4] (f5) {\texttt{sg\_homo.plate\_shear\_ladder}\\
+    only at \texttt{shear\_refined=True}\\
+    $\rightarrow$ \texttt{G\_msg}, \texttt{ABDG}};
+  \node[datanode, below=of f4] (d1) {\texttt{r["C\_eff"]} $6\times6$ ABD\\
+    \texttt{[N11 N22 N12 M11 M22 M12]}};
+  \node[funcnode, below=of d1] (f6) {\texttt{sg\_homo.write\_sc\_K}};
+  \node[outnode, right=of f6] (o1) {\texttt{RHC\_SW\_2UC\_45.out}};
+  \draw[capedge] (i1) -- (f1);
+  \draw[capedge] (f1) -- (p1);
+  \draw[capedge] (p1) -- (op);
+  \draw[capedge] (f1) -- (f2);
+  \draw[capedge] (f2) -- (f3);
+  \draw[capedge] (i2) -- (f3);
+  \draw[capedge] (f3) -- (f4);
+  \draw[capedge2] (f4) -- (f5);
+  \draw[capedge] (f4) -- (d1);
+  \draw[capedge] (d1) -- (f6);
+  \draw[capedge] (f6) -- (o1);
+}
 
 \subsection{The example SG and the input you edit}
 
@@ -628,7 +768,7 @@ material. The script also prints \texttt{r["C\_eff"]}, the same $6\times6$ it
 wrote. The \texttt{.out} banner records the SG measure and the boundary
 treatment:
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\tiny]
  OpenSG msg-solid plate model, omega 35.248001, periodic
 
  The Effective Classical Plate Stiffness Matrix
@@ -741,6 +881,43 @@ honeycomb actually fails --- in the web, not in the smeared plate.
 \texttt{dehom\_fields} returns the strain, the stress and the fluctuation
 displacement in one pass, using the warping columns $V_0$ that the
 homogenization already solved. Nothing is re-solved.
+
+That reuse is the whole point of the tree below: the homogenization node runs
+once and its result dictionary carries the warping modes, the element stiffness
+table and the quadrature data straight into the recovery.
+
+\captree{
+  \node[inputnode] (i1) {\texttt{RHC\_SW\_2UC\_45.yaml}\\ the 2-D cell SG};
+  \node[funcnode, below=of i1] (f1) {\texttt{sg\_homo.plate\_homo\_2d}\\
+    \texttt{n\_model=2}, the Section~\ref{sec:solid-plate2d} solve};
+  \node[funcnode, right=of f1] (f2) {\texttt{sg\_homo.write\_sc\_K},\\
+    \texttt{sg\_mesh.plot\_sg\_mesh},\\
+    \texttt{np.savetxt} in the runner};
+  \node[datanode, below=of f1] (d1) {\texttt{r["C\_eff"]}, \texttt{r["V0"]},\\
+    \texttt{C\_ess}, \texttt{x\_end}, \texttt{phi\_qn},\\
+    \texttt{dphi\_dxi\_qnp}, \texttt{periodic\_cells\_en}};
+  \node[outnode, right=of d1] (o1) {\texttt{RHC\_SW\_2UC\_45.out}\\
+    \texttt{RHC\_SW\_2UC\_45\_mesh.png}\\
+    \texttt{RHC\_SW\_2UC\_45\_plate\_ABD.out}};
+  \node[funcnode, below=of d1] (f3) {\texttt{sg\_dehom.dehom\_fields}\\
+    \texttt{\_dehom\_batch} and \texttt{\_u\_at\_gauss}\\
+    $\rightarrow$ \texttt{Gam}, \texttt{Sig} $(E,Q,6)$, \texttt{U} $(E,Q,3)$};
+  \node[inputnode, right=of f3] (i2) {\texttt{epsilon\_bar}\\
+    \texttt{[e11 e22 2e12 k11 k22 2k12]}\\ in \texttt{plate\_dehom\_2dsg.py}};
+  \node[funcnode, below=of f3] (f4) {\texttt{sg\_dehom.export\_gauss}\\
+    \texttt{sg\_dehom.gauss\_coords},
+    \texttt{\_write\_field}};
+  \node[outnode, below=of f4] (o2) {\texttt{RHC\_SW\_2UC\_45\_dehom.txt}\\
+    \texttt{.vtk}, \texttt{.SM}, \texttt{.EM}, \texttt{.U}};
+  \draw[capedge] (i1) -- (f1);
+  \draw[capedge] (f1) -- (f2);
+  \draw[capedge] (f2) -- (o1);
+  \draw[capedge] (f1) -- (d1);
+  \draw[capedge] (d1) -- (f3);
+  \draw[capedge] (i2) -- (f3);
+  \draw[capedge] (f3) -- (f4);
+  \draw[capedge] (f4) -- (o2);
+}
 
 \subsection{The input you edit}
 
@@ -862,6 +1039,24 @@ to run a dehomogenization at all. The driver here is a demonstration magnitude,
 not a service load; scale it to your own macro state before reading the stresses
 as failure indices.
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\linewidth]{\FIGDIR/pv_plate_dehom_sxx.png}
+\caption{ParaView render of the recovered field on the SG mesh, produced from
+the \texttt{RHC\_SW\_2UC\_45\_dehom.vtk} written by this example, using
+\texttt{docs/latex/render\_pv.py}. The array is \texttt{Sig\_xx}, the axial
+stress $\sigma_{xx}$ in MPa (units follow the SG input, millimetres and
+megapascals), on a symmetric colour scale of $\pm1.64\times10^{5}$~MPa --- the
+$xx$ row of Table~\ref{tab:solid-ex4max}. Every one of the 19\,920 points is a
+single Gauss point carried by its own vertex cell and coloured flat, so no value
+has been averaged across an element boundary. The field varies linearly with the
+through-thickness coordinate $y_2$, which is the macro part $\kappa_{11}y_2$ of
+the driver, and each face pack splits into two sub-bands of visibly different
+$\sigma_{xx}$ at almost the same height, consistent with the $+45^\circ$ and
+$-45^\circ$ laminae differing in the sign of their $C_{16}$ coupling.}
+\label{fig:solid-pvplatedehom}
+\end{figure}
+
 \section{Equivalent 3-D solid from a 2-D SG}
 \label{sec:solid-3dfrom2d}
 
@@ -883,6 +1078,48 @@ fluctuation field $\mathbf{V}_0$ is solved for each, and the effective law is
 with $\omega$ the cell area. This is the classical micromechanics unit-cell
 problem, which makes it the natural place to validate the route against
 published numbers.
+
+The shipped runner takes the self-contained path on the left of the tree; the
+engine path on the right is the same macro model reached through
+\texttt{plate\_homo\_2d}, and is what a 2-D SG in the ordinary
+\texttt{sg\_mesh.load\_sg\_input} dialect goes through.
+
+\captree{
+  \node[inputnode] (i1) {\texttt{UDcomp\_2D.msh}\\ gmsh 2.2, physical tags\\
+    naming the matrix and fibre};
+  \node[funcnode, below=of i1] (f1) {\texttt{make\_udcomp\_yaml.py}\\
+    nodes, 1-based triangles, a constant\\
+    \texttt{elementOrientations} frame, the two\\
+    materials in MPa, \texttt{sets.element}};
+  \node[outnode, below=of f1] (o1) {\texttt{UDcomp\_2D.yaml}};
+  \node[funcnode, below=of o1] (f2) {\texttt{solid\_homo\_2dsg.C\_from\_eng}\\
+    then the CST assembly:
+    \texttt{Ke}, \texttt{Fe},\\ \texttt{Dee}, \texttt{Dhe}, \texttt{omega}};
+  \node[inputnode, right=of f2] (i2) {\texttt{n\_model = 3}, \texttt{name},\\
+    the \texttt{paper} dictionary\\ in \texttt{solid\_homo\_2dsg.py}};
+  \node[funcnode, below=of f2] (f3) {\texttt{solid\_homo\_2dsg.pair}\\
+    right to left, top to bottom;\\
+    corner chains by \texttt{master = master[master]};\\
+    three rigid translations pinned};
+  \node[datanode, below=of f3] (d1) {\texttt{V0} $(n_{\rm dof},6)$\\
+    $\mathbf{D}_{\rm eff} = (\mathbf{D}_{ee}
+      + \mathbf{V}_0^{\mathsf T}\mathbf{D}_{he})/\omega$};
+  \node[funcnode, right=of d1] (e1) {\texttt{sg\_homo.plate\_homo\_2d}\\
+    \texttt{n\_model=3} on
+    \texttt{RHC\_SW\_2UC\_45.yaml}\\ $\rightarrow$
+    \texttt{RHC\_SW\_2UC\_45.out}\\ with the engineering-constants block};
+  \node[outnode, below=of d1] (o2) {\texttt{UDcomp\_2D\_Deff.out}\\
+    \texttt{UDcomp\_2D\_constants\_vs\_paper.dat}\\
+    \texttt{UDcomp\_2D\_mesh.png}};
+  \draw[capedge] (i1) -- (f1);
+  \draw[capedge] (f1) -- (o1);
+  \draw[capedge] (o1) -- (f2);
+  \draw[capedge] (i2) -- (f2);
+  \draw[capedge] (f2) -- (f3);
+  \draw[capedge] (f3) -- (d1);
+  \draw[capedge2] (d1) -- (e1);
+  \draw[capedge] (d1) -- (o2);
+}
 
 \subsection{The example SG}
 
@@ -1016,7 +1253,7 @@ its reference, not merely close.
 
 The stiffness itself, from \texttt{UDcomp\_2D\_Deff.out} (MPa, $\omega = 1$):
 %
-\begin{equation}
+\widematrix{
 \mathbf{D}_{\rm eff} =
 \begin{bmatrix}
 1.726544\times10^{5} & 8.658488\times10^{3} & 8.658488\times10^{3} & 0 & 0 & 0\\
@@ -1025,8 +1262,7 @@ The stiffness itself, from \texttt{UDcomp\_2D\_Deff.out} (MPa, $\omega = 1$):
 0 & 0 & 0 & 3.095555\times10^{3} & 0 & 0\\
 0 & 0 & 0 & 0 & 6.801763\times10^{3} & 0\\
 0 & 0 & 0 & 0 & 0 & 6.801763\times10^{3}
-\end{bmatrix}
-\end{equation}
+\end{bmatrix}}
 
 Two health checks are worth making a habit of. First, the symmetry the geometry
 demands is recovered: $D_{22} = D_{33}$ and $D_{55} = D_{66}$ to all printed
@@ -1057,6 +1293,54 @@ explicit request for SGs that genuinely are not periodic. Aperiodic supports the
 plate and solid models with \texttt{solver="direct"} only; asking for it with
 \texttt{n\_model=1} or \texttt{solver="cg"} raises.
 
+The tree is the sample runner and the boundary comparison, the two paths every
+number in this section comes from. Note the loader branch: a SwiftComp
+\texttt{.sc} is converted on the way in, so the \texttt{.yaml} and \texttt{.msh}
+appear in the working directory as a side effect of the homogenization.
+
+\captree{
+  \node[inputnode] (i1) {\texttt{Sample\_1.sc} or \texttt{Sample\_2.sc}\\
+    SwiftComp linear tets on a unit cell};
+  \node[inputnode, right=of i1] (i2) {\texttt{n\_model = 3},
+    \texttt{E}, \texttt{nu},\\ \texttt{boundary},
+    \texttt{workdir} in\\ \texttt{run\_sample\_N.py}};
+  \node[funcnode, below=of i1] (f1) {\texttt{sg\_homo.plate\_homo\_2d}\\
+    the single entry point};
+  \node[funcnode, below=of f1] (f2) {\texttt{sg\_mesh.load\_sg\_input}\\
+    $\rightarrow$ \texttt{helper.sc\_to\_yaml.convert}};
+  \node[funcnode, right=of f2] (p1) {\texttt{sg\_mesh.plot\_sg\_mesh}};
+  \node[funcnode, below=of f2] (f3) {\texttt{fe\_jax.setup.}\\
+    \texttt{mesh\_to\_periodic\_sparse\_assembly\_map},\\
+    or the bounding-box-face Dirichlet set\\
+    at \texttt{boundary="aperiodic"}; then\\
+    \texttt{sg\_materials.get\_heterogeneous\_C\_matrix}};
+  \node[outnode, right=of f3] (oa) {\texttt{Sample\_N.yaml}\\
+    \texttt{Sample\_N.msh}\\ \texttt{Sample\_N\_mesh.png}};
+  \node[funcnode, below=of f3] (f4) {\texttt{sg\_homo.\_homo\_direct}\\
+    six unit macro states $\rightarrow$\\
+    \texttt{C\_eff}, \texttt{V0}, \texttt{omega}};
+  \node[funcnode, right=of f4] (fb) {\texttt{compare\_boundary\_modes.py}\\
+    both samples under both treatments};
+  \node[funcnode, below=of f4] (f5) {\texttt{sg\_homo.write\_sc\_K}, then the\\
+    runner scales by \texttt{omega} and reads\\ \texttt{Sample\_N.sc.k}
+    term by term};
+  \node[outnode, right=of f5] (ob) {\texttt{boundary\_compare.dat}\\
+    \texttt{Sample\_N\_periodic.out}\\ \texttt{Sample\_N\_aperiodic.out}};
+  \node[outnode, below=of f5] (o1) {\texttt{Sample\_N.out}\\
+    \texttt{Sample\_N\_msg\_solid.out}\\ \texttt{Sample\_N\_compare.dat}};
+  \draw[capedge] (i1) -- (f1);
+  \draw[capedge] (i2) -- (f1);
+  \draw[capedge] (f1) -- (f2);
+  \draw[capedge] (f2) -- (p1);
+  \draw[capedge] (p1) -- (oa);
+  \draw[capedge] (f2) -- (f3);
+  \draw[capedge] (f3) -- (f4);
+  \draw[capedge] (f4) -- (f5);
+  \draw[capedge] (f5) -- (o1);
+  \draw[capedge2] (f4) -- (fb);
+  \draw[capedge2] (fb) -- (ob);
+}
+
 \subsection{The samples and the runners}
 
 Two TPMS samples are supplied as SwiftComp \texttt{.sc} meshes of linear tets on
@@ -1077,6 +1361,20 @@ sample & surface & nodes & tets & relative density $\omega$ \\
 \caption{The two TPMS solid structure genes.}
 \label{tab:solid-tpms}
 \end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\linewidth]{\FIGDIR/schwarz_p_mesh.png}
+\caption{The Schwarz-P triply-periodic minimal surface on its unit cell, drawn
+from the real mesh of \texttt{schwarz\_p\_3Dshell.yaml} by
+\texttt{examples/OpenSG\_shell/4\_get\_solid\_props\_from\_shell\_3D\_SG/}
+\texttt{schwarz\_solid\_props.py}, with the SG coordinates labelled $y_1$, $y_2$
+and $y_3$. This is the surface itself, meshed as a \texttt{msg-shell} SG; the
+two solid genes of Table~\ref{tab:solid-tpms} discretise the same surface as a
+volume of linear tets, which is why \texttt{tpms\_all\_compare.dat} can put the
+two engines side by side at matched thickness.}
+\label{fig:solid-schwarzp}
+\end{figure}
 
 Four runners sit in \texttt{6\_get\_solid\_props\_from\_3D\_SG}.
 
@@ -1246,6 +1544,53 @@ $[\epsilon_{11},\kappa_1,\kappa_2,\kappa_3]$ falls out of the same $V_0$ solve
 and rides along in \texttt{r["C\_eff\_EB"]} at no extra cost. The beam route
 requires an SG of dimension 2 or 3.
 
+The entry point is the same \texttt{plate\_homo\_2d} as every other route, but
+\texttt{n\_model=1} branches to a different engine at the first fork, and that
+engine is where the two shear rows come from.
+
+\captree{
+  \node[inputnode] (i1) {\texttt{RHC\_SW\_2UC\_45.yaml}\\
+    the 2-D cross-sectional SG};
+  \node[inputnode, right=of i1] (i2) {\texttt{n\_model = 1}, \texttt{name},\\
+    \texttt{material\_param}, \texttt{angles}\\ in \texttt{beam\_homo\_sg.py}};
+  \node[funcnode, below=of i1] (f1) {\texttt{sg\_homo.plate\_homo\_2d}\\
+    $\rightarrow$ \texttt{sg\_homo.\_beam\_homo\_kkt}};
+  \node[funcnode, right=of f1] (p1) {\texttt{sg\_mesh.load\_sg\_input},\\
+    \texttt{sg\_mesh.plot\_sg\_mesh}};
+  \node[funcnode, below=of f1] (f2)
+    {\texttt{sg\_assembly.compress\_periodic\_cells\_jax},\\
+     \texttt{sg\_materials.get\_heterogeneous\_C\_matrix}\\
+     $\rightarrow$ \texttt{C\_asm}, \texttt{C\_stress}};
+  \node[outnode, right=of f2] (oa) {\texttt{RHC\_SW\_2UC\_45\_mesh.png}};
+  \node[funcnode, below=of f2] (f3)
+    {\texttt{sg\_assembly.assemble\_system\_matrices},\\
+     \texttt{sg\_assembly.assemble\_rigid\_body\_ops}\\
+     $\rightarrow$ \texttt{Dhh} through \texttt{Dle}, \texttt{omega},\\
+     \texttt{dehomo\_data}, \texttt{Psi}, \texttt{Dc}};
+  \node[funcnode, below=of f3] (f4)
+    {\texttt{sg\_assembly.solve\_fluctuation\_field}\\
+     $\rightarrow$ \texttt{V0}, \texttt{C\_eb} under four rigid-body\\
+     constraints; then \texttt{sg\_homo.prepare\_v1\_rhs} and\\
+     \texttt{sg\_homo.finalize\_v1\_and\_compute\_deff}\\
+     reuse the same factorization};
+  \node[datanode, below=of f4] (d1) {\texttt{r["C\_eff"]} Timoshenko $6\times6$\\
+    \texttt{r["C\_eff\_EB"]} classical $4\times4$\\
+    \texttt{r["V0"]}, \texttt{r["V1s"]}};
+  \node[funcnode, below=of d1] (f5) {\texttt{sg\_homo.write\_sc\_K}\\
+    \texttt{Timoshenko} stiffness and compliance};
+  \node[outnode, right=of f5] (o1) {\texttt{RHC\_SW\_2UC\_45.out}};
+  \draw[capedge] (i1) -- (f1);
+  \draw[capedge] (i2) -- (f1);
+  \draw[capedge] (f1) -- (p1);
+  \draw[capedge] (p1) -- (oa);
+  \draw[capedge] (f1) -- (f2);
+  \draw[capedge] (f2) -- (f3);
+  \draw[capedge] (f3) -- (f4);
+  \draw[capedge] (f4) -- (d1);
+  \draw[capedge] (d1) -- (f5);
+  \draw[capedge] (f5) -- (o1);
+}
+
 \subsection{The example SG and the input you edit}
 
 \texttt{examples/OpenSG-solid/7\_get\_beam\_props\_from\_SG} homogenizes the same
@@ -1275,6 +1620,22 @@ id & material & $E_1, E_2, E_3$ (MPa) & $G_{12}, G_{13}, G_{23}$ (MPa) & angle \
 core.}
 \label{tab:solid-beammat}
 \end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\linewidth]{\FIGDIR/rhc_2dsg_mesh.png}
+\caption{The mesh the beam route runs on, written by
+\texttt{sg\_mesh.plot\_sg\_mesh} to \texttt{RHC\_SW\_2UC\_45\_mesh.png}. It is
+the same 4251-node, 6640-triangle gene as Figure~\ref{fig:solid-rhcmesh},
+because the plate and beam routes read the identical file; only
+\texttt{n\_model} differs. What changes is the reading: with
+\texttt{n\_model=1} the mesh is a \emph{cross-section}, its two coordinates are
+$y_2$ and $y_3$, and the beam axis $y_1$ is normal to the page --- which is why
+the recovery of Section~\ref{sec:solid-beamdehom} reports its extreme fibre at
+$y_3 = 23.29375$~mm where the plate recovery of
+Section~\ref{sec:solid-platedehom2d} reports the same point as $y_2$.}
+\label{fig:solid-beammesh}
+\end{figure}
 
 \begin{lstlisting}[style=opensg,caption={beam\_homo\_sg.py, complete.}]
 import numpy as np
@@ -1325,7 +1686,7 @@ stiffness is not a material stiffness.
 
 The shipped \texttt{RHC\_SW\_2UC\_45.out} stiffness block reads:
 
-\begin{lstlisting}[style=shellst]
+\begin{lstlisting}[style=shellst,basicstyle=\ttfamily\tiny]
      9.8992866E+006     6.9973096E+003     1.2577025E+001    -7.7065215E-001     2.2740495E+000    -8.6717860E-001
      6.9973096E+003     1.9074524E+006     5.9324366E+001    -3.4044009E+001    -1.6298115E+000    -6.0670378E-002
      1.2577025E+001     5.9324366E+001     9.3619028E+005    -8.4787043E+001    -9.3250231E-001     8.5948371E-001
@@ -1414,6 +1775,52 @@ builds the shear-corrected states and the zeroth- and first-order warping
 displacement fields. Nothing from the homogenization is recomputed: the result
 dictionary \texttt{r} carries the warping modes, the material tables and the
 quadrature data, so you homogenize once and recover as often as you like.
+
+The tree shows exactly what rides along. Everything below the dashed data node
+is a contraction of quantities that already exist.
+
+\captree{
+  \node[inputnode] (i1) {\texttt{RHC\_SW\_2UC\_45.yaml}\\
+    the 2-D cross-sectional SG};
+  \node[funcnode, below=of i1] (f1) {\texttt{sg\_homo.plate\_homo\_2d}\\
+    \texttt{n\_model=1}, the Section~\ref{sec:solid-beam} solve};
+  \node[funcnode, right=of f1] (fw) {\texttt{sg\_homo.write\_sc\_K},\\
+    \texttt{sg\_mesh.plot\_sg\_mesh},\\
+    \texttt{np.savetxt} in the runner};
+  \node[datanode, below=of f1] (d1) {\texttt{r["C\_eff"]}, \texttt{r["V0"]},
+    \texttt{r["V1s"]},\\ \texttt{r["dehomo\_data"]},
+    \texttt{r["C\_stress"]},\\ \texttt{r["reduced\_periodic\_cells"]},\\
+    \texttt{r["elem\_rotation"]}, \texttt{r["phi\_qn"]}};
+  \node[outnode, right=of d1] (o1) {\texttt{RHC\_SW\_2UC\_45.out}\\
+    \texttt{RHC\_SW\_2UC\_45\_beam\_Timo.out}\\
+    \texttt{RHC\_SW\_2UC\_45\_mesh.png}};
+  \node[funcnode, below=of d1] (f2) {\texttt{sg\_dehom.dehom\_fields}\\
+    $\rightarrow$ \texttt{sg\_dehom.compute\_fluctuations\_gpu}\\
+    seeded with \texttt{C\_eff} inverse times
+    \texttt{epsilon\_bar}\\ $\rightarrow$ \texttt{w\_1}, \texttt{w1s\_1},
+    \texttt{w1s\_2}, \texttt{w\_2}, \texttt{st\_m\_final}};
+  \node[inputnode, right=of f2] (i2) {\texttt{epsilon\_bar}\\
+    \texttt{[eps11 gam12 gam13}\\ \texttt{kappa1 kappa2 kappa3]}\\
+    in \texttt{beam\_dehom\_sg.py}};
+  \node[funcnode, below=of f2] (f3)
+    {\texttt{sg\_dehom.recover\_gauss\_point\_fields}\\
+     and \texttt{sg\_dehom.\_u\_at\_gauss} $\rightarrow$\\
+     \texttt{Gam}, \texttt{Sig} $(E,Q,6)$, \texttt{U} $(E,Q,3)$};
+  \node[funcnode, below=of f3] (f4) {\texttt{sg\_dehom.export\_gauss}\\
+    \texttt{sg\_dehom.gauss\_coords},
+    \texttt{\_write\_field}};
+  \node[outnode, below=of f4] (o2) {\texttt{RHC\_SW\_2UC\_45\_dehom.txt}\\
+    \texttt{.vtk}, \texttt{.SM}, \texttt{.EM}, \texttt{.U}};
+  \draw[capedge] (i1) -- (f1);
+  \draw[capedge] (f1) -- (fw);
+  \draw[capedge] (fw) -- (o1);
+  \draw[capedge] (f1) -- (d1);
+  \draw[capedge] (d1) -- (f2);
+  \draw[capedge] (i2) -- (f2);
+  \draw[capedge] (f2) -- (f3);
+  \draw[capedge] (f3) -- (f4);
+  \draw[capedge] (f4) -- (o2);
+}
 
 \subsection{The input you edit}
 
@@ -1543,6 +1950,24 @@ shear components, which exist purely because the cross-section is heterogeneous
 and warps, and which no beam theory can supply. The shipped driver is a
 demonstration magnitude, not a service load; scale it to your own macro state
 before reading the stresses as failure indices.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.62\linewidth]{\FIGDIR/pv_beam_dehom_sxx.png}
+\caption{ParaView render of the recovered field on the SG mesh, produced from
+the \texttt{RHC\_SW\_2UC\_45\_dehom.vtk} written by this example, using
+\texttt{docs/latex/render\_pv.py}. The array is \texttt{Sig\_xx}, the axial
+stress $\sigma_{xx}$ in MPa (units follow the SG input, millimetres and
+megapascals), on a symmetric colour scale of $\pm1.53\times10^{4}$~MPa --- the
+$xx$ row of Table~\ref{tab:solid-ex8max}. Each of the 19\,920 points is one
+Gauss point carried by its own vertex cell and coloured flat, so nothing is
+averaged across an element boundary. The gene is the same honeycomb as
+Figure~\ref{fig:solid-pvplatedehom} and the pattern is again linear in the
+through-thickness coordinate, but the peak is an order of magnitude lower,
+tracking this driver's extreme-fibre strain of $0.2339$ against the $2.3294$ of
+the plate recovery.}
+\label{fig:solid-pvbeamdehom}
+\end{figure}
 
 \section{Files at a glance}
 \label{sec:solid-glance}

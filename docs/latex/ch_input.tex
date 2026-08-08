@@ -196,7 +196,7 @@ One row of nine direction cosines per element, $[e_1(3)\;e_2(3)\;e_3(3)]$, in th
 same component order as the node rows. Unlike \texttt{nodes} and
 \texttt{elements}, these rows are true YAML lists of floats:
 
-\begin{lstlisting}[style=shellst,caption={One orientation row: e1 = [0,0,1] out of plane, then the in-plane e2 and e3.}]
+\begin{lstlisting}[style=shellst,caption={One orientation row: e1 = [0,0,1] out of plane, then the in-plane e2 and e3.},basicstyle=\ttfamily\footnotesize]
 elementOrientations:
 - [0.0, 0.0, 1.0, -0.9721541292349604, 0.2343423756204075, 0.0, -0.2343423756204075,
   -0.9721541292349604, 0.0]
@@ -297,7 +297,7 @@ The driver sets \texttt{name = "iea\_s10"}, calls
 \texttt{build\_rm\_bundle(name + "\_shell.yaml")}, and prints the $6\times6$
 with the diagonal labelled \texttt{EA GA2 GA3 GJ EI2 EI3}:
 
-\begin{lstlisting}[style=opensg,caption={The whole compute part of beam\_homo\_shell.py.}]
+\begin{lstlisting}[style=opensg,caption={The whole compute part of beam\_homo\_shell.py.},basicstyle=\ttfamily\footnotesize]
 from opensg_shell import build_rm_bundle, auto_emit
 
 name = "iea_s10"
