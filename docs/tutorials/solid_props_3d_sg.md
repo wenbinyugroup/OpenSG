@@ -9,10 +9,11 @@ solid $6\times6$. OpenSG covers this from both sides:
 | **msg-solid** | 3-D solid SG (tets/hexes) | `opensg_solid.sg_homo.plate_homo_2d(..., n_model=3)` |
 | **msg-shell** | 3-D **shell** SG (a thin sheet meshed as shell elements) | `opensg_shell.shell_sg3d.shell_sg3d(...)` |
 
-The solid route is periodic: opposite **faces, edges and corners** tied through the sparse
-periodic assembly map. The shell route takes a `boundary` argument — `"aperiodic"` (default:
-the boundary solution mapped onto the bounding-box nodes as Dirichlet data) or `"periodic"`
-(the same three-direction tie) — compared head-to-head below.
+Both routes default to **periodic**: opposite faces, edges and corners tied through the sparse
+periodic assembly map. Both also take a `boundary` argument whose `"aperiodic"` option (the
+boundary solution mapped onto the bounding-box nodes as Dirichlet data) is compared
+head-to-head below — a single-cell kinematic upper bound, for SGs that genuinely are not
+periodic.
 
 ```{note}
 Runnable cases in this repository:
@@ -61,9 +62,9 @@ diagonal, which is the health check on the all-directions periodic tie.
 
 ### Boundary treatment on the solid route
 
-`plate_homo_2d` takes the same `boundary` argument; `None` resolves to `"aperiodic"` for the
-3-D SG solid model and `"periodic"` for every other route (the sample runners above pass
-`boundary="periodic"` explicitly to keep the digit-parity gate). Solid elements carry only
+`plate_homo_2d` takes the same `boundary` argument, defaulting to `"periodic"` on every route
+(the sample runners above pass it explicitly to document the digit-parity gate). Solid
+elements carry only
 translations, so aperiodic clamps every DOF of the bounding-box-face nodes. Same `.sc`, per
 unit cell, MPa:
 
@@ -78,8 +79,8 @@ The bias is much larger than the shell route's (+7 %) because the clamped set is
 the solid sheet meets the cube faces in 2-D patches — 17 610 of 116 851 nodes (15 %) for
 Sample 1 against 720 of 13 536 (5 %) for the shell traces — and on the solid route aperiodic
 is **not** faster (the periodic tie merges only face pairs, so the factorized size barely
-changes). Periodic is the exact treatment for a periodic medium; aperiodic is the right model
-only when the SG genuinely is not periodic. Full table:
+changes). Periodic is the exact treatment for a periodic medium — hence the default; aperiodic
+is the right model only when the SG genuinely is not periodic. Full table:
 `examples/OpenSG-solid/6_get_solid_props_from_3D_SG/boundary_compare.dat`.
 
 ## Shell route — the 3-D shell SG
@@ -95,8 +96,8 @@ detected as **junction lines**; a smooth TPMS has none.
 ```python
 from opensg_shell.shell_sg3d import shell_sg3d
 
-r = shell_sg3d("schwarz_p_3Dshell.yaml")                        # boundary="aperiodic" (default)
-r = shell_sg3d("schwarz_p_3Dshell.yaml", boundary="periodic")   # unit-cell benchmark mode
+r = shell_sg3d("schwarz_p_3Dshell.yaml")                        # boundary="periodic" (default)
+r = shell_sg3d("schwarz_p_3Dshell.yaml", boundary="aperiodic")  # non-periodic SGs (explicit)
 r["C3D"], r["n_junction_edges"], r["solve_time"]
 ```
 
@@ -124,9 +125,9 @@ upper bound. On the Schwarz-P yaml (720 boundary nodes of 13 536), per unit cell
 The offset is the clamped-face boundary layer of a **single** cell — the expected kinematic
 bound, not an error in either path (clamping the rotations too would double it). Aperiodic is
 ~25 % *faster*: the Dirichlet rows leave the factorization and there is no tie map or border.
-Use `boundary="periodic"` for anything benchmarked against SwiftComp `.K` or reported as the
-effective law of a periodic medium; the aperiodic default is for SGs that genuinely are not
-periodic. Full table: `examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG/boundary_compare.dat`.
+Periodic (the default) is what to report for a periodic medium; request `"aperiodic"` only for
+SGs that genuinely are not periodic. Full table:
+`examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG/boundary_compare.dat`.
 
 ### Shell versus solid on the same surface
 

@@ -1,7 +1,7 @@
 """3-D shell SG: equivalent solid properties of a shell-element structure
-gene (TPMS-class cells).  boundary="aperiodic" (default: boundary solution
-w = 0 mapped onto the bounding-box nodes) or "periodic" (all three
-directions tied).
+gene (TPMS-class cells).  boundary="periodic" (default: all three
+directions tied) or "aperiodic" (boundary solution w = 0 mapped onto the
+bounding-box nodes; single-cell kinematic upper bound).
 
 Reuses the msg_shell operators unchanged -- solid_fluct_ops_batch (Gamma_h),
 solid_macro_ops_batch (Gamma_e) and the per-element frames are geometry-
@@ -38,10 +38,10 @@ _GPTS = [(-_G, -_G), (_G, -_G), (_G, _G), (-_G, _G)]
 
 
 def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
-               boundary="aperiodic"):
+               boundary="periodic"):
     """Equivalent 3-D solid stiffness of a 3-D shell SG.
 
-    boundary = "aperiodic" (default) or "periodic":
+    boundary = "periodic" (default) or "aperiodic":
       * "periodic"  -- warping fluctuation w periodic: opposite faces, edges
         and corners tied through the sparse assembly map; rigid translations
         removed by 3 area-weighted Lagrange rows.

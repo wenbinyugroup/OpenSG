@@ -1,5 +1,5 @@
 # TPMS Sample_2 -- msg-solid 3-D SG, periodic all 3 dirs, alu E=69 GPa nu=0.3
-# per-UNIT-CELL C (Pa) = C_eff x omega; omega 0.0856935; solve time: 61.39 s
+# per-UNIT-CELL C (Pa) = C_eff x omega; omega 0.0856935; solve time: 61.24 s
 # ---- C (6x6, Pa) ----
   2.30315975e+09   1.61212960e+09   1.61214091e+09   1.15917148e+04   3.01467904e+04   3.54422253e+04
   1.61212960e+09   2.30306731e+09   1.61212022e+09  -1.27989924e+04  -2.46109866e+04  -4.76364876e+04

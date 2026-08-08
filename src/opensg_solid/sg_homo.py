@@ -534,15 +534,14 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     (8x8 [[A6, 0], [0, G]]), r["A6_ladder"]; derivation status per SG
     dimension: see plate_shear_ladder.
     sc_path may also be an ALREADY-PARSED sc dict (laminate_to_sg).
-    boundary: None resolves to 'aperiodic' for the 3-D SG solid model
-    (n_sg = 3, n_model = 3) and 'periodic' for every other route.
-    'periodic' ties opposite faces/edges/corners (the SwiftComp-parity
-    mode -- pass it explicitly for unit-cell benchmarks).  'aperiodic' is
-    the boundary-solution treatment: the macro/affine field mapped onto
-    the boundary prescribes ZERO fluctuation (w = 0 Dirichlet) on every
-    bounding-box-face node; it forbids the rank-one affine fields of a
-    free SG, fixes the rigid modes, and is a kinematic upper bound on a
-    single cell (Rules/periodicity_in_solid_props.md)."""
+    boundary: 'periodic' (default; ties opposite faces/edges/corners --
+    the SwiftComp-parity mode) or 'aperiodic' (explicit request only):
+    the boundary-solution treatment mapping the macro/affine field onto
+    the boundary, i.e. ZERO fluctuation (w = 0 Dirichlet) on every
+    bounding-box-face node.  Aperiodic forbids the rank-one affine fields
+    of a free SG, fixes the rigid modes, and is a kinematic upper bound
+    on a single cell -- on the TPMS samples +22-27 % vs periodic
+    (Rules/periodicity_in_solid_props.md)."""
     if isinstance(sc_path, dict):
         base = os.path.join(workdir if workdir is not None else ".",
                             "laminate_sg")
@@ -580,12 +579,11 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     x_end = mesh_to_jax(vertices=points, cells=cells)
     V = points.shape[0]
 
-    # boundary resolution: 3-D SG solid props default to the aperiodic
-    # (boundary-solution Dirichlet) treatment; every other route stays
-    # periodic (Rules/periodicity_in_solid_props.md)
+    # boundary defaults to periodic on every route; aperiodic (boundary-
+    # solution Dirichlet) only on explicit request
+    # (Rules/periodicity_in_solid_props.md)
     if boundary is None:
-        boundary = "aperiodic" if (n_sg == 3 and n_model == 3) \
-            else "periodic"
+        boundary = "periodic"
     if boundary == "periodic":
         periodic_cells_en, dof_map_np = mesh_to_periodic_sparse_assembly_map(
             V, cells, points, n_model, atol=1e-6)

@@ -64,8 +64,8 @@ periodic faces returns the material's own isotropic stiffness exactly
 
 ## The aperiodic (boundary-solution Dirichlet) mode
 
-`opensg_shell.shell_sg3d(yaml, boundary=...)` takes `"aperiodic"` (default) or
-`"periodic"`. Aperiodic maps the boundary solution — for a unit cell, the
+`opensg_shell.shell_sg3d(yaml, boundary=...)` takes `"periodic"` (default) or
+`"aperiodic"`. Aperiodic maps the boundary solution — for a unit cell, the
 macro/affine field itself — onto the boundary nodes: zero **translational**
 fluctuation (`w1 = w2 = w3 = 0`, Dirichlet) on every bounding-box-face node,
 rotations left natural. This forbids the rank-one affine fields (they violate
@@ -85,9 +85,8 @@ layer at the clamped faces) and it is *faster* than periodic (the Dirichlet
 rows leave the factorization, and there is no tie map or Lagrange border).
 
 The solid route has the same switch: `opensg_solid.plate_homo_2d(...,
-boundary=...)`, where `None` resolves to `"aperiodic"` for the 3-D SG solid
-model (`n_sg = 3`, `n_model = 3`) and `"periodic"` for every other route
-(beam KKT and the CG solver are periodic-only). Solid elements carry only
+boundary=...)`, defaulting to `"periodic"` on every route (beam KKT and the
+CG solver are periodic-only). Solid elements carry only
 the three translations, so the Dirichlet set is simply every DOF of the
 bounding-box-face nodes — there is no rotation-clamping subtlety. In
 `_homo_direct` the boundary DOFs replace the first-node pin (identity rows,
@@ -104,11 +103,12 @@ cells).
 `ring_solid(...)` and `build_solid_bundle(...)` take `periodic=True` by default.
 `periodic=False` (free faces) is retained for diagnostics only (to demonstrate
 the rank-one theorem); do not use it for reported properties.
-`shell_sg3d(...)` takes `boundary="aperiodic"` by default (user convention);
-pass `boundary="periodic"` for unit-cell benchmarks.
-`plate_homo_2d(...)` takes `boundary=None`, resolving to `"aperiodic"` only
-for the 3-D SG solid model; the TPMS sample runners pass
-`boundary="periodic"` explicitly to keep the SwiftComp digit-parity gate.
+`shell_sg3d(...)` and `plate_homo_2d(...)` both default to
+`boundary="periodic"`; `"aperiodic"` is explicit-request only — its
+single-cell upper-bound bias (+7 % shell, +22–27 % solid on the TPMS) makes
+it unsuitable as a default. The TPMS sample runners still pass
+`boundary="periodic"` explicitly to document the SwiftComp digit-parity
+gate.
 
 ## Choosing the cell — the one thing still on the user
 
