@@ -7,7 +7,7 @@ import numpy as np
 
 MSH = ("../../../tests/08072026_square_shell_mesh/TPMS_SC_files/"
        "schwarz_p_D2_shell.msh")
-T = 0.036547           # from Sample_2 mesh data: t = 2V/S_free (same surface)
+T = 0.036457           # Sample_2, volume-consistent
 E, nu = 69.0e9, 0.30
 G = E/(2*(1+nu))
 
