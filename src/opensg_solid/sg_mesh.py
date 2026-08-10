@@ -58,25 +58,78 @@ def _cell_basis(dim, nodes_per_elem):
                          % (dim, nodes_per_elem))
 
 
+def _numify(v):
+    """Recursively convert CBaseLoader string scalars to numbers (leave true
+    text -- names, types -- as strings)."""
+    if isinstance(v, dict):
+        return {k: _numify(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_numify(x) for x in v]
+    if isinstance(v, str):
+        try:
+            f = float(v)
+            return int(f) if f.is_integer() and ("." not in v and "e" not in v.lower()) else f
+        except ValueError:
+            return v
+    return v
+
+
 def load_sg_input(path, out_base=None):
     """The SG from EITHER a SwiftComp .sc (converted via the helper,
     which also writes <base>.yaml/.msh), a yaml directly (the helper's
     own format -- the FEniCS-OpenSG habit of yaml-as-input), or an
     ALREADY-PARSED sc dict (passed through unchanged -- the
     laminate_to_sg route).
+
+    Speed: the yaml is parsed with CBaseLoader (libyaml parser, NO Python
+    resolver/constructor typing -- the pure/typed loaders spend ~30 s building
+    the ~1e6 typed objects of a multi-MB 3-D SG) and the big blocks are bulk
+    numpy-converted; the result is cached in a <base>_sg.npz sidecar that later
+    runs load in ~0.2 s (invalidated by the yaml mtime).
+
     Out: the parsed dict {dim, nodes, cells, mat_id, materials, scale}."""
     if isinstance(path, dict):
         return path
     ext = os.path.splitext(path)[1].lower()
     if ext == ".sc":
         return sc_convert(path, out_base)
-    raw = yaml.safe_load(open(path))
-    return {"dim": int(raw["dim"]),
-            "nodes": np.asarray(raw["nodes"], float),
-            "cells": [list(c) for c in raw["cells"]],
-            "mat_id": np.asarray(raw["mat_id"], int),
-            "materials": {int(k): v for k, v in raw["materials"].items()},
-            "scale": float(raw.get("scale", 1.0))}
+
+    npz = os.path.splitext(path)[0] + "_sg.npz"
+    if os.path.exists(npz) and os.path.getmtime(npz) >= os.path.getmtime(path):
+        z = np.load(npz, allow_pickle=True)
+        return {"dim": int(z["dim"]), "nodes": np.asarray(z["nodes"], float),
+                "cells": [list(c) for c in z["cells"]],
+                "mat_id": np.asarray(z["mat_id"], int),
+                "materials": z["materials"].item(),
+                "scale": float(z["scale"])}
+
+    try:
+        from yaml import CBaseLoader as _YL      # libyaml, untyped (all strings)
+    except ImportError:
+        from yaml import SafeLoader as _YL
+    raw = yaml.load(open(path), Loader=_YL)
+    nodes = np.asarray(raw["nodes"], float)      # numpy bulk str -> float
+    try:                                          # rectangular fast path
+        cells_arr = np.asarray(raw["cells"], np.int64)
+        cells = [list(c) for c in cells_arr]
+    except (ValueError, TypeError):               # mixed element sizes
+        cells_arr = None
+        cells = [[int(v) for v in c] for c in raw["cells"]]
+    mat_id = np.asarray(raw["mat_id"], np.int64)
+    materials = {int(k): _numify(v) for k, v in raw["materials"].items()}
+    scale = float(raw.get("scale", 1.0))
+    sc = {"dim": int(raw["dim"]), "nodes": nodes, "cells": cells,
+          "mat_id": mat_id, "materials": materials, "scale": scale}
+    try:                                          # best-effort sidecar cache
+        np.savez_compressed(
+            npz, dim=int(raw["dim"]), nodes=nodes,
+            cells=(cells_arr if cells_arr is not None
+                   else np.array([np.array(c) for c in cells], dtype=object)),
+            mat_id=mat_id, materials=np.array(materials, dtype=object),
+            scale=scale)
+    except Exception:
+        pass
+    return sc
 
 
 def laminate_to_sg(thick, angles, mat_names, material_db,

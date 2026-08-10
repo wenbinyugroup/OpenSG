@@ -140,6 +140,10 @@ def write_msh(sc, path):
 
 
 def write_yaml_file(sc, path):
+    try:                                     # libyaml C dumper: the pure-python
+        from yaml import CSafeDumper as _YD  # emitter costs ~4x on a 3-D SG
+    except ImportError:
+        from yaml import SafeDumper as _YD
     out = {"dim": int(sc["dim"]),
            "scale": float(sc["scale"]),
            "nodes": [[float(v) for v in row] for row in sc["nodes"]],
@@ -148,16 +152,27 @@ def write_yaml_file(sc, path):
            "materials": {int(k): {kk: vv for kk, vv in m.items()}
                          for k, m in sc["materials"].items()}}
     with open(path, "w") as f:
-        yaml.safe_dump(out, f, sort_keys=False, default_flow_style=None)
+        yaml.dump(out, f, Dumper=_YD, sort_keys=False, default_flow_style=None)
 
 
 def convert(sc_path, out_base=None):
-    """Read .sc, write <base>.yaml + <base>.msh, return the parsed dict."""
+    """Read .sc, write <base>.yaml + <base>.msh, return the parsed dict.
+
+    Up-to-date sidecars short-circuit the conversion: when <base>.yaml and
+    <base>.msh are both newer than the .sc, the yaml is loaded back instead
+    (through load_sg_input's npz cache, ~0.5 s) -- the .sc re-parse plus the
+    yaml/msh rewrite of a 3-D SG costs ~40 s otherwise."""
     if out_base is None:
         out_base = os.path.splitext(sc_path)[0]
+    yml, msh = out_base + ".yaml", out_base + ".msh"
+    if (os.path.exists(yml) and os.path.exists(msh)
+            and os.path.getmtime(yml) >= os.path.getmtime(sc_path)
+            and os.path.getmtime(msh) >= os.path.getmtime(sc_path)):
+        from opensg_solid.sg_mesh import load_sg_input   # call-time: no cycle
+        return load_sg_input(yml)
     sc = read_sc(sc_path)
-    write_yaml_file(sc, out_base + ".yaml")
-    write_msh(sc, out_base + ".msh")
+    write_yaml_file(sc, yml)
+    write_msh(sc, msh)
     print("sc_to_yaml: %dD SG, %d nodes, %d cells, %d materials -> %s.yaml/.msh"
           % (sc["dim"], len(sc["nodes"]), len(sc["cells"]),
              len(sc["materials"]), out_base))

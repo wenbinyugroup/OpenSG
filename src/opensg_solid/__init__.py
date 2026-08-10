@@ -37,3 +37,12 @@ try:
     jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.0)
 except Exception:
     pass    # the cache is an optimization; the engine must run without it
+
+# point pypardiso straight at the conda MKL runtime: without PYPARDISO_MKL_RT its
+# wrapper falls back to a recursive sys.prefix glob (~3 s of scandir on NFS homes)
+# on EVERY first solve of a process
+if "PYPARDISO_MKL_RT" not in os.environ:
+    import glob as _glob
+    _mkl = sorted(_glob.glob(os.path.join(sys.prefix, "lib", "libmkl_rt.so*")))
+    if _mkl:
+        os.environ["PYPARDISO_MKL_RT"] = _mkl[-1]

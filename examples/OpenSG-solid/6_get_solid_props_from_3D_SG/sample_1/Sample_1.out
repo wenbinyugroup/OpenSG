@@ -1,4 +1,4 @@
- OpenSG msg-solid 3D elastic model, omega 0.3
+ OpenSG msg-solid 3D elastic model, omega 0.3, periodic
 
  The Effective Stiffness Matrix
  --------------------------------------------
@@ -30,4 +30,4 @@
   nu13=     3.5654253E-001
   nu23=     3.5653028E-001
 
- Time taken: 165.94 sec
+ Time taken: 48.56 sec

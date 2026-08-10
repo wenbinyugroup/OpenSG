@@ -24,3 +24,6 @@ tests/__pycache__/
 # reproducible bulk dehom dumps (regenerate with the example scripts)
 examples/msg_shell/IEA_blade_beam/*_dehom_v2.txt
 Thumbs.db
+
+# generated SG sidecar caches (load_sg_input / sc_to_yaml)
+*_sg.npz

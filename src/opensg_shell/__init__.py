@@ -46,6 +46,16 @@ try:
 except Exception:
     pass    # the cache is an optimization; the engine must run without it
 
+# point pypardiso straight at the conda MKL runtime: without PYPARDISO_MKL_RT its
+# wrapper falls back to a recursive sys.prefix glob (~3 s of scandir on NFS homes)
+# on EVERY first solve of a process
+if "PYPARDISO_MKL_RT" not in _os.environ:
+    import glob as _glob
+    import sys as _sys
+    _mkl = sorted(_glob.glob(_os.path.join(_sys.prefix, "lib", "libmkl_rt.so*")))
+    if _mkl:
+        _os.environ["PYPARDISO_MKL_RT"] = _mkl[-1]
+
 from .sg_mesh import (load_ring, ring_6dof, ring_5dof, LBL,                # noqa: E402
                       load_ring_ref)
 from .sg_homo import (ring_indep, build_rm_bundle, build_solid_bundle,     # noqa: E402
