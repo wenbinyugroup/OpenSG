@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 
 from opensg_shell import auto_emit
 from opensg_shell.windio import load_blade, blade_stations, build_cross_section, \
-    emit_shell_yaml
+    emit_shell_yaml, emit_prevabs_xml
 
 ############### User Input #################################
 windio = "IEA-22-280-RWT.yaml"     # windIO blade file (v1 or v2)
@@ -38,6 +38,9 @@ prefix = "iea22"                   # station files = <prefix>_rXXXX_shell.yaml
 stations = "airfoil"               # "airfoil" | int N (uniform, e.g. 51) | [0.2, 0.5, ...]
 mesh_size = 0.01                   # element arc length / chord
 reference = "center"               # shell reference surface: "center" | "oml"
+write_xml = False                  # True: ALSO emit the PreVABS XML per station
+                                   # (cross_sections/xml/<tag>/ -- the cross-check
+                                   # input for the XML -> prevabs -> 2-D-solid path)
 ############################################################
 
 out = "cross_sections"
@@ -56,6 +59,8 @@ for r in rs:
     tag = "%s_r%04d" % (prefix, round(r * 1000))
     cs = build_cross_section(blade, r, mesh_size=mesh_size)
     info = emit_shell_yaml(cs, os.path.join(out, tag + "_shell.yaml"), reference=reference)
+    if write_xml:
+        emit_prevabs_xml(cs, os.path.join(out, "xml", tag), name=tag)
     rows.append([r, cs["chord"], cs["twist"], info["n_nodes"], info["n_elems"],
                  info["n_sets"], info["n_webs"]])
     print("  %s  r=%.4f  chord=%7.3f m  %4d nodes  %4d elems  %d sets  %d webs"

@@ -23,7 +23,8 @@ Pipeline (examples/OpenSG_shell/windio):
     6  <tag>.ff + yaml     -> <tag>.SM / .EM / .U               (sg_recovery)
 """
 from .sg_windio import (load_blade, build_cross_section, emit_shell_yaml,   # noqa: F401
-                        blade_stations, blade_length, oml_load_integrals)
+                        emit_prevabs_xml, blade_stations, blade_length,
+                        oml_load_integrals)
 from .sg_props import (mass_matrix_ring, beam_props, write_vabs_k)          # noqa: F401
 from .sg_beamdyn import (read_k_file, vabs_to_beamdyn, write_bd_props,      # noqa: F401
                          write_bd_primary, write_bd_driver, station_loads,
