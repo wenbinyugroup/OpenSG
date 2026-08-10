@@ -997,6 +997,28 @@ _G = 1.0/np.sqrt(3.0)
 _GPTS = [(-_G, -_G), (_G, -_G), (_G, _G), (-_G, _G)]
 
 
+def _sparse_solve(A, R):
+    """Multi-RHS sparse direct solve: PARDISO (multithreaded MKL) when available,
+    SuperLU fallback.  SuperLU is single-threaded CPU; PARDISO uses all cores and
+    is the same direct solver opensg_solid defaults to.  (The device-resident/GPU
+    alternative in this stack is the matrix-free EBE Chebyshev-CG of fe_jax, as in
+    opensg_solid.plate_homo_2d(solver="cg") -- iterative, no factorization at all.)
+
+    In:
+        A: (n, n) scipy sparse matrix (any format).
+        R: (n, k) dense right-hand sides.
+    Out:
+        (n, k) solution array.
+    """
+    R = np.asarray(R, float)
+    try:
+        import pypardiso
+        X = pypardiso.spsolve(sp.csr_matrix(A), R)
+        return X.reshape(R.shape)
+    except ImportError:
+        return spla.splu(sp.csc_matrix(A)).solve(R)
+
+
 def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
                boundary="periodic"):
     """Equivalent 3-D solid stiffness of a 3-D shell SG.
@@ -1033,7 +1055,11 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
               Deff = Dee + V0^T Dhe  (valid for both boundary treatments)
     """
     t0 = time.perf_counter()
-    d = _yaml.safe_load(open(yaml_path))
+    try:                                     # libyaml C loader: the pure-python parse
+        from yaml import CSafeLoader as _YL3  # of a big 3-D SG mesh costs ~25 s alone
+    except ImportError:
+        from yaml import SafeLoader as _YL3
+    d = _yaml.load(open(yaml_path), Loader=_YL3)
     row = lambda r: " ".join(str(x) for x in
                              (r if isinstance(r, list) else [r])).split()
     nd = np.array([[float(v) for v in row(r)][:3] for r in d["nodes"]])
@@ -1120,8 +1146,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         A = sp.bmat([[K, Cc.T], [Cc, None]], format="csc")
         R = np.zeros((ndof + 3, 6))
         R[:ndof] = -Dhe
-        lu = spla.splu(A)
-        V0 = lu.solve(R)[:ndof]
+        V0 = _sparse_solve(A, R)[:ndof]
         n_bnd = 0
     else:
         # boundary solution mapped to boundary nodes: zero translational
@@ -1134,9 +1159,8 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         n_bnd = len(bnodes)
         bd = (NDOF6*bnodes[:, None] + np.arange(3)[None, :]).ravel()
         free = np.setdiff1d(np.arange(ndof), bd)
-        lu = spla.splu(K[free][:, free].tocsc())
         V0 = np.zeros((ndof, 6))
-        V0[free] = lu.solve(-Dhe[free])
+        V0[free] = _sparse_solve(K[free][:, free].tocsc(), -Dhe[free])
     Deff = Dee + V0.T @ Dhe
     Deff = 0.5*(Deff + Deff.T)
     if omega is None:

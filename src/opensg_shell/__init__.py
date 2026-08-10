@@ -28,9 +28,23 @@ The x64 flag below is LOAD-BEARING: every solver in this package
 assembles/factorizes in float64; without it JAX silently degrades to
 float32 and the 6x6 digits are wrong.
 """
+import os as _os
+
 import jax
 
 jax.config.update("jax_enable_x64", True)
+
+# persistent XLA compilation cache (same setup as opensg_solid.__init__): cold runs
+# pay each kernel compile once per machine; warm runs load the cached binaries --
+# this is what makes the msg ABDG / ring / segment kernels start fast.
+_CACHE_DIR = _os.environ.get("JAX_COMPILATION_CACHE_DIR",
+                             _os.path.expanduser("~/.cache/opensg_jax"))
+try:
+    _os.makedirs(_CACHE_DIR, exist_ok=True)
+    jax.config.update("jax_compilation_cache_dir", _CACHE_DIR)
+    jax.config.update("jax_persistent_cache_min_compile_time_secs", 0.0)
+except Exception:
+    pass    # the cache is an optimization; the engine must run without it
 
 from .sg_mesh import (load_ring, ring_6dof, ring_5dof, LBL,                # noqa: E402
                       load_ring_ref)
