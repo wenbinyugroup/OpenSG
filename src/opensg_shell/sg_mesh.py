@@ -72,6 +72,12 @@ from collections import Counter, defaultdict
 
 import numpy as np
 import yaml
+
+try:                                    # libyaml C loader: ~5x faster on big SG yamls
+    from yaml import CSafeLoader as _YLoader
+except ImportError:
+    from yaml import SafeLoader as _YLoader
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -180,7 +186,7 @@ def show(name, S, So, C6, C5):
 # ----------------------------------------------------------------------
 
 def load_ring_ref(path, ref="oml"):
-    d = yaml.safe_load(open(path))
+    d = yaml.load(open(path), Loader=_YLoader)
     rx = np.array([_row(r)[:3] for r in d["nodes"]], dtype=float)
     cells = np.array([[int(v) for v in _row(e)] for e in d["elements"]], dtype=int)
     if cells.min() == 1:

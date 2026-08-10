@@ -443,6 +443,9 @@ def _pack(out: Sequence, thick: Sequence[float], angles_deg: Sequence[float], C_
             "angles": [float(a) for a in angles_deg], "c1": c1, "c2": c2}
 
 
+_RM_PLATE_MEMO = {}                                 # per-process laminate memo (read-only reuse)
+
+
 def rm_plate_msg(thick: Sequence[float],            # ply thicknesses, bottom first
                  angles_deg: Sequence[float],       # ply angles [deg]
                  mat_names: Sequence[str],          # material_db key per ply
@@ -458,9 +461,20 @@ def rm_plate_msg(thick: Sequence[float],            # ply thicknesses, bottom fi
     (V0, V11/V12 + bar/barD variants, V21/22/23 + t variants, V1L/V2L per
     face), node_x, elem_layer, C_layers, elem_order, angles, c1, c2.
 
+    Results are memoized per process by the laminate signature (a station pipeline
+    asks for the same laminate in the homogenization, the ABD-yaml emission, and
+    the dehom) -- treat the returned dict as read-only.
+
     elem_order = 4 represents the whole warping ladder exactly (degrees
     V0: 2, V1: 3, V2: 4); exactness numbers and performance notes: README
     sec. 1.  Batch many laminates with ``rm_plate_msg_batch``."""
+    key = (tuple(float(t) for t in thick), tuple(float(a) for a in angles_deg),
+           tuple(str(m) for m in mat_names), int(n_per_layer), int(elem_order),
+           float(fraction),
+           tuple(sorted((m, str(material_db[m])) for m in set(mat_names))))
+    hit = _RM_PLATE_MEMO.get(key)
+    if hit is not None:
+        return hit
     C_layers = np.array([rotated_stiffness_6x6(material_db[mat_names[k]]['E'],
                                                material_db[mat_names[k]]['G'],
                                                material_db[mat_names[k]]['nu'],
@@ -468,8 +482,10 @@ def rm_plate_msg(thick: Sequence[float],            # ply thicknesses, bottom fi
     bk = _bucket(len(thick), n_per_layer, elem_order)
     out = bk["jit_single"](jnp.asarray(np.asarray(thick, float)), jnp.asarray(C_layers),
                            jnp.asarray(float(fraction)))
-    return _pack(out, thick, angles_deg, C_layers, n_per_layer, int(elem_order), fraction,
-                 bk["elem_layer"])
+    res = _pack(out, thick, angles_deg, C_layers, n_per_layer, int(elem_order), fraction,
+                bk["elem_layer"])
+    _RM_PLATE_MEMO[key] = res
+    return res
 
 
 def rm_plate_msg_batch(layups: List[Dict[str, Any]],    # [{mat_names, thick, angles}]

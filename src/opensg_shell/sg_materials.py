@@ -311,17 +311,20 @@ def material_db_from_yaml(materials):
     return db
 
 
-def emit_station_abd(shell_yaml, out_yaml, station=None, r=None, ref="mid", g_source="whitney"):
+def emit_station_abd(shell_yaml, out_yaml, station=None, r=None, ref="mid", g_source="msg"):
     """Write the per-layup 8x8 RM wall law (default MID reference) for one cross-section.
 
-    Every layup stores the FULL 8x8 storage matrix  ABDG = [[A,B,0],[B,D,0],[0,0,G]]
-    (SwiftComp-style RM plate law) plus the legacy ABD 6x6 / Gs 2x2 keys for old readers.
+    The machine-readable companion of the human-readable <base>_ABDG.out: every layup
+    stores ONE matrix, the full 8x8  ABDG = [[A,B,0],[B,D,0],[0,0,G]]  (SwiftComp-style
+    RM plate law), consumed by load_station_abd (shell buckling / dehom reuse).
 
     ``g_source`` selects the 2x2 transverse-shear block G:
-      * "whitney" (default) -- coupling-aware complementary-energy shear flow
-        (msg_transverse_shear.transverse_shear_stiffness, coupled=True)
-      * "msg"     -- the MSG/VAM second-order-energy RM projection (Yu-2002 LS
-        construction, msg_rm_plate.rm_plate_msg) -- SwiftComp-like G.
+      * "msg" (default) -- the MSG/VAM second-order-energy RM projection (Yu-2002 LS
+        construction, msg_rm_plate.rm_plate_msg) -- SwiftComp-like G, the same G the
+        RM ring homogenization uses (build_rm_bundle g_source="msg").
+      * "whitney" -- coupling-aware complementary-energy shear flow
+        (msg_transverse_shear.transverse_shear_stiffness, coupled=True); also the
+        fallback when the MSG U*-fit is not SPD for a laminate.
     Returns the dict written."""
     d = yaml.safe_load(open(shell_yaml))
     mdb = material_db_from_yaml(d["materials"])
@@ -336,18 +339,20 @@ def emit_station_abd(shell_yaml, out_yaml, station=None, r=None, ref="mid", g_so
         if g_source == "msg":
             from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
             rr = rm_plate_msg(thk, ang, mats, mdb, fraction=frac)
-            if rr["G_msg"] is not None:
-                ABD8[6:, 6:] = rr["G_msg"]
+            Gm = rr["G_msg"]
+            if Gm is not None:                       # non-SPD U*-fit -> keep the energy G
+                Gm = np.asarray(Gm, float)
+                if (Gm.shape == (2, 2) and np.all(np.isfinite(Gm))
+                        and np.linalg.det(Gm) > 0.0 and Gm[0, 0] > 0.0):
+                    ABD8[6:, 6:] = Gm
         layups.append({
             "id": sid, "name": str(sec["elementSet"]), "thickness": round(h, 9),
             "mass_per_area": float(np.asarray(mass).ravel()[0]),
             "plies": [{"material": m, "thickness": round(t, 9), "angle": a} for m, t, a in plies],
             "ABDG": [[float(v) for v in row] for row in ABD8],
-            "ABD": [[float(v) for v in row] for row in ABD8[:6, :6]],
-            "Gs": [[float(v) for v in row] for row in ABD8[6:, 6:]],
         })
     out = {"station": station, "r": r, "reference": ref, "g_source": g_source,
-           "convention": "ABDG=[[A,B,0],[B,D,0],[0,0,G]] 8x8 (rows 1-6 Voigt [11,22,12] membrane+bending, rows 7-8 transverse shear [2g13,2g23]); legacy ABD 6x6 + Gs 2x2 kept; plies OML->IML",
+           "convention": "ABDG=[[A,B,0],[B,D,0],[0,0,G]] 8x8 (rows 1-6 Voigt [11,22,12] membrane+bending, rows 7-8 transverse shear [2g13,2g23]); plies OML->IML",
            "n_layups": len(layups), "layups": layups}
     dd = os.path.dirname(out_yaml)
     if dd:

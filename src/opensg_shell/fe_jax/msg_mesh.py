@@ -11,6 +11,11 @@ Provides:
 import numpy as np
 import yaml
 
+try:                                    # libyaml C loader: ~5x faster on big SG yamls
+    from yaml import CSafeLoader as _YLoader
+except ImportError:
+    from yaml import SafeLoader as _YLoader
+
 
 # =============================================================================
 # YAML Loader (OpenSG format)
@@ -36,7 +41,7 @@ def load_yaml(yaml_path):
     elem_to_layup: dict {elem_id_1based: layup_name}
     """
     with open(yaml_path, 'r') as f:
-        data = yaml.safe_load(f)
+        data = yaml.load(f, Loader=_YLoader)
 
     def _parse_row(row):
         if isinstance(row, str):

@@ -212,31 +212,43 @@ def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     Psi6[3::6, 3] *= -1.0                                      # validated-kernel om1 sign flip
 
     naug = M + P
-    Dhh_a = np.zeros((naug, naug)); Dhh_a[:M, :M] = Dhh
-    Dhh_a[:M, M:] = Gc.T; Dhh_a[M:, :M] = Gc
-    Dhe_a = np.zeros((naug, 4)); Dhe_a[:M] = Dhe; Dhe_a[M:] = Ge
-    Dhl_a = np.zeros((naug, naug)); Dhl_a[:M, :M] = Dhl; Dhl_a[M:, :M] = Gl
-    Dll_a = np.zeros((naug, naug)); Dll_a[:M, :M] = Dll
-    Dle_a = np.zeros((naug, 4)); Dle_a[:M] = Dle
-    Psi_a = np.zeros((naug, 4)); Psi_a[:M] = Psi6
-    Dc_a = np.zeros((naug, 4)); Dc_a[:M] = C6.T
+    # thin (naug, 4) blocks only -- the naug^2 zero-padded Dhh_a/Dhl_a/Dll_a of the
+    # earlier dense route cost more in allocation/copies than the factorization itself
+    # (the ring KKT is ~0.5-1 % dense).
+    Dhe_a = np.vstack([Dhe, Ge])
+    Dle_a = np.vstack([Dle, np.zeros((P, 4))])
+    Psi_a = np.vstack([Psi6, np.zeros((P, 4))])
+    Dc_a = np.vstack([C6.T, np.zeros((P, 4))])
 
-    # full KKT: [Dhh_a, Dc_a; Dc_a^T, 0] -- factorized once for the V0 AND V1 solves
+    # dense KKT [[Dhh, Gc^T, C6^T], [Gc, 0, 0], [C6, 0, 0]] -- LAPACK-factorized once
+    # for the V0 AND V1 solves, assembled DIRECTLY from the blocks (no naug^2 padded
+    # intermediates).  Dense LU is kept deliberately: the saddle point carries a
+    # near-null drilling/kernel mode, and a sparse factorization resolves it along a
+    # different direction (~1e-3 of max in the null couplings) that would leak into
+    # the V0/V1 recovery fields.
     from scipy.linalg import lu_factor, lu_solve
     A = np.zeros((naug + 4, naug + 4))
-    A[:naug, :naug] = Dhh_a; A[:naug, naug:] = Dc_a; A[naug:, :naug] = Dc_a.T
+    A[:M, :M] = Dhh
+    A[:M, M:naug] = Gc.T; A[M:naug, :M] = Gc
+    A[:M, naug:] = C6.T; A[naug:, :M] = C6
     Alu = lu_factor(A)
     R0 = np.zeros((naug + 4, 4)); R0[:naug] = -Dhe_a
     V0 = lu_solve(Alu, R0)[:naug]
     Deff = Dee + V0.T @ Dhe_a
-    bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
-        jnp.array(V0), jnp.array(Dhl_a), jnp.array(Dll_a), jnp.array(Dle_a),
-        jnp.array(Psi_a), jnp.array(Dc_a))
-    R1 = np.zeros((naug + 4, 4)); R1[:naug] = np.asarray(bb)
+    # V1 RHS projected onto range(Dhh): the block form of msg_solver.prepare_v1_rhs
+    # (Dhl_a/Dll_a act on the first M rows only; Gl couples the multiplier rows)
+    V0m, V0p = V0[:M], V0[M:naug]
+    DhlV0 = np.vstack([Dhl @ V0m, Gl @ V0m])
+    DhlTV0Dle = np.vstack([Dhl.T @ V0m + Gl.T @ V0p, np.zeros((P, 4))]) + Dle_a
+    V0DllV0 = V0m.T @ (Dll @ V0m)
+    b_unproj = DhlV0 - DhlTV0Dle
+    bb = Dc_a @ (np.linalg.inv(Psi_a.T @ Dc_a) @ (Psi_a.T @ b_unproj)) - b_unproj
+    R1 = np.zeros((naug + 4, 4)); R1[:naug] = bb
     V1 = lu_solve(Alu, R1)[:naug]
     C6r, *_ = finalize_v1_and_compute_deff(
         jnp.array(V1), jnp.array(V0), jnp.array(Deff),
-        V0DllV0, DhlV0, DhlTV0Dle, jnp.array(Psi_a), jnp.array(Dc_a))
+        jnp.array(V0DllV0), jnp.array(DhlV0), jnp.array(DhlTV0Dle),
+        jnp.array(Psi_a), jnp.array(Dc_a))
     C6r = np.asarray(C6r)
     C6r = 0.5 * (C6r + C6r.T)
     if return_fields:
@@ -824,7 +836,10 @@ def write_abdg_out(out_path, sections, D_by, G_by):
             ABDG = np.zeros((8, 8))
             ABDG[:6, :6] = np.asarray(D_by[si], float)
             ABDG[6:, 6:] = np.asarray(G_by[si], float)
-            S = np.linalg.inv(ABDG)
+            try:
+                S = np.linalg.inv(ABDG)
+            except np.linalg.LinAlgError:               # degenerate wall law: report, don't abort
+                S = np.linalg.pinv(ABDG)
             f.write("\n section %d: %s  layup %s\n" % (si, name, lay))
             f.write(" The Effective Reissner-Mindlin Plate Stiffness Matrix\n"
                     " --------------------------------------------\n")
@@ -1396,7 +1411,11 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
     import time as _time
     from .sg_mesh import load_ring_ref
     _t0 = _time.perf_counter()
-    d = yaml.safe_load(open(shell_yaml))
+    try:
+        from yaml import CSafeLoader as _YL
+    except ImportError:
+        from yaml import SafeLoader as _YL
+    d = yaml.load(open(shell_yaml), Loader=_YL)
     if ref is None:                                       # single source of truth: yaml records its ref
         ref = d.get("reference", "center")                # (set at 1-D-yaml creation; absent -> center)
     R = load_ring_ref(shell_yaml, ref)
@@ -1405,7 +1424,10 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
     frac = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}.get(ref, 0.0)
     # G_msg is reference-independent, but the SG carries the recovery warping, so its z_ref
     # must sit at the chosen reference surface.
-    G_by = list(R["G_by"])
+    # R["G_by"] is a per-section DICT {si: (2,2)} -- materialize the per-section list of
+    # VALUES (list(dict) yields the integer keys; latent until a section keeps its
+    # loader G because the msg replacement below is skipped on a non-SPD U*-fit).
+    G_by = [np.asarray(R["G_by"][si], float) for si in range(len(d["sections"]))]
     if g_source == "msg":
         from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
         from .sg_materials import material_db_from_yaml
@@ -1415,8 +1437,15 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
             _h = sum(p[1] for p in _pl)
             _rr = rm_plate_msg([p[1] for p in _pl], [p[2] for p in _pl], [p[0] for p in _pl],
                                _mdb, fraction=frac)
-            if _rr["G_msg"] is not None:
-                G_by[si] = np.asarray(_rr["G_msg"])
+            # guard the borderline-SPD U*-fit: accept the MSG G only when it is a
+            # finite SPD 2x2 (ev_min ~ 0 flips run-to-run on thin tip laminates);
+            # otherwise keep the energy-consistent G from the ring loader.
+            _Gm = _rr["G_msg"]
+            if _Gm is not None:
+                _Gm = np.asarray(_Gm, float)
+                if (_Gm.shape == (2, 2) and np.all(np.isfinite(_Gm))
+                        and np.linalg.det(_Gm) > 0.0 and _Gm[0, 0] > 0.0):
+                    G_by[si] = _Gm
     import os as _os2
     write_abdg_out(_os2.path.splitext(shell_yaml)[0] + "_ABDG.out",
                    d["sections"], R["D_by"], G_by)
@@ -1428,8 +1457,11 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
 
     sec_names = [s["elementSet"] for s in d["sections"]]
     layup_per_elem = [sec_names[int(si)] for si in R["rsub"]]
-    # reuse the KL bundle ONLY for the by-name plate layup_db + material_db (geometry-free)
-    kl = solve_tw_from_yaml(shell_yaml, frac=frac)
+    # by-name plate layup_db + material_db are GEOMETRY-FREE loader dicts -- read them
+    # directly (the KL solve_tw_from_yaml previously used here spent ~5 s/station
+    # solving the whole Hermite ring just to surface these two dicts).
+    from .fe_jax.msg_mesh import load_yaml as _load_sg_yaml
+    _, _, _mat_db_kl, _layup_db_kl, _ = _load_sg_yaml(shell_yaml)
     # emit the per-station ABD yaml at the SAME reference (once, cached) for dehom + shell buckling
     try:
         import os as _os
@@ -1453,6 +1485,6 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
             "corners": R["rx"][:, R["cross"]], "red_cells": np.asarray(R["cells"]),
             "rx3": np.asarray(R["rx"]), "re3": np.asarray(R["re3"]), "k22": np.asarray(R["k22"]),
             "ax": int(R["ax"]), "cross": list(R["cross"]), "strip": (nodes, quads, h),
-            "layup_per_elem": layup_per_elem, "layup_db": kl["layup_db"],
-            "material_db": kl["material_db"], "frac": frac, "ref": ref,
+            "layup_per_elem": layup_per_elem, "layup_db": _layup_db_kl,
+            "material_db": _mat_db_kl, "frac": frac, "ref": ref,
             "g_source": g_source}
