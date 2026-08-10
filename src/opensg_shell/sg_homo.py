@@ -1038,6 +1038,7 @@ def _sparse_solve(A, R, sym=False):
 
 
 def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
+               solver="direct",
                boundary="periodic"):
     """Equivalent 3-D solid stiffness of a 3-D shell SG.
 
@@ -1161,12 +1162,22 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         Cc = sp.lil_matrix((3, ndof))
         for k in range(3):
             Cc[k, k::NDOF6] = wA
-        A = sp.bmat([[K, Cc.T], [Cc, None]], format="csc")
-        R = np.zeros((ndof + 3, 6))
-        R[:ndof] = -Dhe
-        V0 = _sparse_solve(A, R, sym=True)[:ndof]
+        if solver == "cg":
+            # device-resident GPU path: the 3 area-weighted translation rows
+            # become a projection and ALL 6 macro load cases solve at once
+            # (vmapped matrix-free CG; see sparse_projected_cg)
+            from opensg_solid.sg_assembly import sparse_projected_cg
+            V0 = sparse_projected_cg(K, np.asarray(Cc.todense()), -Dhe, NDOF6)
+        else:
+            A = sp.bmat([[K, Cc.T], [Cc, None]], format="csc")
+            R = np.zeros((ndof + 3, 6))
+            R[:ndof] = -Dhe
+            V0 = _sparse_solve(A, R, sym=True)[:ndof]
         n_bnd = 0
     else:
+        if solver == "cg":
+            raise ValueError("shell_sg3d solver='cg' supports the periodic "
+                             "boundary (the SwiftComp-parity default)")
         # boundary solution mapped to boundary nodes: zero translational
         # fluctuation on the bounding-box faces (rotations stay natural);
         # solve the free interior

@@ -130,7 +130,9 @@ def full_homogenization_pipeline(
         res, _ = jax.scipy.sparse.linalg.cg(A_op, b_col, M=cheb_M, tol=1e-6)
         return res
 
-    V0_matrix = jax.lax.map(solve_inner, -Dhe.T).T
+    # vmap over the macro load cases: all V0 columns solve SIMULTANEOUSLY
+    # (batched matvecs on CPU, parallel on GPU; lax.map was sequential)
+    V0_matrix = jax.vmap(solve_inner)(-Dhe.T).T
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
     D_bar, omega = compute_homogenized_constants(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, n_model, n_sg)
@@ -493,17 +495,23 @@ def mass_matrix_2d(sc, density):
 
 
 def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
-                   W_q, dof_map_np, material_param, angles, elem_rotation):
+                   W_q, dof_map_np, material_param, angles, elem_rotation,
+                   solver="direct"):
     """The n_model=1 beam driver: V0 EB solve under the 4 rigid-body
     Lagrange constraints, the l-chain V1s solve reusing the factorized
     KKT matrix, then the 6x6 Timoshenko reduction.
+
+    solver="cg" replaces BOTH KKT factorizations with the device-resident
+    projected CG (sparse_projected_cg): the rigid-body rows become a
+    projection and the 4 V0 + 4 V1 load cases are vmapped -- the
+    GPU-compatible path (identical digits by V0/V1 stationarity).
 
     In:  sc parsed SG dict; n_sg SG dimension (>= 2); points (V, d)
          nodes; cells (E, N) connectivity; x_end (E, N, d) element node
          coords; phi_qn/dphi_dxi_qnp/W_q quadrature basis tables;
          dof_map_np (V*3,) periodic dof map; material_param (n_mat, 9)
          engineering override or None; angles (n_mat,) deg or None;
-         elem_rotation (E, 9) per-element DCs or None
+         elem_rotation (E, 9) per-element DCs or None; solver str
     Out: the plate_homo_2d r dict -- C_eff (6, 6) Timoshenko, C_eff_EB
          (4, 4) classical, V0/V1s, dehomo_data, C_ess/C_stress,
          elem_rotation (identity tile when None), connectivity, omega,
@@ -525,15 +533,26 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
                                       N_primal, n_sg)
 
     RHS_V0 = -np.array(Dhe.todense())
-    V0, D1_V0, A_augmented = solve_fluctuation_field(Dhh, RHS_V0, Dc, 1)
+    if solver == "cg":
+        from .sg_assembly import sparse_projected_cg
+        Crows = np.asarray(Dc, float).T               # (4, N) rigid-body rows
+        V0 = jnp.asarray(sparse_projected_cg(Dhh, Crows, RHS_V0, 3))
+        D1_V0 = jnp.einsum("ni,nj->ij", V0, -jnp.asarray(RHS_V0))
+    else:
+        V0, D1_V0, A_augmented = solve_fluctuation_field(Dhh, RHS_V0, Dc, 1)
     C_eb = (Dee + D1_V0) / omega
 
     bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
         V0, Dhl, Dll, jnp.array(Dle.todense()), Psi, Dc)
-    R_aug = np.concatenate([np.array(bb),
-                            np.zeros((4, bb.shape[1]))], axis=0)
-    V_aug = _sparse_direct_solve(A_augmented, R_aug, sym=True)
-    V1s_raw = jnp.array(V_aug[:N_primal, :])
+    if solver == "cg":
+        from .sg_assembly import sparse_projected_cg
+        V1s_raw = jnp.asarray(sparse_projected_cg(Dhh, Crows,
+                                                  np.asarray(bb), 3))
+    else:
+        R_aug = np.concatenate([np.array(bb),
+                                np.zeros((4, bb.shape[1]))], axis=0)
+        V_aug = _sparse_direct_solve(A_augmented, R_aug, sym=True)
+        V1s_raw = jnp.array(V_aug[:N_primal, :])
     C_timo, _B_tim, _C_tim, V1s = finalize_v1_and_compute_deff(
         V1s_raw, V0, C_eb, V0DllV0, DhlV0, DhlTV0Dle, Psi, Dc)
 
@@ -727,7 +746,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     if n_model == 1:
         r = _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
                            dphi_dxi_qnp, W_q, dof_map_np,
-                           material_param, angles, elem_rotation)
+                           material_param, angles, elem_rotation,
+                           solver=solver)
         r["solve_time"] = _time.perf_counter() - _t0
         # 6x6 mass matrix (VABS .K style): rho per material from `density`,
         # falling back to the .sc material blocks' T/rho line (aux[1])

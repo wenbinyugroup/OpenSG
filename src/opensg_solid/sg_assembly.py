@@ -765,6 +765,92 @@ def plate_ladder_element_blocks(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     return jax.vmap(one, in_axes=(0, 0))(x_end, C_ess)
 
 
+def sparse_projected_cg(A_sp, C, B, ndof_per_node, tol=1e-8, cheb_degree=4,
+                        maxiter=2000):
+    """Device-resident multi-RHS projected CG -- the GPU-compatible homo solve:
+    ALL load-case columns of B are solved SIMULTANEOUSLY with jax.vmap over a
+    matrix-free BCOO matvec, so the same code batches on CPU and parallelizes
+    on GPU (jit end-to-end, no factorization).
+
+    Solves A x = b with the linear constraints C x = 0 (rigid-body / kernel
+    rows) by projection: P = I - C^T (C C^T)^-1 C, CG on P A P (+ identity on
+    the constrained subspace).  Preconditioner = per-node block-Jacobi inverse
+    of A's diagonal blocks wrapped in a Chebyshev polynomial (the
+    full_homogenization_pipeline recipe); the eigen estimate is hoisted out of
+    the per-column solve so every column sees the same operator.
+
+    In:
+        A_sp: (n, n) scipy sparse, symmetric PSD on ker(C)^perp.
+        C: (m, n) dense constraint rows, or None (no projection).
+        B: (n, k) dense right-hand sides (k load cases).
+        ndof_per_node: int, diagonal block size (3 solid / 6 shell).
+        tol, cheb_degree, maxiter: CG controls.
+    Out:
+        (n, k) numpy solution, each column projected onto C x = 0.
+    """
+    from jax.experimental import sparse as _jsp
+
+    Ac = A_sp.tocoo() if hasattr(A_sp, "tocoo") else A_sp   # scipy | COO-like
+    n = Ac.shape[0]
+    b = int(ndof_per_node)
+    nb = n // b
+    # per-node block-Jacobi from the diagonal blocks (numpy, once)
+    blocks = np.zeros((nb, b, b))
+    m_diag = (Ac.row // b) == (Ac.col // b)
+    np.add.at(blocks, (Ac.row[m_diag] // b, Ac.row[m_diag] % b,
+                       Ac.col[m_diag] % b), Ac.data[m_diag])
+    inv_blocks = jnp.asarray(np.linalg.inv(
+        blocks + 1e-8 * np.eye(b)[None, :, :]))
+
+    A_bcoo = _jsp.BCOO((jnp.asarray(Ac.data),
+                        jnp.asarray(np.column_stack([Ac.row, Ac.col]))),
+                       shape=(n, n))
+    B_d = jnp.asarray(np.asarray(B, float))
+    if C is not None:
+        C_d = jnp.asarray(np.asarray(C, float))
+        Ginv = jnp.linalg.inv(C_d @ C_d.T)
+
+        def proj(x):
+            return x - C_d.T @ (Ginv @ (C_d @ x))
+    else:
+        def proj(x):
+            return x
+
+    def block_prec(x):
+        return jnp.einsum("nij,nj->ni", inv_blocks,
+                          x.reshape(nb, b)).ravel()
+
+    def A_op(x):
+        return proj(A_bcoo @ proj(x)) + (x - proj(x))
+
+    def M_blk(x):
+        return proj(block_prec(proj(x))) + (x - proj(x))
+
+    eig_max = estimate_max_eigenvalue(A_op, M_blk, proj(B_d[:, 0]))
+    eig_min = eig_max / 25.0
+    d_c = (eig_max + eig_min) / 2.0
+    c_c = (eig_max - eig_min) / 2.0
+    theta = d_c + c_c * jnp.cos(
+        jnp.pi * (2 * jnp.arange(1, cheb_degree + 1) - 1) / (2 * cheb_degree))
+
+    def cheb(x):
+        def step(z, th):
+            return z + M_blk(x - A_op(z)) / th, None
+        z, _ = jax.lax.scan(step, jnp.zeros_like(x), theta)
+        return z
+
+    @jax.jit
+    def solve_all(Bcols):
+        def one(bc):
+            bp = proj(bc)
+            x, _ = jax.scipy.sparse.linalg.cg(A_op, bp, M=cheb, tol=tol,
+                                              maxiter=maxiter)
+            return proj(x)
+        return jax.vmap(one)(Bcols.T).T          # vmap over the load cases
+
+    return np.asarray(solve_all(B_d))
+
+
 _direct_spsolve = None
 
 
