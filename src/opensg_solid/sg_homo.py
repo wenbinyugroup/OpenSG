@@ -415,6 +415,83 @@ def finalize_v1_and_compute_deff(V1s_raw, V0, D_eff, V0DllV0, DhlV0,
     return Deff_srt, B_tim, C_tim, V1s
 
 
+_TRI_GP = np.array([[1/6, 1/6], [2/3, 1/6], [1/6, 2/3]])   # degree-2 exact
+_QUAD_GP = np.array([(a, b) for a in (-1/np.sqrt(3), 1/np.sqrt(3))
+                     for b in (-1/np.sqrt(3), 1/np.sqrt(3))])
+
+
+def mass_matrix_2d(sc, density):
+    """6x6 beam mass matrix of a 2-D solid SG (VABS frame, section origin).
+
+    Straight-sided corner-node integration (subparametric: exact for tri3/quad4,
+    the geometric approximation of curved tri6/quad8 edges is negligible for a
+    mass integral): per element  m = int rho dA,  S2/S3 = int rho x dA,
+    I = int rho x x dA, assembled as
+
+        [[ m    0    0    0    S3  -S2 ]
+         [ 0    m    0   -S3   0    0  ]
+         [ 0    0    m    S2   0    0  ]
+         [ 0   -S3   S2  I22+I33  0  0 ]
+         [ S3   0    0    0    I22 -I23]
+         [-S2   0    0    0   -I23  I33]]
+
+    In:  sc dict (load_sg_input): nodes (V, 3) with (x2, x3) in cols 0:2,
+         cells, mat_id (E,) 1-based;
+         density: (n_mat,) per material in mat-id order, or {mat_id: rho}.
+    Out: (M, info): M (6, 6); info dict mpus / mass_center (2,) /
+         i22 / i33 / i23 about the section origin."""
+    nd = np.asarray(sc["nodes"], float)[:, :2]
+    mats = np.asarray(sc["mat_id"], int)
+    if isinstance(density, dict):
+        rho_of = {int(k): float(v) for k, v in density.items()}
+    else:
+        dens = np.asarray(density, float).ravel()
+        rho_of = {i + 1: float(dens[i]) for i in range(len(dens))}
+    m = S2 = S3 = I22 = I33 = I23 = 0.0
+    for c, mid in zip(sc["cells"], mats):
+        rho = rho_of[int(mid)]
+        nn = len(c)
+        if nn in (3, 6):
+            X = nd[np.asarray(c[:3], int)]
+            J2 = abs((X[1, 0] - X[0, 0]) * (X[2, 1] - X[0, 1])
+                     - (X[2, 0] - X[0, 0]) * (X[1, 1] - X[0, 1]))
+            for (l1, l2) in _TRI_GP:
+                w = J2 / 6.0
+                x = X[0] + l1 * (X[1] - X[0]) + l2 * (X[2] - X[0])
+                m += rho * w
+                S2 += rho * w * x[0]; S3 += rho * w * x[1]
+                I22 += rho * w * x[1] ** 2; I33 += rho * w * x[0] ** 2
+                I23 += rho * w * x[0] * x[1]
+        elif nn in (4, 8, 9):
+            X = nd[np.asarray(c[:4], int)]
+            for (xi, eta) in _QUAD_GP:
+                Nx = 0.25 * np.array([-(1 - eta), (1 - eta),
+                                      (1 + eta), -(1 + eta)])
+                Ne = 0.25 * np.array([-(1 - xi), -(1 + xi),
+                                      (1 + xi), (1 - xi)])
+                J = np.array([Nx @ X, Ne @ X])
+                w = abs(np.linalg.det(J))
+                Nf = 0.25 * np.array([(1 - xi) * (1 - eta), (1 + xi) * (1 - eta),
+                                      (1 + xi) * (1 + eta), (1 - xi) * (1 + eta)])
+                x = Nf @ X
+                m += rho * w
+                S2 += rho * w * x[0]; S3 += rho * w * x[1]
+                I22 += rho * w * x[1] ** 2; I33 += rho * w * x[0] ** 2
+                I23 += rho * w * x[0] * x[1]
+        else:
+            raise ValueError("mass_matrix_2d: unsupported 2-D element with "
+                             "%d nodes" % nn)
+    M = np.array([[m,   0,   0,   0,        S3,  -S2],
+                  [0,   m,   0,  -S3,       0,    0],
+                  [0,   0,   m,   S2,       0,    0],
+                  [0,  -S3,  S2,  I22 + I33, 0,   0],
+                  [S3,  0,   0,   0,        I22, -I23],
+                  [-S2, 0,   0,   0,       -I23,  I33]])
+    info = dict(mpus=m, mass_center=np.array([S2 / m, S3 / m]) if m else
+                np.zeros(2), i22=I22, i33=I33, i23=I23)
+    return M, info
+
+
 def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
                    W_q, dof_map_np, material_param, angles, elem_rotation):
     """The n_model=1 beam driver: V0 EB solve under the 4 rigid-body
@@ -500,7 +577,8 @@ def _knum(v):
     return "%19s" % ("%sE%s%03d" % (m, e[0], abs(int(e))))
 
 
-def write_sc_K(path, C, solve_time=None, model="", constants=True, name=""):
+def write_sc_K(path, C, solve_time=None, model="", constants=True, name="",
+               mass=None):
     """Write an effective stiffness in the SwiftComp .K format (as a .out
     file): stiffness, compliance and (3-D solid law only) the orthotropic-
     approximated engineering constants; OpenSG banner at the top, 'Time
@@ -511,7 +589,9 @@ def write_sc_K(path, C, solve_time=None, model="", constants=True, name=""):
          model str banner text; constants bool (True: 3-D solid only);
          name str matrix title infix -- '' -> 'The Effective Stiffness
          Matrix'; 'Timoshenko' (beam 6x6), 'Classical Plate' (ABD 6x6),
-         'Reissner-Mindlin Plate' (ABDG 8x8)
+         'Reissner-Mindlin Plate' (ABDG 8x8);
+         mass (6, 6) | None -- beam mass matrix, written VABS .K style
+         ('The 6X6 Mass Matrix') after the compliance
     Out: the .out file at path; returns None."""
     C = np.asarray(C, float)
     S = np.linalg.inv(C)
@@ -527,6 +607,12 @@ def write_sc_K(path, C, solve_time=None, model="", constants=True, name=""):
                 " --------------------------------------------\n" % infix)
         for i in range(n):
             f.write("".join(_knum(S[i, j]) for j in range(n)) + "\n")
+        if mass is not None:
+            Mm = np.asarray(mass, float)
+            f.write("\n The 6X6 Mass Matrix\n"
+                    " ========================================================\n\n")
+            for i in range(6):
+                f.write("".join(_knum(Mm[i, j]) for j in range(6)) + "\n")
         if not constants:
             if solve_time is not None:
                 f.write("\n Time taken: %.2f sec\n" % solve_time)
@@ -553,7 +639,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     solver: str = "direct",             # "direct" | "cg"
                     shear_refined: bool = False,        # + RM G 2x2 (n_model=2)
                     plot: bool = True,                  # write <base>_mesh.png
-                    boundary: Optional[str] = None      # 'aperiodic'|'periodic'
+                    boundary: Optional[str] = None,     # 'aperiodic'|'periodic'
+                    density=None                        # (n_mat,) beam mass rho
                     ) -> Dict[str, Any]:
     """Homogenize ONE structure gene (1-D/2-D/3-D .sc) to the macro law.
 
@@ -642,11 +729,21 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                            dphi_dxi_qnp, W_q, dof_map_np,
                            material_param, angles, elem_rotation)
         r["solve_time"] = _time.perf_counter() - _t0
+        # 6x6 mass matrix (VABS .K style): rho per material from `density`,
+        # falling back to the .sc material blocks' T/rho line (aux[1])
+        if density is None:
+            aux_rho = [float(sc["materials"][mid].get("aux", [0, 0])[1])
+                       for mid in sorted(sc["materials"])]
+            density = aux_rho if any(r_ > 0 for r_ in aux_rho) else None
+        M6 = None
+        if density is not None:
+            M6, minfo = mass_matrix_2d(sc, np.asarray(density, float))
+            r["Mass"] = M6; r["mass_info"] = minfo
         write_sc_K(base + ".out", np.asarray(r["C_eff"]),
                    solve_time=r["solve_time"],
                    model="msg-solid beam model, omega %.8g"
                          % float(r["omega"]),
-                   constants=False, name="Timoshenko")
+                   constants=False, name="Timoshenko", mass=M6)
         return r
 
     # per-element frames must be applied for plate/solid too, not only beam;

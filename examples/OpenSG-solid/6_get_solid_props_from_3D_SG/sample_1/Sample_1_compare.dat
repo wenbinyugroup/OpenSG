@@ -1,4 +1,4 @@
-# TPMS Sample_1: msg-solid vs SwiftComp .K (per-cell, MPa); relative density 0.3000; solve 42.7 s
+# TPMS Sample_1: msg-solid vs SwiftComp .K (per-cell, MPa); relative density 0.3000; solve 42.9 s
 # term     msg_solid    SwiftComp      err%
   C11      10190.158    10190.158    -0.000
   C12       5646.069     5646.068    +0.000

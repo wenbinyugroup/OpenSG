@@ -32,14 +32,19 @@ material_param = jnp.array([
     (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),
     (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
 angles = jnp.array([45.0, -45.0, 0.0])
+density = [1.6e-9, 1.6e-9, 2.7e-9]   # tonne/mm^3 per material (MPa-mm system):
+                                     # CFRP plies, aluminum core -- edit to yours
 ############################################################
 
 r = plate_homo_2d(name + ".yaml", material_param=material_param,
-                    angles=angles, n_model=n_model)
+                    angles=angles, n_model=n_model, density=density)
 np.set_printoptions(precision=5)
 print("beam 6x6  [eps11 gam12 gam13 kappa1 kappa2 kappa3]  (Timoshenko):")
 print(r["C_eff"])
 print("beam 4x4  [eps11 kappa1 kappa2 kappa3]  (EB, same run):")
 print(r["C_eff_EB"])
-print("wrote %s.out (Timoshenko stiffness + compliance, .K layout)"
+print("mass 6x6  (VABS frame; mass/span %.5g, center (%.4g, %.4g)):"
+      % (r["mass_info"]["mpus"], *r["mass_info"]["mass_center"]))
+print(r["Mass"])
+print("wrote %s.out (Timoshenko stiffness + compliance + 6x6 mass, .K layout)"
       " + %s_mesh.png" % (name, name))

@@ -1,0 +1,7 @@
+# .sc conversion artifacts of the top-level compare/convert runs (regenerable;
+# the tracked per-sample outputs live in sample_1/ and sample_2/)
+Sample_?.yaml
+Sample_?.msh
+/Sample_1.out
+/Sample_2.out
+laminate_sg.out

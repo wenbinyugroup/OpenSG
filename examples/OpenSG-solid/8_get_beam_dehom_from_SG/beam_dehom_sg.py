@@ -32,6 +32,7 @@ material_param = jnp.array([
     (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),
     (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
 angles = jnp.array([45.0, -45.0, 0.0])
+density = [1.6e-9, 1.6e-9, 2.7e-9]   # tonne/mm^3 per material (MPa-mm system)
 
 # the MACRO beam state [eps11, gam12, gam13, kappa1, kappa2, kappa3]
 # (Timoshenko rows; the old EB 4-vector [eps11 kappa1 kappa2 kappa3]
@@ -40,7 +41,7 @@ epsilon_bar = jnp.array([0.001, 0.0, 0.0, 0.0, 0.01, 0.0])
 ############################################################
 
 r = plate_homo_2d(name + ".yaml", material_param=material_param,
-                    angles=angles, n_model=n_model)
+                    angles=angles, n_model=n_model, density=density)
 np.savetxt(name + "_beam_Timo.out", r["C_eff"], fmt="%16.8e",
            header="beam Timoshenko 6x6 [eps11 gam12 gam13 kappa1 kappa2"
                   " kappa3] (Beam_solid KKT engine) from the %dD SG %s"
