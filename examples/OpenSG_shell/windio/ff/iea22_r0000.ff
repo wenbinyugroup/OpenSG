@@ -1,0 +1,11 @@
+# OpenSG station FF (BeamDyn -> VABS frame)  eta = 0.000000
+
+0 0 0 # u1 u2 u3 [m];
+0 0 0 # th1 th2 th3 (Wiener-Milenkovic);
+
+1 0 0 # C 3x3;
+0 1 0
+0 0 1
+
+5.14781448e-07 3.49841489e-09 2223629.75 # F1 F2 F3 [N]
+1279537 -108268168 5.54819621e-08 # M1 M2 M3 [N-m]

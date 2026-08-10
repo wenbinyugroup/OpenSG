@@ -1,0 +1,62 @@
+------- BEAMDYN Driver with OpenFAST INPUT FILE --------------------------------
+Static analysis of iea22 under 1500 Pa flapwise surface traction
+---------------------- SIMULATION CONTROL --------------------------------------
+False         DynamicSolve  - Dynamic solve (false for static solve) (-)
+          0   t_initial     - Starting time of simulation (s) [used only when DynamicSolve=TRUE]
+         30   t_final       - Ending time of simulation   (s) [used only when DynamicSolve=TRUE]
+      0.0002   dt            - Time increment size         (s) [used only when DynamicSolve=TRUE]
+---------------------- GRAVITY PARAMETER --------------------------------------
+          0   Gx            - Component of gravity vector along X direction (m/s^2)
+          0   Gy            - Component of gravity vector along Y direction (m/s^2)
+          0   Gz            - Component of gravity vector along Z direction (m/s^2)
+---------------------- FRAME PARAMETER --------------------------------------
+          0   GlbPos(1)     - Component of position vector of the reference blade frame along X direction (m)
+          0   GlbPos(2)     - Component of position vector of the reference blade frame along Y direction (m)
+          0   GlbPos(3)     - Component of position vector of the reference blade frame along Z direction (m)
+---The following 3 by 3 matrix is the direction cosine matirx ,GlbDCM(3,3),
+---relates global frame to the initial blade root frame
+1.0000000E+00  0.0000000E+00  0.0000000E+00  
+0.0000000E+00  1.0000000E+00  0.0000000E+00  
+0.0000000E+00  0.0000000E+00  1.0000000E+00  
+T             GlbRotBladeT0 - Reference orientation for BeamDyn calculations is aligned with initial blade root?
+---------------------- ROOT VELOCITY PARAMETER ----------------------------------
+          0   RootVel(4)    - Component of angular velocity vector of the beam root about X axis (rad/s)
+          0   RootVel(5)    - Component of angular velocity vector of the beam root about Y axis (rad/s)
+          0   RootVel(6)    - Component of angular velocity vector of the beam root about Z axis (rad/s)
+---------------------- APPLIED FORCE ----------------------------------
+          0   DistrLoad(1)  - Component of distributed force vector along X direction (N/m)
+          0   DistrLoad(2)  - Component of distributed force vector along Y direction (N/m)
+          0   DistrLoad(3)  - Component of distributed force vector along Z direction (N/m)
+          0   DistrLoad(4)  - Component of distributed moment vector along X direction (N-m/m)
+          0   DistrLoad(5)  - Component of distributed moment vector along Y direction (N-m/m)
+          0   DistrLoad(6)  - Component of distributed moment vector along Z direction (N-m/m)
+          0   TipLoad(1)    - Component of concentrated force vector at blade tip along X direction (N)
+          0   TipLoad(2)    - Component of concentrated force vector at blade tip along Y direction (N)
+          0   TipLoad(3)    - Component of concentrated force vector at blade tip along Z direction (N)
+          0   TipLoad(4)    - Component of concentrated moment vector at blade tip along X direction (N-m)
+          0   TipLoad(5)    - Component of concentrated moment vector at blade tip along Y direction (N-m)
+          0   TipLoad(6)    - Component of concentrated moment vector at blade tip along Z direction (N-m)
+         16   NumPointLoads - Number of point loads along blade
+Non-dim blade-span eta   Fx          Fy            Fz           Mx           My           Mz
+(-)                      (N)         (N)           (N)          (N-m)        (N-m)        (N-m)
+0.0000 37763.20551 0 0 0 0 1.170177284
+0.0200 92520.30414 0 0 0 0 192.5657357
+0.0490 89318.48617 0 0 0 0 3626.353092
+0.0660 67690.54664 0 0 0 0 15718.00732
+0.0830 70521.10148 0 0 0 0 28499.49867
+0.1020 50620.21299 0 0 0 0 27946.63077
+0.1100 62717.39048 0 0 0 0 38473.73569
+0.1360 82247.92983 0 0 0 0 63522.06751
+0.1560 106859.0298 0 0 0 0 86707.48597
+0.1970 153599.6942 0 0 0 0 140249.6234
+0.2470 327595.4522 0 0 0 0 343961.5104
+0.3990 379518.1878 0 0 0 0 403172.4418
+0.5340 343475.8184 0 0 0 0 301283.9792
+0.7390 286856.4522 0 0 0 0 153778.8218
+0.9800 70595.16161 0 0 0 0 16080.23068
+1.0000 1730.856643 0 0 0 0 165.0140051
+---------------------- PRIMARY INPUT FILE --------------------------------------
+"iea22_bd_primary.inp"    InputFile - Name of the primary BeamDyn input file
+----- Output Settings -------------------------------------------------------------------
+          0   WrVTK         - VTK visualization data output: (switch) {0=none; 1=init; 2=animation}
+         15   VTK_fps       - Frame rate for VTK output (frames per second) {will use closest integer multiple of DT} [used only if WrVTK=2]
