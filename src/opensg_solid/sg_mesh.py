@@ -217,7 +217,31 @@ def _gmsh_render(msh_path, png_path):
 
 def _boundary_faces(cells, mats):
     """Exterior faces of a tet4/tet10/hex8 batch: faces referenced by
-    exactly one element, each tagged with its owner's material id."""
+    exactly one element, each tagged with its owner's material id.
+    Vectorized (sorted-face np.unique) for uniform batches -- the python
+    dict pass costs ~7 s on a 546k-tet SG; mixed batches fall back."""
+    try:
+        carr = np.asarray(cells, np.int64)
+    except (ValueError, TypeError):
+        carr = None
+    if carr is not None and carr.ndim == 2 and carr.shape[1] in (4, 8, 10):
+        nn = carr.shape[1]
+        if nn in (4, 10):
+            fidx = np.asarray(_TET_FACES, int)
+            corner = carr[:, :4]
+        else:
+            fidx = np.asarray(_HEX_FACES, int)
+            corner = carr
+        F = corner[:, fidx]                       # (E, nf, k), owner face order
+        E, nf, k = F.shape
+        flat = F.reshape(E * nf, k)
+        key = np.sort(flat, axis=1)
+        _, first, cnt = np.unique(key, axis=0, return_index=True,
+                                  return_counts=True)
+        ext = first[cnt == 1]                     # faces referenced exactly once
+        emat = np.repeat(np.asarray(mats, int), nf)
+        return [(tuple(int(v) for v in flat[i]), int(emat[i])) for i in ext]
+
     count = {}
     for ci, (c, m) in enumerate(zip(cells, mats)):
         nn = len(c)

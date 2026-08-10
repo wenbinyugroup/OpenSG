@@ -768,17 +768,41 @@ def plate_ladder_element_blocks(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
 _direct_spsolve = None
 
 
-def _sparse_direct_solve(A_csr, B):
+def _sparse_direct_solve(A_csr, B, sym=False):
     """Direct sparse solve A X = B (dense multi-RHS).  pypardiso when
-    importable (the Beam_solid solver), scipy SuperLU otherwise."""
+    importable (the Beam_solid solver), scipy SuperLU otherwise.
+
+    sym=True: solve with PARDISO real-symmetric-indefinite (mtype=-2) on the
+    UPPER TRIANGLE (~25-40 % faster factor).  Valid for the pin/KKT systems
+    of this engine, which are symmetric aside from entries in pinned COLUMNS
+    whose solution is exactly zero; a residual check (1e-8 relative) guards
+    the untested-mtype path and falls back to the general solver."""
     global _direct_spsolve
+    B_arr = np.asarray(B)
+    if sym:
+        try:
+            import scipy.sparse as _sp
+            from pypardiso import PyPardisoSolver
+            Ac = A_csr.tocsr()
+            n = Ac.shape[0]
+            # + explicit zero diagonal: PARDISO symmetric storage requires
+            # every diagonal entry present (the KKT multiplier block is 0)
+            Au = _sp.triu(Ac + _sp.diags(np.zeros(n)), format="csr")
+            slv = PyPardisoSolver(mtype=-2)
+            X = np.asarray(slv.solve(Au, B_arr)).reshape(B_arr.shape)
+            slv.free_memory(everything=True)
+            bn = np.linalg.norm(B_arr)
+            if bn == 0.0 or np.linalg.norm(Ac @ X - B_arr) <= 1e-8 * bn:
+                return X
+        except Exception:
+            pass                                # any failure -> general path
     if _direct_spsolve is None:
         try:
             from pypardiso import spsolve as _direct
         except ImportError:
             from scipy.sparse.linalg import spsolve as _direct
         _direct_spsolve = _direct
-    return np.asarray(_direct_spsolve(A_csr, B))
+    return np.asarray(_direct_spsolve(A_csr, B_arr))
 
 
 def solve_fluctuation_field(Dhh_sparse, RHS_dense, Dc_matrix, n_model):
@@ -845,7 +869,7 @@ def solve_fluctuation_field(Dhh_sparse, RHS_dense, Dc_matrix, n_model):
         raise RuntimeError("dimension mismatch: A %s vs R %s"
                            % (A_augmented.shape, R_aug.shape))
 
-    V_aug = _sparse_direct_solve(A_augmented, R_aug)
+    V_aug = _sparse_direct_solve(A_augmented, R_aug, sym=True)
 
     V0 = V_aug[:actual_N, :]
     D1 = -(V0.T @ R_array)

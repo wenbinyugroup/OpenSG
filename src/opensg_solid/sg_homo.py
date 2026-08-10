@@ -185,7 +185,7 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     RHS = -np.asarray(Dhe)              # rows 0:3 already zeroed
     if bdofs is not None:
         RHS[pin] = 0.0                  # w = 0 on the boundary nodes
-    V0_matrix = jnp.asarray(_sparse_direct_solve(A_csr, RHS))
+    V0_matrix = jnp.asarray(_sparse_direct_solve(A_csr, RHS, sym=True))
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
     D_bar, omega = compute_homogenized_constants(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, n_model, n_sg)
@@ -320,7 +320,7 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
 
     def solve_constrained(rhs):
         aug = np.vstack([-rhs, np.zeros((3, rhs.shape[1]))])
-        return _sparse_direct_solve(KKT, aug)[:n_unique]
+        return _sparse_direct_solve(KKT, aug, sym=True)[:n_unique]
 
     V0 = solve_constrained(D_he)
     A6 = D_ee + V0.T @ D_he
@@ -455,7 +455,7 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
         V0, Dhl, Dll, jnp.array(Dle.todense()), Psi, Dc)
     R_aug = np.concatenate([np.array(bb),
                             np.zeros((4, bb.shape[1]))], axis=0)
-    V_aug = _sparse_direct_solve(A_augmented, R_aug)
+    V_aug = _sparse_direct_solve(A_augmented, R_aug, sym=True)
     V1s_raw = jnp.array(V_aug[:N_primal, :])
     C_timo, _B_tim, _C_tim, V1s = finalize_v1_and_compute_deff(
         V1s_raw, V0, C_eb, V0DllV0, DhlV0, DhlTV0Dle, Psi, Dc)

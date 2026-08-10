@@ -997,20 +997,38 @@ _G = 1.0/np.sqrt(3.0)
 _GPTS = [(-_G, -_G), (_G, -_G), (_G, _G), (-_G, _G)]
 
 
-def _sparse_solve(A, R):
+def _sparse_solve(A, R, sym=False):
     """Multi-RHS sparse direct solve: PARDISO (multithreaded MKL) when available,
     SuperLU fallback.  SuperLU is single-threaded CPU; PARDISO uses all cores and
     is the same direct solver opensg_solid defaults to.  (The device-resident/GPU
     alternative in this stack is the matrix-free EBE Chebyshev-CG of fe_jax, as in
     opensg_solid.plate_homo_2d(solver="cg") -- iterative, no factorization at all.)
 
+    sym=True: PARDISO real-symmetric-indefinite (mtype=-2) on the upper triangle
+    (~25-40 % faster factor; the KKT multiplier block gets its explicit zero
+    diagonal), guarded by a 1e-8 relative-residual check with fallback.
+
     In:
         A: (n, n) scipy sparse matrix (any format).
         R: (n, k) dense right-hand sides.
+        sym: bool, the matrix is symmetric (periodic KKT / pinned stiffness).
     Out:
         (n, k) solution array.
     """
     R = np.asarray(R, float)
+    if sym:
+        try:
+            from pypardiso import PyPardisoSolver
+            Ac = sp.csr_matrix(A)
+            Au = sp.triu(Ac + sp.diags(np.zeros(Ac.shape[0])), format="csr")
+            slv = PyPardisoSolver(mtype=-2)
+            X = np.asarray(slv.solve(Au, R)).reshape(R.shape)
+            slv.free_memory(everything=True)
+            bn = np.linalg.norm(R)
+            if bn == 0.0 or np.linalg.norm(Ac @ X - R) <= 1e-8 * bn:
+                return X
+        except Exception:
+            pass                                 # any failure -> general path
     try:
         import pypardiso
         X = pypardiso.spsolve(sp.csr_matrix(A), R)
@@ -1146,7 +1164,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         A = sp.bmat([[K, Cc.T], [Cc, None]], format="csc")
         R = np.zeros((ndof + 3, 6))
         R[:ndof] = -Dhe
-        V0 = _sparse_solve(A, R)[:ndof]
+        V0 = _sparse_solve(A, R, sym=True)[:ndof]
         n_bnd = 0
     else:
         # boundary solution mapped to boundary nodes: zero translational
@@ -1160,7 +1178,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         bd = (NDOF6*bnodes[:, None] + np.arange(3)[None, :]).ravel()
         free = np.setdiff1d(np.arange(ndof), bd)
         V0 = np.zeros((ndof, 6))
-        V0[free] = _sparse_solve(K[free][:, free].tocsc(), -Dhe[free])
+        V0[free] = _sparse_solve(K[free][:, free].tocsc(), -Dhe[free], sym=True)
     Deff = Dee + V0.T @ Dhe
     Deff = 0.5*(Deff + Deff.T)
     if omega is None:
