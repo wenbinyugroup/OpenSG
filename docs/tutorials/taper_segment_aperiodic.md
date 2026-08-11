@@ -81,7 +81,8 @@ prismatic circular tube ($R=1$, $t/R=0.1$, $L=1.5$):
 | isotropic (E = 70 GPa) | 0.0003 % (GA) | $2.7\times10^{-6}$ rel |
 | ±45 anisotropic layup | 0.0007 % (GA) | $5.2\times10^{-5}$ rel |
 
-Reproduce it from the example folder in two commands:
+Reproduce it from the example folder in two commands — the first writes the segment and its
+two boundary-ring yamls, the second homogenizes all three and prints the identity table:
 
 ```bash
 python make_cylinder_segment.py
@@ -89,6 +90,13 @@ python make_cylinder_segment.py
 
 ```bash
 python run_taper_segment.py
+```
+
+Any one of the generated yamls also runs on its own through the unified command, since the
+segment header carries `msg: shell`, `n_model: 1` and `refined: 1`:
+
+```bash
+opensg meshes/seg_iso_hR0.1.yaml
 ```
 
 ## Tapered demonstration: BAR-URC segment 12

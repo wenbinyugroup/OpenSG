@@ -36,15 +36,18 @@ argument selects which macro model the same SG is reduced to.
 \toprule
 \texttt{n\_model} & macro model & row and column order & title infix \\
 \midrule
-1 & beam & \texttt{[eps11 gam12 gam13 k1 k2 k3]} & \texttt{Timoshenko} \\
+1 & beam & \texttt{[eps11 gam12 gam13 k1 k2 k3]} & \texttt{Timoshenko Beam} \\
 2 & plate & \texttt{[N11 N22 N12 M11 M22 M12]} & \texttt{Classical Plate} \\
-3 & 3-D elastic & Voigt \texttt{[11 22 33 23 13 12]} & (none) \\
+3 & 3-D elastic & Voigt \texttt{[11 22 33 23 13 12]} & \texttt{Cauchy Continuum} \\
 \bottomrule
 \end{tabular}
 \caption{\texttt{n\_model} on \texttt{plate\_homo\_2d}. The infix goes into
-\texttt{The Effective <infix> Stiffness Matrix}; the plate route becomes
-\texttt{Reissner-Mindlin Plate} when \texttt{shear\_refined=True} produces an
-$8\times8$.}
+\texttt{The Effective <infix> Stiffness Matrix} and is always the macro law's
+console title, so the file and the terminal read the same. Two of the five
+titles belong to the refinement switch rather than to \texttt{n\_model}: the
+classical beam $4\times4$ is \texttt{Euler-Bernoulli Beam}, and the plate route
+becomes \texttt{Reissner-Mindlin} when the shear-refined $8\times8$ is
+produced.}
 \label{tab:solid-nmodel}
 \end{table}
 
@@ -239,13 +242,13 @@ file & content \\
 \end{table}
 
 The \texttt{.out} opens with a banner that records the whole run, then the
-matrix whose title follows \texttt{model} --- \texttt{Reissner-Mindlin Plate}
+matrix whose title follows \texttt{model} --- \texttt{Reissner-Mindlin}
 here, \texttt{Classical Plate} at \texttt{model: 0}:
 
 \begin{lstlisting}[style=shellst,basicstyle=\ttfamily\tiny,breaklines=true]
  OpenSG msg-solid plate model from 1dsg.yaml: 9 plies, h = 0.152400 m, fraction = 0.5, rho*h = 30.251400 kg/m^2, rows [e11 e22 g12 k11 k22 k12 2g13 2g23]
 
- The Effective Reissner-Mindlin Plate Stiffness Matrix
+ The Effective Reissner-Mindlin Stiffness Matrix
  --------------------------------------------
      5.4916502E+008     2.6417019E+007     1.5524611E-010     3.6182957E-006     3.6122933E-006     1.0244011E-024     0.0000000E+000     0.0000000E+000
 \end{lstlisting}
@@ -667,8 +670,8 @@ call, in this order.
     \texttt{helper.sc\_to\_yaml.convert})};
   \node[funcnode, below=of i1] (f1) {\texttt{sg\_homo.plate\_homo\_2d}\\
     $\rightarrow$ \texttt{sg\_mesh.load\_sg\_input}\\
-    \texttt{dim}, \texttt{nodes}, \texttt{cells},
-    \texttt{mat\_id}, \texttt{scale}};
+    the parsed dict: \texttt{dim} (inferred\\ from the mesh),
+    \texttt{nodes}, \texttt{cells},\\ \texttt{mat\_id}, \texttt{materials}};
   \node[funcnode, right=of f1] (p1) {\texttt{sg\_mesh.plot\_sg\_mesh}};
   \node[funcnode, below=of f1] (f2) {\texttt{fe\_jax.setup.}\\
     \texttt{mesh\_to\_periodic\_sparse\_assembly\_map}\\
@@ -706,12 +709,59 @@ call, in this order.
 \subsection{The example SG and the input you edit}
 
 \texttt{RHC\_SW\_2UC\_45.yaml} is a two-unit-cell composite honeycomb sandwich
-section: \texttt{dim: 2}, \texttt{scale: 35.248}, 4251 nodes, 6640 three-node
-triangles, three materials. Coordinates are in millimetres and moduli in MPa.
+section: 4251 nodes, 6640 three-node triangles, three materials. Coordinates
+are in millimetres and moduli in MPa. The yaml \emph{is} the whole problem: a
+short scalar header above the mesh blocks says what to run, and the mesh and
+material blocks say what to run it on.
 
-The \texttt{User Input} block of \texttt{plate\_homo\_2dsg.py} is three items:
+\begin{lstlisting}[style=opensg,caption={The header of a solid SG yaml. Every key is defaulted; a headerless mesh still runs.}]
+n_model: 2      # 1 = beam, 2 = plate, 3 = solid -- the macro model
+refined: 0      # 0 = classical (plate ABD / beam EB); 1 = shear-refined
+analysis: H     # H = homogenization | D = dehomogenization
+\end{lstlisting}
 
-\begin{lstlisting}[style=opensg,caption={The User Input block of plate\_homo\_2dsg.py.}]
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{llp{7.6cm}}
+\toprule
+key & values & meaning \\
+\midrule
+\texttt{msg} & \texttt{shell}, \texttt{solid}
+  & which engine owns the file; omit and the mesh dialect decides \\
+\texttt{n\_model} & \texttt{1}, \texttt{2}, \texttt{3}
+  & macro model: 1 beam, 2 plate, 3 3-D solid \\
+\texttt{refined} & \texttt{0}, \texttt{1}
+  & 0 classical (plate ABD $6\times6$, beam EB $4\times4$), 1 shear-refined
+    (plate ABDG $8\times8$, beam Timoshenko $6\times6$); ignored for the solid
+    model \\
+\texttt{analysis} & \texttt{H}, \texttt{D}
+  & optional; the command-line argument wins \\
+\texttt{epsilon\_bar} & 6 floats & the macro state for \texttt{D} \\
+\texttt{omega} & float
+  & optional user SG measure, overriding the one measured from the mesh \\
+\texttt{aperiodic} & \texttt{1}
+  & optional; zero fluctuation on every bounding-box-face node instead of
+    periodicity \\
+\bottomrule
+\end{tabular}
+\caption{The header contract of the solid SG yaml. \textbf{There is no
+\texttt{dim:} key and no \texttt{scale:} key.} The SG dimension is read from
+the mesh --- the element node count, with ties broken by the leading
+node-coordinate columns that actually vary --- and the SG measure $\omega$ is
+measured from the mesh. A legacy \texttt{dim:}/\texttt{scale:} left in an old
+file is still tolerated by the loader, but neither is part of the input
+contract and neither should be written into a new file. (The
+\texttt{junction:} family of keys belongs to \texttt{msg-shell} recovery and is
+not read on this route.)}
+\label{tab:solid-header}
+\end{table}
+
+The \texttt{material\_param} and \texttt{angles} arguments of
+\texttt{plate\_homo\_2d} are an \emph{override} of the material blocks stored
+in the file, kept for scripting; examples 4 and 7 drive the same cell that way:
+
+\begin{lstlisting}[style=opensg,caption={The material override block, as examples 4 and 7 carry it.}]
 n_model = 2                    # 1: Beam; 2: Plate; 3: 3D elastic
 name = "RHC_SW_2UC_45"         # reads <name>.yaml
 
@@ -725,48 +775,59 @@ angles = jnp.array([45.0, -45.0, 0.0])   # deg per material; 0.0 = none
 \texttt{material\_param} is one row of engineering constants per material,
 $(E_1, E_2, E_3, G_{12}, G_{13}, G_{23}, \nu_{12}, \nu_{13}, \nu_{23})$, and
 \texttt{angles} one rotation per material in degrees. Passing them
-\emph{overrides} the material blocks stored in the SG file. That override is the
-intended route here and it is not cosmetic: opening
-\texttt{RHC\_SW\_2UC\_45.yaml} shows materials 1 and 2 stored as
-\texttt{type: 2}, that is as full $6\times6$ $\mathbf{C}$ blocks already rotated
-to $\pm45^\circ$ (their $C_{16}$ entries are $\mp25368.7$), while material 3 is
-\texttt{type: 0}, isotropic aluminium with $E = 69000$~MPa and $\nu = 0.3$.
-Supplying \texttt{angles} together with the stored blocks would rotate the plies
-twice. Rebuilding from engineering constants and rotating in code is
-unambiguous. The same numbers are recorded next to the runner in
-\texttt{mat\_override.yaml} for reference; omit both arguments to use the file's
-own blocks unchanged.
+\emph{overrides} the material blocks stored in the SG file. The shipped
+\texttt{RHC\_SW\_2UC\_45.yaml} keeps the same data in exactly one place
+instead: all three materials are \texttt{type: 1}, the nine engineering
+constants together with their ply rotation --- \texttt{angle: 45.0} and
+\texttt{angle: -45.0} for the two face laminae, and the isotropic aluminium
+core ($E = 69000$~MPa, $G = 26540$~MPa, $\nu = 0.3$) at \texttt{angle: 0.0}.
+A file that stores its plies \emph{pre-rotated} instead, as a \texttt{type: 2}
+full $6\times6$ $\mathbf{C}$ block, must not be given \texttt{angles} as well,
+or the plies are rotated twice. The same numbers are recorded next to the
+runner in \texttt{mat\_override.yaml} for reference; omit both arguments to use
+the file's own blocks unchanged.
 
 The solver reads \texttt{<name>.yaml}. A SwiftComp \texttt{.sc} is converted
 once with the packaged helper. That helper is a library function, not a
 command-line tool: the module \texttt{sc\_to\_yaml} has no \texttt{\_\_main\_\_}
 block, so
-\texttt{python -m opensg\_solid.rm\_plate\_1D.helper.sc\_to\_yaml file.sc}
+\texttt{python -m opensg\_solid.helper.sc\_to\_yaml file.sc}
 does nothing. Call
 \texttt{convert} instead, which writes \texttt{<base>.yaml} and
 \texttt{<base>.msh} and returns the parsed dictionary:
 
 \begin{lstlisting}[style=opensg,caption={Converting a SwiftComp .sc once.}]
-from opensg_solid.rm_plate_1D.helper.sc_to_yaml import convert
+from opensg_solid.helper.sc_to_yaml import convert
 
 sc = convert("RHC_SW_2UC_45.sc")   # writes RHC_SW_2UC_45.yaml + .msh
 \end{lstlisting}
 
 \subsection{Run it}
 
+The yaml says what to do, so the run is one command with one argument:
+
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG-solid/3_get_plate_props_from_2D_SG
-python plate_homo_2dsg.py
+opensg RHC_SW_2UC_45.yaml
 \end{lstlisting}
+
+\texttt{opensg} is the unified entry point: it resolves the engine from the
+yaml's \texttt{msg:} key --- or, absent that key, from the mesh dialect --- and
+hands the arguments on unchanged. \texttt{opensg\_solid RHC\_SW\_2UC\_45.yaml}
+and \texttt{python -m opensg\_solid RHC\_SW\_2UC\_45.yaml} are the same run
+through the engine-specific entry point.
+\texttt{plate\_homo\_2dsg.py} in the folder is the identical call through the
+Python API, \texttt{plate\_homo\_2d(name + ".yaml")}, for driving it from your
+own script.
 
 \subsection{What comes out}
 
 The run writes \texttt{RHC\_SW\_2UC\_45.out}, the timed \texttt{Classical Plate}
 stiffness and compliance in the \texttt{.K} layout, and
 \texttt{RHC\_SW\_2UC\_45\_mesh.png}, the cell mesh with elements coloured by
-material. The script also prints \texttt{r["C\_eff"]}, the same $6\times6$ it
-wrote. The \texttt{.out} banner records the SG measure and the boundary
-treatment:
+material. It also prints the same $6\times6$ to the terminal, under the macro
+law's own title. The \texttt{.out} banner records the SG measure and the
+boundary treatment:
 
 \begin{lstlisting}[style=shellst,basicstyle=\ttfamily\tiny]
  OpenSG msg-solid plate model, omega 35.248001, periodic
@@ -782,7 +843,13 @@ cell.
 \subsection{What the numbers mean}
 
 $\omega = 35.248001$ is the cell's in-plane period, and it is directly checkable
-against the mesh: the nodes run from $y_1 = -17.624$ to $+17.624$~mm. The
+against the mesh: the nodes run from $y_1 = -17.624$ to $+17.624$~mm. It is
+\emph{measured}, never declared --- the yaml carries no normalization key,
+because the homogenizer always measures its own SG. For a cell converted from
+SwiftComp the measurement is also checkable against the source: the trailing
+line of \texttt{RHC\_SW\_2UC\_45.sc} reads \texttt{35.248}, and the measured
+$\omega$ agrees with it to the digits that line carries, which is the check
+that the mesh and the \texttt{.sc} header describe the same cell. The
 diagonal, in the mesh's own units:
 
 \begin{table}[htbp]
@@ -826,15 +893,19 @@ $\pm23.35$~mm.}
 
 \subsection{The Reissner-Mindlin option}
 
-Passing \texttt{shear\_refined=True} to \texttt{plate\_homo\_2d} additionally
+Setting \texttt{refined: 1} in the yaml header --- or passing
+\texttt{refined=1} to \texttt{plate\_homo\_2d}, of which
+\texttt{shear\_refined=True} is the legacy plate-only spelling --- additionally
 runs the RM first-order warping ladder and returns \texttt{r["G\_msg"]} (the
 $2\times2$ transverse-shear block), \texttt{r["ABDG"]} (the same $8\times8$
 block form as Eq.~\eqref{eq:solid-abdg}), \texttt{r["A6\_ladder"]} and
 \texttt{r["Ustar\_rel"]}. When the ladder produces an SPD fit the \texttt{.out}
 is written from the $8\times8$ and its matrices are titled
-\texttt{Reissner-Mindlin Plate} instead of \texttt{Classical Plate}; otherwise
-the run falls back to the $6\times6$. The argument applies to
-\texttt{n\_model=2} only and raises for any other model.
+\texttt{Reissner-Mindlin} instead of \texttt{Classical Plate}; otherwise
+the run falls back to the $6\times6$. The same header switch serves the beam
+route: \texttt{n\_model: 1} with \texttt{refined: 0} reports the classical
+\texttt{Euler-Bernoulli Beam} $4\times4$, and with \texttt{refined: 1} the
+\texttt{Timoshenko Beam} $6\times6$. The solid law has no refined variant.
 
 \begin{lstlisting}[style=opensg,caption={Requesting the 8x8 from a 2-D cell SG.}]
 from opensg_solid.sg_homo import plate_homo_2d
@@ -847,8 +918,9 @@ print(r["ABDG"])
 \subsection{The 1-D gene in the same folder, and a naming trap}
 
 The folder also ships \texttt{Plate\_1D\_SG\_2UC\_45.yaml}, a \textbf{1-D}
-structure gene (\texttt{dim: 1}, two-node line elements through a stack), which
-runs through the identical call by changing \texttt{name}.
+structure gene --- two-node line elements through a stack, its dimension read
+from the mesh rather than declared in the header --- which runs through the
+identical command by naming that file instead.
 \texttt{plate\_homo\_2d} reads 1-D, 2-D and 3-D genes from the same code path,
 so a stack of plies can be homogenized either here or through the dedicated
 through-thickness route of Section~\ref{sec:solid-plate1d}.
@@ -921,14 +993,18 @@ table and the quadrature data straight into the recovery.
 
 \subsection{The input you edit}
 
-\texttt{plate\_dehom\_2dsg.py} takes the same \texttt{name},
-\texttt{material\_param} and \texttt{angles} as Section~\ref{sec:solid-plate2d},
-plus one new line --- the macro plate strain, in the order
-\texttt{[e11, e22, 2e12, k11, k22, 2k12]}:
+The recovery needs one thing beyond the homogenization: the macro plate strain,
+in the order \texttt{[e11, e22, 2e12, k11, k22, 2k12]}. On the command-line
+route it is a header key of the SG yaml, read when the analysis is \texttt{D}:
 
-\begin{lstlisting}[style=opensg,caption={The macro plate strain driving the recovery.}]
-epsilon_bar = jnp.array([0.0, 0.1, 0.0, 0.1, 0.0, 0.0])
+\begin{lstlisting}[style=opensg,caption={The macro plate strain driving the recovery, in the yaml header.}]
+epsilon_bar: [0.0, 0.1, 0.0, 0.1, 0.0, 0.0]
 \end{lstlisting}
+
+\texttt{plate\_dehom\_2dsg.py} sets the same six numbers in code, as
+\texttt{epsilon\_bar = jnp.array([0.0, 0.1, 0.0, 0.1, 0.0, 0.0])}, alongside
+the \texttt{name}, \texttt{material\_param} and \texttt{angles} of
+Section~\ref{sec:solid-plate2d}.
 
 The shipped state combines a transverse extension $\varepsilon_{22} = 0.1$ with
 a bending curvature $\kappa_{11} = 0.1$~mm$^{-1}$. This vector is yours: it
@@ -937,10 +1013,17 @@ default that would be meaningful.
 
 \subsection{Run it}
 
+The trailing \texttt{D} asks for dehomogenization: the run homogenizes first,
+then recovers, and reports one \texttt{Time taken} covering the whole thing.
+
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG-solid/4_get_plate_dehom_from_2DSG
-python plate_dehom_2dsg.py
+opensg RHC_SW_2UC_45.yaml D
 \end{lstlisting}
+
+\texttt{python plate\_dehom\_2dsg.py} is the same chain through the Python API,
+and additionally writes the bare $6\times6$
+\texttt{RHC\_SW\_2UC\_45\_plate\_ABD.out} through \texttt{np.savetxt}.
 
 \subsection{What comes out}
 
@@ -1176,6 +1259,12 @@ python make_udcomp_yaml.py
 python solid_homo_2dsg.py
 \end{lstlisting}
 
+The script is kept rather than replaced by the unified command because it does
+more than homogenize: it writes the comparison table against the published
+constants and the mesh figure. For a 2-D SG in the ordinary solid dialect the
+same macro law is one command, \texttt{opensg <name>.yaml} with
+\texttt{n\_model: 3} in the header.
+
 The \texttt{User Input} block is three lines: \texttt{n\_model = 3},
 \texttt{name = "UDcomp\_2D"} (which reads \texttt{<name>.yaml}), and the
 \texttt{paper} dictionary of reference constants to compare against.
@@ -1189,7 +1278,7 @@ readable in one file. It therefore writes its own \texttt{\_Deff.out} through
 \texttt{np.savetxt} rather than the SwiftComp-layout report, and it consumes the
 \texttt{nodes}/\texttt{elements}/\texttt{elementOrientations}/\texttt{materials}/\texttt{sets}
 yaml dialect that \texttt{make\_udcomp\_yaml.py} emits, not the
-\texttt{dim}/\texttt{nodes}/\texttt{cells}/\texttt{mat\_id}/\texttt{materials}
+\texttt{nodes}/\texttt{cells}/\texttt{mat\_id}/\texttt{materials}
 dialect that \texttt{opensg\_solid.sg\_mesh.load\_sg\_input} parses. The engine
 path itself is exercised on the honeycomb SG: \texttt{n\_model=3} on
 \texttt{RHC\_SW\_2UC\_45.yaml} runs through \texttt{plate\_homo\_2d} and writes
@@ -1322,8 +1411,7 @@ appear in the working directory as a side effect of the homogenization.
   \node[funcnode, right=of f4] (fb) {\texttt{compare\_boundary\_modes.py}\\
     both samples under both treatments};
   \node[funcnode, below=of f4] (f5) {\texttt{sg\_homo.write\_sc\_K}, then the\\
-    runner scales by \texttt{omega} and reads\\ \texttt{Sample\_N.sc.k}
-    term by term};
+    runner reads \texttt{Sample\_N.sc.k}\\ and differences it term by term};
   \node[outnode, right=of f5] (ob) {\texttt{boundary\_compare.dat}\\
     \texttt{Sample\_N\_periodic.out}\\ \texttt{Sample\_N\_aperiodic.out}};
   \node[outnode, below=of f5] (o1) {\texttt{Sample\_N.out}\\
@@ -1352,13 +1440,15 @@ their sizes.
 \small
 \begin{tabular}{llrrr}
 \toprule
-sample & surface & nodes & tets & relative density $\omega$ \\
+sample & surface & nodes & tets & relative density \\
 \midrule
 \texttt{Sample\_1} & Schwarz-P & 116\,851 & 545\,741 & 0.3000 \\
 \texttt{Sample\_2} & Schwarz-P & 54\,874 & 191\,957 & 0.0857 \\
 \bottomrule
 \end{tabular}
-\caption{The two TPMS solid structure genes.}
+\caption{The two TPMS solid structure genes. The relative density is the
+fraction of the cell filled by aluminium; it is \emph{not} the SG measure. Both
+genes sit on a unit cell, so for both $\omega = 1$.}
 \label{tab:solid-tpms}
 \end{table}
 
@@ -1415,6 +1505,14 @@ cd examples/OpenSG-solid/6_get_solid_props_from_3D_SG
 python compare_boundary_modes.py
 \end{lstlisting}
 
+Both scripts are kept as scripts because both do something the solver does not:
+the sample runner differences the result against the vendor's \texttt{.K} and
+writes \texttt{Sample\_N\_compare.dat}, and
+\texttt{compare\_boundary\_modes.py} runs each sample twice and tabulates the
+two treatments against each other. The homogenization on its own is one
+command --- \texttt{opensg Sample\_1.yaml}, whose header already carries
+\texttt{msg: solid}, \texttt{n\_model: 3} and \texttt{refined: 0}.
+
 One detail to check before comparing numbers across scripts: the two sample
 runners and \texttt{compare\_boundary\_modes.py} use $E = 69$~GPa, matched to
 the SwiftComp \texttt{.K}, whereas \texttt{tpms\_solid\_props.py} and
@@ -1423,17 +1521,27 @@ comparable with the benchmark below. The \texttt{Sample\_N\_msg\_solid.out}
 files that \texttt{tpms\_solid\_props.py} writes at the top level of the folder
 are regenerated on each run.
 
-\subsection{Normalization: per unit material volume, or per unit cell}
+\subsection{Normalization: the \texttt{.out} is already per unit cell}
 
-The \texttt{.out} that \texttt{plate\_homo\_2d} writes is in the SG measure:
-$\omega$ appears in the banner, and for these samples $\omega$ \emph{is} the
-relative density, because the bounding cell has unit volume. So
-\texttt{Sample\_1\_periodic.out} opens with
-\texttt{ OpenSG msg-solid 3D elastic model, omega 0.3, periodic} and reports
-$C_{11} = 3.3967192\times10^{10}$~Pa --- the stiffness per unit volume of
-\emph{aluminium}. The sample runners multiply by $\omega$ to get the per-unit-cell
-value the vendor prints, $3.3967192\times10^{10}\times0.3 = 1.019016\times10^{10}$~Pa
-$= 10190.2$~MPa. Every comparison table below is per unit cell, in MPa.
+For a 3-D solid SG the measure $\omega$ is the \textbf{node bounding-box
+volume}, not the summed element (material) volume. Both these genes sit on a
+unit cell, so $\omega = 1$ and the \texttt{.out} is written per unit cell ---
+exactly the normalization a SwiftComp \texttt{.K} uses.
+\texttt{Sample\_1.out} and \texttt{Sample\_1\_periodic.out} both open with
+\texttt{ OpenSG msg-solid 3D elastic model, omega 1, periodic} and report
+$C_{11} = 1.0190158\times10^{10}$~Pa $= 10190.1580$~MPa, against the
+\texttt{1.0190158E+004}~MPa of \texttt{Sample\_1.sc.k}; Sample 2 reports
+$2.3031598\times10^{9}$~Pa $= 2303.1598$~MPa against \texttt{2.3031598E+003}. The
+two files are therefore \emph{directly} comparable, with no rescale in between,
+and the comparison scripts' surviving \texttt{C x omega} line is a no-op at
+$\omega = 1$.
+
+This is a change from the older behaviour, in which $\omega$ was the material
+volume --- $0.3$ and $0.0857$ for these two cells --- so the \texttt{.out} came
+out $1/\text{relative density}$ too stiff and only the comparison table's
+rescale made the numbers line up. Any note to that effect is obsolete: the
+figures printed in the \texttt{.out} now are the figures in the tables below.
+Every comparison table below is per unit cell, in MPa.
 
 \subsection{The SwiftComp digit-parity benchmark}
 
@@ -1467,9 +1575,10 @@ Digit-for-digit on both samples, to seven significant figures on every entry.
 The effective law is cubic to five digits, and every symmetry-forbidden coupling
 sits four to five orders below the diagonal, which is the health check on the
 all-directions periodic tie. The engineering constants that the \texttt{.out}
-prints for Sample 2 --- $E_1 = 1.1383725\times10^{10}$~Pa,
-$G_{12} = 1.2914214\times10^{10}$~Pa, $\nu_{12} = 0.41174$ --- are per unit
-material volume in the same way.
+prints for Sample 2 --- $E_1 = 9.7551133\times10^{8}$~Pa,
+$G_{12} = 1.1066643\times10^{9}$~Pa, $\nu_{12} = 0.41174$ --- are per unit
+cell in the same way, and only the two moduli carry that normalization;
+Poisson's ratio is a ratio.
 
 \subsection{Periodic versus aperiodic}
 
@@ -1663,16 +1772,24 @@ print(r["C_eff_EB"])
 
 \subsection{Run it}
 
+The homogenization itself is one command; the yaml in this folder carries
+\texttt{n\_model: 1} and \texttt{refined: 1} in its header, so it asks for the
+Timoshenko $6\times6$ without any argument:
+
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG-solid/7_get_beam_props_from_SG
-python beam_homo_sg.py
+opensg RHC_SW_2UC_45.yaml
 \end{lstlisting}
+
+\texttt{python beam\_homo\_sg.py} runs the same solve through the Python API
+and additionally prints the classical Euler-Bernoulli $4\times4$ that rides
+along in \texttt{r["C\_eff\_EB"]}, which the command-line route does not show.
 
 \subsection{What comes out}
 
 The run writes \texttt{RHC\_SW\_2UC\_45.out}, the timed SwiftComp-layout report
-containing \texttt{The Effective Timoshenko Stiffness Matrix} followed by
-\texttt{The Effective Timoshenko Compliance Matrix}, with banner
+containing \texttt{The Effective Timoshenko Beam Stiffness Matrix} followed by
+\texttt{The Effective Timoshenko Beam Compliance Matrix}, with banner
 \texttt{ OpenSG msg-solid beam model, omega 1} and closing line
 \texttt{ Time taken: 8.94 sec}; and \texttt{RHC\_SW\_2UC\_45\_mesh.png}, the SG
 mesh coloured by material.
@@ -1862,10 +1979,18 @@ docstring of \texttt{compute\_fluctuations\_gpu}, not a switch to flip.
 
 \subsection{Run it}
 
+The yaml in this folder carries the same six numbers as its
+\texttt{epsilon\_bar:} header key, so the whole chain --- homogenize, then
+recover --- is one command with the \texttt{D} argument:
+
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG-solid/8_get_beam_dehom_from_SG
-python beam_dehom_sg.py
+opensg RHC_SW_2UC_45.yaml D
 \end{lstlisting}
+
+\texttt{python beam\_dehom\_sg.py} is the same chain through the Python API,
+and additionally writes the bare $6\times6$
+\texttt{RHC\_SW\_2UC\_45\_beam\_Timo.out} through \texttt{np.savetxt}.
 
 \subsection{What comes out}
 
@@ -1975,8 +2100,10 @@ the plate recovery.}
 \begingroup\footnotesize
 \begin{longtable}{cp{4.6cm}p{8.4cm}}
 \caption{Every \texttt{msg-solid} capability in one table. \texttt{<name>} is
-the \texttt{name} variable of the runner, \texttt{<ff stem>} the basename of the
-\texttt{.ff} table.}
+the SG file's own basename --- the \texttt{name} variable where a runner still
+sets one --- and \texttt{<ff stem>} the basename of the \texttt{.ff} table.
+\texttt{opensg} is the unified entry point; \texttt{opensg\_solid} and
+\texttt{python -m opensg\_solid} are the same run.}
 \label{tab:solid-glance} \\
 \toprule
 ex & you edit, then you run & it writes \\
@@ -1997,31 +2124,35 @@ ex & you edit, then you run & it writes \\
     \texttt{python rm\_dehom\_ff.py ex5\_shell\_S8R\_field.ff}
   & \texttt{<ff stem>\_ff.SM}, \texttt{.EM}, \texttt{.U},
     \texttt{<ff stem>\_ff\_gauss.vtk} \\
-3 & \texttt{name}, \texttt{material\_param}, \texttt{angles};
-    \texttt{python plate\_homo\_2dsg.py}
+3 & the yaml header (\texttt{n\_model}, \texttt{refined}, \texttt{analysis});
+    \texttt{opensg <name>.yaml}
   & \texttt{<name>.out}, \texttt{<name>\_mesh.png} \\
-4 & the above plus \texttt{epsilon\_bar};
-    \texttt{python plate\_dehom\_2dsg.py}
-  & \texttt{<name>.out}, \texttt{<name>\_plate\_ABD.out},
+4 & the above plus \texttt{epsilon\_bar:};
+    \texttt{opensg <name>.yaml D}
+  & \texttt{<name>.out},
     \texttt{<name>\_dehom.txt}, \texttt{.vtk}, \texttt{.SM}, \texttt{.EM},
-    \texttt{.U}, \texttt{<name>\_mesh.png} \\
+    \texttt{.U}, \texttt{<name>\_mesh.png};
+    \texttt{python plate\_dehom\_2dsg.py} adds
+    \texttt{<name>\_plate\_ABD.out} \\
 5 & \texttt{name} and the \texttt{paper} dictionary;
     \texttt{python solid\_homo\_2dsg.py}
   & \texttt{<name>\_Deff.out},
     \texttt{<name>\_constants\_vs\_paper.dat}, \texttt{<name>\_mesh.png} \\
 6 & the \texttt{.sc} path, $E$ and $\nu$; \texttt{python run\_sample\_1.py}
+    (the homogenization alone is \texttt{opensg Sample\_1.yaml})
   & \texttt{Sample\_1.out}, \texttt{Sample\_1\_msg\_solid.out},
     \texttt{Sample\_1\_compare.dat}, \texttt{Sample\_1\_mesh.png} \\
 6 & nothing; \texttt{python compare\_boundary\_modes.py}
   & \texttt{boundary\_compare.dat}, \texttt{Sample\_1\_periodic.out},
     \texttt{Sample\_1\_aperiodic.out} and the Sample 2 pair \\
-7 & \texttt{name}, \texttt{material\_param}, \texttt{angles};
-    \texttt{python beam\_homo\_sg.py}
+7 & the yaml header (\texttt{n\_model: 1}, \texttt{refined: 1});
+    \texttt{opensg <name>.yaml}
   & \texttt{<name>.out}, \texttt{<name>\_mesh.png} \\
-8 & the above plus \texttt{epsilon\_bar};
-    \texttt{python beam\_dehom\_sg.py}
-  & \texttt{<name>.out}, \texttt{<name>\_beam\_Timo.out},
+8 & the above plus \texttt{epsilon\_bar:};
+    \texttt{opensg <name>.yaml D}
+  & \texttt{<name>.out},
     \texttt{<name>\_dehom.txt}, \texttt{.vtk}, \texttt{.SM}, \texttt{.EM},
-    \texttt{.U}, \texttt{<name>\_mesh.png} \\
+    \texttt{.U}, \texttt{<name>\_mesh.png}; \texttt{python beam\_dehom\_sg.py}
+    adds \texttt{<name>\_beam\_Timo.out} \\
 \end{longtable}
 \endgroup

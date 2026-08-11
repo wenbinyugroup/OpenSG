@@ -111,11 +111,14 @@ K_{11}\;K_{22}\;K_{12}+K_{21}\;\; 2\gamma_{13}\;2\gamma_{23}]^{T} ,$$
 
 with the row grouping written out in the header of `<name>_shell_ABDG.out`.
 
-The $2\times2$ transverse-shear block $G$ has a default: `g_source="msg"`, the MSG/VAM
-second-order-energy projection (the Yu-2002 least-squares construction, Eq. 61 of Yu, Hodges &
-Volovoi, *Computers & Structures* **81**:439–454, 2003), computed by
-`opensg_solid.rm_plate_1D.msg_rm_plate.rm_plate_msg`. The alternative, `g_source="whitney"`, is
-the coupling-aware complementary-energy shear flow. The MSG choice matters most on the foam-cored
+The $2\times2$ transverse-shear block $G$ is built by **one** route, with no switch to set: the
+MSG/VAM second-order-energy projection (the Yu-2002 least-squares construction, Eq. 61 of Yu,
+Hodges & Volovoi, *Computers & Structures* **81**:439–454, 2003), computed by
+`opensg_solid.rm_plate_1D.msg_rm_plate.rm_plate_msg`. (The former `g_source="whitney"`
+alternative — the coupling-aware complementary-energy shear flow — has been retired; the keyword
+is still accepted by the old signatures and is ignored. The complementary-energy $G$ survives
+only as the numerical fallback on a laminate whose MSG $U^*$-fit is not SPD.) The MSG
+construction matters most on the foam-cored
 walls: for `layup_1` the MSG $G$ block is $4.146\times10^{6}$ and $4.145\times10^{6}$ N/m, some
 seventy times smaller than the carbon cap's $2.867\times10^{8}$ and $2.127\times10^{8}$ N/m, so
 the soft core dominates the section's shear compliance and must not be assigned by a rule of
@@ -136,6 +139,15 @@ name = "iea_s10"               # reads <name>_shell.yaml
 ```bash
 cd examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section
 ```
+
+```bash
+opensg iea_s10_shell.yaml
+```
+
+That is the whole homogenization: the header carries `msg: shell`, `n_model: 1` and
+`refined: 1`, so the unified command resolves the msg-shell engine, runs the Reissner–Mindlin
+ring and writes `iea_s10_shell_Timo.out` and `iea_s10_shell_ABDG.out`. The example's driver
+does the same through the API and adds the two figures the CLI does not emit:
 
 ```bash
 python beam_homo_shell.py
@@ -180,9 +192,10 @@ auto_emit("iea_s10_shell.yaml", out_png="iea_s10_orient.png")
 | `iea_s10_orient.png` | `auto_emit` | the $e_2$/$e_3$ arrows |
 
 Two notes on the cache. It is written **only if it does not already exist**, so delete
-`abd/iea_s10_shell_abd.yaml` after changing the layups. And it records `g_source: whitney`,
-because `emit_station_abd` defaults to the complementary-energy shear flow — it is not a dump of
-the ring's own MSG wall law, which lives in `_ABDG.out`.
+`abd/iea_s10_shell_abd.yaml` after changing the layups (or after upgrading OpenSG — a cache left
+over from an older version is never refreshed in place). And it records `g_source: msg`:
+`emit_station_abd` builds the same MSG wall $G$ the ring uses, at the station's own reference
+surface, so the cached $8\times8$ agrees with the per-section blocks of `_ABDG.out`.
 
 ### The numbers
 
@@ -191,7 +204,7 @@ set $[\varepsilon_{11}\;\gamma_{12}\;\gamma_{13}\;\kappa_1\;\kappa_2\;\kappa_3]$
 two transverse shears, twist, and the two bending curvatures — the VABS ordering):
 
 ```text
- The Effective Timoshenko Stiffness Matrix
+ The Effective Timoshenko Beam Stiffness Matrix
  --------------------------------------------
      2.7660599E+010    -1.7230658E-005     4.6650498E-006     5.4020232E-006     1.6686413E+009    -2.0773040E+009
     -1.7230658E-005     7.1861326E+008     5.7520370E+007    -1.0192044E+008     2.3079953E-006     5.2738749E-006
@@ -221,8 +234,8 @@ the shear centre. Entries printed at $10^{-5}$ against diagonals of $10^{10}$ ar
 about fifteen digits — extension does not couple to transverse shear or to twist on this section,
 which is a useful self-check that the drilling constraint and the rigid-body kernel are behaving.
 
-The footer of the same file reads `Time taken: 8.02 sec` for this run; the same station rebuilt
-inside example 2 took 7.77 s. Both cover the whole bundle build — reading the YAML, the six
+The footer of the same file reads `Time taken: 2.58 sec` for this run; the same station rebuilt
+inside example 2 took 2.93 s. Both cover the whole bundle build — reading the YAML, the six
 per-layup MSG plate solves, the ring KKT factorization and the layup-database build.
 
 ## Example 2 — dehomogenization to 3-D ply stress
@@ -257,6 +270,19 @@ center-referenced, matching `reference: center` in the YAML.
 ```bash
 cd examples/OpenSG_shell/2_get_beam_dehom_from_shell_cross_section
 ```
+
+```bash
+opensg iea_s10_shell.yaml D
+```
+
+The `D` argument (or `analysis: D` in the header) runs the homogenization and then the recovery
+in one pass, taking the macro state from `iea_s10_shell.ff` next to the YAML — or from
+`epsilon_bar:` in the header when there is no `.ff` — and writing
+`iea_s10_shell_dehom.txt`, `.vtk` and `.junc`. It closes with
+`Local field files are computed and stored.` and one `Time taken`.
+
+The example's driver produces the same recovery through the API and adds the figures and the
+VABS comparison:
 
 ```bash
 python beam_dehom_shell.py
@@ -311,6 +337,16 @@ print(Sig / 1e6)      # MPa, Voigt [S11 S22 S33 S23 S13 S12]
 
 ### What comes out
 
+From `opensg iea_s10_shell.yaml D`:
+
+| file | content |
+|---|---|
+| `iea_s10_shell_dehom.txt` | 2790 rows, one per recovery point: `elem`, `zeta`, `y2`, `y3`, `z` from the reference surface, then the six stresses (Pa), the six strains and the three displacements — plus, at the default `junction: flag`, the two extra columns `jflag` and `jdist` |
+| `iea_s10_shell_dehom.vtk` | the exploded recovery mesh: one quad per (element, depth band), each carrying its own station's stress as `CELL_DATA` — never node-averaged — with `jflag`/`jdist` as extra scalars |
+| `iea_s10_shell_dehom.junc` | the junction sidecar: every junction's coordinates, topology, overlap area and per-wall ownership, headed by the census |
+
+From `python beam_dehom_shell.py`:
+
 | file | content |
 |---|---|
 | `iea_s10_dehom_shell.txt` | 2790 rows, one per recovery point: `elem`, `y2`, `y3`, `z` from the reference surface, `zeta`, `ply` angle in degrees, then the six stresses in MPa; the header repeats the frame, $\eta$ and the full `FF` |
@@ -321,6 +357,71 @@ The driver reports the peak as
 
 ```text
 peak |sigma11| = 318.18 MPa at (y2, y3) = (-0.677, 1.311), zeta = 0.06  [material frame]
+```
+
+### Junctions in the recovery
+
+A midline shell SG has no material at a wall crossing, and the homogenization adds that missing
+energy back through a census correction. The **recovery has the opposite problem**. It hangs a
+full through-thickness column off every element mid-arc, so within about a wall thickness of a
+junction the columns of two crossing walls cover the *same material twice*, with two different
+wall laws — which is how a spar-cap ply stress ends up reported at a web station.
+
+`opensg_shell.sg_dehom_junction` does not repair that. It **measures** the hazard and lets the
+YAML header say what to do about it, through three keys the `D` route reads:
+
+| `junction:` | behaviour |
+|---|---|
+| `off` | the pre-junction behaviour exactly — no extra columns, no sidecar, no census; the files are bit-identical to before the feature existed |
+| `flag` | **the default**, and non-mutating: two extra columns `jflag` and `jdist` appended at the *end* of `<base>_dehom.txt`, the same two added as `.vtk` `CELL_DATA` scalars, the `<base>_dehom.junc` sidecar written, and the census printed. **No field value changes**, so every existing column index is untouched. |
+| `exclude` | as `flag`, plus `NaN` in the 15 field columns of every duplicate (`jflag` 3) row. The row itself stays — row $i$ is still element $i/\!/n_{\rm depth}$ at depth $i\%n_{\rm depth}$ — so the cloud *partitions* the material instead of double-covering it. The `.vtk` values are never NaN-ed (legacy ASCII readers handle NaN badly); threshold the mesh on `jflag` instead. |
+
+A fourth tier, `patch`, is **designed but deliberately not implemented** and raises if you ask
+for it: the corner micro-solve it would call is admissible only for two straight walls of
+uniform layup crossing at one node with clear stubs on every leg, which most real blade
+junctions are not.
+
+| `jflag` | meaning |
+|---|---|
+| 0 | clean — outside every junction's boundary layer |
+| 1 | near — inside some $r_{\rm bl}$, but inside no other wall's material |
+| 2 | overlapped, and **this** wall owns the block |
+| 3 | duplicate — inside another wall's material, and another wall owns it |
+| 4 | reserved for `patch`; never emitted |
+
+`jdist` is $|p - J| / \max_i t_i$ at the nearest junction node $J$ (infinite when the section
+has no junction at all), so `jflag >= 1` is exactly `jdist <= k_bl`. Two more optional keys tune
+the measurement: `junction_bl:` (default `1.0`) is $k_{\rm bl}$, the boundary-layer radius in
+units of the junction's thickest wall — a modelling choice, not a derived length, so widen it
+to be conservative. `junction_ang:` (default `1.0`, degrees) is the tangent-grouping tolerance
+of the detector; 1.0 is the homogenization census value and is deliberately tight, so on a
+curved airfoil contour it also calls every kink of more than one degree a junction. Raise it to
+5–15° for a census that lists the wall crossings only — it moves the advisory `near` count, not
+the overlap flags.
+
+Ownership at a crossing mirrors the homogenization's own patch mesh exactly, so the two sides
+cannot drift: one through-family at a two-family node owns the block (a T); two through
+families mitre by $|s_i|/t_j$ against $|s_j|/t_i$ (an X); two ending families mitre on the
+normalized-band diagonal (an L); more than two families fall back to the nearest midline and
+the junction is reported *unresolved*.
+
+On this station the census reads
+
+```text
+ junctions : 97 detected (5 T, 91 L, 1 unresolved)
+ stations  : 2790 total, 1032 near, 56 overlapped (50 duplicates)
+```
+
+— 97 "junctions" at the default 1° tolerance, of which only a handful are genuine wall
+crossings and the rest are discretized contour curvature, which is exactly why the near count is
+large while the overlap counts stay small. The sidecar
+`iea_s10_shell_dehom.junc` lists every junction with its coordinates, topology, overlap area
+$A_j = \sum t_i t_j / |\sin\theta_{ij}|$ and per-wall ownership decision.
+
+```{warning}
+`junction:` here is a **recovery bookkeeping tier**. It is not the homogenization junction
+correction (`build_solid_bundle(junction="census"|"micro"|"microcell")`), which is an energy
+correction with its own validity domain — see `Rules/junction_corrections.md`.
 ```
 
 ### Reading the result
@@ -371,7 +472,7 @@ Two components are **not** delivered by this route and should not be used from t
 - $\sigma_{33}$ is machine-zero in the first-order recovery (rms $3.6\times10^{-13}$ MPa against a
   VABS rms of $5.6\times10^{-2}$ MPa), which is visible directly in the `S33` column of
   `iea_s10_dehom_shell.txt`: over its 2790 recovery points that column is of order $10^{-13}$ MPa
-  and smaller, with a median of $1.96\times10^{-13}$ and a maximum of $9.18\times10^{-13}$.
+  and smaller, with a median of $1.96\times10^{-13}$ and a maximum of $9.15\times10^{-13}$.
 - $\sigma_{13}$ is recovered at rms $6.3\times10^{-3}$ MPa against a VABS rms of
   $2.4\times10^{-1}$ MPa. This is structural, not a bug: on a prismatic ring the $\gamma_{13}$ row
   is untied by construction (see the element section above), so it carries the flat-wall drilling

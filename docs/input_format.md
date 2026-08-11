@@ -17,11 +17,49 @@ material blocks mirror SwiftComp's.
 
 Every run, in every dialect, writes a timed `.out` in the SwiftComp `.K` layout: an ` OpenSG`
 banner line naming the model, `The Effective <Name> Stiffness Matrix`, `The Effective <Name>
-Compliance Matrix`, and a `Time taken` footer in seconds. `<Name>` is `Timoshenko` for a beam
-$6\times6$, `Classical Plate` for a $6\times6$ ABD, `Reissner-Mindlin Plate` for an
-$8\times8$ ABDG, and absent for the equivalent 3-D solid law — which alone also prints
-`The Engineering Constants (Approximated as Orthotropic)`. The writer is
-`opensg_solid.sg_homo.write_sc_K`; the contract is `Rules/output_format_and_timing.md`.
+Compliance Matrix`, and a `Time taken` footer in seconds. `<Name>` is **always the macro law's
+console title**, so the line in the file and the line the terminal printed are word for word
+the same:
+
+| macro law | `<Name>` |
+|---|---|
+| equivalent 3-D solid $6\times6$ | `Cauchy Continuum` |
+| beam $6\times6$ (shear-refined) | `Timoshenko Beam` |
+| beam $4\times4$ (classical) | `Euler-Bernoulli Beam` |
+| plate ABD $6\times6$ (classical) | `Classical Plate` |
+| plate ABDG $8\times8$ (shear-refined) | `Reissner-Mindlin` |
+
+Only the 3-D solid law also prints `The Engineering Constants (Approximated as Orthotropic)`.
+The writer is `opensg_solid.sg_homo.write_sc_K`; the contract is
+`Rules/output_format_and_timing.md`. The per-section **wall** plate laws that a shell run also
+emits as `<base>_ABDG.out` come from a different writer,
+`opensg_shell.sg_homo.write_abdg_out`, and keep the title
+`The Effective Reissner-Mindlin Plate Stiffness Matrix` — one block per section.
+
+## The YAML header — the analysis request
+
+Above the first mesh block every SG YAML may carry a short block of scalar keys. This is the
+**analysis request the file makes about itself**, read by `sg_mesh.read_yaml_header` without
+parsing the mesh. Every key is defaulted, so a headerless mesh runs (as a classical plate
+homogenization on the solid engine, a classical beam on the shell engine).
+
+| key | values | meaning |
+|---|---|---|
+| `msg` | `shell` \| `solid` | which **engine** owns the file. Omit it and the mesh dialect decides, so older files keep working; the unified `opensg` command dispatches on exactly this key. A `msg:` that contradicts the dialect is an error, not a silent override. |
+| `n_model` | `1` \| `2` \| `3` | the macro model: 1 beam, 2 plate, 3 equivalent 3-D solid. `n_model: 2` is the `opensg_solid` route — `opensg_shell` has no plate macro model, because there the **wall** is the plate. |
+| `refined` | `0` \| `1` | `0` classical (plate ABD $6\times6$ / beam Euler–Bernoulli $4\times4$), `1` shear-refined (plate ABDG $8\times8$ / beam Timoshenko $6\times6$). Ignored for the solid macro model. |
+| `analysis` | `H` \| `D` | homogenization or dehomogenization, when you would rather carry the switch in the file than on the command line. The command-line argument wins. |
+| `epsilon_bar` | 6 floats | the macro state a `D` run recovers from: `[e11 e22 2e12 k11 k22 2k12]` (plate/solid) or `[ext sh2 sh3 twist bend2 bend3]` (beam). A `<base>.ff` file next to the YAML supersedes it. |
+| `omega` | float | **optional** user SG measure, overriding the one measured from the mesh. Set it only when the equivalent continuum occupies something other than the measured cell — e.g. the wall *material* area of a closed tube. |
+| `aperiodic` | `1` | **optional**, and only for an SG that genuinely is not periodic: zero fluctuation on every bounding-box-face node instead of the periodic tie. Periodic is the default at every SG dimension — omit the key entirely for a periodic SG. |
+| `junction` | `off` \| `flag` \| `exclude` | **optional, msg-shell `D` only** — the junction-aware recovery tier; see the shell dehomogenization tutorial. Default `flag`. |
+| `junction_bl` | float | optional, shell `D` only — the junction boundary-layer radius in units of the thickest wall there. Default `1.0`. |
+| `junction_ang` | float, deg | optional, shell `D` only — the tangent-grouping tolerance of the junction detector. Default `1.0`. |
+
+**There is no `dim:` key and no `scale:` key.** The SG dimension is read from the mesh — the
+element node count, with the ambiguous solid counts broken by the leading node coordinates
+that actually vary — and the SG measure $\omega$ is measured from the mesh (or declared with
+`omega:`). Neither is something you write into a file.
 
 ## The 1-D shell SG YAML
 
@@ -184,6 +222,17 @@ recorded in the file rather than passed at the call site.
 ### Running it
 
 ```bash
+opensg iea_s10_shell.yaml
+```
+
+The header of `iea_s10_shell.yaml` carries `msg: shell`, `n_model: 1` and `refined: 1`, so the
+run is the Reissner–Mindlin ring and the result is the Timoshenko $6\times6$, written to
+`iea_s10_shell_Timo.out` alongside the per-section wall laws in `iea_s10_shell_ABDG.out`.
+
+The example folder also ships a driver that does the same homogenization through the API and
+adds the two figures the CLI does not emit:
+
+```bash
 python beam_homo_shell.py
 ```
 
@@ -200,7 +249,8 @@ same reference the YAML declared, for reuse by dehomogenization and shell buckli
 Same six keys, but the mesh is a **surface embedded in 3-D**: `nodes` are genuine
 three-dimensional points and `elements` are 3-noded triangles or 4-noded quads. There is no
 `reference` key — `shell_sg3d` references every wall law to its mid-surface. This is the input
-to `opensg_shell.sg_homo.shell_sg3d`, which returns the equivalent 3-D solid $6\times6$.
+to `opensg_shell.sg_homo.shell_sg3d`, which returns the equivalent 3-D solid $6\times6$; its
+header carries `msg: shell` and `n_model: 3`, so `opensg <yaml>` reaches it directly.
 
 `schwarz_p_3Dshell.yaml` is a Schwarz-P TPMS cell: 13536 nodes and 26360 triangles, one
 aluminium layup. Triangles are read and padded to the quad connectivity by repeating the last
@@ -245,24 +295,71 @@ python make_schwarz_yaml.py
 ```
 
 ```bash
-python schwarz_solid_props.py
+opensg schwarz_p_3Dshell.yaml
 ```
 
 The second command writes `schwarz_p_3Dshell_C3D.out`, whose banner records the mesh size, the
-junction-edge count and the boundary treatment — for this cell,
-`13536 nodes, 26360 elems, 0 junction edges, periodic in 3 dirs, per unit cell 1`.
+element the facets were assembled with, the junction-edge count and the boundary treatment —
+for this cell,
+`13536 nodes, 26360 elems [26360 tri3/MITC3], 0 junction edges, periodic in 3 dirs, per unit cell 1`.
+It also
+writes `schwarz_p_3Dshell_ABDG.out`, the **step-1 wall plate law** the surface carries: an
+$8\times8$ Reissner–Mindlin ABDG stiffness and its compliance, one block per section, headed
+
+```text
+ OpenSG msg-shell wall plate laws, one block per section
+ rows [eps11 eps22 2eps12 | K11 K22 K12+K21 | 2g13 2g23]
+
+ section 0: layup_0  layup [['alu', 0.036457, 0.0]]
+```
+
+Every route that reduces a layup to a wall plate law now emits this record — the cross-section
+rings (beam `refined: 1`, and the `n_model: 3` equivalent solid) as well as the 3-D shell SG —
+so the two-step reduction can be inspected at its halfway point.
+(`examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG/schwarz_solid_props.py` is the same
+homogenization through the API, plus the boundary-mode comparison.)
+
+### From a gmsh mesh: `msh_to_yaml`
+
+A surface mesh out of gmsh knows the geometry and nothing else — no layup, no material, no
+macro model. `opensg_shell.helper.msh_to_yaml` writes the whole **mesh** side of the dialect
+from an ASCII `.msh` (format 2.2 or 4.1) and refuses to invent the rest:
+
+```python
+from opensg_shell.helper.msh_to_yaml import convert
+
+convert("schwarz_p_D2_shell.msh")                      # FILL_IN template
+convert("schwarz_p_D2_shell.msh", thickness=0.036457)  # runnable, one alu ply
+```
+
+| call | what you get |
+|---|---|
+| `convert(path)` | the mesh blocks complete, `sections:`/`materials:` written as a marked `FILL_IN` **template**. The file is deliberately not runnable: `opensg_shell` rejects it and `check_filled` names every field still to be filled. |
+| `convert(path, thickness=t)` | a runnable single-ply yaml. The default wall material is aluminium, $E = 69$ GPa, $\nu = 0.30$, $\rho = 2700$ kg/m³; pass `material={...}` for your own. |
+| `convert(path, layup=[[mat, t, angle], ...], materials=[...])` | the general multi-ply form. |
+
+The per-facet frame is the one `make_schwarz_yaml.py` established — $e_3$ the facet normal,
+$e_2$ the first edge, $e_1 = e_2 \times e_3$ — and one `layup_<k>` element set is written per
+gmsh physical tag. Only 3-node triangles (gmsh type 2) and 4-node quads (type 3) are accepted;
+0-/1-D entities gmsh writes for physical points and curves are skipped, anything else is an
+error. The `sections:` and `materials:` blocks are emitted **first**, above the mesh, because
+they are the part a human edits and a `sections:` key buried at line 66262 of a 4 MB file looks
+missing.
 
 ## The solid SG YAML
 
-The solid dialect describes a meshed *domain* rather than a laminated *surface*, so it carries
-no layups and no orientations by default — the material blocks are already $6\times6$
-stiffnesses or engineering constants. `RHC_SW_2UC_45.yaml` is a two-unit-cell honeycomb
-plate SG with 4251 nodes, 6640 triangles and 3 materials; the excerpt below keeps two rows
-per list and two of the three material blocks:
+The yaml is the **native user input** — you author it directly (a SwiftComp `.sc` is just one
+optional way to generate one). The solid dialect describes a meshed *domain* rather than a
+laminated *surface*, so it carries no layups and no orientations — each material block is
+either a $6\times6$ stiffness or engineering constants with a ply angle.
+`RHC_SW_2UC_45.yaml` is a two-unit-cell honeycomb plate SG with 4251 nodes, 6640 triangles
+and 3 materials; the excerpt below keeps the analysis header, two rows per list and two of the
+three material blocks:
 
 ```yaml
-dim: 2
-scale: 35.248
+n_model: 2      # 1 = beam, 2 = plate, 3 = solid -- the macro model this SG homogenizes to
+refined: 1      # 0 = classical (plate ABD / beam EB); 1 = shear-refined (plate ABDG / beam Timoshenko)
+msg: solid      # the ENGINE this SG belongs to (opensg_solid); `opensg <yaml>` dispatches on it
 nodes:
 - [17.6240005, 23.3500004, 0.0]
 - [-17.6240005, 23.3500004, 0.0]
@@ -272,26 +369,18 @@ cells:
 mat_id: [1, 1, 1, 1, 1]
 materials:
   1:
-    type: 2
-    aux: [0.0, 0.0]
-    C:
-    - [35696.6, 27696.6, 3251.1, 0.0, 0.0, -25368.7]
-    - [27696.6, 35696.6, 3251.1, 0.0, 0.0, -25368.7]
-    - [3251.1, 3251.1, 8917.8, 0.0, 0.0, -487.1]
-    - [0.0, 0.0, 0.0, 3500.0, -500.0, 0.0]
-    - [0.0, 0.0, 0.0, -500.0, 3500.0, 0.0]
-    - [-25368.7, -25368.7, -487.1, 0.0, 0.0, 27958.5]
+    type: 1
+    engineering: [108000.0, 8000.0, 8000.0, 4000.0, 4000.0, 3000.0, 0.32, 0.32, 0.30]
+    angle: 45.0
   3:
-    type: 0
-    aux: [0.0, 0.0]
-    E: 69000.0
-    nu: 0.3
+    type: 1
+    engineering: [69000.0, 69000.0, 69000.0, 26540.0, 26540.0, 26540.0, 0.30, 0.30, 0.30]
+    angle: 0.0
 ```
 
 | key | meaning |
 |---|---|
-| `dim` | SG spatial dimension, 1, 2 or 3. Only the first `dim` node coordinates are used (`points = nodes[:, 0:n_sg]`), so the trailing zeros above are padding. |
-| `scale` | the normalization value carried over from the `.sc` trailing line. It is parsed and preserved on the input dict, but the homogenizer computes its own SG measure $\omega$ from the mesh and prints that in the banner. |
+| header keys | `msg`, `n_model`, `refined`, `analysis`, `epsilon_bar`, `omega`, `aperiodic` — the analysis request, every key defaulted; a headerless mesh runs as a classical plate homogenization. See "The YAML header" above. There is no `dim:` and no `scale:`: the SG dimension is inferred from the mesh (the coordinates occupy the leading columns, `points = nodes[:, 0:n_sg]`, so a column that never varies is padding) and $\omega$ is measured from it. |
 | `nodes` | comma-separated coordinate rows, always three components. |
 | `cells` | element connectivity, **0-based** in this dialect (note the `0` in the first row). All elements in one SG must have the same node count — mixed element types raise. |
 | `mat_id` | one material id per cell, **1-based** (the reader forms `mat_id - 1` internally). |
@@ -304,49 +393,56 @@ SwiftComp material types:
 |---|---|---|
 | 0 | `E`, `nu` | isotropic; $G = E/2(1+\nu)$ |
 | 1 | `engineering` | the nine constants $E_1\,E_2\,E_3\,G_{12}\,G_{13}\,G_{23}\,\nu_{12}\,\nu_{13}\,\nu_{23}$ |
-| 2 | `C` | the $6\times6$ stiffness stored directly — typically an already-rotated ply, so no `angles` should be supplied with it |
+| 2 | `C` | the $6\times6$ stiffness stored directly — typically an already-rotated ply, so no angle should be supplied with it |
 
-`aux` is the auxiliary line of the material block, carried through verbatim from the `.sc`; the
-elastic path does not consume it.
+Any block may additionally carry `angle:` (degrees — the in-plane ply rotation, applied when
+the material is built from constants; how a $\pm45$ laminate lives in the file) and
+`density:` (kg/m³ or the mesh's own mass unit — used by the beam route's $6\times6$ mass
+matrix). `aux` is the auxiliary line carried through verbatim when a file was converted from
+an `.sc`; the elastic path does not consume it and a hand-written yaml simply omits it.
 
 ![RHC honeycomb 2-D solid SG mesh](_static/rhc_2dsg_mesh.png)
 
-The driver overrides the pre-rotated `type: 2` blocks with engineering constants plus explicit
-per-material angles, which is the recommended pattern when you want the ply angle to appear in
-exactly one place:
-
-```python
-import jax.numpy as jnp
-from opensg_solid.sg_homo import plate_homo_2d
-
-material_param = jnp.array([
-    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),
-    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),
-    (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
-angles = jnp.array([45.0, -45.0, 0.0])
-
-r = plate_homo_2d("RHC_SW_2UC_45.yaml", material_param=material_param,
-                  angles=angles, n_model=2)
-print(r["C_eff"])
-```
+The recommended pattern keeps the ply data in exactly one place — the yaml itself: `type: 1`
+material blocks carrying the nine engineering constants plus their `angle:`, and the analysis
+request in the yaml header (`msg: solid`, `n_model: 2`, `refined: 1`; every key defaulted, and
+`analysis:` omitted because `H` is the default). The run is then one command:
 
 ```bash
-python plate_homo_2dsg.py
+opensg RHC_SW_2UC_45.yaml
 ```
 
-`n_model` selects the macro model: 1 beam (Timoshenko), 2 plate, 3 equivalent 3-D solid. The
-run writes `RHC_SW_2UC_45.out` — `The Effective Classical Plate Stiffness Matrix`, rows
-`[N11 N22 N12 M11 M22 M12]`, with the banner
+(`opensg_solid RHC_SW_2UC_45.yaml` and `python -m opensg_solid RHC_SW_2UC_45.yaml` are the same
+entry point — `opensg` simply reads `msg: solid` from the header and forwards to it.)
+Or, through the API, one call:
+
+```python
+from opensg_solid.sg_homo import plate_homo_2d
+
+r = plate_homo_2d("RHC_SW_2UC_45.yaml")   # header + materials from the file
+print(r["law_title"], r["law"])
+```
+
+(The `material_param=`/`angles=` override arguments remain for scripting over pre-rotated
+`type: 2` files, as examples 4 and 7 do.) The header's `n_model:` picks the macro model — 1
+beam, 2 plate, 3 solid — and `refined:` upgrades plate ABD to ABDG or beam EB to Timoshenko.
+This file ships with `refined: 1`, so the run
+writes `RHC_SW_2UC_45.out` — `The Effective Reissner-Mindlin Stiffness Matrix`, the $8\times8$
+on rows `[e11 e22 g12 k11 k22 k12 2g13 2g23]`, with the banner
 ` OpenSG msg-solid plate model, omega 35.248001, periodic` — plus `RHC_SW_2UC_45_mesh.png`.
-The printed $\omega = 35.248001$ is the in-plane span measured from the mesh; it agrees with
-the file's `scale: 35.248` to six digits, which is the check that the mesh and the `.sc` header
-describe the same cell.
+Set `refined: 0` and the same file reports the classical $6\times6$ ABD on rows
+`[N11 N22 N12 M11 M22 M12]`, titled `The Effective Classical Plate Stiffness Matrix`.
+The printed $\omega = 35.248001$ is the in-plane span measured from the mesh — the yaml
+carries no normalization key, because the homogenizer always measures its own SG. For a cell
+converted from SwiftComp it agrees with the `.sc` trailing line (`35.248` here) to the
+digits that line carries, which is the check that the mesh and the `.sc` header describe the
+same cell.
 
 ## The SwiftComp `.sc` input and the converter
 
 A `.sc` file can be used directly — `load_sg_input` dispatches on the extension and converts —
 or converted once and kept as YAML. The anatomy the reader expects, from the
-`opensg_solid.rm_plate_1D.helper.sc_to_yaml` module docstring:
+`opensg_solid.helper.sc_to_yaml` module docstring:
 
 | block | content |
 |---|---|
@@ -355,7 +451,7 @@ or converted once and kept as YAML. The anatomy the reader expects, from the
 | node records | `n_nodes` lines of `id  x [y [z]]` |
 | element records | `n_elems` lines of `id  mat_id  conn`, the connectivity zero-padded to a fixed slot count; the padding zeros are not nodes |
 | material blocks | per material: a header `mat_id  mat_type  n`, an auxiliary line such as `0 0`, then the properties — type 0 is `E  nu`, type 1 is `E1 E2 E3 / G12 G13 G23 / v12 v13 v23`, type 2 is the 21 upper-triangular constants of the $6\times6$ over six lines |
-| trailing line | the `scale` (volume or thickness normalization) |
+| trailing line | the `scale` (volume or thickness normalization) — read and kept on the parsed dict for the cross-check above. It is not written into the yaml as a `scale:` key: $\omega$ is measured from the mesh. The converter re-emits it as the optional `omega:` header key in the one case the solver would consume it — a 3-D SG homogenized to a 3-D solid (`n_model: 3`), whose measure is exactly the node bounding-box volume — and then only when it differs from that volume by more than $10^{-6}$ relative; otherwise the value is dropped, with a printed note when it disagrees with the measurement |
 
 In `RHC_SW_2UC_45.sc` the META line is `2 4251 6640 3 0 0` — a 2-D SG with 4251 nodes, 6640
 elements and 3 materials — and the file ends with the lone line `35.248`. The file's last
@@ -368,10 +464,10 @@ triangle, element 6640 of material 3 on nodes 4251/2988/3079, shows the zero pad
 The documented way to run the conversion is the module's own `convert`:
 
 ```python
-from opensg_solid.rm_plate_1D.helper.sc_to_yaml import convert
+from opensg_solid.helper.sc_to_yaml import convert
 
 sc = convert("RHC_SW_2UC_45.sc")
-print(sc["dim"], len(sc["nodes"]), len(sc["cells"]), sc["scale"])
+print(sc["dim"], len(sc["nodes"]), len(sc["cells"]))
 ```
 
 `convert` writes **two** files next to the input — `<base>.yaml`, the solid SG YAML documented
@@ -472,7 +568,7 @@ is repeated.
 `opensg_solid.sg_mesh._cell_basis` maps the SG dimension and the node count per element onto a
 basix cell type and Lagrange degree — this table *is* the list of supported elements:
 
-| `dim` | nodes/elem | basix cell | degree |
+| SG dim | nodes/elem | basix cell | degree |
 |---|---|---|---|
 | 1 | 2 | `interval` | 1 |
 | 1 | 3 | `interval` | 2 |
@@ -526,8 +622,9 @@ transverse shears, giving rows `[e11 e22 g12 k11 k22 k12 2g13 2g23]` and the blo
 $$\mathbf{ABDG} = \begin{bmatrix} A & B & 0 \\ B & D & 0 \\ 0 & 0 & G \end{bmatrix}.$$
 
 For a plate SG the **last SG coordinate is the thickness direction** — the $y_3$ of the solid
-Voigt order above. With `dim: 2` that is node coordinate index 1, since only the first `dim`
-coordinates are read; for a through-thickness 1-D SG it is the single coordinate. This is why
+Voigt order above. On a 2-D SG that is node coordinate index 1, since only the first
+$n_{\rm sg}$ coordinates are read; for a through-thickness 1-D SG it is the single coordinate.
+This is why
 the RHC cell reports $\omega = 35.248$, the span of coordinate 0 (the in-plane periodic
 direction), and not its larger extent in coordinate 1.
 

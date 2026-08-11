@@ -25,7 +25,7 @@ Four runnable examples cover the pair of capabilities in both directions:
 |---|---|---|
 | `examples/OpenSG-solid/1_get_plate_props_from_1DSG` | `1d_sg.py` | layup $\rightarrow$ 1-D SG $\rightarrow$ plate law |
 | `examples/OpenSG-solid/2_get_plate_stress_from_1DSG` | `rm_dehom.py`, `rm_dehom_ff.py` | plate resultants $\rightarrow$ 3-D ply stress through the thickness |
-| `examples/OpenSG-solid/3_get_plate_props_from_2D_SG` | `plate_homo_2dsg.py` | 2-D cell SG $\rightarrow$ plate ABD |
+| `examples/OpenSG-solid/3_get_plate_props_from_2D_SG` | `opensg <name>.yaml` | 2-D cell SG $\rightarrow$ plate ABD (`refined: 0`) or ABDG (`refined: 1`) |
 | `examples/OpenSG-solid/4_get_plate_dehom_from_2DSG` | `plate_dehom_2dsg.py` | macro plate strain $\rightarrow$ 3-D fields inside the cell |
 
 ## A. Through-thickness 1-D SG $\rightarrow$ the plate law
@@ -100,12 +100,12 @@ python 1d_sg.py my_other_layup.yaml
 | `layup_db_plate_homo.out` | the plate law, named `<layup_db stem>_plate_homo.out` |
 
 The `.out` opens with a banner that records the whole run, then the matrix whose name follows
-`model` — `Reissner-Mindlin Plate` here, `Classical Plate` at `model: 0`:
+`model` — `Reissner-Mindlin` here, `Classical Plate` at `model: 0`:
 
 ```
  OpenSG msg-solid plate model from 1dsg.yaml: 9 plies, h = 0.152400 m, fraction = 0.5, rho*h = 30.251400 kg/m^2, rows [e11 e22 g12 k11 k22 k12 2g13 2g23]
 
- The Effective Reissner-Mindlin Plate Stiffness Matrix
+ The Effective Reissner-Mindlin Stiffness Matrix
  --------------------------------------------
      5.4916502E+008     2.6417019E+007     1.5524611E-010     3.6182957E-006     3.6122933E-006     1.0244011E-024     0.0000000E+000     0.0000000E+000
 ```
@@ -326,61 +326,93 @@ for a periodic medium.
 
 ### The input you edit
 
-The `User Input` block of `plate_homo_2dsg.py` is three items:
+The yaml **is** the whole problem — nothing lives in the code, and every header key has a
+default. The header is the leading scalar keys above the mesh blocks:
 
-```python
-n_model = 2                    # 1: Beam; 2: Plate; 3: 3D elastic
-name = "RHC_SW_2UC_45"         # reads <name>.yaml
-
-material_param = jnp.array([
-    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply +45
-    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply -45
-    (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
-angles = jnp.array([45.0, -45.0, 0.0])   # deg per material; 0.0 = none
+```yaml
+n_model: 2      # 1 = beam, 2 = plate, 3 = solid -- the macro model this SG homogenizes to
+refined: 1      # 0 = classical (plate ABD / beam EB); 1 = shear-refined (plate ABDG / beam Timoshenko)
+msg: solid      # the ENGINE this SG belongs to (opensg_solid); `opensg <yaml>` dispatches on it
 ```
 
-`material_param` is one row of engineering constants per material,
-`(E1, E2, E3, G12, G13, G23, nu12, nu13, nu23)`, and `angles` one rotation per material in degrees.
-The override exists because a SwiftComp `.sc` carries **pre-rotated** ply stiffness blocks;
-supplying constants plus an angle rebuilds them in-code instead, which is the documented working
-run. The units are the mesh's: this cell is in millimetres with moduli in MPa, so $108\times10^{3}$
-MPa is a 108 GPa fibre direction.
+`refined` upgrades the macro law within the chosen `n_model`: for the plate, `0` is the
+classical $6\times6$ ABD and `1` the shear-refined $8\times8$ ABDG; for the beam, `0` is the
+classical Euler–Bernoulli $4\times4$ and `1` the Timoshenko $6\times6$; the solid law has no
+refined variant. `0` is the default when the key is absent; the file shipped here asks for
+`1`, so it reports the ABDG. There is no `dim` and no
+`scale` key: the SG dimension is inferred from the mesh and the measure $\omega$ is computed
+from it. `analysis:` defaults to `H`; with `analysis: D` the header additionally carries
+`epsilon_bar:`, the $(6,)$ macro
+state, and the run recovers the local 3-D fields right after the homogenization, writing the
+`<name>_dehom.*` files of section D. Explicit arguments to `plate_homo_2d` always override
+the header (the API's legacy beam default remains Timoshenko, which is what examples 7–8
+rely on).
+
+The materials live in the SG YAML itself, exactly as in a SwiftComp `.sc`: each entry of the
+file's `materials:` block defines one material **either** by its $6\times6$ elastic stiffness
+(`type: 2`, stored pre-rotated, used as-is) **or** by the nine orthotropic engineering constants
+`[E1, E2, E3, G12, G13, G23, nu12, nu13, nu23]` together with the ply angle (`type: 1` plus
+`angle:`, rebuilt and rotated in-code). This example ships the constants + angle form:
+
+```yaml
+materials:
+  1:
+    type: 1
+    engineering: [108000.0, 8000.0, 8000.0, 4000.0, 4000.0, 3000.0, 0.32, 0.32, 0.30]
+    angle: 45.0
+```
+
+The units are the mesh's: this cell is in millimetres with moduli in MPa, so $108\times10^{3}$
+MPa is a 108 GPa fibre direction. (The `material_param=` / `angles=` arguments of
+`plate_homo_2d` remain available as an override that takes precedence over the file's blocks —
+examples 4 and 7 use that route.)
 
 The solver reads `<name>.yaml`. A SwiftComp `.sc` is converted once with the packaged helper.
 The module defines no `__main__` block and reads no command-line arguments, so import its
 `convert` function rather than invoking it with `python -m`:
 
 ```python
-from opensg_solid.rm_plate_1D.helper.sc_to_yaml import convert
+from opensg_solid.helper.sc_to_yaml import convert
 
 convert("RHC_SW_2UC_45.sc")   # writes RHC_SW_2UC_45.yaml + .msh
 ```
 
 ### Run it
 
+One command, one argument — the file says what to do:
+
 ```bash
-python plate_homo_2dsg.py
+opensg RHC_SW_2UC_45.yaml
 ```
+
+The unified `opensg` command reads `msg: solid` from the header and forwards the file
+unchanged; `opensg_solid RHC_SW_2UC_45.yaml` and `python -m opensg_solid RHC_SW_2UC_45.yaml`
+are the same entry point. The example's `plate_homo_2dsg.py` is the identical call through the
+Python API — one line, `plate_homo_2d(name + ".yaml")` — for driving it from your own script.
 
 ### What comes out
 
 | file | content |
 |---|---|
-| `RHC_SW_2UC_45.out` | the timed `Classical Plate` stiffness and compliance in the `.K` layout |
+| `RHC_SW_2UC_45.out` | the timed stiffness and compliance in the `.K` layout, titled `Classical Plate` at `refined: 0` and `Reissner-Mindlin` at `refined: 1` |
 | `RHC_SW_2UC_45_mesh.png` | the cell mesh, elements coloured by material |
 
-The script also prints `r["C_eff"]`, the same $6\times6$ it wrote. The `.out` banner records the SG
-measure and the boundary treatment:
+Both routes print `r["law"]` under its `r["law_title"]` header — the same matrix the `.out`
+reports, selected by the header, so the driver contains no branching. The `.out` banner
+records the SG measure and the boundary treatment; the shipped file asks for `refined: 1`, so
+what comes back is the $8\times8$:
 
 ```
  OpenSG msg-solid plate model, omega 35.248001, periodic
 
- The Effective Classical Plate Stiffness Matrix
+ The Effective Reissner-Mindlin Stiffness Matrix
  --------------------------------------------
-     3.3585973E+005     7.7500043E+004    -1.4366892E+002     4.1488404E-001     1.4861902E+000     3.6602858E-002
+     3.3585973E+005     7.7500043E+004    -1.4366892E+002     4.1488406E-001     1.4861903E+000     3.6602857E-002     0.0000000E+000     0.0000000E+000
 ```
 
-closing with ` Time taken: 7.83 sec` for this 4 251-node, 6 640-triangle cell.
+closing with ` Time taken: 1.89 sec` for this 4 251-node, 6 640-triangle cell. The leading
+$6\times6$ block is the classical ABD `refined: 0` would have reported on its own, and the two
+extra rows carry the transverse shears $2.6974186\times10^{4}$ and $9.7898064\times10^{1}$.
 
 ### What the numbers mean
 
@@ -411,23 +443,27 @@ over the in-plane period. The through-thickness coordinate is $y_2$, spanning $\
 
 ### The Reissner-Mindlin option
 
-Passing `shear_refined=True` to `plate_homo_2d` additionally runs the RM first-order warping ladder
+Setting `refined: 1` in the yaml header (or passing `refined=1` to `plate_homo_2d`;
+`shear_refined=True` is the legacy spelling, plate only) additionally runs the RM first-order
+warping ladder
 and returns `r["G_msg"]` (the $2\times2$ transverse-shear block), `r["ABDG"]` (the same $8\times8$
 block form as section A) and `r["A6_ladder"]`. When the ladder produces an
 SPD fit, the `.out` is written from the $8\times8$ and its matrices are titled
-`Reissner-Mindlin Plate` instead of `Classical Plate`; otherwise the run falls back to the
-$6\times6$. The argument applies to `n_model=2` only and raises for any other model.
+`Reissner-Mindlin` instead of `Classical Plate`; otherwise the run falls back to the
+$6\times6$. The same switch serves the beam route: `n_model: 1` with `refined: 0` reports the
+classical Euler–Bernoulli $4\times4$ (the `.out` titled `Euler-Bernoulli`), with `refined: 1`
+the Timoshenko $6\times6$.
 
 ```python
 from opensg_solid.sg_homo import plate_homo_2d
 
-r = plate_homo_2d("RHC_SW_2UC_45.yaml", material_param=material_param,
-                  angles=angles, n_model=2, shear_refined=True)
+r = plate_homo_2d("RHC_SW_2UC_45.yaml", n_model=2, refined=1)
 print(r["ABDG"])
 ```
 
-The same folder also ships `Plate_1D_SG_2UC_45.yaml`, a **1-D** structure gene (`dim: 1`, two-node
-line elements through a stack), which runs through the identical call by changing `name`; its
+The same folder also ships `Plate_1D_SG_2UC_45.yaml`, a **1-D** structure gene (two-node
+line elements through a stack — the SG dimension follows from the element node count, nothing
+declares it), which runs through the identical call by changing `name`; its
 result is `Plate_1D_SG_2UC_45.out`, because `plate_homo_2d` always names its report after the
 input basename. The `*_plate_ABD.out` files shipped beside it are `np.savetxt` leftovers from an
 older script style — a bare $6\times6$ under a single comment line, not the timed `.K` layout.
@@ -447,8 +483,10 @@ the warping columns $V_0$ that the homogenization already solved; nothing is re-
 
 ### The input you edit
 
-`plate_dehom_2dsg.py` takes the same `name`, `material_param` and `angles` as section C, plus one
-new line — the macro plate strain, in the order `[e11, e22, 2e12, k11, k22, 2k12]`:
+`plate_dehom_2dsg.py` takes the same `name` as section C plus its own `material_param` and
+`angles` (this example still carries the materials in its `User Input` block, through the
+override route), and one new line — the macro plate strain, in the order
+`[e11, e22, 2e12, k11, k22, 2k12]`:
 
 ```python
 epsilon_bar = jnp.array([0.0, 0.1, 0.0, 0.1, 0.0, 0.0])
@@ -510,5 +548,5 @@ you, and the reason to run a dehomogenization at all.
 | 1 | `layup_db.yaml` | `python 1d_sg.py` | `1dsg.yaml`, `1dsg.png`, `layup_db_plate_homo.out` |
 | 2 | the `USER INPUT` block | `python rm_dehom.py` | `1dsg_dehom.SM/.EM/.U/.vtk` |
 | 2 | a `.ff` table + `dehom:` in `layup_db.yaml` | `python rm_dehom_ff.py ex5_shell_S8R_field.ff` | `<ff stem>_ff.SM/.EM/.U`, `_ff_gauss.vtk` |
-| 3 | `name`, `material_param`, `angles` | `python plate_homo_2dsg.py` | `<name>.out`, `<name>_mesh.png` |
-| 4 | the above plus `epsilon_bar` | `python plate_dehom_2dsg.py` | `<name>.out`, `<name>_plate_ABD.out`, `<name>_dehom.txt/.vtk/.SM/.EM/.U`, `<name>_mesh.png` |
+| 3 | the yaml header (`n_model`, `refined`, `analysis`) — materials + angles live in the yaml too | `opensg <name>.yaml` | `<name>.out`, `<name>_mesh.png` |
+| 4 | `name`, `material_param`, `angles`, `epsilon_bar` | `python plate_dehom_2dsg.py` | `<name>.out`, `<name>_plate_ABD.out`, `<name>_dehom.txt/.vtk/.SM/.EM/.U`, `<name>_mesh.png` |

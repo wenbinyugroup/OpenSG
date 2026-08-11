@@ -62,11 +62,11 @@ into existing SwiftComp comparison tooling:
 \begin{Verbatim}[frame=single,fontsize=\small,samepage=false]
  OpenSG msg-shell beam model [ext sh2 sh3 twist bend2 bend3]
 
- The Effective Timoshenko Stiffness Matrix
+ The Effective Timoshenko Beam Stiffness Matrix
  --------------------------------------------
      <6 numbers per row>
  ...
- The Effective Timoshenko Compliance Matrix
+ The Effective Timoshenko Beam Compliance Matrix
  --------------------------------------------
  ...
  Time taken: 12.34 sec
@@ -89,11 +89,76 @@ Model & Entry function & Output file \\
 msg-solid beam / plate / 3-D & \texttt{plate\_homo\_2d} & \texttt{<base>.out} \\
 msg-shell beam (Timoshenko)  & \texttt{build\_rm\_bundle} & \texttt{<yaml>\_Timo.out}, \texttt{<yaml>\_ABDG.out} \\
 msg-shell aperiodic segment  & \texttt{segment\_timo\_from\_3dyaml} & \texttt{<yaml>\_Timo.out} \\
-msg-shell solid props, cross-section SG & \texttt{build\_solid\_bundle} & \texttt{<yaml>\_C3D.out} \\
-msg-shell 3-D shell SG       & \texttt{shell\_sg3d} & \texttt{<yaml>\_C3D.out} \\
+msg-shell solid props, cross-section SG & \texttt{build\_solid\_bundle} & \texttt{<yaml>\_C3D.out}, \texttt{<yaml>\_ABDG.out} \\
+msg-shell 3-D shell SG       & \texttt{shell\_sg3d} & \texttt{<yaml>\_C3D.out}, \texttt{<yaml>\_ABDG.out} \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsection{One command: \texttt{opensg}}
+\label{sec:opensg-cli}
+
+You do not have to know which engine owns a file in order to run it. The
+package installs one dispatcher, \texttt{opensg}, alongside the two
+engine-specific commands \texttt{opensg\_solid} and \texttt{opensg\_shell};
+all three take the same one or two arguments:
+
+\begin{lstlisting}[style=shellst]
+opensg <sg.yaml>          # homogenization -- the default
+opensg <sg.yaml> H        # homogenization, stated explicitly
+opensg <sg.yaml> D        # dehomogenization: homogenize, then recover
+\end{lstlisting}
+
+\noindent
+\texttt{opensg} (\texttt{src/opensg/cli.py}) is a pure dispatcher and prints
+nothing of its own. It resolves the engine with
+\texttt{opensg\_solid.sg\_mesh.resolve\_msg} --- the YAML's \texttt{msg:} key
+(\texttt{shell} or \texttt{solid}) or, when that key is absent, the mesh
+\emph{dialect} (\texttt{nodes}/\texttt{cells}/\texttt{mat\_id} is solid,
+\texttt{nodes}/\texttt{elements}/\texttt{sets}/\texttt{sections}/\texttt{elementOrientations}
+is shell) --- and hands the untouched argument list to
+\texttt{opensg\_shell.cli.main} or \texttt{opensg\_solid.cli.main}. A
+\texttt{msg:} that contradicts the dialect is an error, not a silent
+override, and a file written before the key existed still runs. The
+engine-specific commands remain and behave identically, as do
+\texttt{python -m opensg\_solid <yaml>} and
+\texttt{python -m opensg\_shell <yaml>}. Everything else --- the macro
+model, the classical/shear-refined switch, the macro state for a recovery
+--- lives in the YAML header, which is why the command line needs no flags.
+
+Every run prints the same header, so the terminal states what was actually
+read before any number appears:
+
+\begin{Verbatim}[frame=single,fontsize=\small,samepage=false]
+============================================================================
+OpenSG -- a multiscale structural analysis tool based on the Mechanics of
+Structure Genome (MSG), developed by the Multiscale Structural Mechanics
+Group led by Prof. Wenbin Yu at Purdue University
+============================================================================
+
+ input     : /abs/path/to/iea_s10_shell.yaml
+ msg       : shell
+ SG dim    : 2D
+ analysis  : homogenization
+ macro model: beam, shear-refined
+
+Timoshenko Beam Stiffness Matrix  [eps11 gam12 gam13 kappa1 kappa2 kappa3]:
+[[ 2.76606e+10 ... ]]
+Homogenization stored in iea_s10_shell_Timo.out
+Time taken: 2.58 sec
+\end{Verbatim}
+
+Three lines of that header repay reading. \texttt{msg} is the engine that
+was resolved, so a mis-tagged file is visible on the first line of output.
+\texttt{SG dim} is the \textbf{ambient} dimension --- the space the SG
+occupies, \texttt{node\_span\_dim}, not the intrinsic dimension of the
+manifold --- so a Schwarz-P shell surface prints \texttt{3D} while a
+cross-section ring and a 2-D solid cell both print \texttt{2D}.
+\texttt{macro model} echoes \texttt{n\_model} and \texttt{refined}, and gains
+a trailing \texttt{, aperiodic} when the header sets \texttt{aperiodic}. For
+a dehomogenization the two closing lines are instead
+\texttt{Local field files are computed and stored.} and a single
+\texttt{Time taken}, covering the whole run.
 
 \subsection{The cores hold no paths}
 \label{sec:no-paths}
@@ -442,11 +507,11 @@ one input file, one entry function, one \texttt{.out} file per branch.
 
   \node[funcnode, below=8mm of f2] (f3) {\texttt{sg\_homo.shell\_sg3d}\\ one wall law for every element,\\ junction-edge count, periodic or\\ aperiodic boundary, one \texttt{splu}};
   \node[inputnode, left=5mm of f3] (r3) {3-D shell SG YAML\\ \texttt{schwarz\_p\_3Dshell.yaml}};
-  \node[outnode, right=5mm of f3] (o3) {\texttt{schwarz\_p\_3Dshell\_C3D.out}\\ the equivalent solid $6\times6$,\\ per unit-cell volume};
+  \node[outnode, right=5mm of f3] (o3) {\texttt{schwarz\_p\_3Dshell\_C3D.out}\\ \texttt{schwarz\_p\_3Dshell\_ABDG.out}\\ the equivalent solid $6\times6$,\\ per unit-cell volume};
 
   \node[funcnode, below=8mm of f3] (f4) {\texttt{sg\_homo.plate\_homo\_2d}\\ \texttt{load\_sg\_input} $\rightarrow$ \texttt{\_cell\_basis} $\rightarrow$\\ \texttt{get\_heterogeneous\_C\_matrix} $\rightarrow$\\ \texttt{\_beam\_homo\_kkt} (\texttt{n\_model} 1) or\\ \texttt{\_homo\_direct} (\texttt{n\_model} 2, 3)};
   \node[inputnode, left=5mm of f4] (r4) {solid SG, a SwiftComp \texttt{.sc}\\ or a YAML:\\ \texttt{RHC\_SW\_2UC\_45.yaml}};
-  \node[outnode, right=5mm of f4] (o4) {\texttt{RHC\_SW\_2UC\_45.out}\\ \texttt{n\_model} 1 named Timoshenko;\\ 2 Classical Plate (or the\\ Reissner-Mindlin one if\\ \texttt{shear\_refined}); 3 the 3-D law};
+  \node[outnode, right=5mm of f4] (o4) {\texttt{RHC\_SW\_2UC\_45.out}\\ \texttt{n\_model} 1 named Euler-\\ Bernoulli Beam or Timoshenko\\ Beam; 2 Classical Plate or\\ Reissner-Mindlin; 3 Cauchy\\ Continuum};
 
   \draw[capedge] (r1) -- (f1); \draw[capedge] (f1) -- (o1);
   \draw[capedge] (r2) -- (f2); \draw[capedge] (f2) -- (o2);
@@ -459,8 +524,10 @@ one input file, one entry function, one \texttt{.out} file per branch.
          calls it makes in order, green the \texttt{.out} file it leaves
          behind. All four \texttt{.out} files are written by the one writer
          \texttt{opensg\_solid.sg\_homo.write\_sc\_K}, which is why they share
-         a single layout; the \texttt{\_ABDG.out} companion of the ring route
-         is the one exception, written by \texttt{write\_abdg\_out}.}
+         a single layout; the \texttt{\_ABDG.out} companion --- written by
+         every route that reduces a layup to a wall plate law, the
+         cross-section rings and the 3-D shell SG alike --- is the one
+         exception, written by \texttt{write\_abdg\_out}.}
 \label{fig:pipelines}
 \end{figure}
 
@@ -472,7 +539,7 @@ YAML: nodes and two-node elements tracing the wall contour,
 \texttt{elementOrientations}, \texttt{sections} carrying a layup per element set,
 and \texttt{materials}. The entry function is
 \texttt{build\_rm\_bundle(shell\_yaml, ref=None, shear="mitc4\_g23",
-g\_source="msg")}, and it proceeds as follows.
+g\_source=None)}, and it proceeds as follows.
 
 \begin{enumerate}
 \item \texttt{sg\_mesh.load\_ring\_ref} reads the YAML and returns the contour
@@ -491,12 +558,20 @@ g\_source="msg")}, and it proceeds as follows.
 \item \texttt{sg\_materials.\_material\_by\_section} builds, per section, the
       wall plate ABD $6\times6$ at the chosen reference and the $2\times2$
       transverse-shear $G$.
-\item With the default \texttt{g\_source="msg"}, the wall $G$ of every section
-      is replaced by \texttt{rm\_plate\_msg}, the MSG (Yu-2002 least-squares)
-      through-thickness solve in \texttt{opensg\_solid.rm\_plate\_1D}, run at
-      the same \texttt{fraction=frac}. The alternative is
-      \texttt{g\_source="whitney"}, the complementary-energy shear-flow value.
-      The per-section laws are written to \texttt{<yaml>\_ABDG.out}.
+\item The wall $G$ of every section is then replaced by
+      \texttt{rm\_plate\_msg}, the MSG/VAM second-order-energy (Yu-2002
+      least-squares) projection in \texttt{opensg\_solid.rm\_plate\_1D}, run
+      at the same \texttt{fraction=frac}. \textbf{This is the only route and
+      there is no switch.} The retired \texttt{g\_source} selector is still
+      accepted by the signature so existing callers keep working, but any
+      value other than \texttt{msg} raises a \texttt{DeprecationWarning} and
+      is \emph{ignored} (\texttt{sg\_materials.check\_g\_source}), and an
+      emitted ABD cache records \texttt{g\_source: msg}. The
+      complementary-energy (Whitney-1973) shear flow survives only as the
+      internal numerical fallback on the rare laminate whose MSG $U^{*}$ fit
+      is not positive definite --- a guard, not a user-selectable
+      alternative. The per-section laws are written to
+      \texttt{<yaml>\_ABDG.out}.
 \item \texttt{sg\_assembly.compute\_k22} computes the hoop curvature per edge,
       the initial-curvature correction that makes a curved wall stiffer than a
       faceted approximation of it.
@@ -527,16 +602,25 @@ whose input is \texttt{iea\_s10\_shell.yaml} (the IEA-22 blade at $r/R=0.2$):
 
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section
-python beam_homo_shell.py
+opensg iea_s10_shell.yaml
 \end{lstlisting}
 
 \noindent
-It writes \texttt{iea\_s10\_shell\_Timo.out} (the Timoshenko stiffness and
-compliance), \texttt{iea\_s10\_shell\_ABDG.out} (the per-section wall laws),
-\texttt{iea\_s10\_mesh.png} (the contour coloured by layup) and
-\texttt{iea\_s10\_orient.png} (the compulsory $e_1/e_2/e_3$ orientation figure,
-emitted by \texttt{auto\_emit}). The printed diagonal is
-$[EA, GA_2, GA_3, GJ, EI_2, EI_3]$.
+The YAML carries \texttt{n\_model: 1}, \texttt{refined: 1} and
+\texttt{msg: shell}, so that one command runs the Timoshenko route and writes
+\texttt{iea\_s10\_shell\_Timo.out} (the Timoshenko stiffness and compliance)
+and \texttt{iea\_s10\_shell\_ABDG.out} (the per-section wall laws). The
+printed diagonal is $[EA, GA_2, GA_3, GJ, EI_2, EI_3]$. The shipped driver
+\texttt{beam\_homo\_shell.py} makes the same call through
+\texttt{build\_rm\_bundle} and additionally draws the two figures the CLI
+does not --- \texttt{iea\_s10\_mesh.png} (the contour coloured by layup) and
+\texttt{iea\_s10\_orient.png} (the compulsory $e_1/e_2/e_3$ orientation
+figure, emitted by \texttt{auto\_emit}) --- so run the script when you want
+those:
+
+\begin{lstlisting}[style=shellst]
+python beam_homo_shell.py
+\end{lstlisting}
 
 \subsection{msg-shell: 3-D segment $\rightarrow$ aperiodic Timoshenko $6\times6$}
 \label{sec:pipe-segment}
@@ -611,20 +695,26 @@ Here the SG is a surface in three dimensions --- a triply periodic minimal
 surface, a lattice of sheets --- and the answer wanted is the $6\times6$ of the
 equivalent homogeneous 3-D solid. The entry function is
 \texttt{shell\_sg3d(yaml\_path, omega=None, drill\_pen=1.0e-3,
-g\_source="msg", boundary="periodic")}.
+g\_source=None, solver="direct", boundary=None, shear="mitc")}.
+\texttt{boundary=None} means \emph{read it from the YAML header}, where the
+optional \texttt{aperiodic: 1} key is the opt-out --- the same key
+\texttt{opensg\_solid.plate\_homo\_2d} reads, so the two CLIs share one
+header contract; an explicit argument always wins.
 
 \begin{enumerate}
 \item The YAML's nodes, elements and \texttt{elementOrientations} are read; the
       element normal $e_3$ is columns 7 through 9 of the orientation rows.
-      Triangles are accepted by repeating the last node.
+      Triangles and quads may be mixed: they are assembled as two separate
+      element batches (MITC3 and MITC4) scattered into the same global
+      system, never padded into one another.
 \item The single wall law (ABD at the mid-surface reference plus the $2\times2$
-      $G$, again from \texttt{rm\_plate\_msg} when
-      \texttt{g\_source="msg"}) is built once and applied to every element.
+      $G$, again from \texttt{rm\_plate\_msg}, the only $G$ route) is built
+      once and applied to every element.
 \item Junction lines are counted: any shell edge shared by more than two
       elements. The count appears in the \texttt{.out} banner, because it tells
       you how much of the cell's stiffness comes from junction physics the
       plain shell lattice does not resolve.
-\item The boundary treatment. With the default \texttt{boundary="periodic"} the
+\item The boundary treatment. With \texttt{boundary="periodic"}, the default, the
       periodic map ties opposite faces, edges and corners through the sparse
       assembly map, and the three rigid translations are removed by three
       area-weighted Lagrange rows. With \texttt{boundary="aperiodic"} the macro
@@ -643,12 +733,20 @@ g\_source="msg", boundary="periodic")}.
       strain columns.
 \item $\mathbf{D}_{\mathrm{eff}} = \mathbf{D}_{ee} +
       \mathbf{V}_0^{T}\mathbf{D}_{he}$ is symmetrised and divided by $\omega$.
-      The default $\omega$ is the integrated midsurface \emph{surface area} ---
-      the 3-D analogue of the plane-section $\omega = $ perimeter --- and that
-      is the normalisation of the returned \texttt{C3D}. The
-      \texttt{<yaml>\_C3D.out} file is instead written per unit-cell
-      \emph{volume}, so its moduli compare directly with a solid \texttt{.K}
-      file.
+      The default $\omega$ is the \emph{volume the equivalent continuum
+      occupies}, i.e.\ the node bounding-box volume measured from the mesh
+      --- the same convention \texttt{opensg\_solid} uses, and the same cell
+      the periodic assembly map ties --- so the returned \texttt{C3D}, the
+      printed matrix and \texttt{<yaml>\_C3D.out} are one and the same
+      matrix, directly comparable with a solid \texttt{.K}. Pass
+      \texttt{omega} explicitly (or set the YAML \texttt{omega:} header key)
+      only when the continuum occupies something else; the midsurface
+      \emph{surface area}, for a per-unit-area wall law, is returned
+      alongside as \texttt{surface\_area}.
+\item The step-1 record --- the $8\times8$ Reissner--Mindlin wall plate law
+      and its compliance, one block per section --- is written to
+      \texttt{<yaml>\_ABDG.out} by the same \texttt{write\_abdg\_out} the
+      cross-section routes use.
 \end{enumerate}
 
 Because the wall law is a Reissner--Mindlin plate law, the sheet thickness is a
@@ -670,14 +768,20 @@ sweep. Produced by \texttt{schwarz\_solid\_props.py} in
 
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG
-python make_schwarz_yaml.py
-python schwarz_solid_props.py
+python make_schwarz_yaml.py          # generates schwarz_p_3Dshell.yaml
+opensg schwarz_p_3Dshell.yaml        # homogenizes it
 \end{lstlisting}
 
 \noindent
-The run prints the junction-edge count, the number of DOF and the solve time,
-then the $6\times6$; it writes \texttt{schwarz\_p\_3Dshell\_C3D.out} and
-\texttt{schwarz\_p\_mesh.png}. The companion script
+The first command is the mesh generator and has no CLI equivalent; the second
+is the plain homogenization, which the YAML's own header
+(\texttt{n\_model: 3}, \texttt{msg: shell}) fully describes. The run prints
+the junction-edge count, the number of DOF and the solve time, then the
+$6\times6$; it writes \texttt{schwarz\_p\_3Dshell\_C3D.out} and
+\texttt{schwarz\_p\_3Dshell\_ABDG.out}. The driver
+\texttt{schwarz\_solid\_props.py} makes the same call through
+\texttt{shell\_sg3d} and additionally writes \texttt{schwarz\_p\_mesh.png}.
+The companion script
 \texttt{compare\_boundary\_modes.py} runs the same cell under both boundary
 treatments and tabulates them in \texttt{boundary\_compare.dat}. This route is
 validated against its own solid counterpart: for the Schwarz-P cell the shell SG
@@ -696,23 +800,33 @@ from opensg_solid.sg_homo import plate_homo_2d
 r = plate_homo_2d(sc_path,               # a .sc or .yaml SG file
                   material_param=None,   # (n_mat, 9) engineering override
                   angles=None,           # deg per material
-                  n_model=2,             # 1 beam, 2 plate, 3 3-D solid
+                  n_model=None,          # 1 beam, 2 plate, 3 3-D solid
+                  refined=None,          # 0 classical, 1 shear-refined
                   workdir=None,
                   elem_rotation=None,    # (E, 9) per-element direction cosines
                   solver="direct",       # "direct" | "cg"
-                  shear_refined=False,   # + the RM G 2x2 (plate only)
+                  shear_refined=False,   # legacy alias of refined=1 (plate)
                   plot=True,             # writes <base>_mesh.png
-                  boundary=None)         # "periodic" (default) | "aperiodic"
+                  boundary=None,         # "periodic" (default) | "aperiodic"
+                  density=None,          # (n_mat,) beam mass rho
+                  omega=None)            # user SG measure (3-D solid)
 \end{lstlisting}
 
 \noindent
 and the argument that selects the physics is \texttt{n\_model}: it decides which
-macro strain set $\Gamma_e$ is built. The steps shared by all three are:
+macro strain set $\Gamma_e$ is built. \texttt{n\_model}, \texttt{refined},
+\texttt{boundary} and \texttt{omega} all default to \texttt{None}, meaning
+\emph{take it from the YAML header}, so a self-describing SG file needs no
+arguments at all --- that is what makes \texttt{opensg <yaml>} equivalent to
+the call. The steps shared by all three macro models are:
 
 \begin{enumerate}
 \item \texttt{sg\_mesh.load\_sg\_input} parses the \texttt{.sc} or YAML into a
       dict carrying \texttt{dim} (the SG dimension, 1, 2 or 3), \texttt{nodes},
-      \texttt{cells}, \texttt{mat\_id} and the materials. With
+      \texttt{cells}, \texttt{mat\_id} and the materials. That \texttt{dim} is
+      a \emph{parse result}, not something you write: the input contract has
+      no \texttt{dim:} key and no \texttt{scale:} key, and both the dimension
+      and the SG measure $\omega$ are read from the mesh itself. With
       \texttt{plot=True} it also writes \texttt{<base>\_mesh.png} of the actual
       mesh, elements coloured by material. Mixed element types in one SG are
       rejected --- the solver runs one homogeneous batch.
@@ -747,18 +861,22 @@ From there the routes diverge:
       generalized-Timoshenko reduction produces the $6\times6$. The result dict
       carries \texttt{C\_eff} (the Timoshenko $6\times6$) and
       \texttt{C\_eff\_EB} (the classical $4\times4$ from the same run). The
-      output is \texttt{<base>.out}, named \emph{Timoshenko}, with $\omega$ in
-      the banner. This path needs an SG of dimension $\ge2$.
+      output is \texttt{<base>.out}, named \emph{Timoshenko Beam} with
+      \texttt{refined: 1} and \emph{Euler-Bernoulli Beam} with
+      \texttt{refined: 0}, with $\omega$ in the banner. This path needs an SG
+      of dimension $\ge2$.
 \item[\texttt{n\_model=2}, plate.] The macro strain set is
       $\bar\varepsilon = [\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;
       \kappa_{11}\;\kappa_{22}\;\kappa_{12}]$ and the answer is the plate ABD,
-      written as \emph{Classical Plate}. With \texttt{shear\_refined=True} the
-      first-order warping ladder \texttt{plate\_shear\_ladder} runs as well and
-      the result gains \texttt{G\_msg} ($2\times2$), \texttt{ABDG} (the
-      $8\times8$ with the shear block on the diagonal) and
-      \texttt{A6\_ladder}.
+      written as \emph{Classical Plate}. With \texttt{refined: 1} (or the
+      legacy \texttt{shear\_refined=True}) the first-order warping ladder
+      \texttt{plate\_shear\_ladder} runs as well, the result gains
+      \texttt{G\_msg} ($2\times2$), \texttt{ABDG} (the $8\times8$ with the
+      shear block on the diagonal) and \texttt{A6\_ladder}, and the file is
+      named \emph{Reissner-Mindlin}.
 \item[\texttt{n\_model=3}, solid.] The macro strain set is the six 3-D strains
-      and the answer is the equivalent solid $6\times6$, written with the
+      and the answer is the equivalent solid $6\times6$, named \emph{Cauchy
+      Continuum} and written with the
       orthotropic-approximated engineering constants appended
       ($E_1$, $E_2$, $E_3$, $G_{12}$, $G_{13}$, $G_{23}$, $\nu_{12}$,
       $\nu_{13}$, $\nu_{23}$).

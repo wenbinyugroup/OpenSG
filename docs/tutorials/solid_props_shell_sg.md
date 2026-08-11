@@ -22,6 +22,21 @@ generator, the SG YAML, the driver, a timed `.out` in SwiftComp format, the mesh
 
 ## Driver
 
+A yaml whose header carries `msg: shell` and `n_model: 3` runs straight through the unified
+command:
+
+```bash
+opensg cell_1Dshell.yaml
+```
+
+The SG measure $\omega$ is the `omega:` header key when the file declares one — e.g. the wall
+*material* area of a closed tube, which is not a geometric property of the node cloud — and
+otherwise the measured periodic cell, the node **bounding box**. (The bounding box is not the
+convex hull of the contour; the two differ on any non-convex cell, which is every honeycomb
+and lattice.)
+
+Through the API:
+
 ```python
 from opensg_shell import build_solid_bundle
 
@@ -30,9 +45,11 @@ C3D = b["C3D"]            # 6x6 equivalent solid stiffness
 b["solve_time"]           # seconds; also written into <yaml>_C3D.out
 ```
 
-`build_solid_bundle` writes `<yaml>_C3D.out` by default — the SwiftComp `.K` layout (effective
-stiffness, effective compliance, orthotropic-approximated engineering constants) with an
-` OpenSG …` banner and a ` Time taken: … sec` footer.
+`build_solid_bundle` writes `<yaml>_C3D.out` by default — the SwiftComp `.K` layout
+(`The Effective Cauchy Continuum Stiffness Matrix`, its compliance, and the
+orthotropic-approximated engineering constants) with an ` OpenSG …` banner and a
+` Time taken: … sec` footer. It also writes `<yaml>_ABDG.out`, the step-1 wall plate law:
+one $8\times8$ Reissner–Mindlin ABDG block and its compliance per section.
 
 ## Validation — Deo & Yu (2023)
 
@@ -45,7 +62,7 @@ column.
 
 ### Cellular solid, $\theta = +15^\circ$ (paper Table 1)
 
-Aluminium $E=68.9$ GPa, $\nu=0.33$; $l=h=10$ cm, $t=5$ mm. Solve 1.2 s.
+Aluminium $E=68.9$ GPa, $\nu=0.33$; $l=h=10$ cm, $t=5$ mm. Solve 1.5 s.
 
 | term | OpenSG-TW (RM) | Deo MSG-TW | SwiftComp | ours % | Deo TW % |
 |---|---|---|---|---|---|
@@ -61,7 +78,7 @@ Aluminium $E=68.9$ GPa, $\nu=0.33$; $l=h=10$ cm, $t=5$ mm. Solve 1.2 s.
 
 ### Re-entrant cellular solid, $\theta = -15^\circ$ (paper Table 2)
 
-The auxetic lattice, with the negative $C_{13}$, $C_{23}$ couplings. Solve 0.3 s.
+The auxetic lattice, with the negative $C_{13}$, $C_{23}$ couplings. Solve 0.2 s.
 
 | term | OpenSG-TW (RM) | Deo MSG-TW | SwiftComp | ours % | Deo TW % |
 |---|---|---|---|---|---|
@@ -115,7 +132,7 @@ second.
 
 Cell $25.4\times25.4$ mm, horizontal segments at $y_3=\pm5.84$ mm, one vertical segment through
 the centre; every wall a $[15]_8$ laminate, $t=1.016$ mm; $E_1=141.96$, $E_2=E_3=9.79$,
-$G=6.136$ GPa, $\nu=0.42$. Solve 1.7 s.
+$G=6.136$ GPa, $\nu=0.42$. Solve 1.9 s.
 
 | term | OpenSG-TW (RM) | Deo MSG-TW | SwiftComp | ours % | Deo TW % |
 |---|---|---|---|---|---|

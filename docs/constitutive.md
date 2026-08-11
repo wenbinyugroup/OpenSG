@@ -24,17 +24,25 @@ writer `opensg_solid.sg_homo.write_sc_K(path, C, solve_time, model, constants, n
 file opens with an ` OpenSG <model>` banner, prints the effective stiffness, then its exact
 inverse (the effective compliance), and closes with ` Time taken: <t> sec`. The `name`
 argument is the only thing that changes the matrix title, and it identifies which macro law
-you are looking at:
+you are looking at. **`name` is always the macro law's console title**, so the `.out` header
+and the line the terminal prints are word-for-word the same:
 
 | `name` passed to `write_sc_K` | title printed in the `.out` | macro law |
 |---|---|---|
-| `"Timoshenko"` | `The Effective Timoshenko Stiffness Matrix` | beam $6\times6$ |
+| `"Euler-Bernoulli Beam"` | `The Effective Euler-Bernoulli Beam Stiffness Matrix` | beam $4\times4$ (classical) |
+| `"Timoshenko Beam"` | `The Effective Timoshenko Beam Stiffness Matrix` | beam $6\times6$ (shear-refined) |
 | `"Classical Plate"` | `The Effective Classical Plate Stiffness Matrix` | plate ABD $6\times6$ |
-| `"Reissner-Mindlin Plate"` | `The Effective Reissner-Mindlin Plate Stiffness Matrix` | plate ABDG $8\times8$ |
-| `""` (omitted) | `The Effective Stiffness Matrix` | 3-D solid $6\times6$ |
+| `"Reissner-Mindlin"` | `The Effective Reissner-Mindlin Stiffness Matrix` | plate ABDG $8\times8$ |
+| `"Cauchy Continuum"` | `The Effective Cauchy Continuum Stiffness Matrix` | 3-D solid $6\times6$ |
 
 Only the last of these also prints ` The Engineering Constants (Approximated as Orthotropic)`
 — the `constants=True` branch, which is meaningful only for a 3-D elasticity law.
+
+(`name=""` would give the anonymous ` The Effective Stiffness Matrix`; no macro law uses it.
+The per-section *wall* laws inside a shell beam run are written by a different writer,
+`opensg_shell.sg_homo.write_abdg_out`, which titles each block
+`The Effective Reissner-Mindlin Plate Stiffness Matrix` — a wall plate law, not the macro law
+of the run.)
 
 ## 1. Beam — the Timoshenko $6\times6$
 
@@ -123,11 +131,13 @@ multipliers, $\gamma_{23}$ tied by MITC) and takes its wall transverse shear fro
 least-squares plate solution. From `examples/OpenSG_shell/IEA_blade_beam`:
 
 ```bash
-python 1_homo_beam_props.py
+opensg iea_s10_shell.yaml
 ```
 
 which writes `iea_s10_shell_Timo.out`, banner
-` OpenSG msg-shell beam model [ext sh2 sh3 twist bend2 bend3]`.
+` OpenSG msg-shell beam model [ext sh2 sh3 twist bend2 bend3]`, plus the per-section wall laws
+in `iea_s10_shell_ABDG.out`. (`python 1_homo_beam_props.py` is the same homogenization inside
+the blade pipeline, where it also emits the station figures.)
 
 The segment route replaces axial periodicity by Dirichlet data: each end cross-section is
 extracted topologically, solved on its own with `ring_indep`, and its $V_0$/$V_1$ fields are
@@ -158,11 +168,12 @@ extension–bending coupling and vanishes only for a laminate that is symmetric 
 reference surface. Run it with
 
 ```bash
-python plate_homo_2dsg.py
+opensg RHC_SW_2UC_45.yaml
 ```
 
 which writes `RHC_SW_2UC_45.out`, banner ` OpenSG msg-solid plate model, omega 35.248001,
-periodic`, title `The Effective Classical Plate Stiffness Matrix`.
+periodic`, title `The Effective Classical Plate Stiffness Matrix` at `refined: 0`.
+(`python plate_homo_2dsg.py` is the same call through the API.)
 
 ### Reissner–Mindlin plate law
 
@@ -297,16 +308,27 @@ The TPMS 3-D solid SG shipped in
 law:
 
 ```bash
-python run_sample_1.py
+opensg Sample_1.yaml
 ```
 
-Its `Sample_1.out` reports $E_1 = 2.0547093\times10^{10}$, $E_2 = 2.0547272\times10^{10}$,
-$E_3 = 2.0546693\times10^{10}$ Pa, $G_{12} = 1.5065850\times10^{10}$ Pa and
-$\nu_{12} = 0.35652386$ for TPMS Sample_1 in aluminium ($E = 69$ GPa, $\nu = 0.3$) at
-$\omega = 0.3$ — a cubic cell, correctly returning three equal Young's moduli from three
-independent solves. The same nine constants appear in `Sample_1_periodic.out` one directory up,
-the copy saved by `compare_boundary_modes.py`, whose periodic column is digit-for-digit
-identical to the SwiftComp `.K`. (The sibling `tpms_solid_props.py` runs the same two samples at
+(`python run_sample_1.py` is the same homogenization through the API, plus the parse of the
+vendor `.K` and the comparison table.)
+
+Its `Sample_1.out` reports $E_1 = 6.1641278\times10^{9}$, $E_2 = 6.1641815\times10^{9}$,
+$E_3 = 6.1640078\times10^{9}$ Pa, $G_{12} = 4.5197549\times10^{9}$ Pa and
+$\nu_{12} = 0.35652386$ for TPMS Sample_1 in aluminium ($E = 69$ GPa, $\nu = 0.3$) — a cubic
+cell, correctly returning three equal Young's moduli from three independent solves.
+
+The banner reads ` OpenSG msg-solid 3D elastic model, omega 1, periodic`. **$\omega$ for a 3-D
+solid SG is the node bounding-box volume** — the volume the equivalent continuum occupies and
+the cell the periodic map ties — not the summed element (material) volume. This cell is a unit
+cell, so $\omega = 1$ and the reported law is the per-unit-cell law. The practical consequence
+is that the `.out` is now **directly** comparable with a SwiftComp `.K`: $C_{11} =
+1.0190158\times10^{10}$ Pa is 10190.1580 MPa against the `.K`'s 10190.1580, with no rescale.
+Under the older material-volume convention the file was $1/\text{relative density}$ too stiff
+and only the comparison script's $C\,\omega$ rescale brought the tables into agreement. The
+same nine constants appear in `Sample_1_periodic.out` one directory up, the copy saved by
+`compare_boundary_modes.py`. (The sibling `tpms_solid_props.py` runs the same two samples at
 $E = 70$ GPa and writes `Sample_1_msg_solid.out`, so its numbers will not match these.)
 
 ## 4. The wall law — per-section $8\times8$ ABDG
@@ -314,8 +336,10 @@ $E = 70$ GPa and writes `Sample_1_msg_solid.out`, so its numbers will not match 
 The msg-shell routes need a plate law for **each wall of the cross-section** before they can
 solve the shell SG at all, and that intermediate is exported so it can be inspected
 independently. `opensg_shell.sg_homo.write_abdg_out` writes one $8\times8$ stiffness and its
-compliance per layup section to `<yaml>_ABDG.out`. Both `build_rm_bundle` and
-`build_solid_bundle` call it, so it appears next to every shell `.out`.
+compliance per layup section to `<yaml>_ABDG.out`. Every route that reduces a layup to a wall
+plate law calls it — the cross-section rings through `build_rm_bundle` and
+`build_solid_bundle`, and the 3-D shell SG through `shell_sg3d` — so it appears next to every
+shell `.out`, and the halfway point of the two-step reduction is always inspectable.
 
 The file header states the row convention verbatim:
 
@@ -336,24 +360,24 @@ Each block is preceded by its section identity and full layup, for example
 Two facts about how these blocks are built matter when comparing them against hand
 calculations. First, the ABD is shifted by the parallel-axis rule to the reference surface the
 YAML declares (`reference: center` gives the laminate mid-surface, `fraction = 0.5`), so the
-$\mathbf B$ block depends on that choice. Second, with the default `g_source="msg"` the
-transverse-shear block $\mathbf G$ is **replaced** by the MSG least-squares result from
-`rm_plate_msg` — it is not a shear-correction-factor estimate.
+$\mathbf B$ block depends on that choice. Second, the transverse-shear block $\mathbf G$ is
+**always replaced** by the MSG least-squares result from `rm_plate_msg` — it is not a
+shear-correction-factor estimate, and there is no switch that selects anything else.
 
 ## 5. Where each law is produced and written
 
 | macro law | producing function | output file | title in the `.out` |
 |---|---|---|---|
-| Timoshenko beam $6\times6$ | `opensg_solid.sg_homo.plate_homo_2d(n_model=1)` → `_beam_homo_kkt` | `<sg>.out` | `The Effective Timoshenko Stiffness Matrix` |
-| Timoshenko beam $6\times6$ | `opensg_shell.build_rm_bundle` → `ring_indep` | `<yaml>_Timo.out` | `The Effective Timoshenko Stiffness Matrix` |
-| Timoshenko beam $6\times6$ | `opensg_shell.segment_timo_from_3dyaml` | `<yaml>_Timo.out` | `The Effective Timoshenko Stiffness Matrix` |
-| Euler–Bernoulli beam $4\times4$ | `_beam_homo_kkt` → `r["C_eff_EB"]` | in-memory only | — |
+| Timoshenko beam $6\times6$ | `opensg_solid.sg_homo.plate_homo_2d(n_model=1)` → `_beam_homo_kkt` | `<sg>.out` | `The Effective Timoshenko Beam Stiffness Matrix` |
+| Timoshenko beam $6\times6$ | `opensg_shell.build_rm_bundle` → `ring_indep` | `<yaml>_Timo.out` | `The Effective Timoshenko Beam Stiffness Matrix` |
+| Timoshenko beam $6\times6$ | `opensg_shell.segment_timo_from_3dyaml` | `<yaml>_Timo.out` | `The Effective Timoshenko Beam Stiffness Matrix` |
+| Euler–Bernoulli beam $4\times4$ | `_beam_homo_kkt` → `r["C_eff_EB"]` (`refined: 0`) | `<sg>.out` | `The Effective Euler-Bernoulli Beam Stiffness Matrix` |
 | Classical plate ABD $6\times6$ | `plate_homo_2d(n_model=2)` | `<sg>.out` | `The Effective Classical Plate Stiffness Matrix` |
-| RM plate ABDG $8\times8$ | `plate_homo_2d(n_model=2, shear_refined=True)` → `plate_shear_ladder` | `<sg>.out` | `The Effective Reissner-Mindlin Plate Stiffness Matrix` |
-| RM plate ABDG $8\times8$ | `opensg_solid.rm_plate_1D.msg_rm_plate.rm_plate_msg` → `r["ABDG"]` | `<layup_db>_plate_homo.out` | `The Effective Reissner-Mindlin Plate Stiffness Matrix` |
-| 3-D solid $6\times6$ | `plate_homo_2d(n_model=3)` | `<sg>.out` | `The Effective Stiffness Matrix` + engineering constants |
-| 3-D solid $6\times6$ | `opensg_shell.build_solid_bundle` → `ring_solid` | `<yaml>_C3D.out` | `The Effective Stiffness Matrix` + engineering constants |
-| 3-D solid $6\times6$ | `opensg_shell.sg_homo.shell_sg3d` | `<yaml>_C3D.out` | `The Effective Stiffness Matrix` + engineering constants |
+| RM plate ABDG $8\times8$ | `plate_homo_2d(n_model=2, shear_refined=True)` → `plate_shear_ladder` | `<sg>.out` | `The Effective Reissner-Mindlin Stiffness Matrix` |
+| RM plate ABDG $8\times8$ | `opensg_solid.rm_plate_1D.msg_rm_plate.rm_plate_msg` → `r["ABDG"]` | `<layup_db>_plate_homo.out` | `The Effective Reissner-Mindlin Stiffness Matrix` |
+| 3-D solid $6\times6$ | `plate_homo_2d(n_model=3)` | `<sg>.out` | `The Effective Cauchy Continuum Stiffness Matrix` + engineering constants |
+| 3-D solid $6\times6$ | `opensg_shell.build_solid_bundle` → `ring_solid` | `<yaml>_C3D.out` | `The Effective Cauchy Continuum Stiffness Matrix` + engineering constants |
+| 3-D solid $6\times6$ | `opensg_shell.sg_homo.shell_sg3d` | `<yaml>_C3D.out` | `The Effective Cauchy Continuum Stiffness Matrix` + engineering constants |
 | Wall plate law $8\times8$, per section | `opensg_shell.sg_homo.write_abdg_out` | `<yaml>_ABDG.out` | `The Effective Reissner-Mindlin Plate Stiffness Matrix` (one block per section) |
 
 ## 6. Running the laws backwards: two-step recovery

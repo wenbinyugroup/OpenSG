@@ -135,31 +135,47 @@ SwiftComp \texttt{.K} column format.
 
 The \texttt{name} argument is the only thing that changes the matrix title, and
 it identifies which macro law you are looking at (Table~\ref{tab:outnames}).
+\textbf{\texttt{name} is always the macro law's console title}, so the
+\texttt{.out} header and the line the terminal prints are word-for-word the
+same.
 
 \begin{table}[htbp]
 \centering
 \caption{The \texttt{name} argument of \texttt{write\_sc\_K} and the title it
 prints. The title is the fastest way to tell which law an \texttt{.out} file
-holds.}
+holds, and it is also the line the run prints to the terminal.}
 \label{tab:outnames}
-\footnotesize
+\scriptsize
 \begin{tabular}{lll}
 \toprule
 \texttt{name} passed to \texttt{write\_sc\_K} & title printed in the \texttt{.out} & macro law \\
 \midrule
-\texttt{"Timoshenko"} & \texttt{The Effective Timoshenko Stiffness Matrix} & beam $6\times6$ \\
+\texttt{"Cauchy Continuum"} & \texttt{The Effective Cauchy Continuum Stiffness Matrix} & 3-D solid $6\times6$ \\
+\texttt{"Timoshenko Beam"} & \texttt{The Effective Timoshenko Beam Stiffness Matrix} & beam $6\times6$, shear-refined \\
+\texttt{"Euler-Bernoulli Beam"} & \texttt{The Effective Euler-Bernoulli Beam Stiffness Matrix} & beam $4\times4$, classical \\
 \texttt{"Classical Plate"} & \texttt{The Effective Classical Plate Stiffness Matrix} & plate ABD $6\times6$ \\
-\texttt{"Reissner-Mindlin Plate"} & \texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix} & plate ABDG $8\times8$ \\
-\texttt{""} (omitted) & \texttt{The Effective Stiffness Matrix} & 3-D solid $6\times6$ \\
+\texttt{"Reissner-Mindlin"} & \texttt{The Effective Reissner-Mindlin Stiffness Matrix} & plate ABDG $8\times8$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Only the last of these also prints
+Only the first of these also prints
 \verb| The Engineering Constants (Approximated as Orthotropic)|. That is the
 \texttt{constants=True} branch, and it is meaningful only for a
 three-dimensional elasticity law; the beam and plate calls pass
 \texttt{constants=False}.
+
+Two footnotes to the table. An empty \texttt{name} would give the anonymous
+\texttt{The Effective Stiffness Matrix}, but no macro law uses it any more.
+And the per-section \emph{wall} laws written by the other writer,
+\texttt{opensg\_shell.sg\_homo.write\_abdg\_out}, keep the title
+\texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix}, one block per
+section (Section~\ref{sec:wallabdg}) --- a wall plate law, not the macro law of
+the run. Older documentation used \texttt{Timoshenko},
+\texttt{Reissner-Mindlin Plate} and an anonymous
+\texttt{The Effective Stiffness Matrix} for the 3-D solid law; those spellings
+are stale, and the 25 baseline \texttt{.out} files under \texttt{examples/}
+were regenerated to the titles above.
 
 \section{Beam: the Timoshenko $6\times6$}
 \label{sec:timo}
@@ -225,10 +241,14 @@ materials and the \texttt{reference:} field. From
 \texttt{examples/OpenSG\_shell/IEA\_blade\_beam}:
 
 \begin{lstlisting}[style=shellst]
-python 1_homo_beam_props.py
+opensg iea_s10_shell.yaml
 \end{lstlisting}
 
-The driver's user block is three lines long; only the station name changes:
+\texttt{opensg} is the unified entry point: it resolves the engine from the
+YAML's \texttt{msg:} key (or, if the key is absent, from the mesh dialect) and
+runs the homogenization. The driver \texttt{1\_homo\_beam\_props.py} does the
+same solve from Python and adds the figures. Its user block is three lines
+long; only the station name changes:
 
 \begin{lstlisting}[style=opensg,caption={The complete user input of the shell beam driver. build\_rm\_bundle reads iea\_s10\_shell.yaml.}]
 name = "iea_s10"                  # IEA-22 station at r/R = 0.20
@@ -239,7 +259,7 @@ C6 = np.asarray(B["Timo"])
 \texttt{build\_rm\_bundle} writes two files by itself: the SwiftComp-layout
 \texttt{<yaml base>\_Timo.out} (here \texttt{iea\_s10\_shell\_Timo.out}) with
 banner \verb| OpenSG msg-shell beam model [ext sh2 sh3 twist bend2 bend3]| and
-title \texttt{The Effective Timoshenko Stiffness Matrix}, and the per-section
+title \texttt{The Effective Timoshenko Beam Stiffness Matrix}, and the per-section
 wall law \texttt{<yaml base>\_ABDG.out} described in
 Section~\ref{sec:wallabdg}. The driver additionally saves the bare $6\times6$
 as \texttt{iea\_s10\_beam\_Timo.out} and the ring mesh figure
@@ -285,8 +305,13 @@ the same factorization, then the $6\times6$ reduction in
 \texttt{examples/OpenSG-solid/7\_get\_beam\_props\_from\_SG}:
 
 \begin{lstlisting}[style=shellst]
-python beam_homo_sg.py
+opensg RHC_SW_2UC_45.yaml
 \end{lstlisting}
+
+The same dispatcher serves the solid engine: this YAML's header carries
+\texttt{msg: solid} and \texttt{n\_model: 1}, so \texttt{opensg} hands it to
+\texttt{opensg\_solid}. The driver \texttt{beam\_homo\_sg.py} runs the same
+model from Python with the material table written out in full:
 
 \begin{lstlisting}[style=opensg,caption={The user block of beam\_homo\_sg.py. The material rows are (E1,E2,E3,G12,G13,G23,nu12,nu13,nu23) in MPa; angles rotates each material about the SG normal.}]
 n_model = 1                    # 1: Beam; 2: Plate; 3: 3D elastic
@@ -348,9 +373,13 @@ Timoshenko \texttt{r["C\_eff"]}. In \texttt{\_beam\_homo\_kkt} it is formed as
 $\mathbf C_{\mathrm{eb}} = (D_{ee} + D_1^{V_0})/\omega$ immediately after the
 $V_0$ solve, before the first-order ladder runs, and it is then passed straight
 into \texttt{finalize\_v1\_and\_compute\_deff} as the $\mathbf A$ block of the
-Timoshenko transformation. It is not written to the \texttt{.out} --- the
-\texttt{.out} always carries the $6\times6$ --- so a driver that wants it must
-print it, as \texttt{beam\_homo\_sg.py} does.
+Timoshenko transformation. Which of the two lands in the \texttt{.out} is the
+header's \texttt{refined:} key, exactly as on the plate side:
+\texttt{refined: 1} writes the Timoshenko $6\times6$, and \texttt{refined: 0}
+writes this $4\times4$ under the title
+\texttt{The Effective Euler-Bernoulli Beam Stiffness Matrix}. Either way both
+matrices are in the result dict, so a driver can print the other one, as
+\texttt{beam\_homo\_sg.py} does.
 
 \subsection{Which routes produce the beam law}
 
@@ -409,13 +438,25 @@ laminate that is symmetric about the chosen reference surface, so it is a
 property of the SG \emph{and} of where you put the reference. Run it with
 
 \begin{lstlisting}[style=shellst]
-python plate_homo_2dsg.py
+opensg RHC_SW_2UC_45.yaml
 \end{lstlisting}
 
-which calls \texttt{plate\_homo\_2d(name + ".yaml", material\_param=...,
-angles=..., n\_model=2)} and writes \texttt{RHC\_SW\_2UC\_45.out} with banner
-\verb| OpenSG msg-solid plate model, omega 35.248001, periodic| and title
-\texttt{The Effective Classical Plate Stiffness Matrix}. Here $\omega =
+which writes \texttt{RHC\_SW\_2UC\_45.out} with banner
+
+\begin{Verbatim}[fontsize=\small,frame=single,framesep=4pt]
+ OpenSG msg-solid plate model, omega 35.248001, periodic
+\end{Verbatim}
+
+\noindent
+Which of the
+two plate laws comes back is the header's \texttt{refined:} key:
+\texttt{refined: 0} returns the classical ABD $6\times6$ of this section, under
+the title \texttt{The Effective Classical Plate Stiffness Matrix}; the shipped
+file sets \texttt{refined: 1}, so the run as shipped returns the
+Reissner--Mindlin ABDG $8\times8$ of the next section, whose leading $6\times6$
+is exactly the ABD quoted here. (\texttt{plate\_homo\_2dsg.py} is the same solve
+from Python, and it also regenerates the \texttt{.yaml} and \texttt{.msh} from
+the shipped \texttt{.sc}.) Here $\omega =
 35.248001$ is the in-plane SG measure (the cell width), and the leading entries
 are $A_{11} = 3.3586\times10^{5}$, $A_{22} = 1.1291\times10^{5}$,
 $A_{66} = 1.0552\times10^{5}$ N/mm and $D_{11} = 9.0368\times10^{7}$,
@@ -430,7 +471,8 @@ i.e.\ the cell is symmetric about its own mid-surface to solver precision.
 Figure~\ref{fig:rhcmesh}, run here with $n_{\mathrm{model}} = 2$: the classical
 plate ABD $6\times6$ whose leading entries are quoted in this section is this
 mesh's answer, written to \texttt{RHC\_SW\_2UC\_45.out} under the title
-\texttt{The Effective Classical Plate Stiffness Matrix}. Only the model choice
+\texttt{The Effective Classical Plate Stiffness Matrix} at
+\texttt{refined: 0}. Only the model choice
 changes between this run and the beam run of
 Section~\ref{sec:timo}; the SG is byte-identical.}
 \label{fig:rhcplate}
@@ -544,7 +586,8 @@ solve, re-integrating the value-product ladder blocks on a quadrature exact to
 degree $2p+2$. It adds \texttt{r["G\_msg"]} ($2\times2$),
 \texttt{r["A6\_ladder"]}, \texttt{r["X\_shear"]}, \texttt{r["Ustar\_rel"]} and
 \texttt{r["ABDG"]} to the result dict, and the \texttt{.out} switches its title
-to \texttt{Reissner-Mindlin Plate} and its matrix to the $8\times8$. Passing
+to \texttt{The Effective Reissner-Mindlin Stiffness Matrix} and its matrix to
+the $8\times8$. Passing
 \texttt{shear\_refined=True} with any \texttt{n\_model} other than $2$ raises a
 \texttt{ValueError}.
 
@@ -631,14 +674,20 @@ entry point & SG & normalisation \\
 \midrule
 \texttt{plate\_homo\_2d(..., n\_model=3)} & 1-D/2-D/3-D solid SG & $\mathbf C_{\mathrm{eff}} = (\bar{\mathbf D} + \mathbf D_1)/\omega$ \\
 \texttt{opensg\_shell.build\_solid\_bundle} & 1-D shell SG (cross-section contour) & $\mathbf C^{\,\mathrm{3D}} = \mathbf D_{\mathrm{eff}}/A_{\mathrm{cell}}$ \\
-\texttt{opensg\_shell.sg\_homo.shell\_sg3d} & 3-D shell SG (surface mesh) & $\mathbf D_{\mathrm{eff}}/\omega$, $\omega$ = midsurface area \\
+\texttt{opensg\_shell.sg\_homo.shell\_sg3d} & 3-D shell SG (surface mesh) & $\mathbf D_{\mathrm{eff}}/\omega$, $\omega$ = bounding-box \emph{volume} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-For \texttt{build\_solid\_bundle} the normalising area defaults to the convex
-hull of the contour (\texttt{area\_source = "hull"}); pass \texttt{cell\_area}
-explicitly to use a different measure, and the banner records which was used.
+For \texttt{build\_solid\_bundle} called directly from Python the normalising
+area falls back to the convex hull of the contour
+(\texttt{area\_source = "hull"}); pass \texttt{cell\_area} explicitly to use a
+different measure, and the banner records which was used. The
+\texttt{opensg <yaml>} CLI never takes that fallback: it supplies the measure
+itself (\texttt{opensg\_shell.cli.sg\_cell\_area}) as the \texttt{omega:} header
+key when the file declares one, and otherwise as the measured node
+\emph{bounding box}, which is the periodic cell the assembly map ties and which
+differs from the convex hull on any non-convex cell.
 The isotropic square-tube example in the folder
 \texttt{examples/OpenSG\_shell/3\_get\_solid\_props\_from\_shell\_cross\_section/}
 \texttt{square\_section\_isotropic}
@@ -649,15 +698,19 @@ $E_1 = 7.0000000\times10^{10}$ Pa and $\nu_{12} = 0.30000$, recovering the wall
 material's own $E$ and $\nu$ along the beam axis exactly, which is the sanity
 check that fixes the normalisation.
 
-The last row of Table~\ref{tab:solidroutes} carries a subtlety worth stating
-plainly. \texttt{shell\_sg3d} \emph{returns} \texttt{C3D} divided by the SG
-measure (the midsurface surface area, the three-dimensional analogue of the
-plane-section perimeter), but \emph{writes} the \texttt{.out} divided by the
-bounding-box cell volume $V_{\mathrm{cell}}$, so the printed moduli compare
-directly against a solid SwiftComp \texttt{.K} file. If you read the numbers
-out of the return dict and out of the \texttt{.out} and they differ by a
-constant factor, that factor is $\omega/V_{\mathrm{cell}}$ and nothing is
-wrong.
+The last row of Table~\ref{tab:solidroutes} is worth stating plainly, because
+for a three-dimensional SG the measure is a \textbf{volume}, not an area. The
+$\omega$ of \texttt{shell\_sg3d} is the node bounding-box volume
+$\mathrm{ptp}(y_1)\,\mathrm{ptp}(y_2)\,\mathrm{ptp}(y_3)$, measured from the
+mesh: the volume the equivalent continuum occupies, and the same cell the
+periodic assembly map ties. It is the convention \texttt{opensg\_solid} uses
+too, so the returned \texttt{C3D}, the line the CLI prints and
+\texttt{<yaml>\_C3D.out} are one and the same matrix, and the printed moduli
+compare directly against a solid SwiftComp \texttt{.K} file with no rescale.
+An explicit \texttt{omega=} argument, or the YAML's \texttt{omega:} header key
+which the CLI forwards, overrides the measure --- for instance with the
+midsurface \emph{surface} area, which the result dict also returns as
+\texttt{"surface\_area"}, if a per-unit-area wall law is what you want.
 
 \subsection{Periodicity, and the aperiodic alternative}
 \label{sec:periodicity}
@@ -905,11 +958,16 @@ hand calculations.
   sets $\mathrm{fraction} = 0.5$; \texttt{oml} gives $0.0$, \texttt{iml} and
   \texttt{oml\_flip} give $1.0$. The $\mathbf B$ block depends on that choice,
   and so therefore does every extension--bending coupling downstream of it.
-\item With the default \texttt{g\_source="msg"} the transverse-shear block
-  $\mathbf G$ is \textbf{replaced} by the MSG least-squares result from
-  \texttt{rm\_plate\_msg}, evaluated at the same \texttt{fraction}. It is not a
-  shear-correction-factor estimate. The alternative \texttt{g\_source="whitney"}
-  selects the complementary-energy shear-flow value instead.
+\item The transverse-shear block $\mathbf G$ is \textbf{always replaced} by the
+  MSG least-squares result from \texttt{rm\_plate\_msg}, evaluated at the same
+  \texttt{fraction}. It is not a shear-correction-factor estimate, and there is
+  no switch that selects anything else. The former alternative
+  \texttt{g\_source="whitney"} --- the complementary-energy shear flow --- has
+  been retired: the keyword is still accepted by the old signatures, but
+  passing it explicitly raises a \texttt{DeprecationWarning} and is ignored,
+  and every emitted ABD cache records \texttt{g\_source: msg}. The
+  complementary-energy $\mathbf G$ survives only as the internal numerical
+  fallback on a laminate whose MSG $\mathbf U^*$-fit is not SPD.
 \end{enumerate}
 
 \section{Where each law is produced and written}
@@ -936,16 +994,16 @@ YAML, and \texttt{<db>} the basename of the \texttt{layup\_db.yaml}.}
 \toprule
 macro law & producing function & output file & title in the \texttt{.out} \\
 \midrule
-Timoshenko beam $6\times6$ & \texttt{plate\_homo\_2d(n\_model=1)} $\rightarrow$ \texttt{\_beam\_homo\_kkt} & \texttt{<sg>.out} & \texttt{The Effective Timoshenko Stiffness Matrix} \\
-Timoshenko beam $6\times6$ & \texttt{build\_rm\_bundle} $\rightarrow$ \texttt{ring\_indep} & \texttt{<yaml>\_Timo.out} & \texttt{The Effective Timoshenko Stiffness Matrix} \\
-Timoshenko beam $6\times6$ & \texttt{segment\_timo\_from\_3dyaml} & \texttt{<yaml>\_Timo.out} & \texttt{The Effective Timoshenko Stiffness Matrix} \\
-Euler--Bernoulli beam $4\times4$ & \texttt{\_beam\_homo\_kkt} $\rightarrow$ \texttt{r["C\_eff\_EB"]} & in-memory only & --- \\
+Timoshenko beam $6\times6$ & \texttt{plate\_homo\_2d(n\_model=1)} $\rightarrow$ \texttt{\_beam\_homo\_kkt} & \texttt{<sg>.out} & \texttt{The Effective Timoshenko Beam Stiffness Matrix} \\
+Timoshenko beam $6\times6$ & \texttt{build\_rm\_bundle} $\rightarrow$ \texttt{ring\_indep} & \texttt{<yaml>\_Timo.out} & \texttt{The Effective Timoshenko Beam Stiffness Matrix} \\
+Timoshenko beam $6\times6$ & \texttt{segment\_timo\_from\_3dyaml} & \texttt{<yaml>\_Timo.out} & \texttt{The Effective Timoshenko Beam Stiffness Matrix} \\
+Euler--Bernoulli beam $4\times4$ & \texttt{\_beam\_homo\_kkt} $\rightarrow$ \texttt{r["C\_eff\_EB"]} (\texttt{refined: 0}) & \texttt{<sg>.out} & \texttt{The Effective Euler-Bernoulli Beam Stiffness Matrix} \\
 Classical plate ABD $6\times6$ & \texttt{plate\_homo\_2d(n\_model=2)} & \texttt{<sg>.out} & \texttt{The Effective Classical Plate Stiffness Matrix} \\
-RM plate ABDG $8\times8$ & \texttt{plate\_homo\_2d(n\_model=2, shear\_refined=True)} $\rightarrow$ \texttt{plate\_shear\_ladder} & \texttt{<sg>.out} & \texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix} \\
-RM plate ABDG $8\times8$ & \texttt{rm\_plate\_msg} $\rightarrow$ \texttt{r["ABDG"]} & \texttt{<db>\_plate\_homo.out} & \texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix} \\
-3-D solid $6\times6$ & \texttt{plate\_homo\_2d(n\_model=3)} & \texttt{<sg>.out} & \texttt{The Effective Stiffness Matrix} + engineering constants \\
-3-D solid $6\times6$ & \texttt{build\_solid\_bundle} $\rightarrow$ \texttt{ring\_solid} & \texttt{<yaml>\_C3D.out} & \texttt{The Effective Stiffness Matrix} + engineering constants \\
-3-D solid $6\times6$ & \texttt{sg\_homo.shell\_sg3d} & \texttt{<yaml>\_C3D.out} & \texttt{The Effective Stiffness Matrix} + engineering constants \\
+RM plate ABDG $8\times8$ & \texttt{plate\_homo\_2d(n\_model=2, shear\_refined=True)} $\rightarrow$ \texttt{plate\_shear\_ladder} & \texttt{<sg>.out} & \texttt{The Effective Reissner-Mindlin Stiffness Matrix} \\
+RM plate ABDG $8\times8$ & \texttt{rm\_plate\_msg} $\rightarrow$ \texttt{r["ABDG"]} & \texttt{<db>\_plate\_homo.out} & \texttt{The Effective Reissner-Mindlin Stiffness Matrix} \\
+3-D solid $6\times6$ & \texttt{plate\_homo\_2d(n\_model=3)} & \texttt{<sg>.out} & \texttt{The Effective Cauchy Continuum Stiffness Matrix} + engineering constants \\
+3-D solid $6\times6$ & \texttt{build\_solid\_bundle} $\rightarrow$ \texttt{ring\_solid} & \texttt{<yaml>\_C3D.out} & \texttt{The Effective Cauchy Continuum Stiffness Matrix} + engineering constants \\
+3-D solid $6\times6$ & \texttt{sg\_homo.shell\_sg3d} & \texttt{<yaml>\_C3D.out} & \texttt{The Effective Cauchy Continuum Stiffness Matrix} + engineering constants \\
 Wall plate law $8\times8$, per section & \texttt{sg\_homo.write\_abdg\_out} & \texttt{<yaml>\_ABDG.out} & \texttt{The Effective Reissner-Mindlin Plate Stiffness Matrix}, one block per section \\
 \bottomrule
 \end{tabular}
@@ -1031,6 +1089,21 @@ $\sigma_{13}$ that first order cannot produce. Output is in the ply material
 frame by default (\texttt{frame="material"}), since failure criteria live
 there; pass \texttt{frame="plate"} for anything that integrates or
 differentiates across plies.
+
+\paragraph{The files the \texttt{D} route writes.} Run from the CLI as
+\texttt{opensg <yaml> D}, the chain above writes
+\texttt{<base>\_dehom.txt} (one row per recovery point: 15 field columns, the
+six stresses, six strains and three displacements), the matching
+\texttt{<base>\_dehom.vtk}, and --- unless the header sets
+\texttt{junction: off} --- the \texttt{<base>\_dehom.junc} sidecar. At the
+default \texttt{junction: flag} tier the \texttt{.txt} carries two \emph{extra}
+columns at the very end, \texttt{jflag} and \texttt{jdist}, which are also
+written as extra \texttt{CELL\_DATA} scalars in the \texttt{.vtk}: they flag the
+recovery stations that fall inside a wall-junction boundary layer, where two
+crossing walls hang their through-thickness columns over the same material.
+Nothing else changes at \texttt{flag}. The full treatment, including the
+\texttt{exclude} tier and the \texttt{junction\_bl} and \texttt{junction\_ang}
+keys, is Section~\ref{sec:shell-dehom-junction}.
 
 \subsection{What the shell chain gets right, and where it does not}
 

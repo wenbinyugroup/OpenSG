@@ -13,6 +13,66 @@ Every run is the same shape: **a YAML (or SwiftComp `.sc`) goes in, a timed `.ou
 SwiftComp `.K` layout comes back**. The core packages hold no paths and no `main` blocks — each
 example script names its input file and calls one entry function.
 
+## Running OpenSG
+
+One command, one argument — **the file says what to do**:
+
+```bash
+opensg <sg.yaml>        # homogenization (the default)
+```
+
+```bash
+opensg <sg.yaml> D      # dehomogenization: homogenize, then recover the local fields
+```
+
+`opensg` is a *dispatcher*: it reads the yaml's `msg:` key (`shell` or `solid`) and hands the
+file to the engine that owns it. Without the key the mesh **dialect** decides, so every YAML
+written before the key existed still runs. The two engine commands remain and behave
+identically once the file has been resolved:
+
+```bash
+opensg_solid <sg.yaml> [H|D]     # the general 1-D / 2-D / 3-D SG engine
+```
+
+```bash
+opensg_shell <sg.yaml> [H|D]     # the msg-shell contour / surface engine
+```
+
+(`python -m opensg_solid <sg.yaml>` and `python -m opensg_shell <sg.yaml>` are the same entry
+points.) Everything else — the macro model, the refinement, the boundary treatment, the macro
+state for a recovery — lives in the YAML header and is documented under
+{doc}`input_format`. Every key is defaulted, so a headerless mesh still runs.
+
+A run prints what it resolved, then the law, then where it was stored:
+
+```text
+ ============================================================================
+ OpenSG -- a multiscale structural analysis tool based on the Mechanics of
+ Structure Genome (MSG), developed by the Multiscale Structural Mechanics
+ Group led by Prof. Wenbin Yu at Purdue University
+ ============================================================================
+
+ input     : /.../1_get_beam_props_from_shell_cross_section/iea_s10_shell.yaml
+ msg       : shell
+ SG dim    : 2D
+ analysis  : homogenization
+ macro model: beam, shear-refined
+
+Timoshenko Beam Stiffness Matrix  [eps11 gam12 gam13 kappa1 kappa2 kappa3]:
+[[ 2.76606e+10 -1.72307e-05  4.66505e-06  5.40202e-06  1.66864e+09 -2.07730e+09]
+ ...
+Homogenization stored in iea_s10_shell_Timo.out
+Time taken: 2.58 sec
+```
+
+`SG dim` is the **ambient** dimension — the space the SG occupies, not the dimension of the SG
+manifold. A cross-section ring and a 2-D cell both print `2D`; a Schwarz-P shell surface, whose
+facets live in space, prints `3D`. A dehomogenization closes with
+`Local field files are computed and stored.` and one `Time taken` covering the whole run
+instead.
+
+Every entry function is also importable, for driving a run from your own script:
+
 ```python
 from opensg_shell import build_rm_bundle
 
@@ -24,6 +84,7 @@ B["Timo"]                                    # the Timoshenko 6x6
 :maxdepth: 1
 :caption: Start here
 
+installation
 input_format
 constitutive
 architecture

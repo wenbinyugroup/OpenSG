@@ -27,3 +27,6 @@ Thumbs.db
 
 # generated SG sidecar caches (load_sg_input / sc_to_yaml)
 *_sg.npz
+
+# Sphinx build output (regenerate with: python -m sphinx -b html docs docs/_build)
+docs/_build/

@@ -5,11 +5,13 @@ entry point, `opensg_solid.sg_homo.plate_homo_2d`. The structure gene (SG) — a
 3-D mesh of the repeating heterogeneity — is the input; `n_model` selects which macro model
 the SG is reduced to:
 
-| `n_model` | macro model | `r["C_eff"]` | matrix title in the `.out` |
-|---|---|---|---|
-| 1 | beam | $6\times6$ Timoshenko, strains $[\epsilon_{11},\ \gamma_{12},\ \gamma_{13},\ \kappa_1,\ \kappa_2,\ \kappa_3]$ | `The Effective Timoshenko Stiffness Matrix` |
-| 2 | plate | $6\times6$ ABD, $[N_{11}, N_{22}, N_{12}, M_{11}, M_{22}, M_{12}]$ | `The Effective Classical Plate Stiffness Matrix` |
-| 3 | 3-D elastic | $6\times6$ solid law, Voigt $[11, 22, 33, 23, 13, 12]$ | `The Effective Stiffness Matrix` |
+| `n_model` | `refined` | macro model | `r["C_eff"]` | matrix title in the `.out` |
+|---|---|---|---|---|
+| 1 | 1 | beam | $6\times6$ Timoshenko, strains $[\epsilon_{11},\ \gamma_{12},\ \gamma_{13},\ \kappa_1,\ \kappa_2,\ \kappa_3]$ | `The Effective Timoshenko Beam Stiffness Matrix` |
+| 1 | 0 | beam | $4\times4$ Euler–Bernoulli, $[\epsilon_{11},\ \kappa_1,\ \kappa_2,\ \kappa_3]$ | `The Effective Euler-Bernoulli Beam Stiffness Matrix` |
+| 2 | 0 | plate | $6\times6$ ABD, $[N_{11}, N_{22}, N_{12}, M_{11}, M_{22}, M_{12}]$ | `The Effective Classical Plate Stiffness Matrix` |
+| 2 | 1 | plate | $8\times8$ ABDG | `The Effective Reissner-Mindlin Stiffness Matrix` |
+| 3 | — | 3-D elastic | $6\times6$ solid law, Voigt $[11, 22, 33, 23, 13, 12]$ | `The Effective Cauchy Continuum Stiffness Matrix` |
 
 Every `plate_homo_2d` call writes a timed SwiftComp-`.K`-layout `<base>.out` (effective
 stiffness, then effective compliance) and, unless you pass `plot=False`, a `<base>_mesh.png`
@@ -74,7 +76,6 @@ angles = jnp.array([45.0, -45.0, 0.0])
 
 r = plate_homo_2d(name + ".yaml", material_param=material_param,
                   angles=angles, n_model=n_model)
-np.set_printoptions(precision=5)
 print("beam 6x6  [eps11 gam12 gam13 kappa1 kappa2 kappa3]  (Timoshenko):")
 print(r["C_eff"])
 print("beam 4x4  [eps11 kappa1 kappa2 kappa3]  (EB, same run):")
@@ -101,11 +102,20 @@ cd examples/OpenSG-solid/7_get_beam_props_from_SG
 python beam_homo_sg.py
 ```
 
+The runner is kept here because it *overrides* the file's pre-rotated material blocks with
+engineering constants plus explicit angles, which the CLI deliberately cannot do. For a YAML
+whose own `type: 1` material blocks already carry their `angle:` — the recommended pattern —
+the same beam run is one command, with `n_model: 1` and `refined: 1` in the header:
+
+```bash
+opensg RHC_SW_2UC_45.yaml
+```
+
 ### What comes out
 
 | file | contents |
 |---|---|
-| `RHC_SW_2UC_45.out` | the timed SwiftComp-layout report: `The Effective Timoshenko Stiffness Matrix` followed by `The Effective Timoshenko Compliance Matrix`, banner ` OpenSG msg-solid beam model, omega 1`, closing ` Time taken: 8.94 sec` |
+| `RHC_SW_2UC_45.out` | the timed SwiftComp-layout report: `The Effective Timoshenko Beam Stiffness Matrix` followed by `The Effective Timoshenko Beam Compliance Matrix` and `The 6X6 Mass Matrix`, banner ` OpenSG msg-solid beam model, omega 1`, closing ` Time taken: 2.43 sec` |
 | `RHC_SW_2UC_45_mesh.png` | the SG mesh, elements coloured by material, no title |
 
 The banner reports $\omega = 1$: for a beam model on a 2-D SG the measure is unity, so the
@@ -155,7 +165,7 @@ significant figures on every classical diagonal:
 | term | EB $4\times4$ | Timoshenko $6\times6$ |
 |---|---|---|
 | extension | $9.89926177\times10^{6}$ | $9.89928657\times10^{6}$ |
-| torsion | $2.97745363\times10^{8}$ | $2.97745606\times10^{8}$ |
+| torsion | $2.97746\times10^{8}$ | $2.97745606\times10^{8}$ |
 | bending 2 | $2.18957447\times10^{9}$ | $2.18957452\times10^{9}$ |
 | bending 3 | $9.28992811\times10^{8}$ | $9.28992729\times10^{8}$ |
 
@@ -234,6 +244,11 @@ cd examples/OpenSG-solid/8_get_beam_dehom_from_SG
 ```bash
 python beam_dehom_sg.py
 ```
+
+As in section 1, the runner is kept because it overrides the file's pre-rotated material
+blocks. On a YAML that carries its own `type: 1` blocks with angles, the same
+homogenize-then-recover pass is `opensg <name>.yaml D`, driven by `epsilon_bar:` in the header
+or by a `<name>.ff` macro state next to it.
 
 ### What comes out
 
@@ -339,7 +354,7 @@ corner chains resolved) and the three pinned rigid translations in plain NumPy, 
 read the entire `n_model=3` algebra in one 180-line file. It therefore writes its own
 `_Deff.out` through `np.savetxt` rather than the SwiftComp-layout report, and it consumes the
 `nodes`/`elements`/`elementOrientations`/`materials`/`sets` yaml dialect that
-`make_udcomp_yaml.py` emits — not the `dim`/`nodes`/`cells`/`mat_id`/`materials` dialect that
+`make_udcomp_yaml.py` emits — not the `nodes`/`cells`/`mat_id`/`materials` dialect that
 `opensg_solid.sg_mesh.load_sg_input` parses. The engine path itself is exercised on the
 honeycomb SG of section 1: `n_model=3` on `RHC_SW_2UC_45.yaml` is 6640 elements, 12 273 DOFs,
 11.4 s cold and 8.1 s warm, and writes the full SwiftComp `.out` with its engineering-constants

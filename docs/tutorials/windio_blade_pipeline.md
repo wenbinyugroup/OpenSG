@@ -137,6 +137,16 @@ name = "iea_s10"                  # IEA-22 station at r/R = 0.20
 python 1_homo_beam_props.py
 ```
 
+The homogenization itself is one CLI call — the station yaml carries `msg: shell`,
+`n_model: 1`, `refined: 1`, so
+
+```bash
+opensg iea_s10_shell.yaml
+```
+
+writes the same `iea_s10_shell_Timo.out` and `iea_s10_shell_ABDG.out`. The script is kept
+because the pipeline also wants the bare $6\times6$ text file and the ring figure.
+
 **The API**, if you drive it yourself:
 
 ```python
@@ -148,7 +158,7 @@ C6 = np.asarray(B["Timo"])        # (6,6) Timoshenko stiffness
 print(B["ref"], B["g_source"])    # 'center'  'msg'
 ```
 
-`build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg")` returns a bundle, not
+`build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23")` returns a bundle, not
 just a matrix: `Timo`, the warping modes `V0`/`V1`, the ring geometry (`corners`, `red_cells`,
 `re3`, `k22`, `strip`), `layup_per_elem`, the geometry-free `layup_db`/`material_db`, and
 `frac`/`ref`/`g_source`. Step 5 consumes all of it — do not throw the bundle away.
@@ -157,7 +167,7 @@ just a matrix: `Timo`, the warping modes `V0`/`V1`, the ring geometry (`corners`
 
 | file | written by | content |
 |---|---|---|
-| `iea_s10_shell_Timo.out` | `build_rm_bundle` | the timed SwiftComp `.K` layout: banner ` OpenSG msg-shell beam model [ext sh2 sh3 twist bend2 bend3]`, `The Effective Timoshenko Stiffness Matrix`, the effective compliance, and a `Time taken` footer |
+| `iea_s10_shell_Timo.out` | `build_rm_bundle` | the timed SwiftComp `.K` layout: banner ` OpenSG msg-shell beam model [ext sh2 sh3 twist bend2 bend3]`, `The Effective Timoshenko Beam Stiffness Matrix`, the effective compliance, and a `Time taken` footer |
 | `iea_s10_shell_ABDG.out` | `build_rm_bundle` | per section, the wall law: `The Effective Reissner-Mindlin Plate Stiffness Matrix` (the $8\times8$ ABD plus the MSG $\mathbf{G}$) and its compliance |
 | `abd/iea_s10_shell_abd.yaml` | `build_rm_bundle` | the per-station ABD yaml at the same reference, emitted once and cached; carries `mass_per_area` per section |
 | `iea_s10_beam_Timo.out` | the script | the bare $6\times6$ as text, with the strain order and reference in the header |
@@ -204,10 +214,9 @@ python 4_sweep_51_stations.py
 ```
 
 A station whose yaml is missing is skipped with a printed message, and any station that raises
-is caught and reported so one bad section cannot kill the sweep. In the shipped run, **49 of the
-51 stations completed**: `iea51_beam_props.dat` and `iea51_peak_stress.dat` carry
-$\eta = 0.00\ldots0.94$ in steps of $0.02$ plus $\eta = 1.00$; $\eta = 0.96$ and $0.98$ are
-absent.
+is caught and reported so one bad section cannot kill the sweep. In the shipped run, **all 51
+stations completed**: `iea51_beam_props.dat` and `iea51_peak_stress.dat` carry
+$\eta = 0.00\ldots1.00$ in steps of $0.02$.
 
 `iea51_beam_props.dat` holds one row per station, `eta` followed by the six diagonal terms.
 Selected rows, verbatim:
@@ -385,7 +394,7 @@ recovery gap of the shell-to-plate route, not a tuning issue.
 V2 changes rather than a rounded difference: $\sigma_{11}$ moves by 1.950e−04 MPa rms against a
 first-order rms of 8.851e+01, $\sigma_{33}$ by 5.190e−05 MPa against a VABS rms of 5.576e−02,
 and $\sigma_{13}$ and $\sigma_{23}$ by exactly 0.000e+00. For this constant-force blade state
-the V2 drivers carry no payload; the first-order $\sigma_{33}$ rms is 3.603e−13 MPa, machine
+the V2 drivers carry no payload; the first-order $\sigma_{33}$ rms is 3.626e−13 MPa, machine
 zero.
 
 ### The same recovery, all 51 stations
@@ -397,10 +406,10 @@ the peak $|\sigma|$ per component over the whole section, in the ply frame, into
 
 | $\eta = r/R$ | $\sigma_{11}$ | $\sigma_{22}$ | $\sigma_{33}$ | $\sigma_{23}$ | $\sigma_{13}$ | $\sigma_{12}$ |
 |---|---|---|---|---|---|---|
-| 0.00 | 1.49271417e+02 | 1.53636678e+00 | 4.13972884e−13 | 5.39458803e−03 | 4.12768841e−02 | 2.24186054e+00 |
-| 0.16 | 3.25793641e+02 | 4.14543750e+00 | 8.97794962e−13 | 3.91335971e−02 | 3.51941097e−02 | 7.01052831e+00 |
-| 0.20 | 3.18177433e+02 | 3.08795353e+00 | 9.12696123e−13 | 1.57149557e−02 | 3.45770096e−02 | 5.66031217e+00 |
-| 0.54 | 2.14382707e+02 | 1.62953363e+00 | 8.13510269e−13 | 1.74810053e−02 | 8.23774625e−02 | 5.64234617e+01 |
+| 0.00 | 1.49271417e+02 | 1.53636678e+00 | 4.13972884e−13 | 5.39458803e−03 | 4.12768831e−02 | 2.24186053e+00 |
+| 0.16 | 3.25793641e+02 | 4.14543750e+00 | 8.98726285e−13 | 3.91335971e−02 | 3.51941097e−02 | 7.01052829e+00 |
+| 0.20 | 3.18177433e+02 | 3.08795353e+00 | 9.13627446e−13 | 1.57149557e−02 | 3.45770096e−02 | 5.66031219e+00 |
+| 0.54 | 2.14382707e+02 | 1.62953363e+00 | 8.16304237e−13 | 1.74810053e−02 | 8.23774603e−02 | 5.64234617e+01 |
 | 1.00 | 4.88165692e−01 | 2.71026227e−02 | 2.03726813e−15 | 4.70632777e−05 | 5.13380478e−02 | 7.89278421e+00 |
 
 All values are MPa. The peak axial stress of the whole blade in this load case is
@@ -415,8 +424,8 @@ as a physical through-thickness stress.
 $\sigma_{12}$: the axial peak climbs steeply out of the root, crests near $\eta \approx 0.16$ and
 decays to nothing at the tip, while the shear peak rises in two distinct steps, near
 $\eta \approx 0.35$ and $\eta \approx 0.46$. Right, the recorded per-station wall time,
-homogenization against dehomogenization — of order ten seconds and of order one second
-respectively, with a scatter of much faster homogenizations. The same arrays are saved to
+homogenization against dehomogenization — both of order one second per station, the first
+station alone costing a few seconds of compilation. The same arrays are saved to
 `iea51_sweep.npz` (`eta`, `props`, `peak`, `t_homo`, `t_dehom`, `stations`).
 
 ## The correctness check on transverse shear
@@ -450,7 +459,7 @@ $\log_{10}(I_{13}/Q_1)$). The measured result:
 
 | ratio | median | mean | min | max | verdict |
 |---|---|---|---|---|---|
-| $I_{13}/Q_1$ | 5.228e−01 | −6.974e+00 | −1.299e+03 | 2.260e+01 | target invalid |
+| $I_{13}/Q_1$ | 5.228e−01 | −6.972e+00 | −1.299e+03 | 2.260e+01 | target invalid |
 | $I_{23}/Q_2$ | 9.895e−01 | 1.096e+00 | −1.217e+01 | 1.194e+01 | target valid |
 
 **$\sigma_{23}$ passes**: the median $I_{23}/Q_2$ is 0.9895, a **1.05 % Q-consistency error**,

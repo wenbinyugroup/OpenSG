@@ -292,7 +292,7 @@ bundle that stage 5 reads back:
 \captree{
   \node[inputnode] (y) {\texttt{iea\_s10\_shell.yaml}\\ its own \texttt{reference: center}};
   \node[funcnode, below=of y] (lr) {\texttt{sg\_mesh.load\_ring\_ref}\\ contour \texttt{rx}, \texttt{cells}, \texttt{rsub}, \texttt{re3}, \texttt{ax}, \texttt{cross};\\ it calls \texttt{sg\_materials.\_material\_by\_section}\\ for the wall ABD $6\times6$ and $\mathbf{G}$ per section,\\ and \texttt{sg\_assembly.compute\_k22} for \texttt{k22}};
-  \node[funcnode, below=of lr] (gm) {\texttt{msg\_rm\_plate.rm\_plate\_msg}\\ the MSG wall $\mathbf{G}$ replaces the\\ Whitney one when \texttt{g\_source="msg"}};
+  \node[funcnode, below=of lr] (gm) {\texttt{msg\_rm\_plate.rm\_plate\_msg}\\ the MSG (Yu 2002 least-squares)\\ wall $\mathbf{G}$ -- the only route,\\ no switch};
   \node[funcnode, below=of gm] (ri) {\texttt{sg\_homo.ring\_indep}\\ one KKT factorization, two solves:\\ $\mathbf{V}_0$ then $\mathbf{V}_1$, then\\ \texttt{finalize\_v1\_and\_compute\_deff}};
   \node[outnode, below=of ri] (o1) {\texttt{iea\_s10\_shell\_Timo.out} (\texttt{write\_sc\_K})\\ \texttt{iea\_s10\_shell\_ABDG.out} (\texttt{write\_abdg\_out})\\ \texttt{abd/iea\_s10\_shell\_abd.yaml}\\ (\texttt{sg\_materials.emit\_station\_abd})};
   \node[datanode, right=6mm of ri] (bu) {the bundle \texttt{B}:\\ \texttt{Timo}, \texttt{V0}, \texttt{V1}, \texttt{strip},\\ \texttt{layup\_db}, \texttt{material\_db},\\ \texttt{frac} $\rightarrow$ stage 5};
@@ -318,6 +318,22 @@ name = "iea_s10"                  # IEA-22 station at r/R = 0.20
 python 1_homo_beam_props.py
 \end{lstlisting}
 
+The script is kept here because it does more than homogenize: it also writes
+the bare $6\times6$ \texttt{iea\_s10\_beam\_Timo.out} and the ring mesh figure.
+The homogenization on its own is the unified command,
+
+\begin{lstlisting}[style=shellst]
+opensg iea_s10_shell.yaml
+\end{lstlisting}
+
+which dispatches on the yaml's \texttt{msg: shell} key --- or, absent that key,
+on the mesh dialect --- and hands the argument to \texttt{opensg\_shell}
+unchanged. The macro model comes from the yaml header, and \emph{that} header
+is what decides which beam law you get: \texttt{refined: 1} asks for the
+Timoshenko $6\times6$ and \texttt{iea\_s10\_shell\_Timo.out}, while the default
+\texttt{refined: 0} reports the classical Euler-Bernoulli $4\times4$ into
+\texttt{iea\_s10\_shell\_EB.out}.
+
 \subsection*{The API, if you drive it yourself}
 
 \begin{lstlisting}[style=opensg,caption={The whole homogenization is one call.}]
@@ -330,20 +346,30 @@ print(B["ref"], B["g_source"])    # 'center'  'msg'
 \end{lstlisting}
 
 The full signature is
-\texttt{build\_rm\_bundle(shell\_yaml, ref=None, shear="mitc4\_g23",
-g\_source="msg")}. Passing \texttt{ref=None} means the YAML's own
-\texttt{reference} field decides, which is why homogenization and
-dehomogenization cannot silently disagree; pass an explicit \texttt{ref} only
-to override. \texttt{g\_source} chooses the wall transverse-shear law,
-\texttt{"msg"} for the Yu 2002 least-squares projection or \texttt{"whitney"}
-for the complementary-energy shear flow.
+\texttt{build\_rm\_bundle(shell\_yaml, ref=None, shear="mitc4\_g23")}. Passing
+\texttt{ref=None} means the YAML's own \texttt{reference} field decides, which
+is why homogenization and dehomogenization cannot silently disagree; pass an
+explicit \texttt{ref} only to override.
+
+There is no wall-$\mathbf{G}$ selector. The $2\times2$ transverse-shear block
+of every wall plate law is built by one route: the MSG/VAM
+second-order-energy (Yu 2002 least-squares) projection computed by
+\texttt{opensg\_solid.rm\_plate\_1D.msg\_rm\_plate.rm\_plate\_msg}. The
+retired \texttt{g\_source} argument is still \emph{accepted} by
+\texttt{build\_rm\_bundle}, \texttt{build\_solid\_bundle},
+\texttt{shell\_sg3d} and \texttt{emit\_station\_abd} so that old call sites do
+not break, but an explicit value raises a \texttt{DeprecationWarning} and is
+ignored. The complementary-energy (Whitney 1973) shear-flow $\mathbf{G}$
+survives only as the internal numerical fallback on a laminate whose MSG
+$U^*$ fit is not positive definite; it is not a user-selectable alternative.
 
 What comes back is a bundle, not just a matrix. It carries \texttt{Timo}, the
 warping modes \texttt{V0} and \texttt{V1}, the ring geometry
 (\texttt{corners}, \texttt{red\_cells}, \texttt{rx3}, \texttt{re3},
 \texttt{k22}, \texttt{ax}, \texttt{cross}, \texttt{strip}),
 \texttt{layup\_per\_elem}, the geometry-free \texttt{layup\_db} and
-\texttt{material\_db}, and \texttt{frac}, \texttt{ref}, \texttt{g\_source}.
+\texttt{material\_db}, and \texttt{frac}, \texttt{ref} and \texttt{g\_source}
+--- the last a record, always \texttt{"msg"}, not a choice.
 Stage 5 consumes every one of those entries, so do not throw the bundle away
 after reading the matrix out of it.
 
@@ -379,12 +405,12 @@ File & Written by & Content \\
 Two details about the ABD YAML are worth knowing before you reuse it. It is
 written by \texttt{emit\_station\_abd} with \texttt{ref="mid"} when the station
 is \texttt{center}-referenced, so its \texttt{reference: mid} field means the
-same surface as the ring's \texttt{center}. And it is written with the
-emitter's default transverse-shear source, so the file records
-\texttt{g\_source: whitney}: the $8\times8$ block in that YAML uses the Whitney
-shear-flow $\mathbf{G}$, whereas the ring homogenization itself used the MSG
-$\mathbf{G}$. The membrane and bending blocks are identical either way; only
-the two transverse-shear rows differ. For \texttt{iea\_s10} the file reports
+same surface as the ring's \texttt{center}. And it records
+\texttt{g\_source: msg}, because there is only one wall-$\mathbf{G}$ route:
+the two transverse-shear rows of the cached $8\times8$ are the same MSG
+$\mathbf{G}$ the ring homogenization itself used, so the cache and the ring
+agree block for block and a recovery driven from the cache cannot silently
+disagree with the $6\times6$. For \texttt{iea\_s10} the file reports
 \texttt{n\_layups: 6}, and for \texttt{layup\_0} a total \texttt{thickness} of
 $0.03260055$~m and a \texttt{mass\_per\_area} of $62.89$~kg/m$^2$.
 
@@ -806,6 +832,14 @@ jpath_file = "iea_s10.lp_sparcap_left_thickness.coords"
 \begin{lstlisting}[style=shellst]
 python 2_dehom_v2_vabs.py
 \end{lstlisting}
+
+This one stays a script: beyond the recovery itself it projects the result onto
+the VABS gauss cloud, writes the validation report and draws four figures, none
+of which the solver does. The bare recovery of a single station is the unified
+command with the \texttt{D} argument,
+\texttt{opensg <station>\_shell.yaml D}, which homogenizes and then recovers in
+one run and takes its macro state from the \texttt{<station>\_shell.ff} file
+next to the yaml rather than from a row of the sweep table.
 
 \subsection*{What comes out}
 

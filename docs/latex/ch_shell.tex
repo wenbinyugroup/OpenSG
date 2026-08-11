@@ -232,14 +232,19 @@ with exactly that row grouping printed in the header of
 \texttt{iea\_s10\_shell\_ABDG.out}:
 \texttt{rows [eps11 eps22 2eps12 | K11 K22 K12+K21 | 2g13 2g23]}.
 
-The $2\times2$ transverse-shear block $\mathbf{G}$ has a default,
-\texttt{g\_source="msg"}: the MSG/VAM second-order-energy projection (the
+The $2\times2$ transverse-shear block $\mathbf{G}$ is built by \textbf{one}
+route, with no switch to set: the MSG/VAM second-order-energy projection (the
 Yu--2002 least-squares construction, Eq.~61 of Yu, Hodges \& Volovoi,
 \emph{Computers \& Structures} \textbf{81}:439--454, 2003), computed by
-\texttt{opensg\_solid.rm\_plate\_1D.msg\_rm\_plate.rm\_plate\_msg}. The
-alternative, \texttt{g\_source="whitney"}, is the coupling-aware
-complementary-energy shear flow. Table~\ref{tab:shell-gblocks} shows why this is
-not a detail on a foam-cored blade section.
+\texttt{opensg\_solid.rm\_plate\_1D.msg\_rm\_plate.rm\_plate\_msg}. The former
+alternative \texttt{g\_source="whitney"} --- the coupling-aware
+complementary-energy shear flow --- has been retired. The keyword is still
+accepted by the old signatures, but passing it explicitly raises a
+\texttt{DeprecationWarning} and is \textbf{ignored}, and every emitted ABD cache
+records \texttt{g\_source: msg}. The complementary-energy $\mathbf{G}$ survives
+only as the internal numerical fallback on a laminate whose MSG $U^*$-fit is not
+SPD. Table~\ref{tab:shell-gblocks} shows why this is not a detail on a
+foam-cored blade section.
 
 \begin{table}[htbp]
 \centering
@@ -275,8 +280,22 @@ name = "iea_s10"               # reads <name>_shell.yaml
 ############################################################
 \end{lstlisting}
 
+The homogenization itself needs no driver. \texttt{opensg} is the unified entry
+point: it resolves the engine from the YAML's \texttt{msg:} key (or, when that
+key is absent, from the mesh dialect) and hands the file to
+\texttt{opensg\_shell}.
+
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section
+opensg iea_s10_shell.yaml
+\end{lstlisting}
+
+\noindent
+That writes \texttt{iea\_s10\_shell\_Timo.out} and
+\texttt{iea\_s10\_shell\_ABDG.out}. Run the driver when you also want the two
+figures, which the CLI does not draw:
+
+\begin{lstlisting}[style=shellst]
 python beam_homo_shell.py
 \end{lstlisting}
 
@@ -349,11 +368,14 @@ file & written by & content \\
 
 Two notes on the ABD cache. It is written \textbf{only if it does not already
 exist}, so delete \texttt{abd/iea\_s10\_shell\_abd.yaml} after changing the
-layups or the change will not take. And it records \texttt{g\_source: whitney}
-and \texttt{reference: mid}, because \texttt{emit\_station\_abd} defaults to the
-complementary-energy shear flow. It is a cache for downstream station-level tools
-such as shell buckling, not a dump of the ring's own MSG wall law, which lives in
-\texttt{\_ABDG.out}.
+layups --- or after upgrading OpenSG, since a cache left over from an older
+version is never refreshed in place --- or the change will not take. And it
+records \texttt{g\_source: msg} (with \texttt{reference: mid}, the same
+$\mathrm{fraction} = 0.5$ this station's \texttt{reference: center} resolves
+to): \texttt{emit\_station\_abd} builds the same MSG wall $\mathbf{G}$ the ring
+uses, at the station's own reference surface, so the cached $8\times8$ agrees
+with the per-section blocks of \texttt{\_ABDG.out}. It is a cache for downstream
+station-level tools such as shell buckling.
 
 \subsection{The numbers}
 
@@ -481,10 +503,121 @@ as the stiffness: this table is center-referenced, matching
 
 \subsection{Run it}
 
+The recovery is the \texttt{D} argument of the unified entry point: it
+homogenizes and then recovers, in one timed run.
+
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG_shell/2_get_beam_dehom_from_shell_cross_section
+opensg iea_s10_shell.yaml D
+\end{lstlisting}
+
+\noindent
+That writes \texttt{iea\_s10\_shell\_dehom.txt}, \texttt{.vtk} and
+\texttt{.junc}. Run the driver when you also want the two stress figures, which
+the CLI does not draw:
+
+\begin{lstlisting}[style=shellst]
 python beam_dehom_shell.py
 \end{lstlisting}
+
+\subsection{Junction-aware recovery}
+\label{sec:shell-dehom-junction}
+
+A midline shell SG hangs a full through-thickness column off \emph{every}
+element mid-arc. Within about a wall thickness of a junction the columns of two
+crossing walls therefore cover the \textbf{same material twice}, with two
+different wall laws --- which is how a spar-cap ply stress ends up reported at a
+web station. \texttt{src/opensg\_shell/sg\_dehom\_junction.py} does not repair
+that; it \emph{measures} it, and the YAML header says what to do about it.
+Three scalar keys, all optional and all read only on the \texttt{D} route of
+\texttt{msg-shell}:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llp{7.8cm}}
+\toprule
+key & default & meaning \\
+\midrule
+\texttt{junction} & \texttt{flag} & the recovery tier: \texttt{off},
+  \texttt{flag} or \texttt{exclude} \\
+\texttt{junction\_bl} & \texttt{1.0} & $k_{bl}$, the boundary-layer radius in
+  units of the junction's \emph{thickest} wall \\
+\texttt{junction\_ang} & \texttt{1.0} & the tangent-grouping tolerance of the
+  junction detector, in degrees \\
+\bottomrule
+\end{tabular}
+\caption{The three junction keys of the shell dehomogenization header.}
+\label{tab:shell-junction-keys}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lp{10.5cm}}
+\toprule
+tier & behaviour \\
+\midrule
+\texttt{off} & the pre-junction behaviour exactly: no extra columns, no
+  sidecar, no census, bit-identical files \\
+\texttt{flag} & \textbf{the default}, and \textbf{non-mutating}: two extra
+  columns \texttt{jflag} and \texttt{jdist} at the \emph{end} of
+  \texttt{<base>\_dehom.txt}, the same two as extra \texttt{CELL\_DATA} scalars
+  in \texttt{<base>\_dehom.vtk}, the \texttt{<base>\_dehom.junc} sidecar, and a
+  printed census. It changes no field value \\
+\texttt{exclude} & as \texttt{flag}, plus \texttt{NaN} in the 15 field columns
+  of every duplicate (\texttt{jflag} 3) row, so the point cloud
+  \emph{partitions} the material instead of double-covering it. The row itself
+  stays, so row $i$ is still element $\lfloor i/n_{\mathrm{depth}}\rfloor$ at
+  depth $i \bmod n_{\mathrm{depth}}$. The \texttt{.vtk} values are never
+  NaN-ed --- threshold on \texttt{jflag} instead \\
+\bottomrule
+\end{tabular}
+\caption{The three implemented junction tiers. Because the two columns are
+appended at the end, every existing column index is untouched.}
+\label{tab:shell-junction-tiers}
+\end{table}
+
+A fourth tier, \texttt{patch}, is \textbf{designed but deliberately not
+implemented} and raises if requested. The corner micro-solve it would call is
+admissible only for two straight walls of uniform layup crossing at one node,
+which most real blade junctions --- a web landing on a tapering spar cap, a
+three-way leading-edge node, coincident doublers --- are not.
+
+The two new columns are defined as follows. \texttt{jflag} is \texttt{0} clean,
+\texttt{1} near, \texttt{2} overlapped and this wall owns the block, \texttt{3}
+duplicate (another wall owns it), and \texttt{4} is reserved for \texttt{patch}
+and is never emitted. \texttt{jdist} is $|p - J| / \max_i t_i$ at the nearest
+junction node $J$ (infinite when the section has no junction at all), so
+\texttt{jflag} $\ge 1$ holds exactly when \texttt{jdist} $\le k_{bl}$.
+
+Both remaining keys are modelling choices, not derived lengths.
+\texttt{junction\_bl} sets $k_{bl}$: the RM wall solution is polluted within
+roughly one wall thickness of a crossing, and $1.0$ is the conventional
+Saint-Venant decay scale, nothing more; widen it to be conservative.
+\texttt{junction\_ang} is the detector's tangent-grouping tolerance, and its
+default of $1.0^\circ$ is the homogenization census value and deliberately
+tight: on a curved airfoil contour it also calls every ${>}1^\circ$ contour
+\emph{kink} a junction. Raise it to $5$--$15^\circ$ for a census that lists the
+wall crossings only.
+
+\begin{Verbatim}[frame=single,framesep=4pt,fontsize=\small]
+ junctions : 97 detected (5 T, 91 L, 1 unresolved)
+ stations  : 2790 total, 1032 near, 56 overlapped (50 duplicates)
+\end{Verbatim}
+
+That is the measured census of this station, read from
+\texttt{iea\_s10\_shell\_dehom.junc}: of 97 detected junctions only a handful
+are genuine wall crossings, the rest being discretized curvature at the default
+$1.0^\circ$ tolerance, and 1032 of the 2790 recovery stations fall inside some
+boundary layer while only 56 are truly overlapped.
+
+One warning. This is \textbf{not} the same switch as the \emph{homogenization}
+junction correction \texttt{build\_solid\_bundle(junction="census"} $|$
+\texttt{"micro"} $|$ \texttt{"microcell")} of
+Section~\ref{sec:shell-solid-xsec}. That one is an energy correction with its
+own validity domain and it stays off by default; the tier here is recovery
+bookkeeping, and at \texttt{flag} it corrects nothing at all.
 
 \subsection{The two-step chain}
 
@@ -701,7 +834,7 @@ then a driver that calls \texttt{build\_solid\_bundle} on it.
 \captree{
   \node[inputnode] (gen) {generator, e.g.\\ \texttt{make\_deo\_cellular\_yamls.py}\\ wall lengths $l$, $h$, angle $\theta$,\\ thickness $t$, \texttt{nseg}};
   \node[inputnode, below=of gen] (y) {1-D shell yaml, e.g.\\ \texttt{deo\_cellular\_+15\_1Dshell.yaml}\\ \texttt{reference: center}};
-  \node[funcnode, right=of y] (bsb) {\texttt{opensg\_shell.build\_solid\_bundle}\\ \texttt{cell\_area} $=\omega$ (else convex\\ hull of the contour), \texttt{periodic=True}};
+  \node[funcnode, right=of y] (bsb) {\texttt{opensg\_shell.build\_solid\_bundle}\\ \texttt{cell\_area} $=\omega$: the \texttt{omega:}\\ header key, else the MEASURED\\ node bounding box; \texttt{periodic=True}};
   \node[funcnode, below=of bsb] (lr) {\texttt{sg\_mesh.load\_ring\_ref} +\\ \texttt{msg\_rm\_plate.rm\_plate\_msg}\\ wall $8\times8$ with the MSG \texttt{G}};
   \node[outnode, right=of lr] (abdg) {\texttt{deo\_cellular\_+15\_1Dshell\_ABDG.out}\\ (\texttt{sg\_homo.write\_abdg\_out})};
   \node[funcnode, below=of lr] (rs) {\texttt{sg\_homo.ring\_solid}\\ \texttt{sg\_periodicity.mesh\_to\_periodic\_sparse\_assembly\_map}\\ ties faces, edges, corners;\\ \texttt{assemble\_solid\_strip} +\\ \texttt{assemble\_solid\_macro}};
@@ -749,9 +882,16 @@ b["solve_time"]           # seconds; also written into <yaml>_C3D.out
 
 \texttt{cell\_area} is the one argument you must think about: it is the measure
 $\omega$ the energy is divided by. Pass it explicitly (then
-\texttt{area\_source} reads \texttt{"user"}); if you omit it, the convex-hull
-area of the contour is used instead and \texttt{area\_source} reads
-\texttt{"hull"}. \texttt{build\_solid\_bundle} writes
+\texttt{area\_source} reads \texttt{"user"}); if you omit it in a direct library
+call, the convex-hull area of the contour is used as a legacy fallback and
+\texttt{area\_source} reads \texttt{"hull"}. The \texttt{opensg <yaml>} CLI
+never takes that fallback: it supplies the measure itself
+(\texttt{cli.sg\_cell\_area}) as the \texttt{omega:} header key when the file
+declares one, and otherwise as the \textbf{measured periodic cell} --- the node
+\emph{bounding box}, because the assembly map ties opposite box faces. The
+bounding box is not the convex hull of the contour; the two differ on any
+non-convex cell, which is every honeycomb and every lattice in this section.
+\texttt{build\_solid\_bundle} writes
 \texttt{<yaml>\_C3D.out} by default, in the SwiftComp \texttt{.K} layout
 (effective stiffness, effective compliance, orthotropic-approximated engineering
 constants) with an \texttt{OpenSG} banner and a \texttt{Time taken} footer, plus
@@ -983,13 +1123,32 @@ zero in both thin-walled models, for the reason below.
 \subsubsection{A fifth folder: the isotropic square tube}
 
 \texttt{square\_section\_isotropic} is the simplest case in the set and the best
-place to start. It reads \texttt{square\_tube\_1Dshell.yaml} and its user-input
-block is four lines: \texttt{a, t\_w = 1.0, 0.03} and
-\texttt{CELL\_AREA = 4*a*t\_w}, which is the \emph{wall material area}, the same
-measure the solid engines use, so the two routes are directly comparable. Run it
-with \texttt{python solid\_props\_msg\_shell.py}; it writes
-\texttt{square\_solid\_msg\_shell.out} with the $6\times6$ and the nine
-engineering constants obtained from \texttt{elastic\_constants(C)}.
+place to start. It reads \texttt{square\_tube\_1Dshell.yaml}, whose geometry is
+\texttt{a, t\_w = 1.0, 0.03}. This is the one case in the section that does
+\emph{not} want the measured bounding box: the YAML therefore declares
+\texttt{omega: 0.12} in its header, which is $4at_w$, the \emph{wall material
+area} and the same measure the solid engines use, so the two routes are directly
+comparable. Because the measure rides in the header, the run is the plain
+one-liner
+
+\begin{lstlisting}[style=shellst]
+opensg square_tube_1Dshell.yaml
+\end{lstlisting}
+
+\noindent
+which writes \texttt{square\_tube\_1Dshell\_C3D.out}, carrying the $6\times6$
+and the nine engineering constants under the banner
+
+\begin{Verbatim}[fontsize=\small,frame=single,framesep=4pt]
+ OpenSG msg-shell equivalent 3D solid (cross-section SG), omega 0.12 (user)
+\end{Verbatim}
+
+\noindent
+where \texttt{(user)} is \texttt{area\_source} recording that the measure was
+supplied rather than defaulted to the hull. The driver
+\texttt{solid\_props\_msg\_shell.py} adds the mesh figure and a second copy of
+the same law, \texttt{square\_solid\_msg\_shell.out}, laid out for the
+comparison scripts.
 
 \begin{figure}[htbp]
 \centering
@@ -1106,12 +1265,21 @@ reports the surface area and the resulting relative density
 
 \subsection{Run it}
 
+The generator writes the YAML; the homogenization is then the unified one-liner,
+because everything the route needs --- the layup, the material and the SG
+measure --- is in that file. The third command is the two-mode boundary
+comparison of Table~\ref{tab:schwarz-boundary}, which no single run can produce.
+
 \begin{lstlisting}[style=shellst]
 cd examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG
 python make_schwarz_yaml.py
-python schwarz_solid_props.py
+opensg schwarz_p_3Dshell.yaml
 python compare_boundary_modes.py
 \end{lstlisting}
+
+\noindent
+\texttt{schwarz\_solid\_props.py} runs the same homogenization from Python and
+adds the mesh figure.
 
 \begin{lstlisting}[style=opensg,caption={The two boundary treatments of shell\_sg3d.},basicstyle=\ttfamily\scriptsize]
 from opensg_shell.sg_homo import shell_sg3d
@@ -1121,16 +1289,46 @@ r = shell_sg3d("schwarz_p_3Dshell.yaml", boundary="aperiodic")  # non-periodic S
 r["C3D"], r["n_junction_edges"], r["ndof"], r["solve_time"]
 \end{lstlisting}
 
-The SG measure $\omega$ defaults to the \textbf{midsurface area}, the 3-D
-analogue of $\omega = \text{perimeter}$ for a plane-section shell SG, and can be
-overridden with the \texttt{omega=} argument. The \texttt{.out} file is written
-per unit-cell volume so its moduli compare directly with a solid \texttt{.K}.
+For a 3-D SG the measure $\omega$ is a \textbf{volume}, not an area: it defaults
+to the node \textbf{bounding-box volume}
+$\mathrm{ptp}(y_1)\,\mathrm{ptp}(y_2)\,\mathrm{ptp}(y_3)$, measured from the
+mesh --- the volume the equivalent continuum occupies, and the same cell the
+periodic assembly map ties. It is the same convention \texttt{opensg\_solid}
+uses, so the returned \texttt{C3D}, the line the CLI prints and
+\texttt{<base>\_C3D.out} are one and the same matrix, directly comparable with a
+solid SwiftComp \texttt{.K}. An explicit \texttt{omega=} argument (or the YAML's
+\texttt{omega:} header key, which the CLI forwards here) overrides it --- for
+example with the midsurface \emph{surface} area, which the result dict also
+returns as \texttt{"surface\_area"}, for a per-unit-area wall law.
 
 \subsection{What comes out}
 
-\texttt{shell\_sg3d} writes \texttt{schwarz\_p\_3Dshell\_C3D.out}, and the driver
-writes \texttt{schwarz\_p\_mesh.png}. The banner line of the \texttt{.out} records
-the whole configuration, and the default periodic run at $t = 0.036457$ gives:
+\texttt{shell\_sg3d} writes two files, \texttt{schwarz\_p\_3Dshell\_C3D.out} and
+\texttt{schwarz\_p\_3Dshell\_ABDG.out}, and the driver writes
+\texttt{schwarz\_p\_mesh.png}.
+
+The \texttt{\_ABDG.out} is the step-1 record: every route that reduces a layup
+to a wall plate law now emits it, the cross-section rings of
+Sections~\ref{sec:shell-beam} and~\ref{sec:shell-solid-xsec} and the 3-D shell
+SG alike. It is an $8\times8$ Reissner--Mindlin ABDG stiffness plus its
+compliance, one block per section, opening with
+
+\begin{Verbatim}[fontsize=\small,frame=single,framesep=4pt]
+ OpenSG msg-shell wall plate laws, one block per section
+ rows [eps11 eps22 2eps12 | K11 K22 K12+K21 | 2g13 2g23]
+\end{Verbatim}
+
+\noindent
+The Schwarz-P surface has a single section, headed
+\texttt{section 0: layup\_0  layup [['alu', 0.036457, 0.0]]}, and its wall law
+is $A_{11} = 2.7643220\times10^{9}$, $A_{12} = 8.2929659\times10^{8}$,
+$A_{66} = 9.6751264\times10^{8}$ N/m, $D_{11} = 3.0617465\times10^{5}$
+N$\cdot$m and $G_{11} = G_{22} = 8.5193106\times10^{8}$ N/m --- the plate law of
+a single $36.457$ mm aluminium ply, which is the cheapest possible check that
+the thickness and the material reached the solver intact.
+
+The banner line of the \texttt{\_C3D.out} records the whole configuration, and
+the default periodic run at $t = 0.036457$ gives:
 
 \begin{Verbatim}[fontsize=\footnotesize,frame=single,framesep=4pt]
  OpenSG msg-shell equivalent 3D solid (3-D shell SG, 13536 nodes, 26360 elems,

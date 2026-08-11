@@ -9,8 +9,9 @@ input file.
 | layer | package | role |
 |---|---|---|
 | user | `examples/` | yaml in → `.out` out; owns all paths |
-| msg-shell | `src/opensg_shell` | RM shell SGs: ring, aperiodic segment, 3-D shell cell |
-| msg-solid | `src/opensg_solid` | solid SGs: plate ABD, beam KKT, 3-D solid law |
+| command | `src/opensg` | the unified `opensg <yaml> [H\|D]` **dispatcher** — reads the yaml's `msg:` key (or its mesh dialect) and hands the untouched argv to the owning engine. No analysis, no defaults, no output of its own, and deliberately import-light so the engine's `__init__` still sets the load-bearing JAX x64 flag first. |
+| msg-shell | `src/opensg_shell` | RM shell SGs: ring, aperiodic segment, 3-D shell cell. CLI: `opensg_shell` |
+| msg-solid | `src/opensg_solid` | solid SGs: plate ABD, beam KKT, 3-D solid law. CLI: `opensg_solid` |
 | FE core | `src/fe_jax` | JAX FE architecture: basis/quadrature, periodic assembly map, jitted element kernels, EBE Chebyshev-CG, sparse direct |
 
 ## What a homogenization actually does
