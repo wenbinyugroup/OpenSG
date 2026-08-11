@@ -319,7 +319,12 @@ def weld_nodes(nodes, elements, tol=None, tags=None):
     used = np.zeros(ng, bool)
     for c in kept_conn:
         used[c.ravel()] = True
+    # keep the ORIGINAL node order (groups carry the lowest member index, and
+    # the lexsort that built them is spatial): with nothing to weld the output
+    # is then the input, node for node, so weld=True is a true no-op on a
+    # clean mesh and never silently renumbers someone's node ids
     keep = np.flatnonzero(used)
+    keep = keep[np.argsort(rep[keep], kind="stable")]
     renum = np.full(ng, -1, np.int64)
     renum[keep] = np.arange(len(keep), dtype=np.int64)
     out_nodes = nd[rep[keep]]
