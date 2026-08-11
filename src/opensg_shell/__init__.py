@@ -31,6 +31,9 @@ float32 and the 6x6 digits are wrong.
 import os as _os
 
 import jax
+import numpy as _np
+
+_np.set_printoptions(precision=5)   # the examples' shared print default
 
 jax.config.update("jax_enable_x64", True)
 
@@ -62,7 +65,9 @@ from .sg_homo import (ring_indep, build_rm_bundle, build_solid_bundle,     # noq
                       ring_solid, elastic_constants, GBAR_ORDER,
                       shell_sg3d, segment_timo_from_3dyaml)
 from .sg_dehom import (stress_at_points, disp_at_points,                   # noqa: E402
-                       _macro_fields, _rm_shell_strain)
+                       ring_wall_strains, _macro_fields, _rm_shell_strain)
+from .sg_dehom_junction import (flag_recovery_points,                      # noqa: E402
+                                junction_families)
 from .sg_materials import emit_station_abd, load_station_abd               # noqa: E402
 from .fe_jax.msg_rm_timo import timoshenko_rm                              # noqa: E402
 from .fe_jax.orient_plot import plot_orient, auto_emit                     # noqa: E402

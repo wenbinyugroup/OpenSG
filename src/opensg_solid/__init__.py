@@ -7,6 +7,8 @@ input), split file-per-concern:
                      sparse/KKT solvers
     sg_homo.py       homogenization drivers + plate_homo_2d
     sg_dehom.py      recovery kernels + plate_dehom_2d, export_gauss
+    helper/          format conversions (sc_to_yaml: SwiftComp .sc -> the
+                     SG yaml + .msh), the opensg_shell.helper analog
 Examples import opensg_solid.sg_homo / sg_dehom directly.
 
 This package __init__ carries the process-level setup every submodule
@@ -17,9 +19,14 @@ relies on:
 - the x64 switch, LOAD-BEARING (see rm_plate/__init__.py);
 - the persistent JAX compilation cache: cold runs pay each XLA compile
   once, warm runs load binaries from $JAX_COMPILATION_CACHE_DIR
-  (default ~/.cache/opensg_jax)."""
+  (default ~/.cache/opensg_jax);
+- the numpy print default (precision=5) shared by every example script."""
 import os
 import sys
+
+import numpy as _np
+
+_np.set_printoptions(precision=5)
 
 _FE_CORE = os.environ.get("FE_JAX_CORE")
 if _FE_CORE and _FE_CORE not in sys.path:

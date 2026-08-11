@@ -1,0 +1,33 @@
+name: opensg_2_0
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - numpy
+  - scipy
+  - mpi4py
+  - meshio
+  - petsc4py
+  - pyyaml
+  - fenics-dolfinx=0.8.0
+  - fenics-basix=0.8.0
+  - fenics-ufl=2024.1.0
+  - fenics-ffcx=0.8.0
+  - mpich
+  - matplotlib
+  - pyvista
+  - numba
+  - psutil
+  - pip
+  - pip:
+    # JAX stack -- CPU build (verified). For GPU replace the two pins with:
+    #   jax[cuda13]  (recommended) or jax[cuda12], plus cupy-cuda13x / cupy-cuda12x,
+    #   and use the cg solver instead of pypardiso (MKL/CPU only).
+    - jax==0.10.2
+    - jaxlib==0.10.2
+    - jaxopt
+    - flax
+    - libigl
+    - pypardiso
+    - windio
+    - -e .

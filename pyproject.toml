@@ -24,6 +24,11 @@ dependencies = [
     "scipy",
 ]
 
+[project.scripts]
+opensg = "opensg.cli:main"
+opensg_solid = "opensg_solid.cli:main"
+opensg_shell = "opensg_shell.cli:main"
+
 [project.optional-dependencies]
 cuda12 = [
     "cupy-cuda12x",
