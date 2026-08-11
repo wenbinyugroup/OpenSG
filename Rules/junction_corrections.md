@@ -1,7 +1,24 @@
 # Rule — when junction corrections apply (and when they must stay off)
 
 **Scope:** `junction=` in `build_solid_bundle` (`"census"`, `"micro"`, `"microcell"`) and any
-future junction model.
+future junction model — i.e. anything that changes an effective **property**.
+
+> **Not in scope: the `junction:` yaml key of the DEHOMOGENIZATION** (`opensg_shell <yaml> D`,
+> `sg_dehom_junction`). Same word, different object. That key does not correct anything: at its
+> default tier `flag` it only appends two bookkeeping columns (`jflag`, `jdist`) to
+> `<base>_dehom.txt`, two CELL_DATA scalars to the `.vtk`, and a `.junc` sidecar — **every field
+> value is bit-identical to `junction: off`** (gated). Tier `exclude` deletes duplicated
+> recovery stations (NaN) where two walls' through-thickness columns cover the same material
+> twice; it removes double counting, it never adds energy. Being on by default therefore does
+> not violate the default-OFF rule above, which exists because a *property* correction can be
+> invalid (bending-dominated lattices). Do **not** wire the two switches together.
+>
+> One shared caveat, since both sides use `junction_inventory` + `A_j = t_i t_j / sin θ`: on a
+> **curved** contour the 1° tangent tolerance calls every discretization kink a two-wall L
+> junction, and `sin θ → 0` there makes `A_j` blow up (IEA-22 r/R=0.2: 97 "junctions", only 8
+> real crossings, and `A_j` up to 0.41 m² at a *smooth* node against 4e-3 m² at a real web
+> junction). Harmless for the recovery flags (a material-band test, not `A_j`, decides those);
+> a live hazard for any *census property* correction run on an airfoil.
 
 ## What a junction correction is for
 

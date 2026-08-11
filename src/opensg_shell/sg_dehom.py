@@ -18,8 +18,11 @@ energy-consistent adjoint of the RM 6x6 assembly:
 Unlike the Kirchhoff-Love bundle, the recovery carries the wall transverse shears
 (2g13, 2g23).  Step 2 (plate through-thickness SG) reuses the opensg_jax plate machinery.
 
-Public entry points: disp_at_points, stress_at_points (bundle from
-sg_homo.build_rm_bundle).
+Public entry points: disp_at_points, stress_at_points, ring_wall_strains
+(bundle from sg_homo.build_rm_bundle).  ring_wall_strains is the per-ELEMENT
+step-1 field builder shared by the CLI D route and the shell dehom example --
+it never re-projects a point onto the nearest element, so junction points
+keep their own element's layup.
 """
 import numpy as np
 import jax.numpy as jnp
@@ -88,6 +91,137 @@ def _macro_fields(B, beam_force_vabs=None, beam_strain=None):
     return st, st_m, aA, aB
 
 
+def ring_wall_strains(B, beam_force_vabs=None, beam_strain=None):
+    """Step-1 (section) RM wall strain fields of the WHOLE ring, per element.
+
+    The exact code path of the shell dehom example (beam_dehom_shell.py),
+    lifted here so the CLI and the example share it: _macro_fields, then per
+    element the 6 RM shell strains at the mid-arc (_rm_shell_strain), the span
+    strain gradient dE1 from the element operators, and the arc gradient dE2
+    from the LAYUP-BOUNDARY-AWARE nodal average (element-midpoint values are
+    averaged only at nodes shared by exactly two SAME-layup elements -- no
+    differencing ever crosses a section change, and no point is ever
+    re-projected onto a neighbouring element).
+
+    In:
+        B: dict, RM bundle from build_rm_bundle.
+        beam_force_vabs: (6,) beam force/moment in VABS order, or None.
+        beam_strain: (6,) beam strain, or None (exactly one of the two must be given).
+    Out:
+        dict with:
+            "st": (6,) macro beam strain used.
+            "aA"/"aB": (6m,) nodal RM warping w / w'.
+            "s6mid": (E,6) shell strains [e11 e22 2e12 k11 k22 2k12] at mid-arc.
+            "dE1": (E,6) span gradients dE/dx1.
+            "dE2": (E,6) arc gradients dE/dx2.
+            "s6n": (N,6) same-layup nodal averages of s6mid (NaN elsewhere).
+            "emid": (E,2) element mid-arc points; "nvec": (E,2) inward normals.
+            "Lel": (E,) element arc lengths; "h": (E,) layup thicknesses.
+    """
+    st, st_m, aA, aB = _macro_fields(B, beam_force_vabs, beam_strain)
+    _, _sm, st_cl1, _cl2 = _macro_recovery(np.asarray(B["Timo"]), st)
+
+    corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"])
+    cen = corners.mean(0)
+    nodes_s, quads_s, _hs = B["strip"]
+    n_el = rc.shape[0]; n_nd = int(rc.max()) + 1
+    layups = B["layup_per_elem"]
+    hth = {ln: float(sum(i["thick"])) for ln, i in B["layup_db"].items()}
+    h = np.array([hth[ln] for ln in layups])
+
+    s6mid = np.zeros((n_el, 6)); dE1 = np.zeros((n_el, 6))
+    for e in range(n_el):
+        s6, _ = _rm_shell_strain(B, e, 0.5, st_m, aA, aB)
+        s6mid[e] = np.asarray(s6, float)
+        Xe = nodes_s[quads_s[e]]; e3e = B["re3"][e]
+        BDe, BDh, BDl, *_ = quad_ops_indep(Xe, e3e, 0.0, 0.0, float(B["k22"][e]),
+                                           B["cross"], B["ax"])
+        c0, c1 = int(rc[e, 0]), int(rc[e, 1])
+        g = np.r_[c0 * 6:c0 * 6 + 6, c1 * 6:c1 * 6 + 6, c1 * 6:c1 * 6 + 6, c0 * 6:c0 * 6 + 6]
+        dE1[e] = np.asarray(BDe @ st_cl1 + BDh @ aB[g], float)
+
+    # layup-boundary-aware nodal average of s6 (only where two SAME-layup elements meet)
+    deg = np.zeros(n_nd, int)
+    nd_el = [[] for _ in range(n_nd)]
+    for e in range(n_el):
+        for nd in (int(rc[e, 0]), int(rc[e, 1])):
+            deg[nd] += 1; nd_el[nd].append(e)
+    s6n = np.full((n_nd, 6), np.nan)
+    for nd in range(n_nd):
+        if deg[nd] == 2 and layups[nd_el[nd][0]] == layups[nd_el[nd][1]]:
+            s6n[nd] = 0.5 * (s6mid[nd_el[nd][0]] + s6mid[nd_el[nd][1]])
+    T = corners[rc[:, 1]] - corners[rc[:, 0]]
+    Lel = np.sqrt((T ** 2).sum(1))
+    dE2 = np.zeros((n_el, 6))
+    for e in range(n_el):
+        c0, c1 = int(rc[e, 0]), int(rc[e, 1])
+        v0 = s6n[c0] if np.isfinite(s6n[c0, 0]) else s6mid[e]
+        v1 = s6n[c1] if np.isfinite(s6n[c1, 0]) else s6mid[e]
+        dE2[e] = (v1 - v0) / Lel[e]
+
+    # inward wall normal per element (plate +z = OML -> IML)
+    tun = T / Lel[:, None]
+    nvec = np.column_stack([tun[:, 1], -tun[:, 0]])
+    emid = 0.5 * (corners[rc[:, 0]] + corners[rc[:, 1]])
+    flip = ((cen - emid) * nvec).sum(1) < 0
+    nvec[flip] *= -1.0
+    return {"st": np.asarray(st, float), "aA": np.asarray(aA), "aB": np.asarray(aB),
+            "s6mid": s6mid, "dE1": dE1, "dE2": dE2, "s6n": s6n,
+            "emid": emid, "nvec": nvec, "Lel": Lel, "h": h}
+
+
+def _wall_band(B, e):
+    """The recovery band of ring element ``e`` about its reference surface.
+
+    The wall owns depths z in [-frac*h, (1-frac)*h] (h = its OWN layup
+    thickness, frac = B["frac"]); with the default center reference that is
+    exactly +-h/2, the wall's own half-thickness.
+
+    In:  B: dict, RM bundle; e: int, ring element index.
+    Out: (lo, hi, h) floats.
+    """
+    h = float(sum(B["layup_db"][B["layup_per_elem"][int(e)]]["thick"]))
+    frac = float(B.get("frac", 0.0))
+    return -frac * h, (1.0 - frac) * h, h
+
+
+def _warn_off_wall(bad, api):
+    """One aggregated warning for query points that land outside the wall they
+    were projected onto.
+
+    ``_project_point`` returns the NEAREST ring element, and the plate SG's
+    ``msg_rm_plate._locate`` then CLAMPS the depth into [0, h].  A point that
+    really lives in the CROSSING wall of a junction therefore comes back
+    silently carrying the wrong wall's surface-ply state -- the origin of a
+    measured 274 MPa error at the IEA-22 spar-cap/web junctions.  The hazard is
+    REPORTED, never repaired: the return values of the two public APIs are
+    unchanged, so no consumer breaks and no result silently moves.  A caller
+    that wants the points partitioned instead should flag/exclude them with
+    sg_dehom_junction (the yaml `junction:` tier).
+
+    In:
+        bad: list of (overshoot, ip, e, z, lo, hi, h) per offending point.
+        api: str, the public API name to name in the message.
+    Out:
+        None (raises nothing; emits at most ONE RuntimeWarning).
+    """
+    if not bad:
+        return
+    import warnings
+    over, ip, e, z, lo, hi, h = max(bad, key=lambda r: r[0])
+    warnings.warn(
+        "%s: %d query point(s) project onto a ring element that does NOT own"
+        " them -- the depth falls outside that wall's own thickness band, and"
+        " the through-thickness SG CLAMPS it to the laminate surface, so the"
+        " reported state is the WRONG wall's surface ply (this is the"
+        " spar-cap/web junction failure mode).  Worst: point %d -> element %d,"
+        " depth %.6g m outside [%.6g, %.6g] (h = %.6g m, overshoot %.3g x h)."
+        " Values are returned unchanged; use the yaml `junction:` tier"
+        " (sg_dehom_junction) to flag or exclude such stations."
+        % (api, len(bad), ip, e, z, lo, hi, h, over / h),
+        RuntimeWarning, stacklevel=3)
+
+
 def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None, director=True):
     """RM-recovered warping displacement (u1,u2,u3) at query points.
 
@@ -103,14 +237,27 @@ def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None, directo
             through-thickness paths; on-contour points z~=0 are unaffected).
     Out:
         (P,3) float, warping displacement [u1,u2,u3] per point.
+
+    Warns (RuntimeWarning) when a point's nearest-element projection puts it
+    outside that wall's own thickness band -- see :func:`_warn_off_wall`.  The
+    returned values are unchanged.
     """
     pts = np.atleast_2d(np.asarray(points_2d, float))
     st, st_m, aA, aB = _macro_fields(B, beam_force_vabs, beam_strain)
     wn = np.asarray(aA).reshape(-1, 6)                       # per-node [u1,u2,u3,om1,om2,om3]
     corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"]); cen = corners.mean(0)
     out = np.zeros((len(pts), 3))
+    bad = []
     for i in range(len(pts)):
         e, xi, pr = _project_point(corners, rc, pts[i])
+        # the projected element must be able to REACH the point: |p - proj|
+        # beyond the wall's own band means the nearest element is not the wall
+        # that owns it (a junction cross-wall) -- report, never repair
+        _lo, _hi, _h = _wall_band(B, e)
+        _zmax = max(-_lo, _hi)
+        _dpr = float(np.hypot(*(pts[i] - pr)))
+        if _dpr > _zmax * (1.0 + 1e-9):
+            bad.append((_dpr - _zmax, i, int(e), _dpr, -_zmax, _zmax, _h))
         c0, c1 = int(rc[e, 0]), int(rc[e, 1])
         umid = (1.0 - xi) * wn[c0, 0:3] + xi * wn[c1, 0:3]      # mid-surface warping
         if director:
@@ -122,6 +269,7 @@ def disp_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None, directo
             z = (pts[i, 0] - pr[0]) * n2 + (pts[i, 1] - pr[1]) * n3   # depth from the contour
             umid = umid + z * np.cross(om, np.array([0.0, n2, n3]))   # + z (omega x e3)
         out[i] = umid
+    _warn_off_wall(bad, "disp_at_points")
     return out
 
 
@@ -190,6 +338,11 @@ def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
             "depth": (P,) float, signed depth from the reference contour.
             "proj": (P,2) float, projected point on the contour.
             "macro": (6,) macro beam strain used.
+
+    Warns (RuntimeWarning) when a point's nearest-element projection puts its
+    depth outside that wall's own band [-frac*h, (1-frac)*h] -- the depth the
+    plate SG then CLAMPS to the laminate surface; see :func:`_warn_off_wall`.
+    The returned values are unchanged.
     """
     pts = np.atleast_2d(np.asarray(points_2d, float))
     st, st_m, aA, aB = _macro_fields(B, beam_force_vabs, beam_strain)
@@ -207,6 +360,7 @@ def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
     P = len(pts)
     stress = np.zeros((P, 6)); strain = np.zeros((P, 6))
     el = np.zeros(P, int); xia = np.zeros(P); dep = np.zeros(P); proj = np.zeros((P, 2))
+    bad = []
     for ip in range(P):
         e, xi, pr = _project_point(corners, rc, pts[ip])
         c0, c1 = int(rc[e, 0]), int(rc[e, 1])
@@ -216,6 +370,12 @@ def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
         if (cen[0] - pr[0]) * n2 + (cen[1] - pr[1]) * n3 < 0.0:
             n2, n3 = -n2, -n3
         z = float((pts[ip, 0] - pr[0]) * n2 + (pts[ip, 1] - pr[1]) * n3)
+        # a depth outside this wall's OWN band is silently clamped by
+        # msg_rm_plate._locate -- flag it before the wrong ply answers
+        _lo, _hi, _hw = _wall_band(B, e)
+        _ov = max(_lo - z, z - _hi)
+        if _ov > 1e-9 * _hw:
+            bad.append((_ov, ip, int(e), z, _lo, _hi, _hw))
 
         s6, s2 = _rm_shell_strain(B, e, xi, st_m, aA, aB, s2_scheme=s2_scheme)
         if flow_avg:
@@ -245,5 +405,6 @@ def stress_at_points(B, points_2d, beam_force_vabs=None, beam_strain=None,
             Sig = rotation_6x6(-ply) @ Sig; Gam = rotation_6x6(ply).T @ Gam
         stress[ip] = Sig; strain[ip] = Gam
         el[ip] = e; xia[ip] = xi; dep[ip] = z; proj[ip] = pr
+    _warn_off_wall(bad, "stress_at_points")
     return {"stress": stress, "strain": strain, "elem": el, "xi": xia,
             "depth": dep, "proj": proj, "macro": st}
