@@ -85,6 +85,71 @@ def rotate_C_matrix(C, t):
     return jax.lax.cond(t == 0.0, skip_rotation, do_rotation, (C, t))
 
 
+def _single_C_np(params):
+    """NumPy twin of build_single_C_matrix -- the identical compliance
+    inverse (rm_plate_1D.build_stiffness_6x6 precedent).  The material
+    table is a handful of 6x6s, so building it eagerly in numpy avoids
+    re-tracing a vmapped builder in every fresh process (~0.6 s/call)."""
+    E1, E2, E3, G12, G13, G23, v12, v13, v23 = (float(x) for x in params)
+    S = np.zeros((6, 6))
+    S[0, 0] = 1.0 / E1
+    S[1, 1] = 1.0 / E2
+    S[2, 2] = 1.0 / E3
+    S[3, 3] = 1.0 / G23
+    S[4, 4] = 1.0 / G13
+    S[5, 5] = 1.0 / G12
+    S[0, 1] = S[1, 0] = -v12 / E1
+    S[0, 2] = S[2, 0] = -v13 / E1
+    S[1, 2] = S[2, 1] = -v23 / E2
+    return np.linalg.inv(S)
+
+
+def _rotate_C_np(C, t):
+    """NumPy twin of rotate_C_matrix -- the same SSDM R_Sig sign."""
+    if float(t) == 0.0:
+        return np.asarray(C, float)
+    th = np.deg2rad(float(t))
+    c, s = np.cos(th), np.sin(th)
+    cs = c * s
+    R_Sig = np.array([
+        [c ** 2, s ** 2, 0, 0, 0, 2 * cs],
+        [s ** 2, c ** 2, 0, 0, 0, -2 * cs],
+        [0, 0, 1, 0, 0, 0],
+        [0, 0, 0, c, -s, 0],
+        [0, 0, 0, s, c, 0],
+        [-cs, cs, 0, 0, 0, c ** 2 - s ** 2]])
+    return R_Sig @ np.asarray(C, float) @ R_Sig.T
+
+
+def _material_table_np(sc, material_param=None, angles=None):
+    """The per-MATERIAL (n_mat, 6, 6) table in plain numpy -- the shared
+    core of build_material_C / get_heterogeneous_C_matrix (semantics
+    documented on build_material_C)."""
+    if material_param is not None:
+        rows = [_single_C_np(p) for p in np.asarray(material_param, float)]
+        blk_ang = None
+    else:
+        rows, blk_ang = [], []
+        for mid in sorted(sc["materials"]):
+            m = sc["materials"][mid]
+            if m["type"] == 0:
+                E, nu = float(m["E"]), float(m["nu"])
+                G = E / (2.0 * (1.0 + nu))
+                rows.append(_single_C_np([E, E, E, G, G, G, nu, nu, nu]))
+            elif m["type"] == 1:
+                rows.append(_single_C_np(m["engineering"]))
+            else:
+                rows.append(np.asarray(m["C"], float))
+            blk_ang.append(float(m.get("angle", 0.0)))
+    C_m = np.stack(rows)
+    if angles is not None:
+        C_m = np.stack([_rotate_C_np(C, t)
+                        for C, t in zip(C_m, np.asarray(angles, float))])
+    elif blk_ang is not None and any(a != 0.0 for a in blk_ang):
+        C_m = np.stack([_rotate_C_np(C, t) for C, t in zip(C_m, blk_ang)])
+    return C_m
+
+
 def build_material_C(sc, material_param=None, angles=None):
     """The per-MATERIAL (n_mat, 6, 6) stiffness table.
 
@@ -92,29 +157,15 @@ def build_material_C(sc, material_param=None, angles=None):
          engineering override or None -> use the .sc material blocks
          (type 0 iso E/nu, type 1 the 9 constants, type 2 the stored 6x6 --
          NOTE type-2 .sc entries are typically PRE-ROTATED ply C's, so no
-         angles should be given with them); angles (n_mat,) deg or None
-    Out: (n_mat, 6, 6) jnp -- rotated when angles are given."""
-    if material_param is not None:
-        C_m = jax.vmap(build_single_C_matrix)(jnp.asarray(material_param,
-                                                          float))
-    else:
-        rows = []
-        for mid in sorted(sc["materials"]):
-            m = sc["materials"][mid]
-            if m["type"] == 0:
-                E, nu = m["E"], m["nu"]
-                G = E / (2.0 * (1.0 + nu))
-                rows.append(build_single_C_matrix(
-                    jnp.array([E, E, E, G, G, G, nu, nu, nu])))
-            elif m["type"] == 1:
-                rows.append(build_single_C_matrix(
-                    jnp.array(m["engineering"], float)))
-            else:
-                rows.append(jnp.array(m["C"], float))
-        C_m = jnp.stack(rows)
-    if angles is not None:
-        C_m = jax.vmap(rotate_C_matrix)(C_m, jnp.asarray(angles, float))
-    return C_m
+         angles should be given with them); angles (n_mat,) deg or None.
+         A block may also carry its own `angle` (deg): applied per material
+         when the `angles` argument is None, so an SG file can be
+         self-contained (constants + angle in the file, no override) --
+         the type-1/type-0 route; a type-2 block normally has no `angle`
+         since its stored C is already rotated.
+    Out: (n_mat, 6, 6) jnp -- rotated when angles (or block angles) are
+         given."""
+    return jnp.asarray(_material_table_np(sc, material_param, angles))
 
 
 def rotate_C_with_matrix(C, R_flat):
@@ -181,9 +232,9 @@ def get_heterogeneous_C_matrix(sc, material_param=None, angles=None,
     Out: (C_asm_e, C_mat_e) -- both (E, 6, 6): the ASSEMBLY stiffness
          (elem_rotation applied when given) and the pre-elem-rotation
          stiffness the recovery multiplies the element-frame strain by."""
-    C_m = build_material_C(sc, material_param, angles)
-    ids = jnp.asarray(np.asarray(sc["mat_id"], int) - 1)
-    C_mat_e = C_m[ids]
+    C_np = _material_table_np(sc, material_param, angles)
+    ids = np.asarray(sc["mat_id"], int) - 1
+    C_mat_e = jnp.asarray(C_np[ids])       # numpy gather, ONE device put
     if elem_rotation is None:
         return C_mat_e, C_mat_e
     R = jnp.asarray(elem_rotation, float).reshape(C_mat_e.shape[0], 9)

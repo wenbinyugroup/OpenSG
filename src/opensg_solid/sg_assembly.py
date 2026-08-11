@@ -346,6 +346,40 @@ def apply_chebyshev_precond(inv_blocks, n_unique_u, eig_max, eig_min, A_op,
     return z_final
 
 
+def _solid_omega(x_end, dphi_dxi_qnp, W_q, n_sg):
+    """The SG measure of a 3-D-solid (Cauchy continuum) macro model.
+
+    A 3-D SG (n_sg = 3) is a periodic UNIT CELL: the equivalent homogeneous
+    continuum that replaces it occupies the whole cell, so the measure that
+    turns the assembled energy into a stiffness is the cell VOLUME -- the
+    node bounding box ptp(x) ptp(y) ptp(z) -- NOT the summed element
+    (material) volume.  The two coincide only for a fully dense cell; for a
+    lattice/TPMS cell the material volume is smaller by the relative
+    density, and dividing by it would report the SOLID-PHASE stiffness
+    instead of the cell's effective stiffness.
+
+    A lower-dimensional SG homogenized to a 3-D solid (a 2-D fibre-array
+    cell, a 1-D stack) keeps the integrated measure of its own dimension --
+    that branch is unchanged.
+
+    In:  x_end (E, N, d) element-node coordinates; dphi_dxi_qnp (Q, N, p)
+         parametric basis gradients; W_q (Q,) quadrature weights;
+         n_sg static int SG spatial dimension
+    Out: scalar omega."""
+    if n_sg == 3:
+        return (jnp.ptp(x_end[..., 0]) * jnp.ptp(x_end[..., 1])
+                * jnp.ptp(x_end[..., 2]))
+
+    def _get_vol(x_nd):
+        J_qdp = jnp.einsum("nd,qnp->qdp", x_nd, dphi_dxi_qnp)
+        if n_sg > 1:
+            det_q = jnp.linalg.det(J_qdp)
+        else:
+            det_q = J_qdp[..., 0, 0]
+        return jnp.sum(jnp.abs(det_q) * W_q)
+    return jnp.sum(jax.vmap(_get_vol)(x_end))
+
+
 @partial(jax.jit, static_argnames=['n_model', 'n_sg'])
 def compute_homogenized_constants(
     x_end: jnp.ndarray, dphi_dxi_qnp: jnp.ndarray, phi_qn: jnp.ndarray,
@@ -364,15 +398,13 @@ def compute_homogenized_constants(
         n_sg: static int, SG spatial dimension.
     Out:
         D_bar: (H, H) direct integral, H = 4 beam / 6 plate, solid.
-        omega: scalar SG measure (solid: integrated volume;
+        omega: scalar SG measure (3-D SG -> solid: the node bounding-box
+            VOLUME, i.e. the periodic unit cell -- see _solid_omega;
+            lower-dimensional SG -> solid: integrated measure;
             plate/beam: coordinate spans per n_sg; 1.0 fallback).
     """
     if n_model == 3:
-        def _get_vol(x_nd):
-            J_qdp = jnp.einsum("nd,qnp->qdp", x_nd, dphi_dxi_qnp)
-            return jnp.sum(jnp.linalg.det(J_qdp) * W_q)
-        elem_vols = jax.vmap(_get_vol)(x_end)
-        omega = jnp.sum(elem_vols)
+        omega = _solid_omega(x_end, dphi_dxi_qnp, W_q, n_sg)
     elif n_model == 2:
         if n_sg == 3:
             omega = jnp.ptp(x_end[..., 0]) * jnp.ptp(x_end[..., 1])
@@ -591,7 +623,7 @@ def assemble_system_matrices(
     }
 
     if n_model == 3:
-        omega = jnp.sum(dehomo_data["dV_q"])
+        omega = _solid_omega(x_end, dphi_dxi_qnp, W_q, n_sg)
     elif n_model == 2:
         if n_sg == 3:
             omega = jnp.ptp(x_end[..., 0]) * jnp.ptp(x_end[..., 1])

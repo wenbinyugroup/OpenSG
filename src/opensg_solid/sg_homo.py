@@ -606,9 +606,13 @@ def write_sc_K(path, C, solve_time=None, model="", constants=True, name="",
 
     In:  path str; C (n, n) effective stiffness; solve_time float | None;
          model str banner text; constants bool (True: 3-D solid only);
-         name str matrix title infix -- '' -> 'The Effective Stiffness
-         Matrix'; 'Timoshenko' (beam 6x6), 'Classical Plate' (ABD 6x6),
-         'Reissner-Mindlin Plate' (ABDG 8x8);
+         name str matrix title infix -- it MUST be the console law title
+         of the macro model, so that ' The Effective <name> Stiffness
+         Matrix' in the file reads the same as the terminal:
+         'Timoshenko Beam' (beam 6x6), 'Euler-Bernoulli Beam' (beam 4x4),
+         'Classical Plate' (ABD 6x6), 'Reissner-Mindlin' (ABDG 8x8),
+         'Cauchy Continuum' (3-D solid 6x6);  '' -> 'The Effective
+         Stiffness Matrix' (no macro law names itself that -- do not use);
          mass (6, 6) | None -- beam mass matrix, written VABS .K style
          ('The 6X6 Mass Matrix') after the compliance
     Out: the .out file at path; returns None."""
@@ -652,14 +656,16 @@ def write_sc_K(path, C, solve_time=None, model="", constants=True, name="",
 def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     material_param=None,                # (n_mat, 9) override
                     angles: Optional[Sequence[float]] = None,   # deg/material
-                    n_model: int = 2,                   # 1 beam, 2 plate, 3 3D
+                    n_model: Optional[int] = None,      # 1 beam, 2 plate, 3 3D
+                    refined: Optional[int] = None,      # 0 classical, 1 shear-refined
                     workdir: Optional[str] = None,      # where .yaml/.msh go
                     elem_rotation=None,                 # (E, 9) per-element DCs
                     solver: str = "direct",             # "direct" | "cg"
-                    shear_refined: bool = False,        # + RM G 2x2 (n_model=2)
-                    plot: bool = True,                  # write <base>_mesh.png
+                    shear_refined: bool = False,        # legacy alias of model=1
+                    plot: bool = True,                  # <base>_mesh.png if absent
                     boundary: Optional[str] = None,     # 'aperiodic'|'periodic'
-                    density=None                        # (n_mat,) beam mass rho
+                    density=None,                       # (n_mat,) beam mass rho
+                    omega: Optional[float] = None       # user SG measure (3-D solid)
                     ) -> Dict[str, Any]:
     """Homogenize ONE structure gene (1-D/2-D/3-D .sc) to the macro law.
 
@@ -669,15 +675,32 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     dphi_dxi_qnp, W_q, the periodic connectivity, n_sg, n_model, omega,
     sc (the parsed .sc dict).  Everything the dehom needs rides along --
     homogenize once, recover as often as needed (the msg_rm_plate rule).
+    r["law"] / r["law_title"] carry the law SELECTED by `refined` (the
+    one the .out reports), so a driver needs no branching to print it.
+    refined: 0 = classical (plate ABD 6x6 / beam EB 4x4), 1 =
+    shear-refined (plate ABDG 8x8 / beam Timoshenko 6x6); None = the
+    legacy default (beam Timoshenko; plate classical unless
+    shear_refined=True); ignored for n_model=3, whose 6x6 solid law is
+    the single option.
+    A yaml SG may carry the analysis request in its own header (leading
+    scalar keys, see sg_mesh.read_yaml_header): `n_model:` gives the
+    macro model (1 beam, 2 plate, 3 solid), `refined:` the 0/1 switch
+    and the OPTIONAL `aperiodic: 1` the boundary opt-out (omit the key
+    for a periodic SG -- periodic is the default at every dimension);
+    those fill any argument left at None, so a self-describing
+    file runs as plate_homo_2d("file.yaml") with no arguments --
+    explicit arguments always win over the header.  Without header or
+    argument the legacy defaults apply (plate; refined as above).
     n_model=1 routes through the Beam_solid KKT engine (n_sg >= 2);
     elem_rotation is consumed by every model (beam, plate and solid).
     solver: "direct" (default; one sparse factorization for all columns)
     or "cg" (the verbatim SSDM Chebyshev-CG pipeline) -- both produce
     the same digits, see _homo_direct.
-    shear_refined=True (plate only) additionally runs the RM first-order
-    warping ladder (plate_shear_ladder) -> r["G_msg"] (2x2), r["ABDG"]
-    (8x8 [[A6, 0], [0, G]]), r["A6_ladder"]; derivation status per SG
-    dimension: see plate_shear_ladder.
+    The plate model=1 route runs the RM first-order warping ladder
+    (plate_shear_ladder) -> r["G_msg"] (2x2), r["ABDG"] (8x8
+    [[A6, 0], [0, G]]), r["A6_ladder"]; derivation status per SG
+    dimension: see plate_shear_ladder.  `shear_refined=True` is the
+    legacy spelling of model=1 (plate only).
     sc_path may also be an ALREADY-PARSED sc dict (laminate_to_sg).
     boundary: 'periodic' (default; ties opposite faces/edges/corners --
     the SwiftComp-parity mode) or 'aperiodic' (explicit request only):
@@ -685,7 +708,39 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     the boundary, i.e. ZERO fluctuation (w = 0 Dirichlet) on every
     bounding-box-face node.  Aperiodic forbids the rank-one affine fields
     of a free SG, fixes the rigid modes, and is a kinematic upper bound
-    on a single cell (stiffer than periodic)."""
+    on a single cell (stiffer than periodic).
+    omega: the USER SG measure, overriding the one measured from the mesh
+    (3-D solid macro model only; the yaml header key `omega:` fills it in,
+    and an explicit argument wins over the header).  The measured default
+    for a 3-D SG is the node bounding box -- the periodic unit cell; pass
+    `omega` only when the equivalent continuum occupies something else."""
+    from .sg_mesh import read_yaml_header
+    _hdr = read_yaml_header(sc_path) if isinstance(sc_path, str) else {}
+    if omega is None and _hdr.get("omega") is not None:
+        omega = float(_hdr["omega"])
+    omega_user = None if omega is None else float(omega)
+    del omega                    # below, `omega` is the MEASURED measure
+    if n_model is None:
+        n_model = int(_hdr.get("n_model", 2))
+    if n_model not in (1, 2, 3):
+        raise ValueError("n_model must be 1 (beam), 2 (plate) or 3 (3-D"
+                         " solid), got %r" % n_model)
+    if shear_refined and n_model != 2:
+        raise ValueError("shear_refined applies to the plate model "
+                         "(n_model=2)")
+    if boundary is None and _hdr.get("aperiodic") is not None:
+        # `aperiodic: 1` in the yaml header is the explicit opt-out;
+        # absent (or 0) means periodic -- the default for every SG
+        boundary = "aperiodic" if int(_hdr["aperiodic"]) else "periodic"
+    if refined is None and _hdr.get("refined") is not None:
+        refined = int(_hdr["refined"])
+    if refined is None:
+        refined = 1 if (n_model == 1 or shear_refined) else 0
+    elif refined not in (0, 1):
+        raise ValueError("refined must be 0 (classical: plate ABD / beam"
+                         " EB) or 1 (shear-refined: plate ABDG / beam"
+                         " Timoshenko)")
+    shear_refined = (n_model == 2 and refined == 1)
     if isinstance(sc_path, dict):
         base = os.path.join(workdir if workdir is not None else ".",
                             "laminate_sg")
@@ -697,8 +752,13 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     _t0 = _time.perf_counter()
     sc = load_sg_input(sc_path, base)
     n_sg = sc["dim"]
-    if plot:
-        plot_sg_mesh(sc, base + "_mesh.png", msh_path=base + ".msh")
+
+    def _emit_plot():
+        # visualization stays OUT of the timed span and is drawn only when
+        # missing (same mesh -> same figure; delete the PNG to refresh)
+        png = base + "_mesh.png"
+        if plot and not os.path.exists(png):
+            plot_sg_mesh(sc, png, msh_path=base + ".msh")
 
     nn = sorted({len(c) for c in sc["cells"]})
     if len(nn) != 1:
@@ -750,20 +810,32 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                            solver=solver)
         r["solve_time"] = _time.perf_counter() - _t0
         # 6x6 mass matrix (VABS .K style): rho per material from `density`,
-        # falling back to the .sc material blocks' T/rho line (aux[1])
+        # falling back to the material blocks' own `density:` key (the
+        # user-authored yaml route) and then to the .sc T/rho line (aux[1])
         if density is None:
-            aux_rho = [float(sc["materials"][mid].get("aux", [0, 0])[1])
-                       for mid in sorted(sc["materials"])]
+            aux_rho = [float(m.get("density", m.get("aux", [0, 0])[1]))
+                       for _, m in sorted(sc["materials"].items())]
             density = aux_rho if any(r_ > 0 for r_ in aux_rho) else None
         M6 = None
         if density is not None:
             M6, minfo = mass_matrix_2d(sc, np.asarray(density, float))
             r["Mass"] = M6; r["mass_info"] = minfo
-        write_sc_K(base + ".out", np.asarray(r["C_eff"]),
+        if refined == 0:
+            r["law"] = np.asarray(r["C_eff_EB"])
+            r["law_title"] = ("Euler-Bernoulli Beam Stiffness Matrix  "
+                              "[eps11 kappa1 kappa2 kappa3]")
+            _nm = "Euler-Bernoulli Beam"
+        else:
+            r["law"] = np.asarray(r["C_eff"])
+            r["law_title"] = ("Timoshenko Beam Stiffness Matrix  "
+                              "[eps11 gam12 gam13 kappa1 kappa2 kappa3]")
+            _nm = "Timoshenko Beam"
+        write_sc_K(base + ".out", r["law"],
                    solve_time=r["solve_time"],
                    model="msg-solid beam model, omega %.8g"
                          % float(r["omega"]),
-                   constants=False, name="Timoshenko", mass=M6)
+                   constants=False, name=_nm, mass=M6)
+        _emit_plot()
         return r
 
     # per-element frames must be applied for plate/solid too, not only beam;
@@ -786,6 +858,13 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
             periodic_cells_en, unique_dofs, n_unique, n_model, n_sg)
 
+    if omega_user is not None and n_model == 3:
+        # the user measure WINS over the measured one; C_eff is exactly
+        # linear in 1/omega, so rescaling here is the same as having
+        # divided by omega_user inside the assembly
+        C_eff = np.asarray(C_eff) * (float(omega) / omega_user)
+        omega = omega_user
+
     r = {"C_eff": np.asarray(C_eff), "V0": V0_matrix, "C_ess": C_ess,
          "x_end": x_end, "phi_qn": phi_qn, "dphi_dxi_qnp": dphi_dxi_qnp,
          "W_q": W_q, "periodic_cells_en": periodic_cells_en,
@@ -795,9 +874,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
          "sc": sc}
 
     if shear_refined:
-        if n_model != 2:
-            raise ValueError("shear_refined applies to the plate model "
-                             "(n_model=2)")
+        # (the model/shear_refined guard lives at the top of the function)
         # the l-blocks integrate basis VALUE products -> degree 2p+2
         fe_hi = FiniteElementType(
             cell_type=ctype, family=ElementFamily.P, basis_degree=bdeg,
@@ -827,16 +904,26 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
            else "aperiodic: w=0 on %d boundary nodes"
                 % r["n_boundary_nodes"])
     if n_model == 2 and shear_refined and r.get("ABDG") is not None:
-        write_sc_K(base + ".out", np.asarray(r["ABDG"]),
+        r["law"] = np.asarray(r["ABDG"])
+        r["law_title"] = ("Reissner-Mindlin Stiffness Matrix  "
+                          "[N11 N22 N12 M11 M22 M12 Q1 Q2]")
+        write_sc_K(base + ".out", r["law"],
                    solve_time=r["solve_time"],
                    model="%s, omega %.8g, %s" % (_mdl, float(r["omega"]),
                                                  _bc),
-                   constants=False, name="Reissner-Mindlin Plate")
+                   constants=False, name="Reissner-Mindlin")
     else:
-        write_sc_K(base + ".out", np.asarray(r["C_eff"]),
+        r["law"] = np.asarray(r["C_eff"])
+        r["law_title"] = ("Classical Plate Stiffness Matrix  "
+                          "[N11 N22 N12 M11 M22 M12]" if n_model == 2 else
+                          "Cauchy Continuum Stiffness Matrix  "
+                          "[11 22 33 23 13 12]")
+        write_sc_K(base + ".out", r["law"],
                    solve_time=r["solve_time"],
                    model="%s, omega %.8g, %s" % (_mdl, float(r["omega"]),
                                                  _bc),
                    constants=(n_model == 3),
-                   name="Classical Plate" if n_model == 2 else "")
+                   name="Classical Plate" if n_model == 2
+                        else "Cauchy Continuum")
+    _emit_plot()
     return r
