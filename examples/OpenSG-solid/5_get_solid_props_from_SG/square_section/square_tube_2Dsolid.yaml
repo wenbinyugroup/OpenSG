@@ -1,3 +1,4 @@
+msg: solid      # the ENGINE this SG belongs to (opensg_solid); `opensg <yaml>` dispatches on it
 nodes:
 - [-0.515000 0.515000 0.000000]
 - [-0.485000 0.485000 0.000000]

@@ -1,3 +1,7 @@
+n_model: 1      # 1 = beam, 2 = plate (opensg_solid), 3 = solid -- the macro model this SG homogenizes to
+refined: 1      # 0 = classical (beam EB 4x4, KL wall); 1 = shear-refined (beam Timoshenko 6x6, RM wall)
+msg: shell      # the ENGINE this SG belongs to (opensg_shell); `opensg <yaml>` dispatches on it
+aperiodic: 1    # the two end cross-sections carry their own V0/V1 as Dirichlet data (no axial periodicity)
 nodes:
 - [0.0, 1.0, 0.0]
 - [0.0, 0.9992290362407229, 0.03925981575906861]

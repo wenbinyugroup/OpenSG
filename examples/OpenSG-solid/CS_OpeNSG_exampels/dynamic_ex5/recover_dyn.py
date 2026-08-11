@@ -56,10 +56,17 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = HERE
-while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
-    ROOT = os.path.dirname(ROOT)
-sys.path.insert(0, os.path.join(ROOT, "src"))
+try:
+    import opensg_solid                      # pip install -e . -- nothing to do
+except ImportError:                          # fall back to the in-repo source tree
+    ROOT = HERE
+    while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid")):
+        parent = os.path.dirname(ROOT)
+        if parent == ROOT:                   # hit the filesystem root
+            raise ImportError(
+                "opensg_solid not installed and no src/ found above " + HERE)
+        ROOT = parent
+    sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "examples", "OpenSG-solid",
                                 "CS_OpeNSG_exampels", "static", "yu2003"))
 
@@ -485,8 +492,11 @@ def run(kind):
 
 
 if __name__ == "__main__":
+    import time as _t
+    print("start: " + _t.strftime("%Y-%m-%d %H:%M:%S"))
     ap = argparse.ArgumentParser()
     ap.add_argument("--kind", default=None, choices=("step", "blast"))
     args = ap.parse_args()
     for kind in ([args.kind] if args.kind else ("step", "blast")):
         run(kind)
+    print("end:   " + _t.strftime("%Y-%m-%d %H:%M:%S"))

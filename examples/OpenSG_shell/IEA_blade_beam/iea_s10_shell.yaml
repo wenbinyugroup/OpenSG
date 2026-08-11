@@ -1,3 +1,4 @@
+msg: shell      # the ENGINE this SG belongs to (opensg_shell); `opensg <yaml>` dispatches on it
 nodes:
 - [4.70852238 0.09722431 0.00000000]
 - [4.64563825 0.11238283 0.00000000]

@@ -38,7 +38,6 @@ density = [1.6e-9, 1.6e-9, 2.7e-9]   # tonne/mm^3 per material (MPa-mm system):
 
 r = plate_homo_2d(name + ".yaml", material_param=material_param,
                     angles=angles, n_model=n_model, density=density)
-np.set_printoptions(precision=5)
 print("beam 6x6  [eps11 gam12 gam13 kappa1 kappa2 kappa3]  (Timoshenko):")
 print(r["C_eff"])
 print("beam 4x4  [eps11 kappa1 kappa2 kappa3]  (EB, same run):")
@@ -46,5 +45,5 @@ print(r["C_eff_EB"])
 print("mass 6x6  (VABS frame; mass/span %.5g, center (%.4g, %.4g)):"
       % (r["mass_info"]["mpus"], *r["mass_info"]["mass_center"]))
 print(r["Mass"])
-print("wrote %s.out (Timoshenko stiffness + compliance + 6x6 mass, .K layout)"
-      " + %s_mesh.png" % (name, name))
+print("Homogenization stored in %s.out" % name)
+print("Time taken: %.2f sec" % float(r["solve_time"]))

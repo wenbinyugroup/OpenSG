@@ -11,9 +11,11 @@ import numpy as np
 import yaml as _yaml
 
 from opensg_shell import build_solid_bundle
-
-L2 = 25.4e-3
-DEO = {"C11": (16133.90, 15518.11), "C12": (1016.82, 1008.76),
+from opensg_shell.cli import sg_cell_area          # the yaml IS the input:
+                                                   # omega header, else bbox
+YAML = "deo_composite_square_1Dshell.yaml"
+L2SQ = sg_cell_area(YAML)                          # cell area (25.4 mm)^2
+DEO ={"C11": (16133.90, 15518.11), "C12": (1016.82, 1008.76),
        "C13": (468.38, 459.01), "C15": (-1192.81, -1135.27),
        "C16": (2589.74, 2535.23), "C22": (983.56, 988.88),
        "C23": (3.04e-6, 20.44), "C26": (317.09, 311.80),
@@ -26,7 +28,7 @@ IJ = {"C11": (0, 0), "C12": (0, 1), "C13": (0, 2), "C15": (0, 4),
       "C66": (5, 5)}
 
 t0 = time.perf_counter()
-b = build_solid_bundle("deo_composite_square_1Dshell.yaml", cell_area=L2*L2)
+b = build_solid_bundle(YAML, cell_area=L2SQ)
 dt = time.perf_counter() - t0
 C = np.asarray(b["C3D"])*1e-6
 
@@ -34,7 +36,7 @@ with open("deo_composite_square_msg_shell.out", "w") as f:
     f.write("# Deo composite square -- OpenSG msg_shell (RM), [15]_8 walls\n"
             "# order [G11 G22 G33 2G23 2G13 2G12]; MPa; cell area %.8f\n"
             "# solve time: %.2f s\n# ---- C_eff (6x6, MPa) ----\n"
-            % (L2*L2, dt))
+            % (L2SQ, dt))
     for i in range(6):
         f.write(" ".join("%16.8e" % C[i, j] for j in range(6)) + "\n")
 
@@ -53,7 +55,7 @@ for nm, (tw, so) in DEO.items():
 open("deo_composite_square_compare.dat", "w").write("\n".join(lines) + "\n")
 print("\n".join(lines))
 
-d = _yaml.safe_load(open("deo_composite_square_1Dshell.yaml"))
+d = _yaml.safe_load(open(YAML))
 row = lambda r: " ".join(str(x) for x in
                          (r if isinstance(r, list) else [r])).split()
 nd = np.array([[float(v) for v in row(r)][:2] for r in d["nodes"]])

@@ -40,7 +40,7 @@ TERMS = [("C11", 0, 0), ("C12", 0, 1), ("C13", 0, 2), ("C22", 1, 1),
          ("C66", 5, 5)]
 lines = ["# TPMS Sample_%s: msg-solid vs SwiftComp .K (per-cell, MPa);"
          " relative density %.4f; solve %.1f s" % (S, om, r["solve_time"]),
-         "# %-5s %12s %12s %9s" % ("term", "msg_solid", "SwiftComp", "err%")]
+         "# %-5s %12s %12s %9s" % ("term", "opensg_solid", "SwiftComp", "err%")]
 for nm, i, j in TERMS:
     lines.append("  %-5s %12.3f %12.3f %+9.3f"
                  % (nm, Cc[i, j]*1e-6, K[i, j]*1e-6,

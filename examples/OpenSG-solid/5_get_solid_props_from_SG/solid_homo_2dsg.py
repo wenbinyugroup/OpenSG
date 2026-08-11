@@ -23,10 +23,14 @@ wenbinyugroup/OpenSG dev 3DModel.ipynb (FEniCS) 9 constants:
 #   <name>_Deff.out, <name>_constants_vs_paper.dat, <name>_mesh.png  outputs
 # ----------------------------------------------------------------------------
 """
+import time
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+
+_t0 = time.perf_counter()
 
 ############### User Input #################################
 n_model = 3                    # 1: Beam; 2: Plate; 3: 3D elastic
@@ -173,5 +177,6 @@ ax.tripcolor(nd[:, 0], nd[:, 1], tri, facecolors=mat_id.astype(float),
              cmap="coolwarm", edgecolors="k", linewidth=0.15)
 ax.set_aspect("equal"); ax.set_xlabel("y2"); ax.set_ylabel("y3")
 fig.tight_layout(); fig.savefig(name + "_mesh.png", dpi=200)
-print("\nwrote %s_Deff.out, %s_constants_vs_paper.dat, %s_mesh.png"
-      % (name, name, name))
+print("\nHomogenization stored in %s_Deff.out (+ %s_constants_vs_paper.dat)"
+      % (name, name))
+print("Time taken: %.2f sec" % (time.perf_counter() - _t0))

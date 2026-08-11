@@ -1,3 +1,4 @@
+msg: solid      # the ENGINE this SG belongs to (opensg_solid); `opensg <yaml>` dispatches on it
 sg: {type: plate_1d, elem_order: 4, n_per_layer: 1, reference_fraction: 0.5, thickness: 1.0,
   n_ply: 2}
 nodes:

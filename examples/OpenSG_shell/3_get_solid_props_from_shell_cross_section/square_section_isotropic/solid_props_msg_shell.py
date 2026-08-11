@@ -7,14 +7,18 @@ constants.  PERIODIC by default per Rules/periodicity_in_solid_props.md: for a
 periodic assembly map.
 
 Normalized by the WALL MATERIAL area 4*a*t, the same measure the solid engines
-use for n_model = 3, so the two routes are directly comparable.
+use for n_model = 3, so the two routes are directly comparable.  That measure
+is NOT a property of the node cloud (the bounding box of a closed tube is the
+box, a*a), so the yaml declares it in its `omega:` header and this driver
+reads it from there -- the file is the single input, exactly as it is for
+`opensg_shell square_tube_1Dshell.yaml`.
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS SCRIPT
 # ----------------------------------------------------------------------------
 #   YAML                the 1-D shell SG
-#   a, t_w              wall midline side, wall thickness
-#   CELL_AREA           4*a*t = the wall material area
+#   a, t_w              wall midline side, wall thickness (labels only)
+#   CELL_AREA           the yaml's `omega:` = 4*a*t, the wall material area
 #   B["C3D"]            (6, 6) equivalent solid stiffness,
 #                       order [e11 e22 e33 2e23 2e13 2e12]
 #   square_solid_msg_shell.out      the output
@@ -28,14 +32,17 @@ import numpy as np
 import yaml as _yaml
 
 from opensg_shell import build_solid_bundle, GBAR_ORDER
+from opensg_shell.cli import sg_cell_area          # the yaml IS the input:
+                                                   # omega header, else bbox
 from opensg_shell.sg_homo import elastic_constants
 
 ############### User Input #################################
 YAML = "square_tube_1Dshell.yaml"
-a, t_w = 1.0, 0.03
-CELL_AREA = 4*a*t_w
+a, t_w = 1.0, 0.03                # geometry, for the labels only
 OUT = "square_solid_msg_shell.out"
 ############################################################
+
+CELL_AREA = sg_cell_area(YAML)    # = the yaml's `omega: 0.12` = 4*a*t
 
 KEYS = ("E1", "E2", "E3", "G23", "G13", "G12", "nu12", "nu13", "nu23")
 B = build_solid_bundle(YAML, cell_area=CELL_AREA)

@@ -1,3 +1,4 @@
+msg: solid
 sg: {type: plate_1d, elem_order: 4, n_per_layer: 1, reference_fraction: 0.5, thickness: 0.1,
   n_ply: 3}
 nodes:

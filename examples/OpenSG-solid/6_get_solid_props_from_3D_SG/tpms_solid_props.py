@@ -39,4 +39,5 @@ for s in which:
         f.write("# ---- C_eff (6x6, Pa) ----\n")
         for i in range(6):
             f.write(" ".join("%16.8e" % C[i, j] for j in range(6)) + "\n")
-    print("wrote Sample_%s_msg_solid.out" % s)
+    print("Homogenization stored in Sample_%s_msg_solid.out" % s)
+    print("Time taken: %.2f sec" % dt)

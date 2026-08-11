@@ -1,0 +1,9 @@
+# OpenSG dehomogenization macro state -- read by `opensg_solid RHC_SW_2UC_45.yaml D`
+# The SG yaml describes the STRUCTURE; this file carries the LOADING.
+u:     [0.0, 0.0, 0.0]      # macro displacement u1 u2 u3
+theta: [0.0, 0.0, 0.0]      # macro rotation t1 t2 t3 [rad] (about y1 y2 y3)
+C:     [[1.0, 0.0, 0.0],       # direction cosines of the macro frame
+        [0.0, 1.0, 0.0],       #   (identity = unrotated; overrides theta)
+        [0.0, 0.0, 1.0]]
+# generalized macro forces, beam  [F1 F2 F3 M1 M2 M3]
+FF:    [9899.3087, 6.9807273, 0.0032515777, -31861.511, 21895742, -959.63908]

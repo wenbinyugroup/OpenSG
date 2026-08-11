@@ -1,4 +1,4 @@
-﻿"""rm_dehom_dat.py -- the ABAQUS-DRIVEN OpenSG-RM dehomogenizer.  THE METHOD:
+"""rm_dehom_dat.py -- the ABAQUS-DRIVEN OpenSG-RM dehomogenizer.  THE METHOD:
 every strain-gradient driver comes from FINITE DIFFERENCES of the strain
 field sampled at the element integration points.  No equilibrium closure
 anywhere -- not for the gradients, not for sigma33.

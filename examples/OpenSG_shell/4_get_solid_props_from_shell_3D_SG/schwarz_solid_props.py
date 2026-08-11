@@ -13,7 +13,11 @@ import yaml as _yaml
 
 from opensg_shell.sg_homo import shell_sg3d
 
-r = shell_sg3d("schwarz_p_3Dshell.yaml")   # omega = SG surface area (default)
+# omega defaults to the MEASURED SG measure = the node bounding-box volume
+# (here the 1 x 1 x 1 unit cell), so C3D is the per-unit-cell law the .out
+# stores; r["surface_area"] carries the midsurface area if a per-area
+# normalization is wanted instead.
+r = shell_sg3d("schwarz_p_3Dshell.yaml")
 C = r["C3D"]
 print("junction edges: %d   ndof: %d   solve %.1f s"
       % (r["n_junction_edges"], r["ndof"], r["solve_time"]))

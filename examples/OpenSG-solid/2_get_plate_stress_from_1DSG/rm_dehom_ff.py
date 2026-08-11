@@ -50,8 +50,12 @@ import yaml
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from rm_dehom import (load_sg, z_stations, build_ops, material_rotations,
-                      mls_gradients, write_field, write_vtk, SGIDX, ORDER)
+import time as _t
+print("start: " + _t.strftime("%Y-%m-%d %H:%M:%S"))
+
+from opensg_solid.rm_plate_1D.rm_dehom import (
+    load_sg, z_stations, build_ops, material_rotations,
+    mls_gradients, write_field, write_vtk, SGIDX, ORDER)
 
 import jax
 import jax.numpy as jnp
@@ -260,3 +264,4 @@ else:
           "structured-grid VTK)" % (os.path.basename(STEM), NIP * NZS))
 for nm in ORDER:
     print("  max|S%s| = %.4e Pa" % (nm, np.abs(Sig[:, :, SGIDX[nm]]).max()))
+print("end:   " + _t.strftime("%Y-%m-%d %H:%M:%S"))

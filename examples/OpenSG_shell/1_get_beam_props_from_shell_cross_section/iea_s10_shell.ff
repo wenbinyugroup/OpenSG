@@ -1,0 +1,10 @@
+# OpenSG dehomogenization macro state -- read by `opensg_shell iea_s10_shell.yaml D`
+# The SG yaml describes the STRUCTURE; this file carries the LOADING.
+u:     [0.0, 0.0, 0.0]      # macro displacement u1 u2 u3
+theta: [0.0, 0.0, 0.0]      # macro rotation t1 t2 t3 [rad] (about y1 y2 y3)
+C:     [[1.0, 0.0, 0.0],       # direction cosines of the macro frame
+        [0.0, 1.0, 0.0],       #   (identity = unrotated; overrides theta)
+        [0.0, 0.0, 1.0]]
+# generalized macro forces, beam [F1 F2 F3 M1 M2 M3]
+# IEA-22 station r/R = 0.20 (ff51_rmc_reform.dat row 10, RM center-ref BeamDyn)
+FF:    [4.19268867e+04, 8.26739746e+03, 1.46733512e+06, 1.21914500e+06, -6.01849720e+07, 3.04264594e+05]

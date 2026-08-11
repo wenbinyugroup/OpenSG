@@ -1,4 +1,4 @@
-﻿"""msg-solid 3-D SG solid properties: TPMS Sample_2 (192k tets), periodic in
+"""msg-solid 3-D SG solid properties: TPMS Sample_2 (192k tets), periodic in
 all 3 directions, aluminum E = 69 GPa nu = 0.3 (matched to the SwiftComp .K).
 Writes the timed .out (per-cell), the mesh png (solver default) and the
 comparison .dat vs SwiftComp.  Run:  python run_sample_2.py"""
@@ -40,7 +40,7 @@ TERMS = [("C11", 0, 0), ("C12", 0, 1), ("C13", 0, 2), ("C22", 1, 1),
          ("C66", 5, 5)]
 lines = ["# TPMS Sample_%s: msg-solid vs SwiftComp .K (per-cell, MPa);"
          " relative density %.4f; solve %.1f s" % (S, om, r["solve_time"]),
-         "# %-5s %12s %12s %9s" % ("term", "msg_solid", "SwiftComp", "err%")]
+         "# %-5s %12s %12s %9s" % ("term", "opensg_solid", "SwiftComp", "err%")]
 for nm, i, j in TERMS:
     lines.append("  %-5s %12.3f %12.3f %+9.3f"
                  % (nm, Cc[i, j]*1e-6, K[i, j]*1e-6,

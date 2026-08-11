@@ -46,10 +46,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = HERE
-while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
-    ROOT = os.path.dirname(ROOT)
-sys.path.insert(0, os.path.join(ROOT, "src"))
+try:
+    import opensg_solid                      # pip install -e . -- nothing to do
+except ImportError:                          # fall back to the in-repo source tree
+    ROOT = HERE
+    while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid")):
+        parent = os.path.dirname(ROOT)
+        if parent == ROOT:                   # hit the filesystem root
+            raise ImportError(
+                "opensg_solid not installed and no src/ found above " + HERE)
+        ROOT = parent
+    sys.path.insert(0, os.path.join(ROOT, "src"))
+
+import time as _t
+print("start: " + _t.strftime("%Y-%m-%d %H:%M:%S"))
 sys.path.insert(0, os.path.join(ROOT, "examples", "OpenSG-solid",
                                 "CS_OpeNSG_exampels", "static", "yu2003"))
 
@@ -356,3 +366,4 @@ for key, ylab, y_rm, y_so, unit in CURVES:
                 bbox_inches="tight")
     plt.close(fig)
 print("\nwrote top_sxx.png, top_syy.png, top_w.png + top_centre.out")
+print("end:   " + _t.strftime("%Y-%m-%d %H:%M:%S"))

@@ -11,9 +11,9 @@ import numpy as np
 import yaml as _yaml
 
 from opensg_shell import build_solid_bundle
-
-l, h = 0.10, 0.10
-DEO = {15: {"C11": (4736.9, 4678.9), "C12": (1089.4, 1105.5),
+from opensg_shell.cli import sg_cell_area          # the yaml IS the input:
+                                                   # omega header, else bbox
+DEO = {15:{"C11": (4736.9, 4678.9), "C12": (1089.4, 1105.5),
             "C13": (381.81, 386.88), "C22": (2446.39, 2488.9),
             "C23": (847.44, 860.89), "C33": (306.99, 311.48),
             "C44": (4.3215, 4.1919), "C55": (564.15, 573.11),
@@ -31,9 +31,8 @@ lines = ["# Deo cellular solid (MAMS 2023 Fig 4, Tables 1-2), all MPa",
          "# ours = OpenSG msg_shell (RM segments + MSG G); SwiftComp = the"
          " paper's MSG solid reference (= OpenSG-solid equivalent)"]
 for thd in (15, -15):
-    th = np.radians(thd)
-    area = (2*l*np.cos(th))*(2*(h + l*np.sin(th)))
     yml = "deo_cellular_%+03d_1Dshell.yaml" % thd
+    area = sg_cell_area(yml)                       # the yaml's `omega:` header
     t0 = time.perf_counter()
     b = build_solid_bundle(yml, cell_area=area)
     dt = time.perf_counter() - t0

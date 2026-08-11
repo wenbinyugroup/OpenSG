@@ -1,3 +1,7 @@
+n_model: 3      # 1 = beam, 2 = plate (msg_solid), 3 = solid -- the macro model this SG homogenizes to
+refined: 0      # 0 = classical (beam EB 4x4, KL wall); 1 = shear-refined (beam Timoshenko 6x6, RM wall)
+msg: shell      # the ENGINE this SG belongs to (opensg_shell); `opensg <yaml>` dispatches on it
+omega: 0.028637033051562739   # SG measure = the periodic cell area (2 l cos th) x 2 (h + l sin th)
 nodes:
 - [-0.048296291314 -0.050000000000 0.00000000]
 - [-0.048296291314 -0.040000000000 0.00000000]

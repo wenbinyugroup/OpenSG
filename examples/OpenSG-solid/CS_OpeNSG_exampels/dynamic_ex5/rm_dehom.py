@@ -1,4 +1,4 @@
-﻿"""rm_dehom.py -- the GENERAL OpenSG-RM dehomogenizer for ONE station, and
+"""rm_dehom.py -- the GENERAL OpenSG-RM dehomogenizer for ONE station, and
 the shared core every other recovery script imports.
 
     input    1dsg.yaml            the 1-D SG line mesh (the only file input)
@@ -70,10 +70,17 @@ import numpy as np
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = HERE
-while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
-    ROOT = os.path.dirname(ROOT)
-sys.path.insert(0, os.path.join(ROOT, "src"))
+try:
+    import opensg_solid                      # pip install -e . -- nothing to do
+except ImportError:                          # fall back to the in-repo source tree
+    ROOT = HERE
+    while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid")):
+        parent = os.path.dirname(ROOT)
+        if parent == ROOT:                   # hit the filesystem root
+            raise ImportError(
+                "opensg_solid not installed and no src/ found above " + HERE)
+        ROOT = parent
+    sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from opensg_solid.rm_plate_1D.segment_plate import read_plate_sg_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import (rm_plate_msg,
@@ -91,6 +98,8 @@ from opensg_solid.rm_plate_1D.rm_dehom import (SGIDX, ORDER, load_sg, z_stations
 
 # ---- the single-station dehom ----------------------------------------------
 if __name__ == "__main__":
+    import time as _t
+    print("start: " + _t.strftime("%Y-%m-%d %H:%M:%S"))
     # ------------------------- USER INPUT ------------------------------------
     SG_YAML = os.path.join(HERE, "1dsg.yaml")
     # FF data: the section resultants at the station.  NO defaults -- these
@@ -166,3 +175,4 @@ if __name__ == "__main__":
           % (os.path.basename(stem), NZS))
     for nm in ORDER:
         print("  max|S%s| = %.4e Pa" % (nm, np.abs(Sig[0, :, SGIDX[nm]]).max()))
+    print("end:   " + _t.strftime("%Y-%m-%d %H:%M:%S"))

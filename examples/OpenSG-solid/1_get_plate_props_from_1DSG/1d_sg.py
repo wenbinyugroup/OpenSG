@@ -94,7 +94,7 @@ write_sc_K(out, M, solve_time=time.perf_counter() - t0,
                     " ".join(ROWS[:n])),
            constants=False,
            name="Classical Plate" if model == 0
-                else "Reissner-Mindlin Plate")
+                else "Reissner-Mindlin")
 
 print("%s + %s  ->  %s" % (os.path.basename(DB), os.path.basename(yml),
                            os.path.basename(out)))

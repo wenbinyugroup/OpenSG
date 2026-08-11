@@ -1,4 +1,4 @@
-﻿"""rm_dehom.py -- the GENERAL OpenSG-RM dehomogenizer for ONE station, and
+"""rm_dehom.py -- the GENERAL OpenSG-RM dehomogenizer for ONE station, and
 the shared core every other recovery script imports.
 
     input    1dsg.yaml            the 1-D SG line mesh (the only file input)
@@ -70,10 +70,20 @@ import numpy as np
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = HERE
-while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
-    ROOT = os.path.dirname(ROOT)
-sys.path.insert(0, os.path.join(ROOT, "src"))
+try:
+    import opensg_solid                      # pip install -e . -- nothing to do
+except ImportError:                          # fall back to the in-repo source tree
+    ROOT = HERE
+    while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid")):
+        parent = os.path.dirname(ROOT)
+        if parent == ROOT:                   # hit the filesystem root
+            raise ImportError(
+                "opensg_solid not installed and no src/ found above " + HERE)
+        ROOT = parent
+    sys.path.insert(0, os.path.join(ROOT, "src"))
+
+import time as _t
+print("start: " + _t.strftime("%Y-%m-%d %H:%M:%S"))
 
 from opensg_solid.rm_plate_1D.segment_plate import read_plate_sg_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import (rm_plate_msg,
@@ -90,79 +100,79 @@ from opensg_solid.rm_plate_1D.rm_dehom import (SGIDX, ORDER, load_sg, z_stations
                                         write_field, write_vtk)
 
 # ---- the single-station dehom ----------------------------------------------
-if __name__ == "__main__":
-    # ------------------------- USER INPUT ------------------------------------
-    SG_YAML = os.path.join(HERE, "1dsg.yaml")
-    # FF data: the section resultants at the station.  NO defaults -- these
-    # are YOURS.  The script refuses to run until both are set.
-    F6 = None                     # [N11, N22, N12, M11, M22, M12]  [N/m, N]
-    Q2v = None                    # [Q1, Q2]  [N/m]  (drives the rescale)
-    # optional refinements -- None means zero; a bare FF gives the classical
-    # ply stresses (s11/s22/s12) and NO transverse shear or s33.  A SINGLE
-    # FF fixes no gradients (the equilibrium closure is REMOVED -- it is
-    # indeterminate); gradients come ONLY from finite differences of an FF
-    # FIELD (a station line or a 2-D lattice: rm_dehom_dat.py), or from a
-    # known analytical mode.  Details: dehom_README.md.
-    DE1 = DE2 = None              # d(E6)/dx, d(E6)/dy
-    D11 = D12 = D22 = None        # second gradients
-    QT6 = None                    # surface-load ladder [q q,1 q,2 q,11 q,12 q,22]
-    LATTICE = "gauss"             # "gauss" (default) or "nodes"
-    # -------------------------------------------------------------------------
+# ------------------------- USER INPUT ------------------------------------
+SG_YAML = os.path.join(HERE, "1dsg.yaml")
+# FF data: the section resultants at the station.  NO defaults -- these
+# are YOURS.  The script refuses to run until both are set.
+F6 = [1e6, 0, 0, 0, 0, 0]     # [N11, N22, N12, M11, M22, M12]  [N/m, N]
+Q2v = [0.0, 0.0]              # [Q1, Q2]  [N/m]  (drives the rescale)
+# optional refinements -- None means zero; a bare FF gives the classical
+# ply stresses (s11/s22/s12) and NO transverse shear or s33.  A SINGLE
+# FF fixes no gradients (the equilibrium closure is REMOVED -- it is
+# indeterminate); gradients come ONLY from finite differences of an FF
+# FIELD (a station line or a 2-D lattice: rm_dehom_dat.py), or from a
+# known analytical mode.  Details: dehom_README.md.
+DE1 = DE2 = None              # d(E6)/dx, d(E6)/dy
+D11 = D12 = D22 = None        # second gradients
+QT6 = None                    # surface-load ladder [q q,1 q,2 q,11 q,12 q,22]
+LATTICE = "gauss"             # "gauss" (default) or "nodes"
+# -------------------------------------------------------------------------
 
-    if F6 is None or Q2v is None:
-        raise ValueError(
-            "FF data not given. Set it in the USER INPUT block first:\n"
-            "  F6  = [N11, N22, N12, M11, M22, M12]   # [N/m, N]\n"
-            "  Q2v = [Q1, Q2]                          # [N/m]\n"
-            "There are deliberately no defaults: the FF is the user's input, "
-            "and a built-in number would silently masquerade as a result.")
-    if len(F6) != 6 or len(Q2v) != 2:
-        raise ValueError("F6 must have 6 entries and Q2v 2, got %d and %d"
-                         % (len(F6), len(Q2v)))
+if F6 is None or Q2v is None:
+    raise ValueError(
+        "FF data not given. Set it in the USER INPUT block first:\n"
+        "  F6  = [N11, N22, N12, M11, M22, M12]   # [N/m, N]\n"
+        "  Q2v = [Q1, Q2]                          # [N/m]\n"
+        "There are deliberately no defaults: the FF is the user's input, "
+        "and a built-in number would silently masquerade as a result.")
+if len(F6) != 6 or len(Q2v) != 2:
+    raise ValueError("F6 must have 6 entries and Q2v 2, got %d and %d"
+                     % (len(F6), len(Q2v)))
 
-    sg = load_sg(SG_YAML)
-    ZS = z_stations(sg, LATTICE)
-    NZS = len(ZS)
-    print("homo re-run: %d plies, %d-noded elements -> %d %s depths"
-          % (len(sg["inp"]["thick"]), sg["NPE"], NZS, LATTICE))
+sg = load_sg(SG_YAML)
+ZS = z_stations(sg, LATTICE)
+NZS = len(ZS)
+print("homo re-run: %d plies, %d-noded elements -> %d %s depths"
+      % (len(sg["inp"]["thick"]), sg["NPE"], NZS, LATTICE))
 
-    E6 = sg["S6"] @ np.asarray(F6, float)
-    D = assemble_driver(E6, DE1, DE2, D11, D12, D22, QT6)
-    TE, TS, TW = build_ops(sg["r"], ZS)
-    Eps = (TE @ D)[None]                          # (1, nz, 6)
-    Sig = (TS @ D)[None]
-    Warp = (TW @ D)[None]
+E6 = sg["S6"] @ np.asarray(F6, float)
+D = assemble_driver(E6, DE1, DE2, D11, D12, D22, QT6)
+TE, TS, TW = build_ops(sg["r"], ZS)
+Eps = (TE @ D)[None]                          # (1, nz, 6)
+Sig = (TS @ D)[None]
+Warp = (TW @ D)[None]
 
-    # transverse-shear consistency: carry the given Q1/Q2 if any are nonzero
-    if any(abs(q) > 0 for q in Q2v):
-        zf = np.linspace(-sg["H"] / 2 + 1e-9, sg["H"] / 2 - 1e-9, 61)
-        _, TSf, _ = build_ops(sg["r"], zf + sg["OFF"])
-        Sf = TSf @ D
-        for col, q in ((4, Q2v[0]), (3, Q2v[1])):
-            I = np.trapezoid(Sf[:, col], zf)
-            if abs(I) > 1e-12:
-                Sig[:, :, col] *= q / I
+# transverse-shear consistency: carry the given Q1/Q2 if any are nonzero
+if any(abs(q) > 0 for q in Q2v):
+    zf = np.linspace(-sg["H"] / 2 + 1e-9, sg["H"] / 2 - 1e-9, 61)
+    _, TSf, _ = build_ops(sg["r"], zf + sg["OFF"])
+    Sf = TSf @ D
+    for col, q in ((4, Q2v[0]), (3, Q2v[1])):
+        I = np.trapezoid(Sf[:, col], zf)
+        if abs(I) > 1e-12:
+            Sig[:, :, col] *= q / I
 
-    # ply MATERIAL frame for the delivered fields (rotate AFTER the rescale;
-    # sigma33 invariant, displacement stays global)
-    Rs, Re = material_rotations(sg, ZS)
-    Sig = np.einsum("zab,nzb->nza", Rs, Sig)
-    Eps = np.einsum("zab,nzb->nza", Re, Eps)
+# ply MATERIAL frame for the delivered fields (rotate AFTER the rescale;
+# sigma33 invariant, displacement stays global)
+Rs, Re = material_rotations(sg, ZS)
+Sig = np.einsum("zab,nzb->nza", Rs, Sig)
+Eps = np.einsum("zab,nzb->nza", Re, Eps)
 
-    # a single station has no plate solution: U is the warping alone
-    U = Warp.copy()
+# a single station has no plate solution: U is the warping alone
+U = Warp.copy()
 
-    stem = os.path.splitext(SG_YAML)[0] + "_dehom"
-    lat = ("the %d SG-element Gauss depths" % NZS if LATTICE == "gauss"
-           else "the %d SG nodes" % NZS)
-    title = "OpenSG-RM single-station dehom of %s" % os.path.basename(SG_YAML)
-    write_field(stem + ".SM", "S", "Pa", Sig, [0.0], [0.0], ZS, lat, title)
-    write_field(stem + ".EM", "E", "-", Eps, [0.0], [0.0], ZS, lat, title)
-    write_field(stem + ".U", "U", "m", U, [0.0], [0.0], ZS, lat, title)
-    # the VTK is part of the default output, not an extra step
-    write_vtk(stem + ".vtk", [0.0], [0.0], ZS,
-              U.reshape(1, 1, NZS, 3), Sig.reshape(1, 1, NZS, 6), title)
-    print("wrote %s.SM / .EM / .U / .vtk  (%d depths)"
-          % (os.path.basename(stem), NZS))
-    for nm in ORDER:
-        print("  max|S%s| = %.4e Pa" % (nm, np.abs(Sig[0, :, SGIDX[nm]]).max()))
+stem = os.path.splitext(SG_YAML)[0] + "_dehom"
+lat = ("the %d SG-element Gauss depths" % NZS if LATTICE == "gauss"
+       else "the %d SG nodes" % NZS)
+title = "OpenSG-RM single-station dehom of %s" % os.path.basename(SG_YAML)
+write_field(stem + ".SM", "S", "Pa", Sig, [0.0], [0.0], ZS, lat, title)
+write_field(stem + ".EM", "E", "-", Eps, [0.0], [0.0], ZS, lat, title)
+write_field(stem + ".U", "U", "m", U, [0.0], [0.0], ZS, lat, title)
+# the VTK is part of the default output, not an extra step
+write_vtk(stem + ".vtk", [0.0], [0.0], ZS,
+          U.reshape(1, 1, NZS, 3), Sig.reshape(1, 1, NZS, 6), title)
+print("wrote %s.SM / .EM / .U / .vtk  (%d depths)"
+      % (os.path.basename(stem), NZS))
+for nm in ORDER:
+    print("  max|S%s| = %.4e Pa" % (nm, np.abs(Sig[0, :, SGIDX[nm]]).max()))
+print("end:   " + _t.strftime("%Y-%m-%d %H:%M:%S"))

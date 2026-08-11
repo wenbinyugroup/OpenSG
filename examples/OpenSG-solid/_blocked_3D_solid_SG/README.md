@@ -12,3 +12,11 @@ kernels.  To revive these, supply either
   * a 3-D `.sc` whose element convention is confirmed, or
   * the slot layout of this file, so the converter can read it,
 then move the folders back and renumber.
+
+The two former driver scripts (`solid_homo_sg.py`, `solid_dehom_sg.py`) were
+removed: the terminal route replaces both, with `n_model: 3` already in the
+yaml header and the macro strain supplied by `SW_2UC_45.ff` (or an
+`epsilon_bar:` key) --
+
+    opensg_solid SW_2UC_45.yaml        # homogenization  -> SW_2UC_45.out
+    opensg_solid SW_2UC_45.yaml D      # + recovery      -> SW_2UC_45_dehom.*

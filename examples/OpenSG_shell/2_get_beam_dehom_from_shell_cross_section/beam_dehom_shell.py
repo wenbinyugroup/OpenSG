@@ -1,11 +1,11 @@
 """Two-step SHELL dehomogenization: beam FF -> RM shell section strains -> MSG-RM
 through-thickness stress recovery (the production OpenSG-TW pipeline, msgrm_dehom route).
 
-step 1 (section, opensg_shell.sg_dehom): st = C6^-1 FF and the RM warping recombination
-  (_macro_fields), then per element the 6 shell strains [e11 e22 2e12 k11 k22 2k12]
-  (_rm_shell_strain) plus the span/arc strain gradients dE1/dE2 (quad_ops_indep;
-  arc gradient from LAYUP-BOUNDARY-AWARE nodal averaging -- no differencing across
-  section changes).
+step 1 (section, opensg_shell.sg_dehom.ring_wall_strains -- the SAME code path the
+  `opensg_shell <yaml> D` CLI route runs): st = C6^-1 FF and the RM warping
+  recombination, then per element the 6 shell strains [e11 e22 2e12 k11 k22 2k12]
+  plus the span/arc strain gradients dE1/dE2 (arc gradient from LAYUP-BOUNDARY-AWARE
+  nodal averaging -- no differencing across section changes).
 step 2 (wall through-thickness): MSG-RM first-order plate recovery at depth z --
   msgrm_strain_at_depth imported from opensg_solid.rm_plate_1D.msg_rm_plate
   (shared with the plate/solid examples, NOT duplicated here).
@@ -33,9 +33,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from opensg_shell import build_rm_bundle, _macro_fields, _rm_shell_strain
-from opensg_shell.sg_assembly import quad_ops_indep
-from opensg_shell.fe_jax.msg_dehom import _macro_recovery
+from opensg_shell import build_rm_bundle, ring_wall_strains
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
 
 ############### User Input #################################
@@ -56,53 +54,19 @@ print("bundle built %.1fs (reference=%s, wall G=%s)" % (time.perf_counter() - t0
 print("beam FF at eta=%.2f  [F1 F2 F3 M1 M2 M3] = %s" % (eta, np.array2string(FF, precision=4)))
 
 # ================= step 1: RM shell section strains =================
-st, st_m, aA, aB = _macro_fields(B, beam_force_vabs=FF)
-_, _sm, st_cl1, st_cl2 = _macro_recovery(C6, np.linalg.inv(C6) @ FF)
+# ring_wall_strains is the package's per-ELEMENT step-1 field builder (lifted
+# from this example; the `opensg_shell <yaml> D` CLI route runs the same call)
+F = ring_wall_strains(B, beam_force_vabs=FF)
+st = F["st"]
 print("macro section strains st = C6^-1 FF = %s" % np.array2string(np.asarray(st), precision=5))
 
 corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"]); cen = corners.mean(0)
-nodes_s, quads_s, _hs = B["strip"]
-n_el = rc.shape[0]; n_nd = int(rc.max()) + 1
+n_el = rc.shape[0]
 layups = B["layup_per_elem"]; ldb = B["layup_db"]; mdb = B["material_db"]
 frac = float(B.get("frac", 0.0))
 hth = {ln: float(sum(i["thick"])) for ln, i in ldb.items()}
-
-s6mid = np.zeros((n_el, 6)); dE1e = np.zeros((n_el, 6))
-for e in range(n_el):
-    s6, _ = _rm_shell_strain(B, e, 0.5, st_m, aA, aB)
-    s6mid[e] = np.asarray(s6, float)
-    Xe = nodes_s[quads_s[e]]; e3e = B["re3"][e]
-    BDe, BDh, BDl, *_ = quad_ops_indep(Xe, e3e, 0.0, 0.0, float(B["k22"][e]),
-                                       B["cross"], B["ax"])
-    c0, c1 = int(rc[e, 0]), int(rc[e, 1])
-    g = np.r_[c0 * 6:c0 * 6 + 6, c1 * 6:c1 * 6 + 6, c1 * 6:c1 * 6 + 6, c0 * 6:c0 * 6 + 6]
-    dE1e[e] = np.asarray(BDe @ st_cl1 + BDh @ aB[g], float)
-
-# layup-boundary-aware nodal average of s6 (only where two SAME-layup elements meet)
-deg = np.zeros(n_nd, int)
-nd_el = [[] for _ in range(n_nd)]
-for e in range(n_el):
-    for nd in (int(rc[e, 0]), int(rc[e, 1])):
-        deg[nd] += 1; nd_el[nd].append(e)
-s6n = np.full((n_nd, 6), np.nan)
-for nd in range(n_nd):
-    if deg[nd] == 2 and layups[nd_el[nd][0]] == layups[nd_el[nd][1]]:
-        s6n[nd] = 0.5 * (s6mid[nd_el[nd][0]] + s6mid[nd_el[nd][1]])
-T = corners[rc[:, 1]] - corners[rc[:, 0]]
-Lel = np.sqrt((T ** 2).sum(1))
-dE2e = np.zeros((n_el, 6))
-for e in range(n_el):
-    c0, c1 = int(rc[e, 0]), int(rc[e, 1])
-    v0 = s6n[c0] if np.isfinite(s6n[c0, 0]) else s6mid[e]
-    v1 = s6n[c1] if np.isfinite(s6n[c1, 0]) else s6mid[e]
-    dE2e[e] = (v1 - v0) / Lel[e]
-
-# inward wall normal per element (plate +z = OML -> IML)
-tun = T / Lel[:, None]
-nvec = np.column_stack([tun[:, 1], -tun[:, 0]])
-emid = 0.5 * (corners[rc[:, 0]] + corners[rc[:, 1]])
-flip = ((cen - emid) * nvec).sum(1) < 0
-nvec[flip] *= -1.0
+s6mid, dE1e, dE2e, s6n = F["s6mid"], F["dE1"], F["dE2"], F["s6n"]
+emid, nvec = F["emid"], F["nvec"]
 
 # ================= step 2: MSG-RM through-thickness recovery =================
 t1 = time.perf_counter()

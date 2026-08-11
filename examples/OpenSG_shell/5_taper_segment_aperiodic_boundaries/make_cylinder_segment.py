@@ -51,8 +51,16 @@ GEOMETRY / CONVENTIONS
     (Same e1/e2/e3 roles as the validated 1-D generators, rotated so the
      beam axis is x instead of z.)
 
-OUTPUT: OpenSG-style YAML (nodes / elements(quad) / sections / sets /
-materials / elementOrientations), read by the dolfinx extractor stage.
+OUTPUT: one self-contained msg-shell SG YAML per case -- the header
+(n_model / refined / aperiodic) followed by nodes / elements(quad) /
+sections / sets / materials / elementOrientations.  Nothing about the case
+is left in code, so each file runs on its own:
+
+    opensg_shell meshes/seg_iso_hR0.1.yaml
+
+n_model 1 + refined 1 on a SURFACE mesh is the segment route (the mesh, not
+a key, picks the engine); `aperiodic: 1` records that this SG is closed by
+the two boundary rings' V0/V1 Dirichlet data instead of axial periodicity.
 """
 
 import os
@@ -68,6 +76,18 @@ NC = 160           # circumferential quads (== the 1-D ring resolution we tested
 NL = 3             # axial quads over the segment (>=2 so an interior ring exists)
 L = 1.5            # segment length [m] (prismatic => value is immaterial to 6x6)
 HR = [0.05, 0.1, 0.2]   # wall/radius ratios: thin, moderate, thick
+
+# the msg-shell SG header, written above the mesh blocks so each yaml is the
+# only input its run needs (`opensg_shell meshes/seg_iso_hR0.1.yaml`)
+HEADER = (
+    "n_model: 1      # 1 = beam, 2 = plate (opensg_solid), 3 = solid --"
+    " the macro model this SG homogenizes to\n"
+    "refined: 1      # 0 = classical (beam EB 4x4, KL wall);"
+    " 1 = shear-refined (beam Timoshenko 6x6, RM wall)\n"
+    "msg: shell      # the ENGINE this SG belongs to (opensg_shell);"
+    " `opensg <yaml>` dispatches on it\n"
+    "aperiodic: 1    # the two end cross-sections carry their own V0/V1 as"
+    " Dirichlet data (no axial periodicity)\n")
 
 # material cards (engineering constants, orthotropic E[3]/G[3]/nu[3])
 ISO = {"name": "iso", "density": 1800.0,
@@ -131,6 +151,7 @@ def build_segment(material, layup_of_t, tag, hR):
     }
     fn = os.path.join(OUT, "seg_%s_hR%s.yaml" % (tag, hR))
     with open(fn, "w") as f:
+        f.write(HEADER)                            # commented, hand-editable
         yaml.safe_dump(d, f, default_flow_style=None, sort_keys=False)
     print("wrote %-28s  nodes=%d  quads=%d  t=%.4f  R=%.2f  L=%.2f"
           % (os.path.basename(fn), len(nodes), ne, t, R, L))

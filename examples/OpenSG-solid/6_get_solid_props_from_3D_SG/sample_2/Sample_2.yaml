@@ -1,5 +1,6 @@
-dim: 3
-scale: 1.0
+n_model: 3      # 1 = beam, 2 = plate, 3 = solid -- the macro model this SG homogenizes to
+refined: 0      # 0 = classical (plate ABD / beam EB); 1 = shear-refined (plate ABDG / beam Timoshenko)
+msg: solid      # the ENGINE this SG belongs to (opensg_solid); `opensg <yaml>` dispatches on it
 nodes:
 - [0.176255787015, 0.127118644068, 0.483050847458]
 - [0.161674196865, 0.14406779661, 0.483050847458]

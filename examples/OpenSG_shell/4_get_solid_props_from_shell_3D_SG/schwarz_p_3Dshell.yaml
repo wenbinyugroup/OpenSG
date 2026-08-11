@@ -1,3 +1,20 @@
+n_model: 3      # 1 = beam, 2 = plate (opensg_solid), 3 = solid -- the macro model this SG homogenizes to
+refined: 0      # 0 = classical (beam EB 4x4, KL wall); 1 = shear-refined (beam Timoshenko 6x6, RM wall)
+msg: shell      # the ENGINE this SG belongs to (opensg_shell); `opensg <yaml>` dispatches on it
+sections:
+- type: shell
+  elementSet: layup_0
+  layup:
+  - - alu
+    - 3.645700e-02
+    - 0.0
+materials:
+- name: alu
+  density: 2700.0
+  elastic:
+    E: [6.900000e+10, 6.900000e+10, 6.900000e+10]
+    G: [2.653846e+10, 2.653846e+10, 2.653846e+10]
+    nu: [0.300000, 0.300000, 0.300000]
 nodes:
 - [-0.247975024080 -0.025423728814 -0.500000000000]
 - [-0.249777247270 -0.008474576271 -0.500000000000]
@@ -66257,20 +66274,6 @@ elementOrientations:
 - [0.105438, -0.994410, 0.005614, -0.053166, 0.000000, 0.998586, -0.993004, -0.105587, -0.052869]
 - [-0.213051, 0.947471, 0.238555, 0.000000, 0.244161, -0.969735, -0.977041, -0.206603, -0.052019]
 - [-0.050893, -0.010762, 0.998646, -0.206883, 0.978366, 0.000000, -0.977041, -0.206603, -0.052019]
-sections:
-- type: shell
-  elementSet: layup_0
-  layup:
-  - - alu
-    - 3.645700e-02
-    - 0.0
-materials:
-- name: alu
-  density: 2700.0
-  elastic:
-    E: [6.900000e+10, 6.900000e+10, 6.900000e+10]
-    G: [2.653846e+10, 2.653846e+10, 2.653846e+10]
-    nu: [0.300000, 0.300000, 0.300000]
 sets:
   element:
   - name: layup_0

@@ -2,6 +2,8 @@
 # the tracked per-sample outputs live in sample_1/ and sample_2/)
 Sample_?.yaml
 Sample_?.msh
+# the msg-SHELL idealisation of the same .sc, written by sc_to_3dyaml.py (~29 MB)
+Sample_?_3Dsolid.yaml
 /Sample_1.out
 /Sample_2.out
 laminate_sg.out

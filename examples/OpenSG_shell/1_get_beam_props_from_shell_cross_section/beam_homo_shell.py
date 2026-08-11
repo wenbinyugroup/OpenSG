@@ -36,12 +36,11 @@ name = "iea_s10"               # reads <name>_shell.yaml
 ############################################################
 
 t0 = time.perf_counter()
-B = build_rm_bundle(name + "_shell.yaml")     # RM 6-DOF ring + MSG wall G (g_source="msg")
+B = build_rm_bundle(name + "_shell.yaml")     # RM 6-DOF ring + MSG wall G (the only route)
 C6 = np.asarray(B["Timo"])
 dt = time.perf_counter() - t0
 
 LBL = ["EA", "GA2", "GA3", "GJ", "EI2", "EI3"]
-np.set_printoptions(precision=5)
 print("shell 1-D SG: %s_shell.yaml  (reference=%s, wall G=%s)  [%.1f s]"
       % (name, B["ref"], B["g_source"], dt))
 print("beam 6x6  [eps11 gam12 gam13 kappa1 kappa2 kappa3]  (Timoshenko):")

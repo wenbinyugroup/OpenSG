@@ -11,9 +11,11 @@ import numpy as np
 import yaml as _yaml
 
 from opensg_shell import build_solid_bundle
-
-R = 0.10
-DEO = {"C11": (5186.39, 5099.03), "C12": (24.83, 26.75),
+from opensg_shell.cli import sg_cell_area          # the yaml IS the input:
+                                                   # omega header, else bbox
+YAML = "deo_square_1Dshell.yaml"
+AREA = sg_cell_area(YAML)                          # cell area (2 R)^2, R = 0.1
+DEO ={"C11": (5186.39, 5099.03), "C12": (24.83, 26.75),
        "C13": (24.83, 26.75), "C22": (47.13, 50.46),
        "C23": (27.94, 30.59), "C33": (47.13, 50.45),
        "C44": (3.22, 3.39), "C55": (650.00, 670.92),
@@ -23,7 +25,7 @@ IJ = {"C11": (0, 0), "C12": (0, 1), "C13": (0, 2), "C22": (1, 1),
       "C66": (5, 5)}
 
 t0 = time.perf_counter()
-b = build_solid_bundle("deo_square_1Dshell.yaml", cell_area=(2*R)**2)
+b = build_solid_bundle(YAML, cell_area=AREA)
 dt = time.perf_counter() - t0
 C = np.asarray(b["C3D"])*1e-6
 
@@ -31,7 +33,7 @@ with open("deo_square_msg_shell.out", "w") as f:
     f.write("# Deo hierarchical square -- OpenSG msg_shell (RM)\n"
             "# order [G11 G22 G33 2G23 2G13 2G12]; MPa; cell area %.4f\n"
             "# solve time: %.2f s\n# ---- C_eff (6x6, MPa) ----\n"
-            % ((2*R)**2, dt))
+            % (AREA, dt))
     for i in range(6):
         f.write(" ".join("%16.8e" % C[i, j] for j in range(6)) + "\n")
 
@@ -49,7 +51,7 @@ for nm, (tw, so) in DEO.items():
 open("deo_square_compare.dat", "w").write("\n".join(lines) + "\n")
 print("\n".join(lines))
 
-d = _yaml.safe_load(open("deo_square_1Dshell.yaml"))
+d = _yaml.safe_load(open(YAML))
 row = lambda r: " ".join(str(x) for x in
                          (r if isinstance(r, list) else [r])).split()
 nd = np.array([[float(v) for v in row(r)][:2] for r in d["nodes"]])

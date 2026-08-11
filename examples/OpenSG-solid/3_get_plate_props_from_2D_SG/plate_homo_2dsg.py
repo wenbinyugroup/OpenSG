@@ -1,42 +1,34 @@
-"""Plate properties (6x6 ABD) of the 2-D honeycomb SG.  Input is the
-YAML; the one-time SwiftComp conversion is the separate helper:
-    python -m opensg_solid.rm_plate_1D.helper.sc_to_yaml RHC_SW_2UC_45.sc
+"""Plate properties of the 2-D honeycomb SG.  The yaml IS the whole
+problem: its header says in words what to run (`model: plate`,
+`refined: 0`, `analysis: H`), and its materials block defines each
+material either by the 6x6 elastic stiffness (type 2, pre-rotated) or
+by the 9 orthotropic engineering constants plus the ply angle (type 1;
+this example ships that form).  The terminal route is one command,
+one argument:
+    opensg_solid RHC_SW_2UC_45.yaml
+One-time SwiftComp conversion (the helper defines no __main__ -- import
+its convert):
+    from opensg_solid.helper.sc_to_yaml import convert
+    convert("RHC_SW_2UC_45.sc")     # writes the .yaml + .msh
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS SCRIPT
 # ----------------------------------------------------------------------------
-#   n_model, name       2 = plate; reads <name>.yaml
-#   material_param      (3, 9) engineering constants per material
-#   angles              (3,) deg per material (0.0 = none)
-#   r                   sg_homo.plate_homo_2d result dict
-#   r["C_eff"]          (6, 6) plate ABD [N11 N22 N12 M11 M22 M12]
-#   <name>.out          Classical Plate stiffness + compliance (SwiftComp
-#                       .K layout, timed) -- written by the solver
-#   <name>_mesh.png     the mesh figure
+#   name                reads <name>.yaml (analysis + materials live in it)
+#   r                   sg_homo.plate_homo_2d result dict; r["law"] is the
+#                       macro law the yaml header selected, r["law_title"]
+#                       its strain order; the timed <name>.out and
+#                       <name>_mesh.png are written by the solver
 # ----------------------------------------------------------------------------
 """
-import numpy as np
-import jax.numpy as jnp
-
 from opensg_solid.sg_homo import plate_homo_2d
 
 ############### User Input #################################
-n_model = 2                    # 1: Beam; 2: Plate; 3: 3D elastic
 name = "RHC_SW_2UC_45"         # reads <name>.yaml
-
-# engineering constants per material (the .sc blocks carry PRE-ROTATED
-# ply C's; this override rebuilds from E,G,nu + the angle instead):
-material_param = jnp.array([
-    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply +45
-    (108e3, 8e3, 8e3, 4e3, 4e3, 3e3, 0.32, 0.32, 0.30),      # ply -45
-    (69e3, 69e3, 69e3, 26.54e3, 26.54e3, 26.54e3, 0.30, 0.30, 0.30)])
-angles = jnp.array([45.0, -45.0, 0.0])   # deg per material; 0.0 = none
 ############################################################
 
-r = plate_homo_2d(name + ".yaml", material_param=material_param,
-                    angles=angles, n_model=n_model)
-np.set_printoptions(precision=5)
-print("plate 6x6  [N11 N22 N12 M11 M22 M12]:")
-print(r["C_eff"])
-print("wrote %s.out (Classical Plate stiffness + compliance, .K layout)"
-      " + %s_mesh.png" % (name, name))
+r = plate_homo_2d(name + ".yaml")
+print(r["law_title"] + ":")
+print(r["law"])
+print("Homogenization stored in %s.out" % name)
+print("Time taken: %.2f sec" % float(r["solve_time"]))

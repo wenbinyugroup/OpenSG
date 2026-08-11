@@ -41,7 +41,20 @@ for th_deg in (15.0, -15.0):
     wall([-c2, -h/2], [-2*c2, -h/2-ls/2])
     wall([2*c2, -h/2-ls/2], [c2, -h/2-ls])
 
-    o = ["nodes:"]
+    # the periodic cell is the double cell (2 l cos th) x 2 (h + l sin th).
+    # It is declared, not measured: the node block is written to 12 decimals,
+    # so the bounding box of the CONTOUR reproduces it only to ~1e-12
+    # relative -- the yaml carries the exact value instead.
+    omega = (2*l*np.cos(th))*(2*(h + ls))
+    o = ["n_model: 3      # 1 = beam, 2 = plate (msg_solid), 3 = solid"
+         " -- the macro model this SG homogenizes to",
+         "refined: 0      # 0 = classical (beam EB 4x4, KL wall);"
+         " 1 = shear-refined (beam Timoshenko 6x6, RM wall)",
+         "msg: shell      # the ENGINE this SG belongs to (opensg_shell);"
+         " `opensg <yaml>` dispatches on it",
+         "omega: %.17g   # SG measure = the periodic cell area"
+         " (2 l cos th) x 2 (h + l sin th)" % omega,
+         "nodes:"]
     for x, y in np.array(pts):
         o.append("- [%.12f %.12f 0.00000000]" % (x, y))
     o.append("elements:")

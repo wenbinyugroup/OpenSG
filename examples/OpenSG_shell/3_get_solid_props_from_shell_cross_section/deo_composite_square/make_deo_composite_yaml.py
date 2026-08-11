@@ -34,7 +34,13 @@ wall([-h,  y3w], [0,  y3w]); wall([0,  y3w], [h,  y3w])
 wall([-h, -y3w], [0, -y3w]); wall([0, -y3w], [h, -y3w])
 wall([0, -h], [0, -y3w]); wall([0, -y3w], [0, y3w]); wall([0, y3w], [0, h])
 
-o = ["nodes:"]
+o = ["n_model: 3      # 1 = beam, 2 = plate (msg_solid), 3 = solid"
+     " -- the macro model this SG homogenizes to",
+     "refined: 0      # 0 = classical (beam EB 4x4, KL wall);"
+     " 1 = shear-refined (beam Timoshenko 6x6, RM wall)",
+     "msg: shell      # the ENGINE this SG belongs to (opensg_shell);"
+     " `opensg <yaml>` dispatches on it",
+     "nodes:"]
 for x, y in np.array(pts):
     o.append("- [%.12f %.12f 0.00000000]" % (x, y))
 o.append("elements:")

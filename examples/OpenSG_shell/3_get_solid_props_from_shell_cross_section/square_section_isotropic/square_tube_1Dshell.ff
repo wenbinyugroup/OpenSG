@@ -1,0 +1,11 @@
+# OpenSG dehomogenization macro state -- read by `opensg_shell square_tube_1Dshell.yaml D`
+# The SG yaml describes the STRUCTURE; this file carries the LOADING.
+u:     [0.0, 0.0, 0.0]      # macro displacement u1 u2 u3
+theta: [0.0, 0.0, 0.0]      # macro rotation t1 t2 t3 [rad] (about y1 y2 y3)
+C:     [[1.0, 0.0, 0.0],       # direction cosines of the macro frame
+        [0.0, 1.0, 0.0],       #   (identity = unrotated; overrides theta)
+        [0.0, 0.0, 1.0]]
+# generalized macro forces, solid [S11 S22 S33 S23 S13 S12] (Pa)
+# (the msg-shell equivalent-solid route is homogenization only -- this is the
+#  macro state its recovery will consume)
+FF:    [1.0e6, 0.0, 0.0, 0.0, 0.0, 0.0]

@@ -40,10 +40,20 @@ import sys
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = HERE
-while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
-    ROOT = os.path.dirname(ROOT)
-sys.path.insert(0, os.path.join(ROOT, "src"))
+try:
+    import opensg_solid                      # pip install -e . -- nothing to do
+except ImportError:                          # fall back to the in-repo source tree
+    ROOT = HERE
+    while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid")):
+        parent = os.path.dirname(ROOT)
+        if parent == ROOT:                   # hit the filesystem root
+            raise ImportError(
+                "opensg_solid not installed and no src/ found above " + HERE)
+        ROOT = parent
+    sys.path.insert(0, os.path.join(ROOT, "src"))
+
+import time as _t
+print("start: " + _t.strftime("%Y-%m-%d %H:%M:%S"))
 
 from opensg_solid.rm_plate_1D.rm_homo import load_layup_db, homogenize_layup_db
 
@@ -145,3 +155,4 @@ open(out, "w").write("\n".join(L) + "\n")
 print("%s -> %s  (%d %s, %d nodes)" % (os.path.basename(DB),
                                        os.path.basename(out), NX * NY, SELT,
                                        len(NID)))
+print("end:   " + _t.strftime("%Y-%m-%d %H:%M:%S"))
