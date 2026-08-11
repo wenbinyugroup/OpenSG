@@ -1173,7 +1173,10 @@ def _surf_frame_batch(Xe, e3e, xi, eta, cross, ax):
     cosines for all elements at one parent point (same algebra per element).
 
     In:
-      Xe: (ne,4,3) float, element node coordinates.
+      Xe: (ne,4,3) float, element node coordinates.  GENUINE quads only -- the
+        collapsed-quad triangle [n1 n2 n3 n3] is no longer accepted (its
+        zero-length edge makes the frame singular and the MITC tying point on
+        that edge returned NaN); a triangle goes to tri_frame_batch instead.
       e3e: (ne,3) float, reference material normals (fix the frame sign).
       xi, eta: float, parent coordinates in [-1,1].
       cross: (2,) int, cross-section coordinate indices.
@@ -1186,9 +1189,13 @@ def _surf_frame_batch(Xe, e3e, xi, eta, cross, ax):
     N, dNx, dNe = _bilinear(xi, eta)
     Jxi = np.einsum('a,eaj->ej', dNx, Xe)
     Jeta = np.einsum('a,eaj->ej', dNe, Xe)
-    a2 = Jxi / np.linalg.norm(Jxi, axis=1, keepdims=True)
+    n2 = np.linalg.norm(Jxi, axis=1, keepdims=True)
+    _frame_guard(n2[:, 0], "quad", "|dx/dxi|", xi, eta)
+    a2 = Jxi / n2
     a1 = Jeta - np.sum(Jeta * a2, axis=1, keepdims=True) * a2
-    a1 = a1 / np.linalg.norm(a1, axis=1, keepdims=True)
+    n1 = np.linalg.norm(a1, axis=1, keepdims=True)
+    _frame_guard(n1[:, 0], "quad", "|dx/deta orthogonalized|", xi, eta)
+    a1 = a1 / n1
     n = np.cross(a1, a2)
     flip = np.sum(n * e3e, axis=1) < 0.0
     n[flip] = -n[flip]; a1[flip] = -a1[flip]
@@ -1339,6 +1346,233 @@ def _shear_batch(xi, eta, scheme, BGh_gauss, tie):
         BGt = BGt.copy()
         BGt[:, :, rot] = BGh_gauss[:, :, rot]
     return BGt
+
+
+# ================ NATIVE 3-NODE TRIANGLE: the tri3 element and MITC3 tying ============
+#
+# The COLLAPSED-QUAD triangle ([n1 n2 n3 n3] pushed through the bilinear element) has
+# been REMOVED.  As a displacement element it was exact -- with N1 = L1, N2 = L2 and
+# N3 + N4 = L3 the bilinear map degenerates to the affine CST -- but its eta = +1 edge
+# has ZERO LENGTH, so the Dvorkin-Bathe tying point (0, +1) sits on a singular Jacobian
+# and the tied gamma_23 row came back NaN.  A triangle is now a first-class element.
+#
+#   parent      the unit triangle  {r >= 0, s >= 0, r + s <= 1}
+#   shape fns   N = [L1, L2, L3] = [1 - r - s, r, s]          (area coordinates)
+#   DOF         6 per node (w1 w2 w3 om1 om2 om3) -> 18 per element
+#   frame       g_r = dx/dr = X2 - X1,  g_s = dx/ds = X3 - X1  (constant: affine map)
+#               a2 = g_r/|g_r|,  a1 = (g_s - (g_s.a2) a2)/|.|,  n = a1 x a2 flipped
+#               onto the yaml normal e3 -- the SAME construction _surf_frame_batch
+#               uses.  For the collapsed quad Jxi = (1-eta)/4 (X2 - X1) and the
+#               orthogonalized Jeta is the perpendicular part of X3 - X1, so this IS
+#               the frame the collapsed quad produced: membrane/bending is unchanged
+#               to round-off, only the shear treatment changes.
+#   strain rows [eps11 eps22 2eps12 K11 K22 2K12] and [2eps13 2eps23], from the SAME
+#               formulae as the quad -- the operators differ only through N, D1, D2.
+#   quadrature  the degree-2 interior rule: 3 points at the (1/6, 1/6) permutations,
+#               weight 1/6 each (sum = 1/2 = the parent area).  One point would
+#               integrate the CST membrane/bending rows exactly (they are constant),
+#               but the MITC3 assumed shear field is LINEAR in (r, s), so the shear
+#               energy is quadratic, and om3 enters the drilling residual through N so
+#               that is quadratic too.  Three points make the whole 18x18 element
+#               matrix EXACT; a one-point rule samples only 2 of the 3 directions of
+#               the assumed-shear space and would leave it rank-deficient.
+#
+# MITC3 assumed transverse-shear field (Lee & Bathe, "Development of MITC isotropic
+# triangular shell finite elements", Comput. Struct. 82 (2004) 945-962):
+#
+#   tying points (edge midpoints of the parent triangle)
+#       A = (1/2, 0)     midpoint of edge 1-2   (the r-edge)
+#       B = (0, 1/2)     midpoint of edge 1-3   (the s-edge)
+#       C = (1/2, 1/2)   midpoint of edge 2-3
+#
+#   assumed COVARIANT field (e_rt = gamma . g_r, e_st = gamma . g_s)
+#       e~_rt(r,s) = e_rt^A + c s
+#       e~_st(r,s) = e_st^B - c r
+#       c          = (e_rt^C - e_rt^A) - (e_st^C - e_st^B)
+#
+#   The 3-parameter space {a1 + c s, a2 - c r} is exactly the space whose
+#   EDGE-TANGENTIAL covariant component is constant along every edge (the lowest-order
+#   rotated Raviart-Thomas / Whitney edge space); c follows uniquely from tying the
+#   tangential component at C on edge 2-3, whose tangent is (-1, +1):
+#       -e~_rt(C) + e~_st(C) = -e_rt^C + e_st^C  ->  -e_rt^A + e_st^B - c = -e_rt^C + e_st^C.
+#   c is the characteristic MITC3 correction: it COUPLES the two covariant components,
+#   so MITC3 is NOT "average the three edge values" and NOT two independent 1-D ties.
+#   Because both the space and the three tying conditions are stated geometrically,
+#   the assumed field does not depend on which corner is numbered 1 (Lee & Bathe's
+#   "isotropy" requirement) -- see the cyclic-renumbering gate.
+
+TRI_NDOF = 6 * 3                 # 18 = 3 nodes x (w1 w2 w3 om1 om2 om3)
+_ONE6, _TWO3 = 1.0 / 6.0, 2.0 / 3.0
+# degree-2 exact interior rule on the unit triangle: (r, s, weight)
+TRI_GPTS = [(_ONE6, _ONE6, _ONE6), (_TWO3, _ONE6, _ONE6), (_ONE6, _TWO3, _ONE6)]
+# MITC3 tying points, in the order (A, B, C) used above
+TIE_MITC3 = ((0.5, 0.0), (0.0, 0.5), (0.5, 0.5))
+
+# A MITC4 request on a mixed mesh means "assumed transverse shear"; the triangle
+# answers with MITC3.  MITC3's assumed field is intrinsically two-component (the
+# correction c mixes e_rt and e_st), so there is no 'g23-only' triangular variant --
+# every tied quad scheme maps to plain MITC3.
+_TRI_SCHEME = {"full": "full", "mitc": "mitc3", "mitc3": "mitc3",
+               "mitc4_both": "mitc3", "mitc4_g23": "mitc3", "mitc4_wonly": "mitc3"}
+
+
+def tri_scheme_for(scheme):
+    """Triangle counterpart of a quad transverse-shear scheme name.
+
+    In:  scheme: str, one of 'full' | 'mitc' | 'mitc3' | 'mitc4_both' |
+         'mitc4_g23' | 'mitc4_wonly'.
+    Out: 'full' or 'mitc3'.
+    A triangle gets MITC3 wherever a quad gets any MITC4 variant."""
+    try:
+        return _TRI_SCHEME[scheme]
+    except KeyError:
+        raise ValueError("unknown transverse-shear scheme %r; expected one of %s"
+                         % (scheme, ", ".join(sorted(_TRI_SCHEME))))
+
+
+def _linear_tri(r, s):
+    """Area-coordinate shape functions of the 3-node triangle and their
+    (constant) parametric derivatives.
+
+    In:  r, s: float, parent coordinates on the unit triangle.
+    Out: N (3,) = [1-r-s, r, s]; dNr (3,) = [-1,1,0]; dNs (3,) = [-1,0,1]."""
+    return (np.array([1.0 - r - s, r, s]),
+            np.array([-1.0, 1.0, 0.0]),
+            np.array([-1.0, 0.0, 1.0]))
+
+
+def check_element_edges(nodes, conn, tag="element", rel_tol=1e-9, ids=None):
+    """Refuse a degenerate element: any edge whose length is negligible against
+    the element's own size (a repeated node, i.e. the old collapsed quad).
+
+    In:  nodes: (Nn,3) float node coordinates;
+         conn: (ne,k) int connectivity, k = 3 or 4, 0-based;
+         tag: str used in the message ('quad', 'triangle', ...);
+         rel_tol: float, an edge is degenerate if len < rel_tol * (longest edge);
+         ids: optional (ne,) int original element numbers for the message.
+    Out: None.  Raises ValueError naming the element if any edge is degenerate.
+    This is the guard that makes the silent-NaN collapsed-quad path unreachable:
+    a zero-length edge makes the surface frame (and every MITC tying point that
+    lands on it) singular."""
+    conn = np.asarray(conn, int)
+    if conn.size == 0:
+        return
+    X = np.asarray(nodes, float)[conn]                       # (ne,k,3)
+    L = np.linalg.norm(X - np.roll(X, -1, axis=1), axis=2)   # (ne,k) edge lengths
+    Lmax = L.max(axis=1)
+    bad = L <= rel_tol * np.where(Lmax > 0.0, Lmax, 1.0)[:, None]
+    if not bad.any():
+        return
+    e, a = (int(v) for v in np.argwhere(bad)[0])
+    k = conn.shape[1]
+    eid = int(ids[e]) if ids is not None else e
+    raise ValueError(
+        "opensg_shell: DEGENERATE %s element %d (%d-node) -- local edge %d->%d "
+        "(global nodes %d, %d) has length %.6e against element size %.6e.  The "
+        "collapsed-quad triangle path ([n1 n2 n3 n3]) has been removed: store a "
+        "triangle as a 3-NODE element and it gets the native tri3/MITC3 element.  "
+        "A zero-length edge makes the surface frame singular and used to return a "
+        "silent NaN from the MITC tying point that lands on it."
+        % (tag, eid, k, a, (a + 1) % k, conn[e, a], conn[e, (a + 1) % k],
+           L[e, a], Lmax[e]))
+
+
+def _frame_guard(nrm, tag, what, p, q):
+    """Backstop against a singular surface frame inside the batched operators.
+
+    In:  nrm: (ne,) float norm that is about to be divided by;
+         tag: str element kind; what: str which basis vector;
+         p, q: float the parent coordinates being evaluated.
+    Out: None.  Raises ValueError naming the batch element index.
+    Cheap (one comparison per element) and arithmetic-neutral: it never touches
+    the values used downstream."""
+    ok = np.isfinite(nrm) & (nrm > 0.0)
+    if not ok.all():
+        e = int(np.argmin(ok))
+        raise ValueError(
+            "opensg_shell: SINGULAR surface frame on %s element %d of the batch at "
+            "parent point (%g, %g): %s = %r.  This is the degenerate/zero-length-edge "
+            "geometry the collapsed-quad triangle used to hit; run "
+            "check_element_edges on the mesh to find it."
+            % (tag, e, p, q, what, nrm[e]))
+
+
+def tri_frame_batch(Xe, e3e, r, s, cross, ax):
+    """Batched surface frame of the NATIVE 3-node triangle -- the tri3 twin of
+    _surf_frame_batch, with the identical frame construction and identical
+    direction-cosine dictionary.
+
+    In:  Xe: (ne,3,3) float corner coordinates;
+         e3e: (ne,3) float reference material normals (fix the frame sign);
+         r, s: float parent coordinates on the unit triangle;
+         cross: (2,) int cross-section coordinate indices; ax: int axial index.
+    Out: N (3,) shape functions; D1, D2 (ne,3) derivatives along the orthonormal
+         surface directions a1, a2; dA (ne,) = |g_r x g_s| = 2 * (triangle area),
+         the (r,s) -> physical area Jacobian (multiply by the rule weight);
+         c: dict of (ne,) direction cosines (x11..x32, y1..y3, x2, x3);
+         Gm: (G11, G12, G21, G22) the constant covariant metric rows
+         [[a1.g_r, a1.g_s], [a2.g_r, a2.g_s]] needed by the MITC3 tying."""
+    N, dNr, dNs = _linear_tri(r, s)
+    Jr = np.einsum('a,eaj->ej', dNr, Xe)                    # g_r = X2 - X1
+    Js = np.einsum('a,eaj->ej', dNs, Xe)                    # g_s = X3 - X1
+    n2 = np.linalg.norm(Jr, axis=1, keepdims=True)
+    _frame_guard(n2[:, 0], "triangle", "|dx/dr|", r, s)
+    a2 = Jr / n2
+    a1 = Js - np.sum(Js * a2, axis=1, keepdims=True) * a2
+    n1 = np.linalg.norm(a1, axis=1, keepdims=True)
+    _frame_guard(n1[:, 0], "triangle", "|dx/ds orthogonalized|", r, s)
+    a1 = a1 / n1
+    n = np.cross(a1, a2)
+    flip = np.sum(n * e3e, axis=1) < 0.0
+    n[flip] = -n[flip]; a1[flip] = -a1[flip]
+    G11 = np.sum(a1 * Jr, axis=1); G12 = np.sum(a1 * Js, axis=1)
+    G21 = np.sum(a2 * Jr, axis=1); G22 = np.sum(a2 * Js, axis=1)
+    det = G11 * G22 - G12 * G21
+    D1 = (G22[:, None] * dNr[None, :] - G21[:, None] * dNs[None, :]) / det[:, None]
+    D2 = (-G12[:, None] * dNr[None, :] + G11[:, None] * dNs[None, :]) / det[:, None]
+    dA = np.linalg.norm(np.cross(Jr, Js), axis=1)
+    x = np.einsum('a,eaj->ej', N, Xe)
+    c = dict(
+        x11=a1[:, ax], x21=a1[:, cross[0]], x31=a1[:, cross[1]],
+        x12=a2[:, ax], x22=a2[:, cross[0]], x32=a2[:, cross[1]],
+        y1=n[:, ax], y2=n[:, cross[0]], y3=n[:, cross[1]],
+        x2=x[:, cross[0]], x3=x[:, cross[1]],
+    )
+    return N, D1, D2, dA, c, (G11, G12, G21, G22)
+
+
+def mitc3_shear_batch(Gm, gA, gB, gC, r, s):
+    """The MITC3 assumed transverse-shear rows at (r, s).
+
+    In:  Gm: (G11,G12,G21,G22) the constant covariant metric from tri_frame_batch;
+         gA, gB, gC: (ne,2,ndof) float DISPLACEMENT-BASED shear rows
+         [2gamma_13; 2gamma_23] in the orthonormal frame, evaluated at the three
+         edge-midpoint tying points A=(1/2,0), B=(0,1/2), C=(1/2,1/2);
+         r, s: float parent coordinates to evaluate the assumed field at.
+    Out: BGt: (ne,2,ndof) tied rows [2gamma~_13; 2gamma~_23] in the same frame.
+
+    Covariant components: [e_rt; e_st] = G^T [gamma_13; gamma_23] with
+    G = [[a1.g_r, a1.g_s],[a2.g_r, a2.g_s]]; the assumed field is
+        e~_rt = e_rt^A + c s,   e~_st = e_st^B - c r,
+        c     = (e_rt^C - e_rt^A) - (e_st^C - e_st^B),
+    and the result is pulled back with G^-T.  The factor 2 (engineering shear) is
+    carried through unchanged -- the whole construction is linear."""
+    G11, G12, G21, G22 = Gm
+
+    def cov(g):
+        return (G11[:, None] * g[:, 0, :] + G21[:, None] * g[:, 1, :],   # e_rt
+                G12[:, None] * g[:, 0, :] + G22[:, None] * g[:, 1, :])   # e_st
+
+    ertA, estA = cov(gA)
+    ertB, estB = cov(gB)
+    ertC, estC = cov(gC)
+    c = (ertC - ertA) - (estC - estB)
+    ert = ertA + c * s
+    est = estB - c * r
+    det = (G11 * G22 - G12 * G21)[:, None]
+    g13 = (G22[:, None] * ert - G21[:, None] * est) / det
+    g23 = (-G12[:, None] * ert + G11[:, None] * est) / det
+    return np.stack([g13, g23], axis=1)
 
 
 def _d_scale(D_by):

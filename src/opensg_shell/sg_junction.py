@@ -96,7 +96,7 @@ def stack_plies(stack, sections, materials):
     return plies, t
 
 
-def stack_shell_law(stack, sections, materials, g_source="msg", frac=0.5):
+def stack_shell_law(stack, sections, materials, g_source=None, frac=0.5):
     """Shell law the GLOBAL model carries for the stacked coincident walls:
     the SUM of each member's production ABD and shear G (coincident
     midlines, laws add); the mirrored member uses its angle-negated section.
@@ -105,13 +105,17 @@ def stack_shell_law(stack, sections, materials, g_source="msg", frac=0.5):
       stack: list[(int, bool)] -- (sec_idx, mirrored)
       sections: list[dict] -- wall sections with "layup"
       materials: list[dict] -- material entries
-      g_source: str -- "msg" replaces each member's G with the MSG RM-plate G
+      g_source: DEPRECATED, accepted and ignored -- each member's G is always
+             the MSG RM-plate G (see sg_materials.check_g_source)
       frac: float -- reference-surface fraction for the MSG G (0.5 = center)
     Out:
       D6: (6,6) ndarray -- summed ABD
       G2: (2,2) ndarray -- summed transverse-shear law
     """
-    from .sg_materials import _material_by_section
+    from .sg_materials import _material_by_section, check_g_source
+    from .sg_materials import material_db_from_yaml
+    from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
+    check_g_source(g_source, "stack_shell_law")
     D6 = np.zeros((6, 6))
     G2 = np.zeros((2, 2))
     for sec, mir in stack:
@@ -122,15 +126,12 @@ def stack_shell_law(stack, sections, materials, g_source="msg", frac=0.5):
         D_by, G_by = _material_by_section([s], materials, center_ref=True)
         Dk = np.asarray(D_by[0], float)
         Gk = np.asarray(G_by[0], float)
-        if g_source == "msg":
-            from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-            from .sg_materials import material_db_from_yaml
-            pl = [[str(p[0]), float(p[1]), float(p[2])] for p in s["layup"]]
-            rr = rm_plate_msg([p[1] for p in pl], [p[2] for p in pl],
-                              [p[0] for p in pl],
-                              material_db_from_yaml(materials), fraction=frac)
-            if rr["G_msg"] is not None:
-                Gk = np.asarray(rr["G_msg"], float)
+        pl = [[str(p[0]), float(p[1]), float(p[2])] for p in s["layup"]]
+        rr = rm_plate_msg([p[1] for p in pl], [p[2] for p in pl],
+                          [p[0] for p in pl],
+                          material_db_from_yaml(materials), fraction=frac)
+        if rr["G_msg"] is not None:
+            Gk = np.asarray(rr["G_msg"], float)
         D6 += Dk
         G2 += Gk
     return D6, G2
@@ -806,7 +807,7 @@ def microcell_law(stackA, stackB, sections, materials, D_by, G_by,
 
 
 def corner_micro_law(topo, stackA, stackB, sections, materials,
-                     g_source="msg", Ls_fac=5.0, nply_el=4, fill="A"):
+                     g_source=None, Ls_fac=5.0, nply_el=4, fill="A"):
     """Corner patch-subtraction junction law:
         dC = E_solid_patch - E_shell_patch (+ analytic homologous-span term)
     with matched cut BCs (solid: far-field fluctuation profiles; shell: zero
@@ -820,7 +821,8 @@ def corner_micro_law(topo, stackA, stackB, sections, materials,
              periodic lattice, [(sec_idx, mirrored)]
       sections: list[dict] -- wall sections with "layup"
       materials: list[dict] -- material entries
-      g_source: str -- "msg" uses the MSG RM-plate G per member
+      g_source: DEPRECATED, accepted and ignored -- the MSG RM-plate G per
+             member is the only route (see sg_materials.check_g_source)
       Ls_fac: float -- stub length factor, Ls = Ls_fac*max(tA, tB)
       nply_el: int -- minimum elements through each ply
       fill: str -- overlap-block owner for 'X'

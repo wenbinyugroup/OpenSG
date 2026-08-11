@@ -103,7 +103,16 @@ bounding-box nodes; single-cell kinematic upper bound).
 Reuses the msg_shell operators unchanged -- solid_fluct_ops_batch (Gamma_h),
 solid_macro_ops_batch (Gamma_e) and the per-element frames are geometry-
 general; what changes vs a cross-section run is only the environment:
-  * general shell quads (tris = collapsed quads) in 3-D, no prismatic strip;
+  * general shell facets in 3-D, no prismatic strip.  3-node TRIANGLES are
+    first-class NATIVE elements: solid_fluct_ops_tri_batch /
+    solid_macro_ops_tri_batch on the area coordinates [L1,L2,L3], 18 DOF, the
+    degree-2 3-point rule, and MITC3 assumed transverse shear (Lee & Bathe
+    2004).  Quads and triangles are assembled as two SEPARATE batches --
+    (ne4,24,24) and (ne3,18,18) -- scattered into one global system; a
+    triangle is never padded to a quad.  The old collapsed-quad encoding
+    [n1 n2 n3 n3] is REJECTED by check_element_edges: it reproduced the CST
+    exactly, but its zero-length edge carried a MITC tying point and returned
+    a silent NaN;
   * periodicity through the sparse assembly map on the FULL 3-D coordinates
     (all opposite faces, edges and corners -- the 3-D SG default);
   * sparse assembly (scipy) -- 3-D SGs are too large for dense Dhh;
@@ -116,7 +125,10 @@ general; what changes vs a cross-section run is only the environment:
     the quad junction remesh) -- detection is wired, the hex micro follows
     the same dC = E_solid_mini - E_shell_mini construction.
 
-Writes <yaml base>_C3D.out with the solve time (OpenSG default).
+Writes <yaml base>_C3D.out with the solve time (OpenSG default) AND
+<yaml base>_ABDG.out -- the step-1 wall plate laws (8x8 Reissner-Mindlin
+ABDG + compliance, one block per section), the same file and the same
+emitter (write_abdg_out) the cross-section routes produce.
 
 segment_taper.py -- Aperiodic-boundary shell segment homogenization (tapered or prismatic)
 ------------------------------------------------------------------------------------------
@@ -156,7 +168,9 @@ import scipy.sparse.linalg as spla
 import yaml
 import yaml as _yaml
 
-from .sg_assembly import _surf_frame_batch, _shear_batch, NDOF6
+from .sg_assembly import (_surf_frame_batch, _shear_batch, NDOF6,
+                          tri_frame_batch, mitc3_shear_batch, tri_scheme_for,
+                          check_element_edges, TRI_GPTS, TIE_MITC3, TRI_NDOF)
 from .sg_materials import _material_by_section
 from .sg_periodicity import mesh_to_periodic_sparse_assembly_map
 from .fe_jax.msg_hermite import solve_tw_from_yaml          # layup_db / material_db by name
@@ -313,6 +327,122 @@ def _tie_rows_solid(Xe, e3e, cross, ax):
          at tying points (0, -1) and (0, +1)."""
     f = lambda xi, eta: solid_fluct_ops_batch(Xe, e3e, xi, eta, cross, ax)[1]
     return {"g23m": f(0.0, -1.0)[:, 1:2, :], "g23p": f(0.0, 1.0)[:, 1:2, :]}
+
+
+def _tie_rows_solid4(Xe, e3e, cross, ax):
+    """MITC4 tying rows for the SURFACE (3-D shell SG) route: BOTH covariant
+    shear rows are tied, the standard Dvorkin-Bathe field.
+
+    In:  Xe (ne,4,3), e3e (ne,3), cross (2,) int, ax int -- as _tie_rows_solid.
+    Out: dict {"g13m","g13p","g23m","g23p"}, each (ne,1,24): row 0 at
+         (-1,0)/(+1,0) and row 1 at (0,-1)/(0,+1).
+    Unlike the cross-section ring (where 'mitc4_g23' ties only gamma_23 because
+    gamma_13 is algebraic in the drilling rotation on a flat wall), a closed 3-D
+    shell SG has no privileged axis, so both rows are assumed."""
+    f = lambda xi, eta: solid_fluct_ops_batch(Xe, e3e, xi, eta, cross, ax)[1]
+    return {"g13m": f(-1.0, 0.0)[:, 0:1, :], "g13p": f(1.0, 0.0)[:, 0:1, :],
+            "g23m": f(0.0, -1.0)[:, 1:2, :], "g23p": f(0.0, 1.0)[:, 1:2, :]}
+
+
+def solid_fluct_ops_tri_batch(Xe, e3e, r, s, cross, ax):
+    """Gamma_h of the NATIVE 3-node triangle -- the tri3 twin of
+    solid_fluct_ops_batch, same strain rows, same DOF layout, 18 columns.
+
+    In:  Xe: (ne,3,3) float triangle corner coordinates;
+         e3e: (ne,3) float wall normal per element;
+         r, s: float parent coordinates on the unit triangle;
+         cross: (2,) int cross-section axes; ax: int axial axis.
+    Out: B (ne,6,18) rows [eps11 eps22 2eps12 K11 K22 2K12];
+         Bg (ne,2,18) rows [2eps13 2eps23] (UNTIED, displacement-based);
+         Dr (ne,18) drilling residual; dA (ne,) = |g_r x g_s| (multiply by the
+         quadrature weight); Gm the covariant metric for the MITC3 tying.
+    DOF slots per node: 0:3 = w_i, 3:6 = om_i, exactly as the quad."""
+    N, D1, D2, dA, c, Gm = tri_frame_batch(Xe, e3e, r, s, cross, ax)
+    ne = Xe.shape[0]
+    xi1 = np.stack([c["x11"], c["x21"], c["x31"]], axis=1)     # X_{i1}
+    xi2 = np.stack([c["x12"], c["x22"], c["x32"]], axis=1)     # X_{i2}
+    yv = np.stack([c["y1"], c["y2"], c["y3"]], axis=1)         # C_{3i}
+
+    B = np.zeros((ne, 6, 3, NDOF6))
+    B[:, 0, :, 0:3] = D1[:, :, None] * xi1[:, None, :]                  # eps11 = X_i1 w_i,1
+    B[:, 1, :, 0:3] = D2[:, :, None] * xi2[:, None, :]                  # eps22 = X_i2 w_i,2
+    B[:, 2, :, 0:3] = (D2[:, :, None] * xi1[:, None, :]
+                       + D1[:, :, None] * xi2[:, None, :])              # 2eps12
+    B[:, 3, :, 3:6] = D1[:, :, None] * xi2[:, None, :]                  # K11 = X_i2 om_i,1
+    B[:, 4, :, 3:6] = -D2[:, :, None] * xi1[:, None, :]                 # K22 = -X_i1 om_i,2
+    B[:, 5, :, 3:6] = (D2[:, :, None] * xi2[:, None, :]
+                       - D1[:, :, None] * xi1[:, None, :])              # K12+K21
+
+    Bg = np.zeros((ne, 2, 3, NDOF6))
+    Bg[:, 0, :, 0:3] = D1[:, :, None] * yv[:, None, :]                  # 2g13 = C_3i w_i,1 ...
+    Bg[:, 0, :, 3:6] = N[None, :, None] * xi2[:, None, :]               # ... + X_i2 om_i
+    Bg[:, 1, :, 0:3] = D2[:, :, None] * yv[:, None, :]                  # 2g23 = C_3i w_i,2 ...
+    Bg[:, 1, :, 3:6] = N[None, :, None] * (-xi1)[:, None, :]            # ... - X_i1 om_i
+
+    den = np.where(np.abs(yv[:, 2]) > 1e-8, yv[:, 2], 1.0)
+    Dr = np.zeros((ne, 3, NDOF6))
+    Dr[:, :, 0:3] = -0.5 * (D1[:, :, None] * xi2[:, None, :]
+                            - D2[:, :, None] * xi1[:, None, :]) \
+        / den[:, None, None]
+    Dr[:, :, 3:6] = (N[None, :, None] * yv[:, None, :]
+                     / den[:, None, None])
+    return (B.reshape(ne, 6, TRI_NDOF), Bg.reshape(ne, 2, TRI_NDOF),
+            Dr.reshape(ne, TRI_NDOF), dA, Gm)
+
+
+def solid_macro_ops_tri_batch(Xe, e3e, r, s, cross, ax):
+    """Gamma_e of the native triangle -- identical algebra to
+    solid_macro_ops_batch, evaluated on the tri3 frame.
+
+    In:  Xe (ne,3,3), e3e (ne,3), r, s float, cross (2,) int, ax int.
+    Out: BDe6 (ne,6,6), BGe6 (ne,2,6), dA (ne,).
+    The direction cosines are constant over an affine triangle, so these rows
+    do not actually depend on (r, s)."""
+    N, D1, D2, dA, c, Gm = tri_frame_batch(Xe, e3e, r, s, cross, ax)
+    ne = Xe.shape[0]
+    X11, X21, X31 = c["x11"], c["x21"], c["x31"]
+    X12, X22, X32 = c["x12"], c["x22"], c["x32"]
+    C31, C32, C33 = c["y1"], c["y2"], c["y3"]
+    z = np.zeros(ne)
+    BDe6 = np.stack([
+        np.stack([X11**2, X21**2, X31**2,
+                  X31*X21, X11*X31, X11*X21], 1),
+        np.stack([X12**2, X22**2, X32**2,
+                  X32*X22, X32*X12, X12*X22], 1),
+        np.stack([2*X11*X12, 2*X22*X21, 2*X31*X32,
+                  X22*X31 + X32*X21, X12*X31 + X32*X11,
+                  X12*X21 + X11*X22], 1),
+        np.stack([z, z, z, z, z, z], 1),
+        np.stack([z, z, z, z, z, z], 1),
+        np.stack([z, z, z, z, z, z], 1),
+    ], axis=1)
+    BGe6 = np.stack([
+        np.stack([C31*X11, C32*X21, C33*X31,
+                  0.5*(X31*C32 + X21*C33), 0.5*(X31*C31 + X11*C33),
+                  0.5*(X21*C31 + X11*C32)], 1),
+        np.stack([C31*X12, C32*X22, C33*X32,
+                  0.5*(X32*C32 + X22*C33), 0.5*(X32*C31 + X12*C33),
+                  0.5*(X22*C31 + X12*C32)], 1),
+    ], axis=1)
+    return BDe6, BGe6, dA
+
+
+def tri_shear_rows(Xe, e3e, cross, ax, r, s, Bg_gauss, Gm, scheme):
+    """Transverse-shear rows of the tri3 element at (r, s) under `scheme`.
+
+    In:  Xe (ne,3,3), e3e (ne,3), cross (2,) int, ax int;
+         r, s: float parent coordinates;
+         Bg_gauss: (ne,2,18) untied rows already evaluated at (r, s);
+         Gm: covariant metric from tri_frame_batch;
+         scheme: 'full' (displacement-based) or 'mitc3' (assumed field).
+    Out: (ne,2,18) shear rows.
+    Convenience wrapper; the production loop hoists the three tying-point
+    evaluations out of the quadrature loop instead (they are (r,s)-independent)."""
+    if scheme == "full":
+        return Bg_gauss
+    g = [solid_fluct_ops_tri_batch(Xe, e3e, tr, ts, cross, ax)[1]
+         for (tr, ts) in TIE_MITC3]
+    return mitc3_shear_batch(Gm, g[0], g[1], g[2], r, s)
 
 
 def solid_macro_enn_batch(Xe, e3e, xi, eta, cross, ax):
@@ -853,18 +983,22 @@ def write_abdg_out(out_path, sections, D_by, G_by):
     return out_path
 
 
-def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg",
+def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
                        cell_area=None, periodic=True, junction=None):
     """Load the shell yaml exactly as build_rm_bundle does (same reference logic,
     same MSG wall transverse-shear upgrade), run ring_solid, and package:
 
         {"C3D", "D_eff", "cell_area", "area_source", "V0", geometry..., "order"}
 
-    C3D = D_eff / cell_area.  cell_area=None -> convex-hull area of the contour."""
+    C3D = D_eff / cell_area.  cell_area=None -> convex-hull area of the contour.
+    ``g_source`` is accepted and ignored (MSG is the only wall-G route) --
+    see sg_materials.check_g_source."""
     import time as _time
     import yaml as _yaml
     from .sg_mesh import load_ring_ref
+    from .sg_materials import check_g_source
 
+    check_g_source(g_source, "build_solid_bundle")
     _t0 = _time.perf_counter()
     d = _yaml.safe_load(open(shell_yaml))
     if ref is None:
@@ -872,16 +1006,16 @@ def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg",
     R = load_ring_ref(shell_yaml, ref)
     frac = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}.get(ref, 0.0)
     G_by = list(R["G_by"])
-    if g_source == "msg":
-        from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-        from .sg_materials import material_db_from_yaml
-        _mdb = material_db_from_yaml(d["materials"])
-        for si, sec in enumerate(d["sections"]):
-            _pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
-            _rr = rm_plate_msg([p[1] for p in _pl], [p[2] for p in _pl],
-                               [p[0] for p in _pl], _mdb, fraction=frac)
-            if _rr["G_msg"] is not None:
-                G_by[si] = np.asarray(_rr["G_msg"])
+    # wall transverse-shear G: the MSG (Yu-2002 LS) construction, the only route
+    from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
+    from .sg_materials import material_db_from_yaml
+    _mdb = material_db_from_yaml(d["materials"])
+    for si, sec in enumerate(d["sections"]):
+        _pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
+        _rr = rm_plate_msg([p[1] for p in _pl], [p[2] for p in _pl],
+                           [p[0] for p in _pl], _mdb, fraction=frac)
+        if _rr["G_msg"] is not None:
+            G_by[si] = np.asarray(_rr["G_msg"])
     import os as _os
     write_abdg_out(_os.path.splitext(shell_yaml)[0] + "_ABDG.out",
                    d["sections"], R["D_by"], G_by)
@@ -948,7 +1082,7 @@ def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg",
                     cache[key] = corner_micro_law(topo, list(A["stack"]),
                                                   list(B["stack"]),
                                                   d["sections"],
-                                                  d["materials"], g_source,
+                                                  d["materials"],
                                                   fill=fill)
             dCloc, jinf = cache[key]
             c, s = float(A["dir"][0]), float(A["dir"][1])
@@ -980,7 +1114,8 @@ def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg",
     write_sc_K(_os.path.splitext(shell_yaml)[0] + "_C3D.out", _C,
                solve_time=solve_time,
                model="msg-shell equivalent 3D solid (cross-section SG),"
-                     " omega %.8g (%s)" % (float(cell_area), area_source))
+                     " omega %.8g (%s)" % (float(cell_area), area_source),
+               name="Cauchy Continuum")
     return {"C3D": Deff / float(cell_area), "D_eff": Deff,
             "solve_time": solve_time,
             "cell_area": float(cell_area), "area_source": area_source,
@@ -988,13 +1123,14 @@ def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg",
             "red_cells": np.asarray(R["cells"]), "rsub": np.asarray(R["rsub"]),
             "re3": np.asarray(R["re3"]), "k22": np.asarray(R["k22"]),
             "ax": int(R["ax"]), "cross": list(R["cross"]), "ref": ref,
-            "g_source": g_source, "order": GBAR_ORDER}
+            "g_source": "msg", "order": GBAR_ORDER}
 
 
 # ===================== from shell_sg3d.py =====================
 
 _G = 1.0/np.sqrt(3.0)
 _GPTS = [(-_G, -_G), (_G, -_G), (_G, _G), (-_G, _G)]
+_ONE3 = 1.0/3.0                      # triangle centroid, for the nodal area weights
 
 
 def _sparse_solve(A, R, sym=False):
@@ -1037,12 +1173,31 @@ def _sparse_solve(A, R, sym=False):
         return spla.splu(sp.csc_matrix(A)).solve(R)
 
 
-def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
+def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
                solver="direct",
-               boundary="periodic"):
+               boundary=None, shear="mitc"):
     """Equivalent 3-D solid stiffness of a 3-D shell SG.
 
-    boundary = "periodic" (default) or "aperiodic":
+    MIXED MESH.  The surface may hold 3-node triangles and 4-node quads at once.
+    They are assembled as two SEPARATE BATCHES -- (ne3,18,18) tri3 blocks and
+    (ne4,24,24) quad blocks -- scattered into the same global system; a triangle
+    is NEVER padded to a quad.  The old collapsed-quad triangle [n1 n2 n3 n3] is
+    rejected by check_element_edges (it made the MITC tying point on the
+    zero-length edge singular and returned a silent NaN).
+
+    shear   : transverse-shear treatment, the shared vocabulary.
+      * "mitc" (default) -- assumed transverse shear: MITC4 (Dvorkin-Bathe, both
+        covariant rows tied) on a quad, MITC3 (Lee & Bathe 2004, the three
+        edge-midpoint ties with the coupling correction) on a triangle.  A
+        triangle gets MITC3 wherever a quad gets MITC4; see tri_scheme_for.
+      * "full" -- displacement-based shear at the quadrature points, the legacy
+        (locking-prone) treatment this route used before the tri3 element
+        existed.  Kept for ablation and for reproducing older numbers.
+
+    boundary = "periodic" (the default) or "aperiodic".  Left as None it is
+    read from the yaml header, where the OPTIONAL `aperiodic: 1` key is the
+    boundary opt-out -- the same key opensg_solid.plate_homo_2d reads, so the
+    two CLIs share one header contract; an explicit argument always wins.
       * "periodic"  -- warping fluctuation w periodic: opposite faces, edges
         and corners tied through the sparse assembly map; rigid translations
         removed by 3 area-weighted Lagrange rows.
@@ -1062,44 +1217,102 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
 
     Variables
     ---------
-    omega   : SG measure remaining in the model (SwiftComp-TW convention):
-              midsurface SURFACE AREA, integrated from the mesh by default
-              (3-D analog of the plane-section omega = perimeter); pass
-              explicitly to override (e.g. cell volume for a per-cell law)
+    omega   : SG measure the homogenized law is divided by = the VOLUME the
+              equivalent continuum occupies, i.e. the node BOUNDING-BOX
+              volume ptp(y1)*ptp(y2)*ptp(y3), measured from the mesh by
+              default -- the same convention opensg_solid uses, and the same
+              cell the periodic assembly map ties (opposite box faces).  So
+              the returned C3D, the CLI print and <base>_C3D.out are one and
+              the same matrix.  An explicit argument (or the yaml `omega:`
+              header key, which the CLI passes here) overrides it -- e.g.
+              omega = the midsurface SURFACE AREA, also returned in the result
+              dict as "surface_area", for a per-unit-area wall law.
     De, Gm  : laminate 6x6 (center-ref) and transverse-shear 2x2
     uniq,inv: master-node set and node->master map (identity if aperiodic)
     K, Dhe, Dee : fluctuation/macro energy blocks of
               2U = w^T K w + 2 w^T Dhe ebar + ebar^T Dee ebar
     V0      : minimizing fluctuation per macro strain column ebar;
               Deff = Dee + V0^T Dhe  (valid for both boundary treatments)
+    g_source: accepted and IGNORED -- the wall transverse-shear block G is
+              always the MSG (Yu-2002 LS) construction; see
+              sg_materials.check_g_source
     """
+    from .sg_materials import check_g_source
+    check_g_source(g_source, "shell_sg3d")
     t0 = time.perf_counter()
     try:                                     # libyaml C loader: the pure-python parse
         from yaml import CSafeLoader as _YL3  # of a big 3-D SG mesh costs ~25 s alone
     except ImportError:
         from yaml import SafeLoader as _YL3
     d = _yaml.load(open(yaml_path), Loader=_YL3)
+    if boundary is None:                     # yaml header: `aperiodic: 1` is
+        _ap = d.get("aperiodic")             # the opt-out, absent = periodic
+        boundary = "aperiodic" if _ap is not None and int(_ap) else "periodic"
+    if boundary not in ("periodic", "aperiodic"):
+        raise ValueError("boundary must be 'periodic' or 'aperiodic', got %r"
+                         % (boundary,))
     row = lambda r: " ".join(str(x) for x in
                              (r if isinstance(r, list) else [r])).split()
+    if shear not in ("mitc", "full"):
+        raise ValueError("shell_sg3d shear must be 'mitc' or 'full', got %r"
+                         % (shear,))
+    tri_scheme = tri_scheme_for(shear)                 # 'mitc' -> 'mitc3'
     nd = np.array([[float(v) for v in row(r)][:3] for r in d["nodes"]])
     el = [[int(v) for v in row(r)] for r in d["elements"]]
-    el = np.array([e + [e[-1]]*(4 - len(e)) for e in el], int) - 1
+    # MIXED MESH: a 3-node entry is a NATIVE triangle (tri3 + MITC3), a 4-node
+    # entry a genuine quad (MITC4).  The collapsed-quad triangle is gone.
+    nv = np.array([len(e) for e in el], int)
+    if not np.all((nv == 3) | (nv == 4)):
+        bad = int(np.argmax((nv != 3) & (nv != 4)))
+        raise ValueError("shell_sg3d: element %d has %d nodes; a 3-D shell SG "
+                         "holds 3-node triangles and/or 4-node quads only"
+                         % (bad, nv[bad]))
+    itri = np.nonzero(nv == 3)[0]
+    iquad = np.nonzero(nv == 4)[0]
+    el3 = (np.array([el[i] for i in itri], int) - 1) if len(itri) \
+        else np.zeros((0, 3), int)
+    el4 = (np.array([el[i] for i in iquad], int) - 1) if len(iquad) \
+        else np.zeros((0, 4), int)
+    # the guard that makes the silent-NaN collapsed-quad path unreachable
+    check_element_edges(nd, el3, tag="triangle", ids=itri)
+    check_element_edges(nd, el4, tag="quad", ids=iquad)
     ori = np.array(d["elementOrientations"], float)
-    e3 = ori[:, 6:9]
-    nn, ne = len(nd), len(el)
+    e33, e34 = ori[itri, 6:9], ori[iquad, 6:9]
+    nn, ne, ne3, ne4 = len(nd), len(el), len(el3), len(el4)
 
+    # STEP 1 of the two-step homogenization: every layup -> its wall plate law.
+    # Done for ALL sections (not just the one the SG solve uses) so the emitted
+    # _ABDG.out is the complete step-1 record, exactly as the cross-section
+    # routes build_rm_bundle / build_solid_bundle write it.
     D_by, G_by = _material_by_section(d["sections"], d["materials"],
                                       center_ref=True)
-    if g_source == "msg":
-        from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-        from .sg_materials import material_db_from_yaml
-        pl = [[str(p[0]), float(p[1]), float(p[2])]
-              for p in d["sections"][0]["layup"]]
+    # wall transverse-shear G: the MSG (Yu-2002 LS) construction, the only route
+    from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
+    from .sg_materials import material_db_from_yaml
+    _mdb = material_db_from_yaml(d["materials"])
+    G_by = [np.asarray(G_by[si], float).reshape(2, 2)
+            for si in range(len(d["sections"]))]
+    for si, sec in enumerate(d["sections"]):
+        pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
         rr = rm_plate_msg([p[1] for p in pl], [p[2] for p in pl],
-                          [p[0] for p in pl],
-                          material_db_from_yaml(d["materials"]), fraction=0.5)
+                          [p[0] for p in pl], _mdb, fraction=0.5)
         if rr["G_msg"] is not None:
-            G_by = [np.asarray(rr["G_msg"])]
+            G_by[si] = np.asarray(rr["G_msg"], float).reshape(2, 2)
+    # step 1 on disk, same emitter and same layout as the cross-section routes
+    write_abdg_out(os.path.splitext(yaml_path)[0] + "_ABDG.out",
+                   d["sections"], D_by, G_by)
+    # STEP 2 uses ONE wall law for the whole surface: section 0.  A per-element
+    # section id (`sets:`/`rsub`) is not yet plumbed through this route, so a
+    # multi-section 3-D shell SG would silently run on layup 0 -- refuse it
+    # rather than return a wrong number (the ABDG above still lists them all).
+    if len(d["sections"]) > 1:
+        raise NotImplementedError(
+            "shell_sg3d homogenizes a 3-D shell SG with ONE wall law; this yaml"
+            " declares %d sections (%s).  The per-element section map is not"
+            " wired into this route yet -- split the SG, or use one section."
+            % (len(d["sections"]),
+               ", ".join(str(s.get("elementSet", i))
+                         for i, s in enumerate(d["sections"]))))
     De = np.asarray(D_by[0] if not isinstance(D_by, dict) else D_by[0],
                     float).reshape(6, 6)
     Gm = np.asarray(G_by[0], float).reshape(2, 2)
@@ -1107,9 +1320,8 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
     # junction lines: shell edges shared by more than two elements
     cnt = Counter()
     for e in el:
-        vs = list(dict.fromkeys(e))
-        for k in range(len(vs)):
-            cnt[tuple(sorted((vs[k], vs[(k+1) % len(vs)])))] += 1
+        for k in range(len(e)):
+            cnt[tuple(sorted((e[k], e[(k+1) % len(e)])))] += 1
     n_junc_edges = sum(1 for v in cnt.values() if v > 2)
 
     if boundary == "periodic":
@@ -1123,42 +1335,99 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         uniq = inv = np.arange(nn)
     ndof = NDOF6*len(uniq)
 
-    Xe = nd[el]
-    gd = (NDOF6*inv[el][:, :, None]
-          + np.arange(NDOF6)[None, None, :]).reshape(ne, 24).astype(np.int32)
+    Xe4 = nd[el4]
+    Xe3 = nd[el3]
+    gd4 = (NDOF6*inv[el4][:, :, None]
+           + np.arange(NDOF6)[None, None, :]).reshape(ne4, 24).astype(np.int32)
+    gd3 = (NDOF6*inv[el3][:, :, None]
+           + np.arange(NDOF6)[None, None, :]).reshape(ne3, TRI_NDOF).astype(np.int32)
     Dhe = np.zeros((ndof, 6))
     Dee = np.zeros((6, 6))
     A11 = De[0, 0]
     A_surf = 0.0
-    Ke_acc = np.zeros((ne, 24, 24))
-    Fe_acc = np.zeros((ne, 24, 6))
-    for xi, eta in _GPTS:
-        B, Bg, Dr, dA = solid_fluct_ops_batch(Xe, e3, xi, eta, [1, 2], 0)
-        BDe6, BGe6, _ = solid_macro_ops_batch(Xe, e3, xi, eta, [1, 2], 0)
-        w = dA[:, None, None]
-        DB = np.einsum('ij,ejb->eib', De, B)*w
-        GB = np.einsum('ij,ejb->eib', Gm, Bg)*w
-        DBe = np.einsum('ij,ejb->eib', De, BDe6)*w
-        GBe = np.einsum('ij,ejb->eib', Gm, BGe6)*w
-        Ke_acc += np.einsum('eia,eib->eab', B, DB) \
-            + np.einsum('eia,eib->eab', Bg, GB) \
-            + (drill_pen*A11)*(dA[:, None, None]*Dr[:, :, None]*Dr[:, None, :])
-        Fe_acc += np.einsum('eia,eib->eab', B, DBe) \
-            + np.einsum('eia,eib->eab', Bg, GBe)
-        Dee += np.einsum('eia,eib->ab', BDe6, DBe) \
-            + np.einsum('eia,eib->ab', BGe6, GBe)
-        A_surf += float(dA.sum())
-    np.add.at(Dhe, gd.ravel(), Fe_acc.reshape(-1, 6))
-    K = sp.csr_matrix((Ke_acc.ravel(),
-                       (np.repeat(gd, 24, 1).ravel(),
-                        np.tile(gd, (1, 24)).ravel())),
+    Krow, Kcol, Kval = [], [], []
+
+    # ---------------- batch 1: genuine QUADS (bilinear, 2x2 Gauss, MITC4) ---------
+    if ne4:
+        tie4 = None if shear == "full" else _tie_rows_solid4(Xe4, e34, [1, 2], 0)
+        Ke_acc = np.zeros((ne4, 24, 24))
+        Fe_acc = np.zeros((ne4, 24, 6))
+        for xi, eta in _GPTS:
+            B, Bg, Dr, dA = solid_fluct_ops_batch(Xe4, e34, xi, eta, [1, 2], 0)
+            BDe6, BGe6, _ = solid_macro_ops_batch(Xe4, e34, xi, eta, [1, 2], 0)
+            if tie4 is not None:
+                Bg = _shear_batch(xi, eta, "mitc4_both", Bg, tie4)
+            w = dA[:, None, None]
+            DB = np.einsum('ij,ejb->eib', De, B)*w
+            GB = np.einsum('ij,ejb->eib', Gm, Bg)*w
+            DBe = np.einsum('ij,ejb->eib', De, BDe6)*w
+            GBe = np.einsum('ij,ejb->eib', Gm, BGe6)*w
+            Ke_acc += np.einsum('eia,eib->eab', B, DB) \
+                + np.einsum('eia,eib->eab', Bg, GB) \
+                + (drill_pen*A11)*(dA[:, None, None]*Dr[:, :, None]*Dr[:, None, :])
+            Fe_acc += np.einsum('eia,eib->eab', B, DBe) \
+                + np.einsum('eia,eib->eab', Bg, GBe)
+            Dee += np.einsum('eia,eib->ab', BDe6, DBe) \
+                + np.einsum('eia,eib->ab', BGe6, GBe)
+            A_surf += float(dA.sum())
+        np.add.at(Dhe, gd4.ravel(), Fe_acc.reshape(-1, 6))
+        Krow.append(np.repeat(gd4, 24, 1).ravel())
+        Kcol.append(np.tile(gd4, (1, 24)).ravel())
+        Kval.append(Ke_acc.ravel())
+
+    # ---------------- batch 2: native TRIANGLES (tri3, 3-point rule, MITC3) -------
+    # a separate (ne3,18,18) batch scattered into the SAME global system -- no
+    # padding to 24 DOF, no per-element Python loop
+    if ne3:
+        tie3 = None
+        if tri_scheme == "mitc3":
+            tie3 = [solid_fluct_ops_tri_batch(Xe3, e33, tr, ts, [1, 2], 0)[1]
+                    for (tr, ts) in TIE_MITC3]
+        Ke_acc = np.zeros((ne3, TRI_NDOF, TRI_NDOF))
+        Fe_acc = np.zeros((ne3, TRI_NDOF, 6))
+        for (r_, s_, wq) in TRI_GPTS:
+            B, Bg, Dr, dJ, Gmet = solid_fluct_ops_tri_batch(Xe3, e33, r_, s_,
+                                                            [1, 2], 0)
+            BDe6, BGe6, _ = solid_macro_ops_tri_batch(Xe3, e33, r_, s_, [1, 2], 0)
+            if tie3 is not None:
+                Bg = mitc3_shear_batch(Gmet, tie3[0], tie3[1], tie3[2], r_, s_)
+            dA = wq*dJ                       # rule weight x |g_r x g_s|
+            w = dA[:, None, None]
+            DB = np.einsum('ij,ejb->eib', De, B)*w
+            GB = np.einsum('ij,ejb->eib', Gm, Bg)*w
+            DBe = np.einsum('ij,ejb->eib', De, BDe6)*w
+            GBe = np.einsum('ij,ejb->eib', Gm, BGe6)*w
+            Ke_acc += np.einsum('eia,eib->eab', B, DB) \
+                + np.einsum('eia,eib->eab', Bg, GB) \
+                + (drill_pen*A11)*(dA[:, None, None]*Dr[:, :, None]*Dr[:, None, :])
+            Fe_acc += np.einsum('eia,eib->eab', B, DBe) \
+                + np.einsum('eia,eib->eab', Bg, GBe)
+            Dee += np.einsum('eia,eib->ab', BDe6, DBe) \
+                + np.einsum('eia,eib->ab', BGe6, GBe)
+            A_surf += float(dA.sum())
+        np.add.at(Dhe, gd3.ravel(), Fe_acc.reshape(-1, 6))
+        Krow.append(np.repeat(gd3, TRI_NDOF, 1).ravel())
+        Kcol.append(np.tile(gd3, (1, TRI_NDOF)).ravel())
+        Kval.append(Ke_acc.ravel())
+
+    K = sp.csr_matrix((np.concatenate(Kval),
+                       (np.concatenate(Krow), np.concatenate(Kcol))),
                       shape=(ndof, ndof))
 
     if boundary == "periodic":
-        # kernel: the 3 rigid translations, area-weighted Lagrange rows
+        # kernel: the 3 rigid translations, area-weighted Lagrange rows.  Any
+        # strictly positive nodal weighting removes the same kernel and leaves
+        # Deff untouched (a translation is annihilated by B, Bg and DR, so
+        # V0^T Dhe does not see it) -- both element families just contribute
+        # their own area.
         wA = np.zeros(len(uniq))
-        _, _, _, dA0 = solid_fluct_ops_batch(Xe, e3, 0.0, 0.0, [1, 2], 0)
-        np.add.at(wA, inv[el].ravel(), np.repeat(dA0, 4))
+        if ne4:
+            _, _, _, dA0 = solid_fluct_ops_batch(Xe4, e34, 0.0, 0.0, [1, 2], 0)
+            np.add.at(wA, inv[el4].ravel(), np.repeat(dA0, 4))
+        if ne3:
+            dA0 = solid_fluct_ops_tri_batch(Xe3, e33, _ONE3, _ONE3,
+                                            [1, 2], 0)[3]
+            np.add.at(wA, inv[el3].ravel(), np.repeat(dA0/6.0, 3))
         Cc = sp.lil_matrix((3, ndof))
         for k in range(3):
             Cc[k, k::NDOF6] = wA
@@ -1192,28 +1461,41 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source="msg",
         V0[free] = _sparse_solve(K[free][:, free].tocsc(), -Dhe[free], sym=True)
     Deff = Dee + V0.T @ Dhe
     Deff = 0.5*(Deff + Deff.T)
+    # SG measure: the VOLUME the equivalent continuum occupies = the node
+    # bounding box, the same convention opensg_solid uses.  It is also the
+    # periodic cell this route ties (the assembly map pairs opposite box
+    # faces), so C3D, the CLI print and the .out are now ONE number.
+    V_cell = float(np.prod(nd.max(0) - nd.min(0)))
     if omega is None:
-        omega = A_surf                       # SG measure = midsurface area
+        omega = V_cell                       # SG measure = unit-cell volume
     C3D = Deff/float(omega)
     solve_time = time.perf_counter() - t0
 
-    import os
     from opensg_solid.sg_homo import write_sc_K
     # the .out follows SwiftComp's normalization (per unit-cell volume) so its
-    # moduli compare directly with solid .K files; the returned C3D keeps the
-    # SG-measure (surface-area) convention
-    V_cell = float(np.prod(nd.max(0) - nd.min(0)))
+    # moduli compare directly with solid .K files; with the default omega the
+    # returned C3D is that same matrix
     bc_txt = ("periodic in 3 dirs" if boundary == "periodic"
               else "aperiodic: w=0 on %d boundary nodes" % n_bnd)
+    el_txt = ("%d tri3/%s" % (ne3, "MITC3" if tri_scheme == "mitc3" else "full")
+              if ne3 else "")
+    el_txt += (", " if (ne3 and ne4) else "")
+    el_txt += ("%d quad4/%s" % (ne4, "MITC4" if shear == "mitc" else "full")
+               if ne4 else "")
     write_sc_K(os.path.splitext(yaml_path)[0] + "_C3D.out", Deff/V_cell,
                solve_time=solve_time,
                model="msg-shell equivalent 3D solid (3-D shell SG, %d nodes,"
-                     " %d elems, %d junction edges, %s,"
+                     " %d elems [%s], %d junction edges, %s,"
                      " per unit cell %.6g)"
-                     % (nn, ne, n_junc_edges, bc_txt, V_cell))
+                     % (nn, ne, el_txt, n_junc_edges, bc_txt, V_cell),
+               name="Cauchy Continuum")
     return {"C3D": C3D, "D_eff": Deff, "solve_time": solve_time,
             "n_junction_edges": n_junc_edges, "ndof": ndof,
-            "boundary": boundary, "n_boundary_nodes": n_bnd}
+            "boundary": boundary, "n_boundary_nodes": n_bnd,
+            "omega": float(omega), "cell_volume": V_cell,
+            "surface_area": float(A_surf),
+            "n_tri": ne3, "n_quad": ne4, "shear": shear,
+            "tri_shear": tri_scheme}
 
 
 # ===================== from segment_taper.py =====================
@@ -1409,7 +1691,7 @@ def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
     write_sc_K(base + "_Timo.out", S6, solve_time=solve_time,
                model="msg-shell tapered/aperiodic segment"
                      " (boundary V0/V1 Dirichlet, L=%.6g)" % Lz,
-               constants=False, name="Timoshenko")
+               constants=False, name="Timoshenko Beam")
     out = dict(S6=S6, C6L=rings["L"]["C6"], C6R=rings["R"]["C6"], L=Lz,
                solve_time=solve_time)
     if return_full:
@@ -1440,7 +1722,7 @@ def _strip(rx3, cells, ax):
     return nodes, quads, h
 
 
-def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
+def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None):
     """Homogenize with the RM ring and package everything the two-step dehom needs.
 
     ``ref=None`` reads the reference surface from the yaml's ``reference`` field -- the single
@@ -1451,18 +1733,22 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
         shell_yaml: str, path to the 1-D shell section yaml.
         ref: None | "center" | "oml" | "oml_flip" | "iml", reference-surface override.
         shear: str, RM transverse-shear tying scheme passed to ring_indep.
-        g_source: str, wall transverse-shear source: "msg" (Yu-2002 LS projection) or
-            "whitney" (complementary-energy shear flow).
+        g_source: DEPRECATED, accepted and ignored.  The wall transverse-shear block
+            G is always the MSG (Yu-2002 least-squares) projection -- the only route;
+            see sg_materials.check_g_source.
     Out:
-        dict bundle: "Timo" (6,6) RM Timoshenko matrix; "V0"/"V1" (6m,4) warping modes;
+        dict bundle: "Timo" (6,6) RM Timoshenko matrix; "solve_time" float (the
+        value written into <base>_Timo.out); "V0"/"V1" (6m,4) warping modes;
         "corners" (m,2) section contour coords; "red_cells" (n_el,2) connectivity;
         "rx3" (m,3), "re3" (n_el,3), "k22" (n_el,) ring geometry; "ax" int beam axis;
         "cross" axis pair; "strip" (nodes, quads, h); "layup_per_elem" list of layup
         names per element; "layup_db"/"material_db" plate-SG databases (by-name,
-        geometry-free); "frac" float; "ref" str; "g_source" str.
+        geometry-free); "frac" float; "ref" str; "g_source" str (always "msg").
     """
     import time as _time
     from .sg_mesh import load_ring_ref
+    from .sg_materials import check_g_source
+    check_g_source(g_source, "build_rm_bundle")
     _t0 = _time.perf_counter()
     try:
         from yaml import CSafeLoader as _YL
@@ -1481,24 +1767,24 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
     # VALUES (list(dict) yields the integer keys; latent until a section keeps its
     # loader G because the msg replacement below is skipped on a non-SPD U*-fit).
     G_by = [np.asarray(R["G_by"][si], float) for si in range(len(d["sections"]))]
-    if g_source == "msg":
-        from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
-        from .sg_materials import material_db_from_yaml
-        _mdb = material_db_from_yaml(d["materials"])
-        for si, sec in enumerate(d["sections"]):
-            _pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
-            _h = sum(p[1] for p in _pl)
-            _rr = rm_plate_msg([p[1] for p in _pl], [p[2] for p in _pl], [p[0] for p in _pl],
-                               _mdb, fraction=frac)
-            # guard the borderline-SPD U*-fit: accept the MSG G only when it is a
-            # finite SPD 2x2 (ev_min ~ 0 flips run-to-run on thin tip laminates);
-            # otherwise keep the energy-consistent G from the ring loader.
-            _Gm = _rr["G_msg"]
-            if _Gm is not None:
-                _Gm = np.asarray(_Gm, float)
-                if (_Gm.shape == (2, 2) and np.all(np.isfinite(_Gm))
-                        and np.linalg.det(_Gm) > 0.0 and _Gm[0, 0] > 0.0):
-                    G_by[si] = _Gm
+    # wall transverse-shear G: the MSG (Yu-2002 LS) construction, the only route
+    from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
+    from .sg_materials import material_db_from_yaml
+    _mdb = material_db_from_yaml(d["materials"])
+    for si, sec in enumerate(d["sections"]):
+        _pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
+        _h = sum(p[1] for p in _pl)
+        _rr = rm_plate_msg([p[1] for p in _pl], [p[2] for p in _pl], [p[0] for p in _pl],
+                           _mdb, fraction=frac)
+        # guard the borderline-SPD U*-fit: accept the MSG G only when it is a
+        # finite SPD 2x2 (ev_min ~ 0 flips run-to-run on thin tip laminates);
+        # otherwise keep the energy-consistent G from the ring loader.
+        _Gm = _rr["G_msg"]
+        if _Gm is not None:
+            _Gm = np.asarray(_Gm, float)
+            if (_Gm.shape == (2, 2) and np.all(np.isfinite(_Gm))
+                    and np.linalg.det(_Gm) > 0.0 and _Gm[0, 0] > 0.0):
+                G_by[si] = _Gm
     import os as _os2
     write_abdg_out(_os2.path.splitext(shell_yaml)[0] + "_ABDG.out",
                    d["sections"], R["D_by"], G_by)
@@ -1529,15 +1815,17 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source="msg"):
         pass
     # OpenSG default: SwiftComp-format timed .out for the beam model too
     from opensg_solid.sg_homo import write_sc_K
+    _solve_time = _time.perf_counter() - _t0
     write_sc_K(_os2.path.splitext(shell_yaml)[0] + "_Timo.out", C6,
-               solve_time=_time.perf_counter() - _t0,
+               solve_time=_solve_time,
                model="msg-shell beam model"
                      " [ext sh2 sh3 twist bend2 bend3]",
-               constants=False, name="Timoshenko")
-    return {"Timo": C6, "V0": np.asarray(V0), "V1": np.asarray(V1),
+               constants=False, name="Timoshenko Beam")
+    return {"Timo": C6, "solve_time": _solve_time,
+            "V0": np.asarray(V0), "V1": np.asarray(V1),
             "corners": R["rx"][:, R["cross"]], "red_cells": np.asarray(R["cells"]),
             "rx3": np.asarray(R["rx"]), "re3": np.asarray(R["re3"]), "k22": np.asarray(R["k22"]),
             "ax": int(R["ax"]), "cross": list(R["cross"]), "strip": (nodes, quads, h),
             "layup_per_elem": layup_per_elem, "layup_db": _layup_db_kl,
             "material_db": _mat_db_kl, "frac": frac, "ref": ref,
-            "g_source": g_source}
+            "g_source": "msg"}

@@ -459,7 +459,11 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="center"):
                          - np.roll(skin_xy[:, 0], -1) * skin_xy[:, 1]))
     inward = 1.0 if area2 > 0 else -1.0
 
-    seg = {"reference": reference, "nodes": [], "elements": [], "sets": {"element": []},
+    # `msg` names the ENGINE that owns the file (`opensg <yaml>` dispatches on
+    # it); `reference` is the layup reference surface -- both are header keys,
+    # so they sit above the mesh blocks
+    seg = {"msg": "shell", "reference": reference,
+           "nodes": [], "elements": [], "sets": {"element": []},
            "sections": [], "elementOrientations": [], "materials": []}
     for (X, Y) in nodes:
         seg["nodes"].append(_Flow(["%.8f %.8f %.8f" % (X, Y, 0.0)]))

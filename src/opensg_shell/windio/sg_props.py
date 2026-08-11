@@ -286,7 +286,7 @@ def _append_mass_to_timo_out(timo_out, M):
     return timo_out
 
 
-def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source="msg"):
+def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None):
     """Timoshenko 6x6 + mass 6x6 of a 1-D shell SG, written as a VABS .K-layout file.
 
     Also inserts the same 6x6 mass block into the station's <base>_Timo.out
@@ -295,7 +295,9 @@ def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source="msg"):
     In:
         shell_yaml: str, 1-D shell SG yaml (its `reference` field sets the surface).
         out_k: str | None, output .K path (default <yaml base>.K, `_shell` stripped).
-        shear, g_source: str, passed to build_rm_bundle (production RM defaults).
+        shear: str, passed to build_rm_bundle (production RM default).
+        g_source: DEPRECATED, accepted and ignored -- the wall transverse-shear G is
+            always the MSG construction (see sg_materials.check_g_source).
     Out:
         dict: "Timo" (6,6), "Mass" (6,6), "info" mass/geometry dict, "bundle" the RM
         bundle (reusable by the dehom), "k_file" str path.

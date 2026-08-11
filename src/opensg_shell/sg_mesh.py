@@ -346,6 +346,17 @@ def _write_boundary_yaml(comp, oedges, oq, nodes, ori, subdom, sections, ax_idx,
         "materials": materials,
     }
     with open(path, "w") as f:
+        # msg-shell SG header: an end cross-section is a 1-D ring, so it is a
+        # runnable SG in its own right -- `opensg_shell boundary_<tag>_L.yaml`
+        # returns that ring's own Timoshenko 6x6 (the C6L/C6R the segment run
+        # reports).  The ring IS periodic along the beam axis, so no
+        # `aperiodic:` key here -- only the segment that owns it carries one.
+        f.write("n_model: 1      # 1 = beam, 2 = plate (opensg_solid),"
+                " 3 = solid -- the macro model this SG homogenizes to\n"
+                "refined: 1      # 0 = classical (beam EB 4x4, KL wall);"
+                " 1 = shear-refined (beam Timoshenko 6x6, RM wall)\n"
+                "msg: shell      # the ENGINE this SG belongs to"
+                " (opensg_shell); `opensg <yaml>` dispatches on it\n")
         yaml.safe_dump(d, f, default_flow_style=None, sort_keys=False)
     return len(comp), len(oedges)
 
