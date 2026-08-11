@@ -1,4 +1,4 @@
-﻿"""msg_rm_plate.py -- MSG Reissner-Mindlin plate law + 3-D recovery (Yu-2002/2003).
+"""msg_rm_plate.py -- MSG Reissner-Mindlin plate law + 3-D recovery (Yu-2002/2003).
 
 Core OpenSG module, JAX implementation.  Equation numbers = Yu, Hodges &
 Volovoi, Computers & Structures 81:439-454 (2003).  The ladder:

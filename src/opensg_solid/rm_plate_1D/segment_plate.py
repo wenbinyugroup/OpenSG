@@ -111,7 +111,11 @@ def plate_sg_dict(layup, material_db, n_per_layer=1, elem_order=4, fraction=0.5)
             entry["full_name"] = str(md["full_name"])
         materials.append(entry)
 
-    return {"sg": {"type": "plate_1d", "elem_order": int(elem_order),
+    # `msg` names the ENGINE that owns the file (`opensg <yaml>` dispatches on
+    # it): a through-thickness plate SG is opensg_solid's, not opensg_shell's,
+    # even though it spells its connectivity `elements:` like the shell dialect
+    return {"msg": "solid",
+            "sg": {"type": "plate_1d", "elem_order": int(elem_order),
                    "n_per_layer": n_per_layer, "reference_fraction": float(fraction),
                    "thickness": float(sum(thick)), "n_ply": len(thick)},
             "nodes": [[float(x)] for x in node_x],

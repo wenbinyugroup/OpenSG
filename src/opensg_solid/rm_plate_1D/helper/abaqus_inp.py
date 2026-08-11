@@ -86,10 +86,17 @@ import yaml
 # ----------------------------------------------------------------------------
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = HERE
-while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid", "rm_plate_1D")):
-    ROOT = os.path.dirname(ROOT)
-sys.path.insert(0, os.path.join(ROOT, "src"))
+try:
+    import opensg_solid                      # pip install -e . -- nothing to do
+except ImportError:                          # fall back to the in-repo source tree
+    ROOT = HERE
+    while not os.path.isdir(os.path.join(ROOT, "src", "opensg_solid")):
+        parent = os.path.dirname(ROOT)
+        if parent == ROOT:                   # hit the filesystem root
+            raise ImportError(
+                "opensg_solid not installed and no src/ found above " + HERE)
+        ROOT = parent
+    sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from opensg_solid.rm_plate_1D.segment_plate import read_plate_sg_yaml
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
@@ -305,4 +312,7 @@ def main():
 
 
 if __name__ == "__main__":
+    import time as _t
+    print("start: " + _t.strftime("%Y-%m-%d %H:%M:%S"))
     main()
+    print("end:   " + _t.strftime("%Y-%m-%d %H:%M:%S"))
