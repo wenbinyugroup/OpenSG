@@ -1,4 +1,4 @@
-# Deo composite square (MAMS 2023 Fig 13 / Table 4), all MPa;  solve 1.8 s
+# Deo composite square (MAMS 2023 Fig 13 / Table 4), all MPa;  solve 1.4 s
 # ours = OpenSG msg_shell (RM); SwiftComp = the paper's MSG solid reference (= OpenSG-solid equivalent)
 # term    msg_shell       DeoTW   SwiftComp     ours%    DeoTW%
   C11      15263.83    16133.90    15518.11     -1.64     +3.97

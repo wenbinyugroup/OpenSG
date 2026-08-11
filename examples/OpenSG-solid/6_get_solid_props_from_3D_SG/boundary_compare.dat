@@ -1,7 +1,7 @@
 # TPMS solid 3-D SG (tets): aperiodic (w=0 Dirichlet on boundary nodes) vs periodic (== SwiftComp .K)
 # per-unit-cell C in MPa; alu E=69 GPa nu=0.3
 
-## Sample_1   aperiodic: 17610 boundary nodes, 69.8 s   periodic: 69.7 s
+## Sample_1   aperiodic: 17610 boundary nodes, 30.2 s   periodic: 28.5 s
 #  term      aperiodic      periodic     %diff
    C11       12977.036     10190.158   +27.349
    C22       12977.030     10190.131   +27.349
@@ -13,7 +13,7 @@
    C55        5546.044      4519.637   +22.710
    C66        5546.133      4519.755   +22.709
 
-## Sample_2   aperiodic: 4456 boundary nodes, 24.9 s   periodic: 22.2 s
+## Sample_2   aperiodic: 4456 boundary nodes, 9.6 s   periodic: 8.4 s
 #  term      aperiodic      periodic     %diff
    C11        2810.329      2303.160   +22.021
    C22        2810.363      2303.067   +22.027

@@ -1,4 +1,4 @@
-# Deo hierarchical square (MAMS 2023 Table 3), all MPa;  solve 1.8 s
+# Deo hierarchical square (MAMS 2023 Table 3), all MPa;  solve 1.3 s
 # ours = OpenSG msg_shell (RM); SwiftComp = the paper's MSG solid reference (= OpenSG-solid equivalent)
 # term    msg_shell       DeoTW   SwiftComp     ours%    DeoTW%
   C11       5183.48     5186.39     5099.03     +1.66     +1.71

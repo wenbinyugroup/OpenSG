@@ -88,4 +88,4 @@
  The principal shear axes rotated from user coordinate system by
    92.9932905991 degrees about the positive direction of x1 axis.
 
- Time taken: 1.06 sec
+ Time taken: 0.96 sec

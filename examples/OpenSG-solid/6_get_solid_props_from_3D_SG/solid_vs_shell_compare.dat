@@ -3,4 +3,4 @@
 # case                                  rho       C11       C12       C44      C11n      C44n   Zener
   Sample_1 solid (Schwarz-P, t~0.128) 0.3000   10190.2    5646.1    4519.6    0.4923    0.2183   1.989
   Sample_2 solid (Schwarz-P, t~0.0365) 0.0857    2303.2    1612.1    1106.7    0.3895    0.1872   3.203
-  Schwarz-P shell t=0.0365 (msg_shell) 0.0860    2231.1    1568.8    1043.6    0.3760    0.1759   3.151
+  Schwarz-P shell t=0.0365 (msg_shell) 0.0860    2225.3    1564.9    1041.0    0.3750    0.1754   3.152

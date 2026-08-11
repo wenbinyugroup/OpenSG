@@ -28,7 +28,7 @@ Effect of the tying flags on Q:
   rms |Q2(g23) - Q2(both)| = 0.0000e+00 N/m   (Q2 rms 8.9686e+00)
 
                        median      mean       min        max
-  I13 / Q1         5.228e-01 -6.974e+00 -1.299e+03  2.260e+01   <- target INVALID
+  I13 / Q1         5.228e-01 -6.972e+00 -1.299e+03  2.260e+01   <- target INVALID
   I23 / Q2         9.895e-01  1.096e+00 -1.217e+01  1.194e+01   <- target valid
 
   Q-CONSISTENCY ERROR in sigma_23 : 1.05 %  (median |1 - I23/Q2|)
