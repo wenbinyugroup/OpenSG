@@ -59,12 +59,13 @@ D_eff = Dee + V0^T Dhe (6x6); C3D = D_eff / w_SG.  No V1 step.
 #                              y1, y2, y3 = C_{3i}
 #   xi1, xi2  (ne, 3) float    X_{i1}, X_{i2} stacked
 #   yv        (ne, 3) float    C_{3i} stacked
-#   den       (ne,) float      C33 divisor of DR (1 where |C33| < 1e-8)
 #   dA        (ne,) float      area weight at the Gauss point
 # operators
 #   B -> BDh  (ne, 6, 24)      Gamma_h membrane+curvature rows (slots w | om)
 #   Bg -> BGh (ne, 2, 24)      Gamma_h transverse-shear rows
-#   Dr -> DRh (ne, 24)         drilling residual row DR (divided by C33)
+#   Dr -> DRh (ne, 24)         drilling residual row DR = om.n - curl_n(w)/2
+#                              (multiplied-through, frame-covariant; never
+#                              divided by C33)
 #   BDe6      (ne, 6, 6)       Gamma_e membrane+curvature rows on ebar
 #   BGe6      (ne, 2, 6)       Gamma_e transverse-shear rows on ebar
 #   tie       dict of (ne,1,24) g23 Dvorkin-Bathe tying rows (only g23 is tied
@@ -116,8 +117,10 @@ general; what changes vs a cross-section run is only the environment:
   * periodicity through the sparse assembly map on the FULL 3-D coordinates
     (all opposite faces, edges and corners -- the 3-D SG default);
   * sparse assembly (scipy) -- 3-D SGs are too large for dense Dhh;
-  * drilling om3 by penalty on the SAME element-constant residual the
-    cross-section route enforces with multipliers;
+  * drilling om3 by the SAME element-constant LAGRANGE multipliers the
+    cross-section route uses (one multiplier per element, int_e DR dA = 0,
+    for the tri3 batch and the quad batch alike) -- there is no drilling
+    penalty on this route any more;
   * kernel = 3 translations (Lagrange border);
   * JUNCTION handling: shell edges shared by >2 elements are junction lines
     (a smooth TPMS has none -- every edge interior, count reported); when
@@ -209,7 +212,7 @@ def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
 
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
         nodes, quads, rsub, e3q, D_by, G_by, np.asarray(k22_edge), cross, ax,
-        kg_e=None, pen=0.0, dof_map=dof_map, shear=shear)
+        kg_e=None, dof_map=dof_map, shear=shear)
     Gc, Gl, Ge = assemble_constraint(nodes, quads, rsub, e3q, np.asarray(k22_edge),
                                      cross, ax, dof_map=dof_map, lam_space=lam_space)
     Dhh, Dhe, Dhl, Dll, Dle = [np.asarray(A) / h for A in (Dhh, Dhe, Dhl, Dll, Dle)]
@@ -302,15 +305,24 @@ def solid_fluct_ops_batch(Xe, e3e, xi, eta, cross, ax):
     Bg[:, 1, :, 0:3] = D2[:, :, None] * yv[:, None, :]                  # 2g23 = C_3i w_i,2 ...
     Bg[:, 1, :, 3:6] = N[None, :, None] * (-xi1)[:, None, :]            # ... - X_i1 om_i
 
-    # DR = om3 + [ C31 om1 + C32 om2 - 1/2 (X_i2 w_i,1 - X_i1 w_i,2) ] / C33
-    # (C33 -> 0: multiplied-through form kept)
-    den = np.where(np.abs(yv[:, 2]) > 1e-8, yv[:, 2], 1.0)
+    # DRILLING RESIDUAL, MULTIPLIED-THROUGH (frame-covariant) form
+    #     DR = C_3i om_i - 1/2 (X_i2 w_i,1 - X_i1 w_i,2)
+    #        = om.n - 1/2 [ (w.a2),1 - (w.a1),2 ]
+    # It is NOT divided by C33 = C_33 = n.e_3 any more.  The divided form
+    # (om3 + [C31 om1 + C32 om2 - S/2]/C33) is the drilling-ELIMINATION
+    # statement "om3 = ..."; the 1/C33 factor is not frame-covariant, so any
+    # ENERGY built from that row (the old shell_sg3d drilling penalty) depended
+    # on the wall's orientation in space and blew up as C33 -> 0.  The
+    # undivided row is exactly the same CONSTRAINT -- a nonzero row scaling
+    # leaves the null space, and hence the Lagrange-enforced solution,
+    # unchanged -- and it is finite and continuous everywhere, so the old
+    # |C33| < 1e-8 fallback (which silently swapped the row for a different
+    # constraint) is gone too.  Same convention as the segment operator
+    # sg_assembly.quad_ops_indep_batch, whose DR was already multiplied through.
     Dr = np.zeros((ne, 4, NDOF6))
     Dr[:, :, 0:3] = -0.5 * (D1[:, :, None] * xi2[:, None, :]
-                            - D2[:, :, None] * xi1[:, None, :]) \
-        / den[:, None, None]                    # -1/2 (X_i2 w_i,1 - X_i1 w_i,2)/C33
-    Dr[:, :, 3:6] = (N[None, :, None] * yv[:, None, :]
-                     / den[:, None, None])      # om3 + (C31 om1 + C32 om2)/C33
+                            - D2[:, :, None] * xi1[:, None, :])
+    Dr[:, :, 3:6] = N[None, :, None] * yv[:, None, :]   # C_3i om_i = om.n
     return (B.reshape(ne, 6, 24), Bg.reshape(ne, 2, 24),
             Dr.reshape(ne, 24), dA)
 
@@ -379,13 +391,13 @@ def solid_fluct_ops_tri_batch(Xe, e3e, r, s, cross, ax):
     Bg[:, 1, :, 0:3] = D2[:, :, None] * yv[:, None, :]                  # 2g23 = C_3i w_i,2 ...
     Bg[:, 1, :, 3:6] = N[None, :, None] * (-xi1)[:, None, :]            # ... - X_i1 om_i
 
-    den = np.where(np.abs(yv[:, 2]) > 1e-8, yv[:, 2], 1.0)
+    # drilling residual in the MULTIPLIED-THROUGH (frame-covariant) form, the
+    # tri3 twin of solid_fluct_ops_batch -- see the long comment there for why
+    # the 1/C33 divisor is gone:  DR = om.n - 1/2 [ (w.a2),1 - (w.a1),2 ].
     Dr = np.zeros((ne, 3, NDOF6))
     Dr[:, :, 0:3] = -0.5 * (D1[:, :, None] * xi2[:, None, :]
-                            - D2[:, :, None] * xi1[:, None, :]) \
-        / den[:, None, None]
-    Dr[:, :, 3:6] = (N[None, :, None] * yv[:, None, :]
-                     / den[:, None, None])
+                            - D2[:, :, None] * xi1[:, None, :])
+    Dr[:, :, 3:6] = N[None, :, None] * yv[:, None, :]
     return (B.reshape(ne, 6, TRI_NDOF), Bg.reshape(ne, 2, TRI_NDOF),
             Dr.reshape(ne, TRI_NDOF), dA, Gm)
 
@@ -1133,50 +1145,153 @@ _GPTS = [(-_G, -_G), (_G, -_G), (_G, _G), (-_G, _G)]
 _ONE3 = 1.0/3.0                      # triangle centroid, for the nodal area weights
 
 
-def _sparse_solve(A, R, sym=False):
-    """Multi-RHS sparse direct solve: PARDISO (multithreaded MKL) when available,
-    SuperLU fallback.  SuperLU is single-threaded CPU; PARDISO uses all cores and
-    is the same direct solver opensg_solid defaults to.  (The device-resident/GPU
-    alternative in this stack is the matrix-free EBE Chebyshev-CG of fe_jax, as in
-    opensg_solid.plate_homo_2d(solver="cg") -- iterative, no factorization at all.)
+def _with_explicit_diagonal(Ac):
+    """CSR copy in which EVERY diagonal entry is structurally present (values
+    unchanged; missing ones stored as explicit zeros).
 
-    sym=True: PARDISO real-symmetric-indefinite (mtype=-2) on the upper triangle
-    (~25-40 % faster factor; the KKT multiplier block gets its explicit zero
-    diagonal), guarded by a 1e-8 relative-residual check with fallback.
+    PARDISO's real-symmetric-indefinite mtype=-2 reads the diagonal from the
+    SPARSITY PATTERN, and a KKT multiplier block has an identically zero
+    diagonal.  `Ac + sp.diags(zeros)` does NOT do this -- scipy drops the zero
+    fill -- and the factorization then returns a wrong answer without failing
+    (measured on the schwarz drilling KKT: relative residual 5.4e+01).
+
+    In:  Ac (n,n) scipy sparse.   Out: (n,n) csr with a full structural diagonal.
+    """
+    Ac = sp.coo_matrix(Ac)
+    n = Ac.shape[0]
+    return sp.coo_matrix(
+        (np.concatenate([Ac.data, np.zeros(n)]),
+         (np.concatenate([Ac.row, np.arange(n)]),
+          np.concatenate([Ac.col, np.arange(n)]))), shape=(n, n)).tocsr()
+
+
+def _live_constraint_rows(G, ref=1.0, rtol=1e-12):
+    """Prepare a sparse multiplier block for the KKT: drop the empty rows, then
+    rescale every surviving row to 2-norm `ref`.
+
+    Empty rows: a drilling row whose every column has been eliminated (an
+    element all of whose dofs are Dirichlet-fixed) would enter the KKT as a zero
+    row AND a zero column -- a structurally singular pivot.  It constrains
+    nothing, so it is dropped rather than regularized.
+
+    Row scaling: a Lagrange constraint is invariant under any nonzero row
+    scaling (the multiplier absorbs the factor -- the same invariance that makes
+    the constraint, unlike a penalty, blind to the 1/C33 the residual used to
+    carry).  The raw rows int_e DR dA are O(element area) ~ 1e-2 against a wall
+    stiffness of ~1e9, and that 11-decade imbalance is what wrecks the saddle
+    point: measured on the schwarz SG, |lambda| ~ 4e14 and the factorization
+    returns a physically impossible (negative-diagonal) D_eff.  Scaled to the
+    stiffness magnitude the same solve is clean.
+
+    In:  G (P, n) scipy sparse; ref float, target row 2-norm; rtol float,
+         relative row-norm cutoff for "empty".
+    Out: (G_scaled (P', n) csr, kept_index (P',) int)."""
+    G = sp.csr_matrix(G)
+    nrm = np.sqrt(np.asarray(G.multiply(G).sum(axis=1)).ravel())
+    keep = np.nonzero(nrm > rtol*max(float(nrm.max(initial=0.0)), 1e-300))[0]
+    G = G[keep]
+    return sp.diags(float(ref)/nrm[keep]) @ G, keep
+
+
+def _kkt_solve(A, R, n_dual, scale, rtol=1e-10, atol=1e-7, max_refine=20):
+    """Solve the strict-Lagrange saddle point A X = R -- the UNMODIFIED system.
+
+    A direct factorization of an unshifted saddle point whose whole multiplier
+    diagonal is zero is not reliable: on the schwarz drilling KKT PARDISO
+    mtype=-2 returns relative residuals of 1e+19 (aperiodic) and 1e+38
+    (periodic), and the unsymmetric mtype=11 path 1e+02, all without raising.
+    SuperLU is exact but 20-200x slower and runs out of memory at 1e6 dofs.  So
+    the FACTORIZATION is taken of the quasi-definite shift
+        A_reg = A - eps * diag(0 ... 0, 1 ... 1)     (multiplier block only)
+    and the shift is then removed by iterative refinement against the true A.
+    Nothing but the preconditioner changes -- the system solved is A X = R, and
+    the returned residual is the proof.  (Measured: schwarz 105 k dofs, factor
+    0.5 s, 2-4 refinements, 2e-11, identical D_eff to the SuperLU solution of
+    the unshifted system; SP_mesh_2 1.2 M dofs, 67 s, 1e-8 -- the
+    double-precision floor for a matrix spanning 13 decades.)
+
+    Refinement stops on stagnation and the BEST iterate is kept; `rtol` is the
+    target, `atol` the acceptance bound (a mis-solved saddle point misses it by
+    six or more orders, so it separates cleanly), and only past `atol` does the
+    exact-but-heavy SuperLU fallback run.
 
     In:
-        A: (n, n) scipy sparse matrix (any format).
-        R: (n, k) dense right-hand sides.
-        sym: bool, the matrix is symmetric (periodic KKT / pinned stiffness).
+        A: (n,n) sparse symmetric saddle point, multiplier rows LAST.
+        R: (n,k) right-hand sides.
+        n_dual: int, number of trailing multiplier rows.
+        scale: float, stiffness magnitude used for the shift and for the row
+            scaling of the multiplier block (they must match).
+        rtol, atol: float, target and accepted relative residual.
+        max_refine: int, refinement cap per shift.
     Out:
-        (n, k) solution array.
+        (X (n,k), rel_residual float)
     """
+    n = A.shape[0]
+    Acsr = sp.csr_matrix(A)
     R = np.asarray(R, float)
-    if sym:
+    bn = np.linalg.norm(R)
+    rel = lambda X: (0.0 if bn == 0.0                            # noqa: E731
+                     else float(np.linalg.norm(Acsr @ X - R)/bn))
+    best = None
+    for tau in (1e-8, 1e-6):
         try:
             from pypardiso import PyPardisoSolver
-            Ac = sp.csr_matrix(A)
-            Au = sp.triu(Ac + sp.diags(np.zeros(Ac.shape[0])), format="csr")
+            d = np.zeros(n)
+            d[n - n_dual:] = -tau*float(scale)
+            Au = sp.triu(_with_explicit_diagonal(Acsr + sp.diags(d)),
+                         format="csr")
             slv = PyPardisoSolver(mtype=-2)
             X = np.asarray(slv.solve(Au, R)).reshape(R.shape)
+            r = rel(X)
+            for _ in range(max_refine):
+                if r <= rtol:
+                    break
+                Xn = X + np.asarray(slv.solve(Au, R - Acsr @ X)).reshape(R.shape)
+                rn, prev = rel(Xn), r
+                if rn < r:
+                    X, r = Xn, rn
+                if rn >= 0.5*prev:               # stagnated: no more digits
+                    break
             slv.free_memory(everything=True)
-            bn = np.linalg.norm(R)
-            if bn == 0.0 or np.linalg.norm(Ac @ X - R) <= 1e-8 * bn:
-                return X
+            if best is None or r < best[1]:
+                best = (X, r)
+            if r <= rtol:
+                return best
         except Exception:
-            pass                                 # any failure -> general path
+            pass                                 # -> next shift / SuperLU
+    if best is not None and best[1] <= atol:
+        return best
     try:
-        import pypardiso
-        X = pypardiso.spsolve(sp.csr_matrix(A), R)
-        return X.reshape(R.shape)
-    except ImportError:
-        return spla.splu(sp.csc_matrix(A)).solve(R)
+        X = spla.splu(sp.csc_matrix(A)).solve(R)   # exact, memory-hungry
+        return X, rel(X)
+    except Exception as e:
+        raise RuntimeError(
+            "the drilling saddle point (%d dofs, %d multipliers) did not reach"
+            " the accepted residual %.0e -- best %.3e from the shifted"
+            " factorization -- and the exact SuperLU fallback failed (%s)."
+            % (n - n_dual, n_dual, atol,
+               float("inf") if best is None else best[1], e))
 
 
-def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
+def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
                solver="direct",
                boundary=None, shear="mitc"):
     """Equivalent 3-D solid stiffness of a 3-D shell SG.
+
+    DRILLING.  The independent omega_3 is pinned by an element-wise LAGRANGE
+    MULTIPLIER -- one piecewise-constant multiplier per element enforcing
+    int_e DR dA = 0 with the frame-covariant residual
+        DR = om.n - 1/2 [ (w.a2),1 - (w.a1),2 ]
+    -- exactly the construction the cross-section ring routes (ring_indep via
+    sg_assembly.assemble_constraint, ring_solid via assemble_solid_strip) have
+    always used, extended to the tri3 batch.  It replaces the former
+    drill_pen*A11*int DR^2 PENALTY: a penalty makes the element stiffness a
+    function of the row scaling and so of the wall's orientation in space
+    (measured 1.8e-4 relative change of Ke under a rigid rotation), whereas a
+    constraint has the same null space under any nonzero row scaling.
+
+    drill_pen : DEPRECATED, accepted and IGNORED.  There is no penalty path any
+    more; passing a value raises a DeprecationWarning.
 
     MIXED MESH.  The surface may hold 3-node triangles and 4-node quads at once.
     They are assembled as two SEPARATE BATCHES -- (ne3,18,18) tri3 blocks and
@@ -1239,6 +1354,13 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
     """
     from .sg_materials import check_g_source
     check_g_source(g_source, "shell_sg3d")
+    if drill_pen is not None:
+        import warnings
+        warnings.warn(
+            "shell_sg3d(drill_pen=...) is deprecated and IGNORED: the drilling"
+            " omega_3 is enforced exactly by element-wise Lagrange multipliers"
+            " (int_e DR dA = 0), not by a penalty.  Remove the argument.",
+            DeprecationWarning, stacklevel=2)
     t0 = time.perf_counter()
     try:                                     # libyaml C loader: the pure-python parse
         from yaml import CSafeLoader as _YL3  # of a big 3-D SG mesh costs ~25 s alone
@@ -1343,15 +1465,22 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
            + np.arange(NDOF6)[None, None, :]).reshape(ne3, TRI_NDOF).astype(np.int32)
     Dhe = np.zeros((ndof, 6))
     Dee = np.zeros((6, 6))
-    A11 = De[0, 0]
     A_surf = 0.0
     Krow, Kcol, Kval = [], [], []
+    # element-constant drilling multiplier rows: one row per element,
+    # G[e, :] = int_e DR dA -- the quad rows first, then the tri3 rows, so the
+    # multiplier index IS the element index of the concatenated [quads; tris]
+    # ordering.  NO macro (Gamma_e) column: on the solid route the macro field
+    # is affine and its drilling residual cancels identically, exactly as
+    # assemble_solid_strip / ring_solid have it (their Gc carries no Ge either).
+    Grow, Gcol, Gval = [], [], []
 
     # ---------------- batch 1: genuine QUADS (bilinear, 2x2 Gauss, MITC4) ---------
     if ne4:
         tie4 = None if shear == "full" else _tie_rows_solid4(Xe4, e34, [1, 2], 0)
         Ke_acc = np.zeros((ne4, 24, 24))
         Fe_acc = np.zeros((ne4, 24, 6))
+        Ge_acc = np.zeros((ne4, 24))
         for xi, eta in _GPTS:
             B, Bg, Dr, dA = solid_fluct_ops_batch(Xe4, e34, xi, eta, [1, 2], 0)
             BDe6, BGe6, _ = solid_macro_ops_batch(Xe4, e34, xi, eta, [1, 2], 0)
@@ -1363,8 +1492,8 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
             DBe = np.einsum('ij,ejb->eib', De, BDe6)*w
             GBe = np.einsum('ij,ejb->eib', Gm, BGe6)*w
             Ke_acc += np.einsum('eia,eib->eab', B, DB) \
-                + np.einsum('eia,eib->eab', Bg, GB) \
-                + (drill_pen*A11)*(dA[:, None, None]*Dr[:, :, None]*Dr[:, None, :])
+                + np.einsum('eia,eib->eab', Bg, GB)
+            Ge_acc += Dr*dA[:, None]                   # int_e DR dA (row of Gc)
             Fe_acc += np.einsum('eia,eib->eab', B, DBe) \
                 + np.einsum('eia,eib->eab', Bg, GBe)
             Dee += np.einsum('eia,eib->ab', BDe6, DBe) \
@@ -1374,6 +1503,9 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
         Krow.append(np.repeat(gd4, 24, 1).ravel())
         Kcol.append(np.tile(gd4, (1, 24)).ravel())
         Kval.append(Ke_acc.ravel())
+        Grow.append(np.repeat(np.arange(ne4, dtype=np.int32), 24))
+        Gcol.append(gd4.ravel())
+        Gval.append(Ge_acc.ravel())
 
     # ---------------- batch 2: native TRIANGLES (tri3, 3-point rule, MITC3) -------
     # a separate (ne3,18,18) batch scattered into the SAME global system -- no
@@ -1385,6 +1517,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
                     for (tr, ts) in TIE_MITC3]
         Ke_acc = np.zeros((ne3, TRI_NDOF, TRI_NDOF))
         Fe_acc = np.zeros((ne3, TRI_NDOF, 6))
+        Ge_acc = np.zeros((ne3, TRI_NDOF))
         for (r_, s_, wq) in TRI_GPTS:
             B, Bg, Dr, dJ, Gmet = solid_fluct_ops_tri_batch(Xe3, e33, r_, s_,
                                                             [1, 2], 0)
@@ -1398,8 +1531,8 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
             DBe = np.einsum('ij,ejb->eib', De, BDe6)*w
             GBe = np.einsum('ij,ejb->eib', Gm, BGe6)*w
             Ke_acc += np.einsum('eia,eib->eab', B, DB) \
-                + np.einsum('eia,eib->eab', Bg, GB) \
-                + (drill_pen*A11)*(dA[:, None, None]*Dr[:, :, None]*Dr[:, None, :])
+                + np.einsum('eia,eib->eab', Bg, GB)
+            Ge_acc += Dr*dA[:, None]                   # int_e DR dA (row of Gc)
             Fe_acc += np.einsum('eia,eib->eab', B, DBe) \
                 + np.einsum('eia,eib->eab', Bg, GBe)
             Dee += np.einsum('eia,eib->ab', BDe6, DBe) \
@@ -1409,10 +1542,17 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
         Krow.append(np.repeat(gd3, TRI_NDOF, 1).ravel())
         Kcol.append(np.tile(gd3, (1, TRI_NDOF)).ravel())
         Kval.append(Ke_acc.ravel())
+        Grow.append(np.repeat(ne4 + np.arange(ne3, dtype=np.int32), TRI_NDOF))
+        Gcol.append(gd3.ravel())
+        Gval.append(Ge_acc.ravel())
 
     K = sp.csr_matrix((np.concatenate(Kval),
                        (np.concatenate(Krow), np.concatenate(Kcol))),
                       shape=(ndof, ndof))
+    Gc = sp.csr_matrix((np.concatenate(Gval),
+                        (np.concatenate(Grow), np.concatenate(Gcol))),
+                       shape=(ne, ndof))
+    kscale = float(np.abs(K.data).max()) if K.nnz else 1.0   # KKT row balance
 
     if boundary == "periodic":
         # kernel: the 3 rigid translations, area-weighted Lagrange rows.  Any
@@ -1431,17 +1571,32 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
         Cc = sp.lil_matrix((3, ndof))
         for k in range(3):
             Cc[k, k::NDOF6] = wA
+        # same exact row scaling as the drilling rows -- these three are
+        # Lagrange rows too, and unscaled (|row| ~ cell area) they cost the
+        # saddle-point factorization several digits
+        Cc = _live_constraint_rows(Cc.tocsr(), ref=kscale)[0]
         if solver == "cg":
-            # device-resident GPU path: the 3 area-weighted translation rows
-            # become a projection and ALL 6 macro load cases solve at once
-            # (vmapped matrix-free CG; see sparse_projected_cg)
-            from opensg_solid.sg_assembly import sparse_projected_cg
-            V0 = sparse_projected_cg(K, np.asarray(Cc.todense()), -Dhe, NDOF6)
-        else:
-            A = sp.bmat([[K, Cc.T], [Cc, None]], format="csc")
-            R = np.zeros((ndof + 3, 6))
-            R[:ndof] = -Dhe
-            V0 = _sparse_solve(A, R, sym=True)[:ndof]
+            # NOT SUPPORTED with the drilling multiplier.  sparse_projected_cg
+            # projects with P = I - C^T (C C^T)^-1 C on a DENSE C and a dense
+            # inverse; the 3 translation rows fit, but one drilling row per
+            # element does not (C would be (ne, ndof) dense, and C C^T an
+            # ne x ne inverse).  The old penalty made the operator SPD so CG
+            # could run; an exactly enforced constraint makes it a saddle
+            # point, which CG cannot take either.  Use solver='direct'.
+            raise NotImplementedError(
+                "shell_sg3d solver='cg' is not available with the element-wise"
+                " drilling Lagrange multiplier: the projected-CG kernel needs"
+                " dense constraint rows and a dense (C C^T)^-1, and there is"
+                " one drilling row per element (%d here).  Use"
+                " solver='direct'." % ne)
+        Gk, nzr = _live_constraint_rows(Gc, ref=kscale)
+        P = Gk.shape[0]
+        A = sp.bmat([[K, Gk.T, Cc.T], [Gk, None, None], [Cc, None, None]],
+                    format="csc")
+        R = np.zeros((ndof + P + 3, 6))
+        R[:ndof] = -Dhe
+        X, kkt_res = _kkt_solve(A, R, P + 3, kscale)
+        V0 = X[:ndof]
         n_bnd = 0
     else:
         if solver == "cg":
@@ -1457,8 +1612,19 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
         n_bnd = len(bnodes)
         bd = (NDOF6*bnodes[:, None] + np.arange(3)[None, :]).ravel()
         free = np.setdiff1d(np.arange(ndof), bd)
+        nf = len(free)
+        # the prescribed values are ZERO, so the eliminated columns add nothing
+        # to either right-hand side; the drilling rows are restricted to the
+        # free columns the same way
+        Gk, nzr = _live_constraint_rows(Gc.tocsc()[:, free].tocsr(),
+                                        ref=kscale)
+        P = Gk.shape[0]
+        A = sp.bmat([[K[free][:, free], Gk.T], [Gk, None]], format="csc")
+        R = np.zeros((nf + P, 6))
+        R[:nf] = -Dhe[free]
+        X, kkt_res = _kkt_solve(A, R, P, kscale)
         V0 = np.zeros((ndof, 6))
-        V0[free] = _sparse_solve(K[free][:, free].tocsc(), -Dhe[free], sym=True)
+        V0[free] = X[:nf]
     Deff = Dee + V0.T @ Dhe
     Deff = 0.5*(Deff + Deff.T)
     # SG measure: the VOLUME the equivalent continuum occupies = the node
@@ -1486,8 +1652,8 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
                solve_time=solve_time,
                model="msg-shell equivalent 3D solid (3-D shell SG, %d nodes,"
                      " %d elems [%s], %d junction edges, %s,"
-                     " per unit cell %.6g)"
-                     % (nn, ne, el_txt, n_junc_edges, bc_txt, V_cell),
+                     " %d element drilling multipliers, per unit cell %.6g)"
+                     % (nn, ne, el_txt, n_junc_edges, bc_txt, P, V_cell),
                name="Cauchy Continuum")
     return {"C3D": C3D, "D_eff": Deff, "solve_time": solve_time,
             "n_junction_edges": n_junc_edges, "ndof": ndof,
@@ -1495,6 +1661,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=1.0e-3, g_source=None,
             "omega": float(omega), "cell_volume": V_cell,
             "surface_area": float(A_surf),
             "n_tri": ne3, "n_quad": ne4, "shear": shear,
+            "n_drill_rows": int(P), "kkt_residual": kkt_res,
             "tri_shear": tri_scheme}
 
 
@@ -1646,10 +1813,10 @@ def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
                                    return_fields=True)
         rings[side] = dict(C6=C6r, V0=V0r, V1=V1r)
 
-    # 3. segment operators + drilling constraint (saddle point, pen=0)
+    # 3. segment operators + drilling constraint (saddle point; no penalty)
     Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
         nodes, quads, sd, e3s, D_by, G_by, k22_e, cross, ax, kg_e=kg_e,
-        pen=0.0, shear=shear)
+        shear=shear)
     Gc, Gl, Ge = assemble_constraint(nodes, quads, sd, e3s, k22_e, cross, ax,
                                      kg_e=kg_e, lam_space=lam_space)
     Dhh, Dhe, Dhl, Dll, Dle = map(np.asarray, (Dhh, Dhe, Dhl, Dll, Dle))

@@ -141,14 +141,38 @@ The in-plane symmetry that DEFINED omega_3 is re-imposed in its FINITE (undivide
 form via the drilling residual
   DR = C33 om3 + C3b om_b - S/2   (= C33 (om3 - om3_eliminated), finite even at C33=0),
   S/2 = 1/2[ k1(x11 Rn2 - x12 Rn1) + w'_i(x11 x_{i;2}-x12 x_{i;1}) + (w_{i|1}x_{i;2}-w_{i|2}x_{i;1}) ],
-enforced as a penalty (assemble_segment_indep) or a Lagrange-multiplier
-constraint (assemble_constraint).  On healthy walls (C33~1) this pins om3 to its
-eliminated value; where C33=0 the residual constrains om_b instead and om3 is
-set by its own curvature stiffness -- no singularity.
+enforced by an element-wise LAGRANGE MULTIPLIER (assemble_constraint,
+lam_space='elem': one piecewise-constant multiplier per element, int_e DR dA=0)
+-- the ONLY drilling treatment in this package.  There is no penalty path: a
+penalty pen*DR^2 makes the stiffness depend on the scaling of the DR row and so
+on the wall's orientation in space, while a constraint has the same null space
+under any nonzero row scaling (the multiplier absorbs the factor).  On healthy
+walls (C33~1) this pins om3 to its eliminated value; where C33=0 the residual
+constrains om_b instead and om3 is set by its own curvature stiffness -- no
+singularity.
 
 Shear scheme constraint: with the independent omega_3, both transverse-shear
 rows carry algebraic drilling content that Dvorkin-Bathe assumed-strain tying
 ALIASES -- 'full' (untied) integration is the default; tied variants are ablation.
+
+  WHERE THE ALIASING COMES FROM (measured, not asserted).  Written on ONE frame
+  the rows are
+      2g13 = D1_a (n.w_a) + N_a (a2.om_a) ,   2g23 = D2_a (n.w_a) - N_a (a1.om_a)
+      DR   = N_a (n.om_a) - 1/2 [ D1_a (a2.w_a) - D2_a (a1.w_a) ] ,
+  so the shear rows are BLIND to the drilling n.om_a and DR is blind to the
+  tangential rotation: the two are exactly orthogonal projections of the same
+  nodal om.  The om3 COLUMN they appear to share is a basis artifact (om3 is the
+  b3 GLOBAL component, a mixture of both), not a coupling.  A tied row is a
+  combination of rows sampled at DIFFERENT parent points, and _surf_frame_batch
+  rebuilds (a1,a2,n) at each of them; when the frame moves across the element the
+  tied rotation coefficient c_a acquires a component along n(gauss) and drilling
+  leaks into the shear.  max |c_a.n|/|c_a| at a Gauss point, mitc4_both:
+      planar parallelogram  8.5e-17     planar trapezoid       3.6e-16
+      warped d/h = 0.15     4.4e-02     warped d/h = 0.50      1.7e-01
+  So the mechanism is quad WARP, not the independence of om3, and 'mitc4_wonly'
+  (rotation columns kept at full integration) is clean by construction.  See
+  Rules/tri3_in_the_segment_route.md for the numbers and for why the objection
+  does NOT transfer to MITC3 on a triangle.
 
 Boundary: reuse the validated 5-DOF rings (ring_general) for dofs [0..4]; om3
 (dof 5) is left FREE at the boundary (natural BC).
@@ -1575,25 +1599,94 @@ def mitc3_shear_batch(Gm, gA, gB, gC, r, s):
     return np.stack([g13, g23], axis=1)
 
 
-def _d_scale(D_by):
-    """Characteristic ABD stiffness magnitude: max |diag(D)| over all layups.
+# ===================== THE SEGMENT ELEMENT IS 4-NODE ONLY =====================
+#
+# shell_sg3d assembles a MIXED surface -- (ne3,18,18) tri3 blocks and (ne4,24,24)
+# quad blocks scattered into one system -- but the SEGMENT/RING family below
+# (assemble_segment_indep, assemble_constraint, build_C_Psi_segment6) is bilinear
+# 4-node throughout: 24 dof/element, the 2x2 Gauss rule, quad_ops_indep_batch.
+# A triangle cannot be pushed through it, and until this guard it died on a bare
+# `cannot reshape array of size 17280 into shape (960,24)` from the dof-map line.
+#
+# WHY THERE IS NO tri3 SEGMENT ELEMENT TODAY -- and it is NOT the shear scheme.
+# The aliasing objection recorded at the top of Section 3 does NOT transfer to
+# MITC3: a tri3 is affine, so tri_frame_batch returns the SAME (a1,a2,n) at the
+# three edge-midpoint tying points as at the Gauss point (measured frame drift
+# 0.000e+00 on the equilateral / right-iso / obtuse-143deg / ar-250-sliver / skew
+# reference triangles), and every MITC3 row is therefore a combination of rows
+# whose rotation blocks lie in span{a1.om_a, a2.om_a}.  n.om_a never enters:
+# max |c_a.n|/|c_a| is 1.0e-16 .. 2.9e-16 under mitc3, indistinguishable from the
+# 4.0e-17 .. 9.2e-17 of 'full'.  MITC3 CANNOT alias the drilling on a triangle.
+#
+# The real blockers are the missing OPERATORS, not the tying:
+#   * the segment needs ten arrays per element -- BDe/BGe/DRe (the BEAM macro
+#     eb = [g11 k1 k2 k3] columns, built from Rn1, Rn2, swept, x2, x3) and
+#     BDl/BGl/DRl (the w' Gamma_l chain-rule columns).  The triangle has NEITHER:
+#     sg_homo.solid_fluct_ops_tri_batch supplies only Gamma_h, and
+#     solid_macro_ops_tri_batch only the 3-D SOLID 6-column macro drive.
+#   * that tri3 Gamma_h also divides its drilling row by C33, while the segment's
+#     DR is the undivided multiplied-through form, so it cannot be reused as-is.
+#   * assemble_constraint and build_C_Psi_segment6 would each need the same mixed
+#     dispatch, and sg_mesh.extract stores seg_cells as ONE rectangular array.
+# Writing tri_ops_indep_batch is a new element family, not a wiring job; a mixed
+# segment element must also project Gamma_e and Gamma_l with the same assumed
+# field it applies to Gamma_h (the tied path today projects Gamma_h alone -- see
+# Rules/gamma_e_gamma_h_consistency.md).  Recorded in
+# Rules/tri3_in_the_segment_route.md so the assessment is not repeated.
 
-    In:
-      D_by: dict or sequence of (6,6) ABD matrices, keyed/indexed by subdomain.
-    Out:
-      float, max absolute diagonal entry over all layups.
-    Note: the drilling penalty is set to beta*this so it is dimensionally
-    commensurate with the elastic stiffness (avoids penalty ill-conditioning).
+
+def _ragged(cells):
+    """True when `cells` is a sequence whose rows differ in length."""
+    try:
+        return len({len(r) for r in cells}) > 1
+    except TypeError:
+        return False
+
+
+def require_quad_mesh(cells, where):
+    """Refuse a non-4-node element in the 4-node-only segment/ring family.
+
+    In:  cells: (ne,k) int connectivity (or a ragged sequence);
+         where: str, the caller's name for the message.
+    Out: (ne,4) int ndarray.  Raises ValueError naming the offending element.
     """
-    keys = D_by.keys() if isinstance(D_by, dict) else range(len(D_by))
-    return max(float(np.max(np.abs(np.diag(np.asarray(D_by[k]))))) for k in keys)
+    if len(cells) == 0:
+        raise ValueError("opensg_shell: %s got an EMPTY element table." % where)
+    cells = np.asarray(cells, dtype=object if _ragged(cells) else int)
+    if cells.dtype == object or cells.ndim != 2:
+        raise ValueError(
+            "opensg_shell: %s got a MIXED-ARITY element table.  The 3-D shell "
+            "SEGMENT/RING element family is bilinear 4-node only (24 dof, 2x2 "
+            "Gauss); it cannot hold triangles and quads at once the way "
+            "shell_sg3d can.  See Rules/tri3_in_the_segment_route.md." % where)
+    if cells.shape[1] != 4:
+        raise ValueError(
+            "opensg_shell: %s got %d-NODE elements; the 3-D shell SEGMENT/RING "
+            "element family is bilinear 4-node only (24 dof per element, 2x2 "
+            "Gauss, quad_ops_indep_batch).  A 3-node triangle has NO segment "
+            "operator: the beam-macro (Gamma_e) and w' (Gamma_l) tri3 rows do "
+            "not exist -- only shell_sg3d's Gamma_h tri3 does.  This is an "
+            "OPERATOR gap, not a transverse-shear-scheme one: MITC3 is sound "
+            "here (an affine triangle ties on one frame, so it cannot alias the "
+            "drilling).  Re-mesh the segment with quads, or implement "
+            "tri_ops_indep_batch.  See Rules/tri3_in_the_segment_route.md."
+            % (where, cells.shape[1]))
+    return cells
 
 
 def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, ax,
-                           kg_e=None, pen=None, pen_beta=0.1, dof_map=None,
+                           kg_e=None, pen=None, pen_beta=None, dof_map=None,
                            shear="full", sparse=False):
-    """Assemble the 6-DOF segment energy blocks with the finite drilling-residual
-    penalty pen*DR^2.
+    """Assemble the 6-DOF segment energy blocks.  ELASTIC ENERGY ONLY -- the
+    drilling residual DR does NOT enter here.
+
+    omega_3 is pinned by the element-wise LAGRANGE multiplier assembled by
+    `assemble_constraint` (one piecewise-constant multiplier per element,
+    int_e DR dA = 0), never by a penalty: a penalty term pen*DR^2 makes the
+    stiffness depend on how the DR row is scaled -- and DR used to be divided
+    by C33 = n.e_3 -- so the element stiffness became a function of the wall's
+    orientation in space.  A constraint has the same null space under any
+    nonzero row scaling, so the multiplier absorbs the factor.
 
     In:
       nodes: (Nn,3) float, node coordinates.
@@ -1606,8 +1699,8 @@ def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, 
       cross: (2,) int, cross-section coordinate indices.
       ax: int, beam-axis coordinate index.
       kg_e: optional (ne,) float, unused (signature parity).
-      pen: float, drilling penalty weight; default pen_beta * max|diag(D)|.
-      pen_beta: float, penalty scale relative to the ABD magnitude.
+      pen, pen_beta: DEPRECATED, accepted and IGNORED (there is no penalty path
+        any more); anything other than None or 0.0 raises a DeprecationWarning.
       dof_map: optional (Nn,) int, node -> dof-node index (wrapped strips).
       shear: 'full' (default) | 'mitc4_wonly' | 'mitc4_g23' | 'mitc4_both'.
       sparse: bool, return CSR for the square ndof x ndof blocks.
@@ -1616,10 +1709,19 @@ def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, 
       Dll (ndof,ndof), Dle (ndof,4), with ndof = 6*(max(dof_map)+1);
       square blocks CSR when sparse=True.
     Note: with the independent omega_3, Dvorkin-Bathe tying aliases the algebraic
-    drilling shear -- keep shear='full'; tied variants are ablation only.
+    drilling shear -- keep shear='full'; tied variants are ablation only.  The
+    aliasing is driven by quad WARP (the tying points carry a moved frame), so it
+    does not arise on an affine triangle; `quads` is nevertheless 4-node ONLY --
+    there is no tri3 segment operator.  See require_quad_mesh.
     """
-    if pen is None:
-        pen = pen_beta * _d_scale(D_by)
+    quads = require_quad_mesh(quads, "assemble_segment_indep")
+    if (pen is not None and pen != 0.0) or pen_beta is not None:
+        import warnings
+        warnings.warn(
+            "assemble_segment_indep(pen=/pen_beta=) is deprecated and IGNORED:"
+            " the drilling omega_3 is enforced by the element-wise Lagrange"
+            " multiplier of assemble_constraint, not by a penalty.",
+            DeprecationWarning, stacklevel=2)
     if dof_map is None:
         dof_map = np.arange(len(nodes))
     dof_map = np.asarray(dof_map, int)
@@ -1653,28 +1755,15 @@ def assemble_segment_indep(nodes, quads, subdom, e3s, D_by, G_by, k22_e, cross, 
         GBe = np.einsum('eij,ejb->eib', Gm, BGe)
         DBl = np.einsum('eij,ejb->eib', De, BDl)
         GBl = np.einsum('eij,ejb->eib', Gm, BGl)
-        if pen != 0.0:
-            Ehh += w * (np.einsum('eia,eib->eab', BDh, DB) + np.einsum('eia,eib->eab', BGt, GB)
-                        + pen * DRh[:, :, None] * DRh[:, None, :])
-            Ehe += w * (np.einsum('eia,eib->eab', BDh, DBe) + np.einsum('eia,eib->eab', BGt, GBe)
-                        + pen * DRh[:, :, None] * DRe[:, None, :])
-            Dee += np.einsum('e,eab->ab', dA,
-                             np.einsum('eia,eib->eab', BDe, DBe) + np.einsum('eia,eib->eab', BGe, GBe)
-                             + pen * DRe[:, :, None] * DRe[:, None, :])
-            Ehl += w * (np.einsum('eia,eib->eab', BDh, DBl) + np.einsum('eia,eib->eab', BGt, GBl)
-                        + pen * DRh[:, :, None] * DRl[:, None, :])
-            Ell += w * (np.einsum('eia,eib->eab', BDl, DBl) + np.einsum('eia,eib->eab', BGl, GBl)
-                        + pen * DRl[:, :, None] * DRl[:, None, :])
-            Ele += w * (np.einsum('eia,eib->eab', BDl, DBe) + np.einsum('eia,eib->eab', BGl, GBe)
-                        + pen * DRl[:, :, None] * DRe[:, None, :])
-        else:
-            Ehh += w * (np.einsum('eia,eib->eab', BDh, DB) + np.einsum('eia,eib->eab', BGt, GB))
-            Ehe += w * (np.einsum('eia,eib->eab', BDh, DBe) + np.einsum('eia,eib->eab', BGt, GBe))
-            Dee += np.einsum('e,eab->ab', dA,
-                             np.einsum('eia,eib->eab', BDe, DBe) + np.einsum('eia,eib->eab', BGe, GBe))
-            Ehl += w * (np.einsum('eia,eib->eab', BDh, DBl) + np.einsum('eia,eib->eab', BGt, GBl))
-            Ell += w * (np.einsum('eia,eib->eab', BDl, DBl) + np.einsum('eia,eib->eab', BGl, GBl))
-            Ele += w * (np.einsum('eia,eib->eab', BDl, DBe) + np.einsum('eia,eib->eab', BGl, GBe))
+        # DRe / DRh / DRl are deliberately unused: the drilling residual leaves
+        # the energy and lives only in the constraint rows (assemble_constraint)
+        Ehh += w * (np.einsum('eia,eib->eab', BDh, DB) + np.einsum('eia,eib->eab', BGt, GB))
+        Ehe += w * (np.einsum('eia,eib->eab', BDh, DBe) + np.einsum('eia,eib->eab', BGt, GBe))
+        Dee += np.einsum('e,eab->ab', dA,
+                         np.einsum('eia,eib->eab', BDe, DBe) + np.einsum('eia,eib->eab', BGe, GBe))
+        Ehl += w * (np.einsum('eia,eib->eab', BDh, DBl) + np.einsum('eia,eib->eab', BGt, GBl))
+        Ell += w * (np.einsum('eia,eib->eab', BDl, DBl) + np.einsum('eia,eib->eab', BGl, GBl))
+        Ele += w * (np.einsum('eia,eib->eab', BDl, DBe) + np.einsum('eia,eib->eab', BGl, GBe))
 
     Dhe = np.zeros((ndof, 4)); Dle = np.zeros((ndof, 4))
     np.add.at(Dhe, g.reshape(-1), Ehe.reshape(-1, 4))
@@ -1724,7 +1813,10 @@ def assemble_constraint(nodes, quads, subdom, e3s, k22_e, cross, ax, kg_e=None,
     Out:
       G (P,6Nd) on w_s, Gl (P,6Nd) on w_s', Ge (P,4) on eb, where P is the
       number of multiplier rows and Nd = max(dof_map)+1.
+    Note: `quads` is 4-node ONLY, like assemble_segment_indep; see
+    require_quad_mesh.
     """
+    quads = require_quad_mesh(quads, "assemble_constraint")
     Nn = len(nodes)
     if dof_map is None:
         dof_map = np.arange(Nn)
@@ -1813,7 +1905,10 @@ def build_C_Psi_segment6(nodes, quads, cross):
     Out:
       C: (4, 6*Nn) area-weighted constraint rows on dofs [w1,w2,w3,om1].
       Psi: (6*Nn, 4) rigid modes (3 translations + axial rotation).
+    Note: `quads` is 4-node ONLY, like assemble_segment_indep; see
+    require_quad_mesh.
     """
+    quads = require_quad_mesh(quads, "build_C_Psi_segment6")
     nodes = np.asarray(nodes, float); quads = np.asarray(quads, int)
     Nn = len(nodes); ndof = NDOF6 * Nn
     C = np.zeros((4, ndof)); Psi = np.zeros((ndof, 4))

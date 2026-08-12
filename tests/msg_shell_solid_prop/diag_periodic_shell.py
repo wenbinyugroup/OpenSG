@@ -62,7 +62,7 @@ def build(periodic):
     dof_map = np.concatenate([nm, nm])
     Dhh, _, _, _, _, _ = assemble_segment_indep(
         nodes_st, quads, R["rsub"], e3q, R["D_by"], G_by, np.asarray(R["k22"]),
-        cross, ax, kg_e=None, pen=0.0, dof_map=dof_map, shear="mitc4_g23")
+        cross, ax, kg_e=None, dof_map=dof_map, shear="mitc4_g23")
     Gc, _, _ = assemble_constraint(nodes_st, quads, R["rsub"], e3q,
                                    np.asarray(R["k22"]), cross, ax,
                                    dof_map=dof_map, lam_space="elem")

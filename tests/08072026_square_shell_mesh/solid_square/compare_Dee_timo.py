@@ -51,7 +51,7 @@ dof_map = np.concatenate([np.arange(m), np.arange(m)])
 quads = np.array([[a, b, m+b, m+a] for a, b in rcells], int)
 _, _, Dee_sh, _, _, _ = assemble_segment_indep(
     nodes_st, quads, R["rsub"], np.asarray(R["re3"]), R["D_by"], G_by,
-    np.asarray(R["k22"]), R["cross"], R["ax"], kg_e=None, pen=0.0,
+    np.asarray(R["k22"]), R["cross"], R["ax"], kg_e=None,
     dof_map=dof_map, shear="mitc4_g23")
 Dee_sh = np.asarray(Dee_sh)/h_st
 
