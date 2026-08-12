@@ -41,40 +41,18 @@ def read_k_file(path):
     Accepts both the sg_props.write_vabs_k output and a native VABS .K (and the legacy
     OpenSG "Stiffness :" block as a fallback).
 
+    This is the historical msg-shell import path and stays exactly that; the parser
+    itself was promoted to opensg_solid.helper.k_file (read_beam_k), the ONE .K reader
+    both engines and the tests use -- that module also reads the SwiftComp 3-D solid
+    .sc.k and carries the compare_to_K verifier.
+
     In:
         path: str, .K (or .out) file.
     Out:
         (K, M): (6,6) Timoshenko stiffness, (6,6) mass matrix (VABS order).
     """
-    lines = open(path).read().splitlines()
-
-    def read6(start):
-        rows, j = [], start
-        while len(rows) < 6 and j < len(lines):
-            try:
-                v = [float(x) for x in lines[j].split()]
-                if len(v) >= 6:
-                    rows.append(v[:6])
-            except ValueError:
-                pass
-            j += 1
-        return np.array(rows)
-
-    K = M = None
-    for i, ln in enumerate(lines):
-        s = ln.strip().lower()
-        if s.startswith("timoshenko stiffness matrix"):
-            K = read6(i + 1)
-        elif K is None and s.startswith("stiffness"):
-            K = read6(i + 1)
-        elif s.startswith("the 6x6 mass matrix") and "center" not in s:
-            if M is None:
-                M = read6(i + 1)
-    if K is None or K.shape != (6, 6):
-        raise ValueError("no Timoshenko stiffness 6x6 in %s" % path)
-    if M is None or M.shape != (6, 6):
-        raise ValueError("no mass 6x6 in %s" % path)
-    return K, M
+    from opensg_solid.helper.k_file import read_beam_k
+    return read_beam_k(path)
 
 
 def _trsf_sixbysix(Mtx, T):
