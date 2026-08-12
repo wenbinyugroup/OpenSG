@@ -1,6 +1,6 @@
 # Deo cellular solid (MAMS 2023 Fig 4, Tables 1-2), all MPa
 # ours = OpenSG msg_shell (RM segments + MSG G); SwiftComp = the paper's MSG solid reference (= OpenSG-solid equivalent)
-# ---- theta = +15 deg (Table 1)  solve 1.0 s ----
+# ---- theta = +15 deg (Table 1)  solve 1.1 s ----
 # term    msg_shell       DeoTW   SwiftComp     ours%    DeoTW%
   C11       4733.84     4736.90     4678.90     +1.17     +1.24
   C12       1086.01     1089.40     1105.50     -1.76     -1.46
