@@ -8,7 +8,11 @@ input), split file-per-concern:
     sg_homo.py       homogenization drivers + plate_homo_2d
     sg_dehom.py      recovery kernels + plate_dehom_2d, export_gauss
     helper/          format conversions (sc_to_yaml: SwiftComp .sc -> the
-                     SG yaml + .msh), the opensg_shell.helper analog
+                     SG yaml + .msh; sg_input: the yaml -> .sc / VABS .sg
+                     writer), the opensg_shell.helper analog, plus
+                     k_file.py -- the ONE .K reader/verifier both engines
+                     can share (opensg_shell imports opensg_solid, never
+                     the reverse)
 Examples import opensg_solid.sg_homo / sg_dehom directly.
 
 This package __init__ carries the process-level setup every submodule
