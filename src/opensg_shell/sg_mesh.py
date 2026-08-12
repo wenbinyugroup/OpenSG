@@ -85,6 +85,7 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers 3d projection)
 
 from .sg_assembly import compute_k22
 from .sg_assembly import ring_general
+from .sg_assembly import require_quad_mesh
 from .sg_materials import _material_by_section
 from .fe_jax.msg_materials import shift_abd_reference
 
@@ -379,6 +380,11 @@ def extract(seg_yaml, out_npz, write_yaml=False, plot="auto"):
     seg = load_segment_yaml(seg_yaml)
     nodes = np.array(seg["nodes"], dtype=float)
     quads = [list(map(int, e)) for e in seg["elements"]]
+    # The segment solver behind this bundle is 4-node only, and seg_cells is ONE
+    # rectangular array: say so here rather than let numpy raise "inhomogeneous
+    # shape" (mixed mesh) or the assembler "cannot reshape ... into (ne,24)"
+    # (all-triangle) several hundred lines downstream.
+    require_quad_mesh(quads, "sg_mesh.extract")
     if min(min(q) for q in quads) == 1:                    # 1-indexed YAML (our cylinder) -> 0-indexed (OpenSG)
         quads = [[n - 1 for n in q] for q in quads]
     ori = np.array(seg["elementOrientations"], dtype=float)     # (Ne,9)
