@@ -8,6 +8,9 @@ windio reader would drop from the laminate.  This package owns that dialect:
                      loud skip warnings), st-id resolution, the file's own
                      elastic_properties_mb 6x6 accessor, and the station /
                      all-stations drivers built on the windio machinery.
+    sg_homo.py       STANDALONE in-memory homogenizer: Blade object ->
+                     Timoshenko + mass 6x6, no yaml, no .out, no windio
+                     import -- `timo(blade, st)`.
 
 Terminal route:
 
@@ -18,3 +21,4 @@ Terminal route:
 from .sg_pynumad import (PyNuMADBlade, load_blade_pynumad, resolve_station,  # noqa: F401
                          file_six_by_six, FILE_DIAG_TO_VABS,
                          station_timo, generate_cross_sections)
+from .sg_homo import timo                                                    # noqa: F401

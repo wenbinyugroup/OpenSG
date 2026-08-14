@@ -85,6 +85,32 @@ def test_opensg_read_and_call(tmp_path):
     assert np.allclose(K, K2, rtol=1e-12)
 
 
+def test_pynumad_sg_homo_bypass(tmp_path):
+    """The standalone in-memory homogenizer must match the file route."""
+    from opensg_shell import Blade
+    from opensg_shell.pynumad.sg_homo import timo as timo_mem
+
+    b = Blade(BLADE, workdir=str(tmp_path / "w"))
+    K, M = timo_mem(b, 9)
+    R = b.timo(9)                                       # yaml/file route
+    Kf, Mf = np.asarray(R["Timo"]), np.asarray(R["Mass"])
+    assert np.allclose(K, Kf, rtol=1e-8, atol=1e-9 * np.abs(Kf).max())
+    assert np.allclose(M, Mf, rtol=1e-8, atol=1e-9 * np.abs(Mf).max())
+    # no artifacts were produced by the in-memory call
+    K4, M4, info = timo_mem(b, 4, full=True)
+    assert info["mpus"] > 0 and K4[0, 0] > 0
+    # honors a live Section override, same as the file route
+    S = b.section(4)
+    S.scale_thickness(2.0, region="LP_SPAR")
+    S.scale_thickness(2.0, region="HP_SPAR")
+    K4e, _ = timo_mem(b, 4)
+    R4e = b.timo(4)
+    assert np.allclose(K4e, np.asarray(R4e["Timo"]), rtol=1e-8,
+                       atol=1e-9 * np.abs(K4e).max())
+    assert K4e[4, 4] > 1.1 * K4[4, 4]                   # the edit is in
+    S.reset()
+
+
 def test_section_mirror_edit_reset(tmp_path):
     from opensg_shell import Blade
 
