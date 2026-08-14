@@ -1,0 +1,6 @@
+# regenerable pipeline output (steps 1 and 6; ~30 MB per full run)
+cross_sections/
+recovery/
+run*.log
+beamdyn/*.ech
+iea22_beam_props.png

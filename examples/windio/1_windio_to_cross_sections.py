@@ -38,7 +38,7 @@ prefix = "iea22"                   # station files = <prefix>_rXXXX_shell.yaml
 stations = "airfoil"               # "airfoil" | int N (uniform, e.g. 51) | [0.2, 0.5, ...]
 mesh_size = 0.01                   # element arc length / chord
 reference = "center"               # shell reference surface: "center" | "oml"
-write_xml = False                  # True: ALSO emit the PreVABS XML per station
+write_xml = True                   # True: ALSO emit the PreVABS XML per station
                                    # (cross_sections/xml/<tag>/ -- the cross-check
                                    # input for the XML -> prevabs -> 2-D-solid path)
 ############################################################

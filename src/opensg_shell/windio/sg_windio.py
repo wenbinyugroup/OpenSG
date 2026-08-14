@@ -389,7 +389,9 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="center"):
     built, then every node is shifted chordwise so the windIO reference axis x1 is
     the origin -- the same origin the Timoshenko/mass 6x6 and the BeamDyn loads use.
     The chosen reference is recorded in the yaml's `reference` field (the single
-    source of truth consumed by build_rm_bundle and the dehom).
+    source of truth consumed by build_rm_bundle and the dehom), and the header
+    carries `refined: 1` so `opensg <yaml>` runs the shear-refined RM ->
+    Timoshenko route by default (not the classical EB 4x4).
 
     In:
         cs: dict from build_cross_section.
@@ -460,9 +462,11 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="center"):
     inward = 1.0 if area2 > 0 else -1.0
 
     # `msg` names the ENGINE that owns the file (`opensg <yaml>` dispatches on
-    # it); `reference` is the layup reference surface -- both are header keys,
-    # so they sit above the mesh blocks
-    seg = {"msg": "shell", "reference": reference,
+    # it); `refined: 1` = shear-refined (RM wall -> Timoshenko 6x6), the model
+    # the windIO blade pipeline is built on -- without it the terminal route
+    # defaults to the classical EB 4x4; `reference` is the layup reference
+    # surface -- all three are header keys, so they sit above the mesh blocks
+    seg = {"msg": "shell", "refined": 1, "reference": reference,
            "nodes": [], "elements": [], "sets": {"element": []},
            "sections": [], "elementOrientations": [], "materials": []}
     for (X, Y) in nodes:
@@ -629,6 +633,112 @@ def emit_prevabs_xml(cs, outdir, name="xsec", mesh_size=0.005):
     open(os.path.join(outdir, name + ".xml"), "w").write(xml)
     return dict(dat=name + ".dat", xml=name + ".xml", materials="materials.xml",
                 n_layups=len(inv), n_webs=len(cs["webs"]), out=outdir)
+
+
+def generate_cross_sections(windio_path, out_dir="cross_sections",
+                            stations="airfoil", mesh_size=0.01,
+                            reference="center", xml=True, plots=True,
+                            prefix=None, verbose=True):
+    """windIO blade -> one 1-D shell SG yaml per station (+ PreVABS XML byproduct).
+
+    The terminal route (`opensg gen_windio_cs <windio.yaml>`): every station
+    gets <prefix>_rXXXX_shell.yaml (XXXX = round(r*1000)) with the
+    reference-axis origin and the reference surface recorded in the yaml, the
+    layup-colored ring-mesh PNG and the e1/e2/e3 orientation PNG, and (xml)
+    the PreVABS XML cross-check input under <out_dir>/xml/<tag>/.  A station
+    table <prefix>_stations.dat closes the run (twist is passed through in the
+    windIO file's own unit).
+
+    In:
+        windio_path: str, windIO blade yaml (v1 or v2).
+        out_dir: str, output folder (created).
+        stations: "airfoil" = the blade's own airfoil positions | int N =
+            N uniform stations r = i/(N-1) | iterable of float r.
+        mesh_size: float, target element arc length (chord-normalised).
+        reference: "center" | "oml", shell reference surface.
+        xml: bool, ALSO emit the PreVABS XML per station (default True).
+        plots: bool, ALSO emit the mesh + orientation PNGs (default True).
+        prefix: str | None, station tag prefix (None = the windIO file stem).
+        verbose: bool, per-station progress lines.
+    Out:
+        dict(rows (n, 7) float station table [r chord twist n_nodes n_elems
+             n_sets n_webs], yamls list[str], dat str station-table path,
+             out_dir str, prefix str).
+    """
+    import os
+
+    blade = load_blade(windio_path)
+    if stations == "airfoil":
+        rs = blade.stations()
+    elif isinstance(stations, int):
+        rs = [i / (stations - 1.0) for i in range(stations)]
+    else:
+        rs = [float(r) for r in stations]
+    if prefix is None:
+        prefix = os.path.splitext(os.path.basename(windio_path))[0]
+    os.makedirs(out_dir, exist_ok=True)
+    if verbose:
+        print("%s: %d stations, reference=%s%s"
+              % (windio_path, len(rs), reference, ", xml" if xml else ""))
+
+    if plots:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from opensg_shell import auto_emit
+
+    rows, yamls = [], []
+    for r in rs:
+        tag = "%s_r%04d" % (prefix, round(r * 1000))
+        cs = build_cross_section(blade, r, mesh_size=mesh_size)
+        ypath = os.path.join(out_dir, tag + "_shell.yaml")
+        info = emit_shell_yaml(cs, ypath, reference=reference)
+        if xml:
+            emit_prevabs_xml(cs, os.path.join(out_dir, "xml", tag), name=tag)
+        rows.append([r, cs["chord"], cs["twist"], info["n_nodes"],
+                     info["n_elems"], info["n_sets"], info["n_webs"]])
+        yamls.append(ypath)
+        if verbose:
+            print("  %s  r=%.4f  chord=%7.3f m  %4d nodes  %4d elems"
+                  "  %d sets  %d webs"
+                  % (tag, r, cs["chord"], info["n_nodes"], info["n_elems"],
+                     info["n_sets"], info["n_webs"]))
+        if plots:
+            # figures come from the EMITTED file, never the in-memory state
+            d = yaml.load(open(ypath), Loader=_Loader)
+            nd = np.array([[float(v) for v in row[0].split()][:2]
+                           for row in d["nodes"]])
+            el = np.array([[int(v) for v in row[0].split()]
+                           for row in d["elements"]]) - 1
+            lam = np.zeros(len(el), int)
+            for k, grp in enumerate(d["sets"]["element"]):
+                for lab in grp["labels"]:
+                    lam[int(lab) - 1] = k
+            cmap = plt.get_cmap("tab20")
+            fig, ax = plt.subplots(figsize=(9.0, 5.0))
+            for k in range(lam.max() + 1):
+                first = True
+                for e in np.where(lam == k)[0]:
+                    sxy = nd[el[e]]
+                    ax.plot(sxy[:, 0], sxy[:, 1], "-", color=cmap(k % 20),
+                            lw=2.0, label="layup_%d" % k if first else None)
+                    first = False
+            ax.plot(nd[:, 0], nd[:, 1], ".", color="0.25", ms=1.5)
+            ax.set_aspect("equal")
+            ax.set_xlabel("y2 (m)"); ax.set_ylabel("y3 (m)")
+            ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5),
+                      frameon=False, fontsize=8)
+            fig.tight_layout()
+            fig.savefig(os.path.join(out_dir, tag + "_mesh.png"), dpi=150,
+                        bbox_inches="tight")
+            plt.close(fig)
+            auto_emit(ypath, out_png=os.path.join(out_dir, tag + "_orient.png"))
+
+    dat = os.path.join(out_dir, prefix + "_stations.dat")
+    np.savetxt(dat, np.array(rows), fmt="%.4f %10.4f %10.6f %6d %6d %3d %3d",
+               header="r chord[m] twist[windIO unit] n_nodes n_elems"
+                      " n_sets n_webs")
+    return dict(rows=rows, yamls=yamls, dat=dat, out_dir=out_dir, prefix=prefix)
 
 
 def oml_load_integrals(cs):

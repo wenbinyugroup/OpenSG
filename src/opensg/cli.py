@@ -3,6 +3,12 @@
     opensg <sg.yaml>        homogenization (the default)
     opensg <sg.yaml> D      dehomogenization: homogenize, then recover
 
+    opensg gen_windio_cs <windio.yaml>
+                            windIO blade -> one 1-D shell cross-section SG
+                            yaml per station (+ the PreVABS XML byproduct by
+                            default) -- the opensg_shell windio route
+                            (gen_windio_cs --help for the flags)
+
 The file says which engine owns it.  `msg: shell` in the yaml header sends
 it to opensg_shell (the msg-shell contour / surface SG), `msg: solid` to
 opensg_solid (the general 1-D/2-D/3-D SG engine); without the key the mesh
@@ -29,6 +35,10 @@ def main(argv=None):
     Out: int exit code -- whatever the engine's own main() returns
          (0 ok, 2 usage)."""
     argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] == "gen_windio_cs":
+        # the windIO cross-section generator lives in the shell engine
+        from opensg_shell.cli import main as _engine
+        return _engine(argv)
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):
         from opensg_solid.cli import BANNER          # the ONE banner
         print(BANNER)

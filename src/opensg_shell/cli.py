@@ -3,6 +3,16 @@
     opensg_shell <sg.yaml>        homogenization (the default)
     opensg_shell <sg.yaml> D      dehomogenization: homogenize, then recover
 
+    opensg_shell gen_windio_cs <windio.yaml>
+                                  windIO blade (v1 or v2) -> one 1-D shell
+                                  cross-section SG yaml per station, with the
+                                  PreVABS XML cross-check input, the mesh and
+                                  e1/e2/e3 orientation PNGs and a station
+                                  table, all under cross_sections/ (see
+                                  gen_windio_cs --help for --stations,
+                                  --mesh-size, --reference, --no-xml, --out,
+                                  --prefix)
+
 No flags, no codes: everything else lives in the yaml header (the
 leading scalar keys above the mesh blocks), and every key has a default
 -- a headerless msg-shell SG runs as a classical beam homogenization.
@@ -184,14 +194,75 @@ def sg_cell_area(path):
     return float(ext[0]*ext[1])
 
 
+def gen_windio_cs(argv):
+    """`gen_windio_cs <windio.yaml>` -- windIO blade -> station cross-sections.
+
+    One 1-D shell SG yaml per station (reference-axis origin, reference
+    surface recorded in the yaml), the PreVABS XML cross-check input per
+    station (on by default -- the established XML -> prevabs -> 2-D-solid
+    pathway), the layup-colored ring-mesh PNG, the e1/e2/e3 orientation PNG
+    and a station table, all under --out.
+
+    In:  argv list[str] -- [windio_path, flags...] (the token after
+         `gen_windio_cs`); see --help
+    Out: int exit code (0 ok, 2 usage)."""
+    import argparse
+
+    p = argparse.ArgumentParser(
+        prog="opensg gen_windio_cs",
+        description="windIO blade (v1 or v2) -> one OpenSG 1-D shell"
+                    " cross-section SG yaml per station, with the PreVABS XML"
+                    " byproduct, mesh + orientation PNGs and a station table.")
+    p.add_argument("windio", help="windIO blade yaml (v1 or v2)")
+    p.add_argument("--stations", default="airfoil", metavar="S",
+                   help='"airfoil" = the blade\'s own airfoil positions (the'
+                        " default); an int N = N uniform stations r = i/(N-1);"
+                        " or comma-separated r values, e.g. 0.2,0.5,0.7")
+    p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
+                   help="target element arc length / chord (default 0.01)")
+    p.add_argument("--reference", choices=("center", "oml"), default="center",
+                   help="shell reference surface (default center)")
+    p.add_argument("--no-xml", action="store_true",
+                   help="skip the per-station PreVABS XML byproduct")
+    p.add_argument("--out", default="cross_sections", metavar="DIR",
+                   help="output folder (default cross_sections)")
+    p.add_argument("--prefix", default=None, metavar="TAG",
+                   help="station tag prefix (default: the windIO file stem)")
+    a = p.parse_args(argv)
+    if not os.path.exists(a.windio):
+        raise SystemExit("no such file: %s" % a.windio)
+    st = a.stations
+    if st != "airfoil":
+        try:
+            st = int(st)
+        except ValueError:
+            st = [float(v) for v in st.replace(",", " ").split()]
+
+    import time as _time
+
+    _t0 = _time.perf_counter()
+    from .windio import generate_cross_sections
+    R = generate_cross_sections(a.windio, out_dir=a.out, stations=st,
+                                mesh_size=a.mesh_size, reference=a.reference,
+                                xml=not a.no_xml, prefix=a.prefix)
+    print("Cross-sections stored in %s (%d yaml%s + PNGs + %s)"
+          % (R["out_dir"], len(R["yamls"]), "" if a.no_xml else " + xml",
+             os.path.basename(R["dat"])))
+    print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
+    return 0
+
+
 def main(argv=None):
     """Run the analysis the shell SG yaml (and an optional H|D argument) asks for.
 
-    In:  argv (list[str] | None) -- [yaml_path, "H"|"D" (optional)];
-         None reads sys.argv
+    In:  argv (list[str] | None) -- [yaml_path, "H"|"D" (optional)], or
+         ["gen_windio_cs", windio_path, flags...] for the windIO
+         cross-section generator; None reads sys.argv
     Out: int exit code (0 ok, 2 usage)."""
     print(BANNER)
     argv = sys.argv[1:] if argv is None else list(argv)
+    if argv and argv[0] == "gen_windio_cs":
+        return gen_windio_cs(argv[1:])
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):
         print(__doc__)
         return 2

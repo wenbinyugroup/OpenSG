@@ -14,6 +14,11 @@ wrapper): cross-sections, beam properties, BeamDyn coupling, stress recovery.
     sg_recovery.py   per-station two-step RM dehomogenization driven by a .ff
                      file; VABS-layout .SM / .EM / .U writers
 
+Terminal route for step 1 (all stations, PreVABS XML byproduct on by
+default):
+
+    opensg gen_windio_cs <windio.yaml>          (sg_windio.generate_cross_sections)
+
 Pipeline (examples/OpenSG_shell/windio):
     1  windIO yaml         -> <tag>_shell.yaml per station     (sg_windio)
     2  <tag>_shell.yaml    -> <tag>.K  (Timoshenko 6x6 + mass) (sg_props)
@@ -24,7 +29,7 @@ Pipeline (examples/OpenSG_shell/windio):
 """
 from .sg_windio import (load_blade, build_cross_section, emit_shell_yaml,   # noqa: F401
                         emit_prevabs_xml, blade_stations, blade_length,
-                        oml_load_integrals)
+                        generate_cross_sections, oml_load_integrals)
 from .sg_props import (mass_matrix_ring, beam_props, write_vabs_k)          # noqa: F401
 from .sg_beamdyn import (read_k_file, vabs_to_beamdyn, write_bd_props,      # noqa: F401
                          write_bd_primary, write_bd_driver, station_loads,
