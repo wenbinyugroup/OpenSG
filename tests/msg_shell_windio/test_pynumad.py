@@ -48,7 +48,11 @@ def test_pynumad_cli_lean_and_optins(tmp_path):
     out = str(tmp_path / "st")
     rc = main(["pynumad", BLADE, "9", "--out", out])
     assert rc == 0
-    assert os.path.exists(os.path.join(out, tag + ".K"))
+    # the pynumad station record is a VABS-layout .out (not .K), carrying
+    # the elastic_properties_mb cross-check block
+    kout = os.path.join(out, tag + ".out")
+    assert os.path.exists(kout)
+    assert "Cross-check vs the blade file" in open(kout).read()
     ypath = os.path.join(out, tag + "_shell.yaml")
     assert os.path.exists(ypath)
     # this dialect defaults the shell reference surface to the OML

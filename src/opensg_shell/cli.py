@@ -385,19 +385,44 @@ def pynumad(argv):
 
     import time as _time
 
-    import numpy as np
-
-    from .pynumad import (FILE_DIAG_TO_VABS, file_six_by_six,
-                          generate_cross_sections, station_timo)
+    from .pynumad import load_blade_pynumad, station_timo
 
     if a.station == "all":
+        import numpy as np
+
+        rs = load_blade_pynumad(a.blade).stations()
+        out = a.out or "cross_sections"
+        stem = os.path.splitext(os.path.basename(a.blade))[0]
+        rows, rows_k, rows_m = [], [], []
         _t0 = _time.perf_counter()
-        R = generate_cross_sections(a.blade, out_dir=a.out or "cross_sections",
-                                    mesh_size=a.mesh_size,
-                                    reference=a.reference, xml=not a.no_xml)
-        print("Cross-sections stored in %s (%d yaml%s + PNGs + %s)"
-              % (R["out_dir"], len(R["yamls"]), "" if a.no_xml else " + xml",
-                 os.path.basename(R["dat"])))
+        for r in rs:
+            P = station_timo(a.blade, "%.10f" % r, mesh_size=a.mesh_size,
+                             reference=a.reference, out_dir=out,
+                             xml=not a.no_xml, view=True)
+            print(" r = %.4f" % P["r"])
+            print("Timoshenko Beam Stiffness Matrix  "
+                  "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
+            print(P["Timo"])
+            print("Homogenization stored in %s" % P["k_file"])
+            m = P["mesh"]
+            rows.append([P["r"], P["chord"], P["twist"], m["n_nodes"],
+                         m["n_elems"], m["n_sets"], m["n_webs"]])
+            rows_k.append(np.r_[P["r"], np.asarray(P["Timo"]).flatten()])
+            rows_m.append(np.r_[P["r"], P["info"]["mpus"],
+                                np.asarray(P["Mass"]).flatten()])
+        np.savetxt(os.path.join(out, stem + "_stations.dat"), np.array(rows),
+                   fmt="%.4f %10.4f %10.6f %6d %6d %3d %3d",
+                   header="r chord[m] twist[windIO unit] n_nodes n_elems"
+                          " n_sets n_webs")
+        np.savetxt(os.path.join(out, stem + "_timo_by_r.dat"),
+                   np.array(rows_k), fmt="%.8e",
+                   header="r then Timoshenko 6x6 row-major (VABS order)")
+        np.savetxt(os.path.join(out, stem + "_mass_by_r.dat"),
+                   np.array(rows_m), fmt="%.8e",
+                   header="r mass_per_span then mass 6x6 row-major"
+                          " (VABS frame)")
+        print("Cross-sections + Timoshenko stored in %s (%d stations)"
+              % (out, len(rs)))
         print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
         return 0
 
@@ -405,28 +430,11 @@ def pynumad(argv):
     P = station_timo(a.blade, a.station, mesh_size=a.mesh_size,
                      reference=a.reference, out_dir=a.out or ".",
                      xml=a.xml, view=a.view)
-    m = P["mesh"]
-    print(" station   : st-id %s  ->  r = %.4f   chord = %.3f m   %d nodes"
-          "  %d elems  %d sets  %d webs"
-          % (a.station, P["r"], P["chord"], m["n_nodes"], m["n_elems"],
-             m["n_sets"], m["n_webs"]))
     print("Timoshenko Beam Stiffness Matrix  "
           "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
     print(P["Timo"])
-    print(" mass/span = %.6g kg/m" % P["info"]["mpus"])
-    if P["file_K"] is not None:
-        LBL = ("EA", "GA2", "GA3", "GJ", "EI2", "EI3")
-        dv = np.diag(np.asarray(P["Timo"]))
-        df = np.diag(np.asarray(P["file_K"]))
-        print(" cross-check vs the file's own elastic_properties_mb"
-              " (pyNuMAD/WISDEM 6x6):")
-        for b, v in enumerate(FILE_DIAG_TO_VABS):
-            print("   %-3s  OpenSG %12.5g   file %12.5g   %+7.2f %%"
-                  % (LBL[v], dv[v], df[b], 100.0 * (dv[v] / df[b] - 1.0)))
-        mu_f = float(np.asarray(P["file_M"])[0, 0])
-        print("   %-3s  OpenSG %12.5g   file %12.5g   %+7.2f %%"
-              % ("mu", P["info"]["mpus"], mu_f,
-                 100.0 * (P["info"]["mpus"] / mu_f - 1.0)))
+    print("Mass Matrix  [F1 F2 F3 M1 M2 M3]:")
+    print(P["Mass"])
     if a.xml:
         print("PreVABS XML stored in %s"
               % os.path.join(a.out or ".", "xml", P["tag"]))

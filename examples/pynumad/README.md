@@ -32,12 +32,13 @@ Output names derive from the blade file stem: station tag =
 opensg pynumad IEA-15-240-RWT.yaml 4
 ```
 
-prints the Timoshenko 6x6 at station 4 (r = 0.3288) and the cross-check
-table against the file's own `elastic_properties_mb` (pyNuMAD/WISDEM 6x6,
-3 = axial frame), and stores EXACTLY three files:
+prints the Timoshenko 6x6 and the 6x6 mass matrix at station 4
+(r = 0.3288) and stores EXACTLY three files:
 `IEA-15-240-RWT_r0329_shell.yaml` + `IEA-15-240-RWT_r0329_shell_Timo.out`
-+ the VABS-layout `IEA-15-240-RWT_r0329.K` -- no ABDG record, no abd/
-cache, no PNGs.  Opt extra artifacts in per station:
++ the VABS-layout `IEA-15-240-RWT_r0329.out` (mass blocks, stiffness /
+compliance, centers, and the cross-check block against the file's own
+`elastic_properties_mb` -- the pyNuMAD/WISDEM 6x6, 3 = axial frame).
+No ABDG record, no abd/ cache, no PNGs.  Opt extra artifacts in:
 
 - `--xml`   also write the PreVABS XML byproduct (`xml/<tag>/`)
 - `--view`  also write the layup-colored mesh PNG + e1/e2/e3 orientation PNG
@@ -48,9 +49,11 @@ cache, no PNGs.  Opt extra artifacts in per station:
 opensg pynumad IEA-15-240-RWT.yaml all
 ```
 
-generates every station under `cross_sections/`: 1-D shell SG yaml
-(+ PreVABS XML byproduct, `--no-xml` to skip) + mesh/orientation PNGs +
-`<stem>_stations.dat`.
+homogenizes EVERY station: prints the Timoshenko 6x6 per station and
+stores, under `cross_sections/`, the per-station 1-D shell SG yaml +
+VABS-layout `.out` (+ PreVABS XML, `--no-xml` to skip) + mesh/orientation
+PNGs, plus three spanwise tables: `<stem>_stations.dat`,
+`<stem>_timo_by_r.dat`, `<stem>_mass_by_r.dat`.
 
 ## Flags and conventions
 

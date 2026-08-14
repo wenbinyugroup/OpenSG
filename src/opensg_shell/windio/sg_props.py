@@ -328,7 +328,8 @@ def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None,
 
 
 def station_timo(windio_path, r, mesh_size=0.01, reference="center",
-                 out_dir=".", prefix=None, blade=None, xml=False, view=False):
+                 out_dir=".", prefix=None, blade=None, xml=False, view=False,
+                 k_ext=".K"):
     """Timoshenko 6x6 of one windIO blade station, straight from the windIO file.
 
     The one-shot bypass behind `opensg windio_st <windio.yaml> <r>`: builds the
@@ -349,6 +350,8 @@ def station_timo(windio_path, r, mesh_size=0.01, reference="center",
         xml: bool, ALSO emit the PreVABS XML byproduct (out_dir/xml/<tag>/).
         view: bool, ALSO emit the layup-colored mesh PNG + e1/e2/e3
             orientation PNG (out_dir/<tag>_{mesh,orient}.png).
+        k_ext: str, extension of the stored VABS-layout record
+            (".K" default; the pynumad route stores ".out").
     Out:
         dict: the beam_props result ("Timo" (6,6), "Mass" (6,6), "info",
         "bundle", "k_file") + "yaml" str emitted station yaml, "tag" str,
@@ -375,7 +378,7 @@ def station_timo(windio_path, r, mesh_size=0.01, reference="center",
         auto_emit(ypath, out_png=os.path.join(out_dir, tag + "_orient.png"))
     # terminal st-id contract DEFAULT: yaml + _Timo.out + .K only -- no
     # _ABDG.out, no abd/ cache; --xml / --view opt in per station
-    P = beam_props(ypath, out_k=os.path.join(out_dir, tag + ".K"),
+    P = beam_props(ypath, out_k=os.path.join(out_dir, tag + k_ext),
                    abd_out=False)
     P.update(yaml=ypath, tag=tag, mesh=mesh, chord=cs["chord"], twist=cs["twist"])
     return P

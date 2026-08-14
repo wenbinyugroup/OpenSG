@@ -88,4 +88,14 @@
  The principal shear axes rotated from user coordinate system by
    92.9730574069 degrees about the positive direction of x1 axis.
 
- Time taken: 4.16 sec
+ Time taken: 3.92 sec
+
+ Cross-check vs the blade file's own elastic_properties_mb (pyNuMAD/WISDEM)
+ ========================================================
+   GA3  OpenSG   1.671283E+08   file   2.033162E+08     -17.80 %
+   GA2  OpenSG   3.371935E+08   file   3.337354E+08      +1.04 %
+   EA   OpenSG   2.355506E+10   file   2.160810E+10      +9.01 %
+   EI3  OpenSG   2.730378E+10   file   2.818818E+10      -3.14 %
+   EI2  OpenSG   1.280644E+10   file   1.180563E+10      +8.48 %
+   GJ   OpenSG   4.977211E+08   file   5.313826E+08      -6.33 %
+   mu   OpenSG   4.789557E+02   file   4.690433E+02      +2.11 %

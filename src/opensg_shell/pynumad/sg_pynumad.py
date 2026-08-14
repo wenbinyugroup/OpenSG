@@ -145,6 +145,36 @@ def file_six_by_six(blade, r):
 FILE_DIAG_TO_VABS = (2, 1, 0, 5, 4, 3)
 
 
+def _append_file_crosscheck(out_path, K6, mpus, file_K, file_M):
+    """Append the elastic_properties_mb cross-check block to the station .out.
+
+    The console stays lean (Timoshenko + mass matrices only); the diagonal
+    comparison against the blade file's own pyNuMAD/WISDEM 6x6 lives in the
+    stored record instead.
+
+    In:
+        out_path: str, the station VABS-layout .out file (appended in place).
+        K6: (6,6) OpenSG Timoshenko; mpus: float mass/span [kg/m];
+        file_K/file_M: (6,6) the blade file's stiffness/inertia at r.
+    Out:
+        None.
+    """
+    LBL = ("EA", "GA2", "GA3", "GJ", "EI2", "EI3")
+    dv = np.diag(np.asarray(K6, float))
+    df = np.diag(np.asarray(file_K, float))
+    L = ["\n Cross-check vs the blade file's own elastic_properties_mb"
+         " (pyNuMAD/WISDEM)\n"
+         " ========================================================\n"]
+    for b, v in enumerate(FILE_DIAG_TO_VABS):
+        L.append("   %-3s  OpenSG %14.6E   file %14.6E   %+8.2f %%\n"
+                 % (LBL[v], dv[v], df[b], 100.0 * (dv[v] / df[b] - 1.0)))
+    mu_f = float(np.asarray(file_M, float)[0, 0])
+    L.append("   %-3s  OpenSG %14.6E   file %14.6E   %+8.2f %%\n"
+             % ("mu", mpus, mu_f, 100.0 * (mpus / mu_f - 1.0)))
+    with open(out_path, "a") as f:
+        f.write("".join(L))
+
+
 def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
                  out_dir=".", prefix=None, xml=False, view=False):
     """Timoshenko 6x6 of one pyNuMAD blade station (steps 1 + 2 fused).
@@ -168,10 +198,13 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
     r = resolve_station(blade, station)
     P = _station_timo(blade_yaml, r, mesh_size=mesh_size, reference=reference,
                       out_dir=out_dir, prefix=prefix, blade=blade,
-                      xml=xml, view=view)
+                      xml=xml, view=view, k_ext=".out")
     ref = file_six_by_six(blade, r)
     P.update(r=r, file_K=None if ref is None else ref[0],
              file_M=None if ref is None else ref[1])
+    if ref is not None:
+        _append_file_crosscheck(P["k_file"], P["Timo"],
+                                float(P["info"]["mpus"]), ref[0], ref[1])
     return P
 
 
