@@ -118,11 +118,4 @@ for label, move in MOVES:
           % (label, pc(0), pc(1), pc(2), pc(3), pc(4), pc(5),
              100.0 * (mp - m0) / m0))
 
-print("""
-Notes on reading the table:
-- twist: the 6x6 is computed in the LOCAL chord frame, so its diagonal is
-  twist-invariant by design; twist reaches BeamDyn as frame metadata.
-- caps x1.2 spanwise vs Section: the spanwise move passes through the
-  pyNuMAD ply quantization (thickness rounds to whole plies), the Section
-  edit is applied verbatim -- hence the larger, exact x1.2 response.
-- webs move GA2/GA3 and mass, barely the bending stiffnesses.""")
+
