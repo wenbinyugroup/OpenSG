@@ -50,6 +50,260 @@ from .pynumad.sg_pynumad import (PyNuMADBlade, resolve_station,
                                  file_six_by_six, _append_file_crosscheck)
 
 
+REGION_NAMES = ("HP_TE_FLAT", "HP_TE_REINF", "HP_TE_PANEL", "HP_SPAR",
+                "HP_LE_PANEL", "HP_LE", "LP_LE", "LP_LE_PANEL", "LP_SPAR",
+                "LP_TE_PANEL", "LP_TE_REINF", "LP_TE_FLAT")
+KEY_LABELS = ("te", "e", "d", "c", "b", "a", "le", "a", "b", "c", "d", "e",
+              "te")
+
+
+class Definition:
+    """The EDITABLE blade definition (pyNuMAD's definition object).
+
+    All attributes are live references into the parsed yaml dict -- editing
+    them edits the blade; update_blade() re-syncs the derived objects.
+
+    In (constructor): reader -- a dialect reader bound to the raw dict.
+    Out: chord/twist/offset (grid dicts), layers {name: layer}, webs,
+         materials {name: card}, airfoils {name: airfoil}."""
+
+    def __init__(self, reader, dialect):
+        osh = reader.osh
+        self.chord = osh["chord"]
+        self.twist = osh["twist"]
+        self.offset = osh.get("pitch_axis" if dialect == "v1"
+                              else "section_offset_y")
+        src = reader._layers if dialect == "v1" else reader.st["layers"]
+        self.layers = {L["name"]: L for L in src}
+        self.webs = reader._webs if dialect == "v1" else reader.st["webs"]
+        self.materials = reader.mats
+        self.airfoils = reader.afs
+
+
+class Geometry:
+    """GENERATED station geometry accessor (pyNuMAD's geometry object).
+
+    In (generate): reader; Out: stations list + contour/chord accessors."""
+
+    def generate(self, reader):
+        self._reader = reader
+        self.stations = reader.stations()
+        return self
+
+    def chord(self, r):
+        """Chord [m] at span r."""
+        return self._reader.scalar("chord", r)
+
+    def contour(self, r):
+        """Chord-scaled section contour (n, 2) at span r."""
+        return self._reader.airfoil_coords(r) * (self.chord(r) or 1.0)
+
+    def le_arc(self, r):
+        """Normalised arc position s of the LE (min-x point) at span r."""
+        xy = self.contour(r)
+        d = np.r_[0.0, np.cumsum(np.hypot(np.diff(xy[:, 0]),
+                                          np.diff(xy[:, 1])))]
+        return float(d[int(np.argmin(xy[:, 0]))] / d[-1])
+
+
+class KeyPoints:
+    """GENERATED pyNuMAD keypoints: te,e,d,c,b,a,le,a,b,c,d,e,te per station.
+
+    The keypoint arcs come from the SAME definition placements pyNuMAD uses:
+    a = LE band edges (LE_reinforcement span), b/c = spar-cap edges, d = TE
+    band inner edge (TE_reinforcement span), e = TE band outer edge (the
+    flat/TE side; e == te when there is no flatback).  All in the TE(0) ->
+    suction -> LE -> pressure -> TE(1) normalised arc of the OpenSG contour.
+
+    In (generate): definition, geometry, reader.
+    Out: key_arcs(r) -> (13,) float s; regions(r) -> [(name, s_a, s_b)]."""
+
+    _SIDES = {"HP": ("_PS", "hp"), "LP": ("_SS", "lp")}
+
+    def generate(self, definition, geometry, reader):
+        self._def = definition
+        self._geo = geometry
+        self._reader = reader
+        return self
+
+    def _layer_span(self, name_frags, r):
+        """Resolved (s, e) of the first present layer matching any fragment."""
+        for L in self._reader.layers_at(r):
+            nm = L["name"].lower()
+            if any(f in nm for f in name_frags):
+                return float(L["s"]), float(L["e"])
+        return None
+
+    def key_arcs(self, r):
+        """The 13 keypoint arc positions s at span r (HP=pressure side first
+        in pyNuMAD label order te..le..te; here expressed in OpenSG s where
+        s=0 is the TE on the suction (LP) side).
+
+        In:  r float span.
+        Out: (13,) float s, ordered per KEY_LABELS (HP te -> LP te)."""
+        le = self._geo.le_arc(r)
+        sp_lp = self._layer_span(("spar_cap_ss",), r)
+        sp_hp = self._layer_span(("spar_cap_ps",), r)
+        leb = self._layer_span(("le_reinf",), r)
+        te_lp = self._layer_span(("te_reinforcement_ss",), r)
+        te_hp = self._layer_span(("te_reinforcement_ps",), r)
+
+        def lo(x, d):
+            return d if x is None else min(x)
+
+        def hi(x, d):
+            return d if x is None else max(x)
+
+        a_lp, a_hp = lo(leb, le), hi(leb, le)
+        b_lp, c_lp = (hi(sp_lp, le), lo(sp_lp, le))
+        b_hp, c_hp = (lo(sp_hp, le), hi(sp_hp, le))
+        e_lp, d_lp = (lo(te_lp, 0.0), hi(te_lp, 0.0))
+        e_hp, d_hp = (hi(te_hp, 1.0), lo(te_hp, 1.0))
+        # pyNuMAD's keypoint clamps (keypoints.generate), expressed as
+        # distance-from-LE fractions of each surface arc: a in [1%, 10%],
+        # b >= 15%, c <= 80%, d in [85%, 98% HP / 96% LP]
+        L_lp, L_hp = le, 1.0 - le
+
+        def cl(dist, lo_f, hi_f, L):
+            return min(max(dist, lo_f * L), hi_f * L)
+
+        a_lp = le - cl(le - a_lp, 0.01, 0.10, L_lp)
+        a_hp = le + cl(a_hp - le, 0.01, 0.10, L_hp)
+        b_lp = le - max(le - b_lp, 0.15 * L_lp)
+        b_hp = le + max(b_hp - le, 0.15 * L_hp)
+        c_lp = le - min(le - c_lp, 0.80 * L_lp)
+        c_hp = le + min(c_hp - le, 0.80 * L_hp)
+        d_lp = le - cl(le - d_lp, 0.85, 0.96, L_lp)
+        d_hp = le + cl(d_hp - le, 0.85, 0.98, L_hp)
+        return np.array([1.0, e_hp, d_hp, c_hp, b_hp, a_hp, le,
+                         a_lp, b_lp, c_lp, d_lp, e_lp, 0.0])
+
+    def regions(self, r):
+        """The 12 canonical regions at span r (zero-width ones included).
+
+        In:  r float span.
+        Out: list of (name, s_a, s_b) with s_a <= s_b, REGION_NAMES order."""
+        k = self.key_arcs(r)
+        bounds = [(k[1], k[0]), (k[2], k[1]), (k[3], k[2]), (k[4], k[3]),
+                  (k[5], k[4]), (k[6], k[5]), (k[7], k[6]), (k[8], k[7]),
+                  (k[9], k[8]), (k[10], k[9]), (k[11], k[10]),
+                  (k[12], k[11])]
+        return [(nm, float(min(a, b)), float(max(a, b)))
+                for nm, (a, b) in zip(REGION_NAMES, bounds)]
+
+
+class StackDatabase:
+    """GENERATED per-region stacks (pyNuMAD's stackdb).
+
+    In (generate): keypoints, reader.
+    Out: stacks(r) -> {region: laminate tuple ((mat, t, ang) outer->inner)};
+         swstacks(r) -> [web laminate tuples]; segments(r) -> the
+         build_cross_section segments list."""
+
+    def generate(self, keypoints, reader):
+        self._kp = keypoints
+        self._reader = reader
+        # pyNuMAD component classes are fixed for the WHOLE blade: any layer
+        # whose arc span reaches >= 0.9 somewhere is a full-surface 'shell'
+        # component (te..te in every region at every station)
+        self._full = set()
+        for rs in reader.stations():
+            for L in reader.layers_at(rs):
+                if max(L["s"], L["e"]) - min(L["s"], L["e"]) >= 0.9:
+                    self._full.add(L["name"])
+        return self
+
+    def _ply_quantize(self, name, mat, t_resolved, r):
+        """pyNuMAD ply quantization: n = round(interp(grid,
+        round(values*1000/layerthickness), r)), thickness = n plies.
+
+        In:  name/mat str; t_resolved float [m] fallback; r float span.
+        Out: float thickness [m] (0.0 when the count rounds to zero)."""
+        ply_mm = 1000.0 * float(self._kp._def.materials
+                                .get(mat, {}).get("ply_t") or 0.001)
+        raw = self._kp._def.layers.get(name, {}).get("thickness")
+        if isinstance(raw, dict) and "grid" in raw:
+            counts = np.round(np.asarray(raw["values"], float) * 1000.0
+                              / ply_mm)
+            n = float(np.round(np.interp(r, np.asarray(raw["grid"], float),
+                                         counts)))
+        else:
+            n = float(np.round(t_resolved * 1000.0 / ply_mm))
+        return n * ply_mm / 1000.0
+
+    def _laminate_at(self, r, a, b):
+        # pyNuMAD assigns a component to EVERY region it overlaps (partial
+        # overlap counts; a pure boundary touch does not)
+        cov = []
+        for L in self._reader.layers_at(r):
+            lo, hi = min(L["s"], L["e"]), max(L["s"], L["e"])
+            if L["name"] in self._full:
+                lo, hi = 0.0, 1.0
+            if min(hi, b) - max(lo, a) > 1e-4:
+                cov.append(L)
+        cov.sort(key=lambda L: L["order"])
+        out = []
+        for L in cov:
+            t = self._ply_quantize(L["name"], L["material"], L["t"], r)
+            if t > 1e-9:
+                out.append((L["material"], round(t, 8),
+                            round(L["fiber"], 3)))
+        return tuple(out)
+
+    def stacks(self, r):
+        """{region name: laminate} at span r (region-midpoint coverage)."""
+        out = {}
+        for nm, a, b in self._kp.regions(r):
+            out[nm] = self._laminate_at(r, a, b) if b - a > 1e-9 \
+                else tuple()
+        # pyNuMAD extends the TE band component into the TE flat region
+        for side in ("HP", "LP"):
+            if not out[side + "_TE_FLAT"]:
+                out[side + "_TE_FLAT"] = out[side + "_TE_REINF"]
+        return out
+
+    def swstacks(self, r):
+        """Web laminates at span r ([(mat, t, ang) ...] per web)."""
+        out = []
+        for w in self._reader.webs_at(r):
+            if not w["layers"]:
+                continue
+            lam = []
+            for L in w["layers"]:
+                t = self._ply_quantize(L["name"], L["material"], L["t"], r)
+                if t > 1e-9:
+                    lam.append((L["material"], round(t, 8),
+                                round(L["fiber"], 3)))
+            out.append(tuple(lam))
+        return out
+
+    def segments(self, r):
+        """The 12-region contour segmentation for build_cross_section.
+
+        In:  r float span.
+        Out: list of (s_a, s_b, laminate) with zero-width regions dropped,
+             ordered by arc position."""
+        segs = [(a, b, self._laminate_at(r, a, b))
+                for _nm, a, b in self._kp.regions(r) if b - a > 1e-9]
+        return sorted(segs, key=lambda t: t[0])
+
+
+class MaterialDatabase:
+    """GENERATED material card view (pyNuMAD's materialdb).
+
+    In (generate): definition.  Out: dict-like name -> card (live refs)."""
+
+    def generate(self, definition):
+        self.materials = definition.materials
+        return self
+
+    def __getitem__(self, name):
+        return self.materials[name]
+
+    def __contains__(self, name):
+        return name in self.materials
+
+
 class Blade:
     """The editable blade definition + its cross-section/beam analyses.
 
@@ -102,18 +356,22 @@ class Blade:
         # edits reach every later cross-section/homogenization
         self._reader = (PyNuMADBlade(self.raw) if self.dialect == "v1"
                         else WindIOBlade(self.raw))
-        osh = self._reader.osh
-        self.chord = osh["chord"]
-        self.twist = osh["twist"]
-        self.offset = osh.get("pitch_axis" if self.dialect == "v1"
-                              else "section_offset_y")
-        src = (self._reader._layers if self.dialect == "v1"
-               else self._reader.st["layers"])
-        self.layers = {L["name"]: L for L in src}
-        self.webs = (self._reader._webs if self.dialect == "v1"
-                     else self._reader.st["webs"])
-        self.materials = self._reader.mats
-        self.airfoils = self._reader.afs
+        # the pyNuMAD chain: definition -> geometry -> keypoints -> stackdb
+        # -> materialdb (all views over the SAME raw dict)
+        self.definition = Definition(self._reader, self.dialect)
+        self.geometry = Geometry().generate(self._reader)
+        self.keypoints = KeyPoints().generate(self.definition, self.geometry,
+                                              self._reader)
+        self.stackdb = StackDatabase().generate(self.keypoints, self._reader)
+        self.materialdb = MaterialDatabase().generate(self.definition)
+        # flat aliases (kept for the initial Blade API)
+        self.chord = self.definition.chord
+        self.twist = self.definition.twist
+        self.offset = self.definition.offset
+        self.layers = self.definition.layers
+        self.webs = self.definition.webs
+        self.materials = self.definition.materials
+        self.airfoils = self.definition.airfoils
         return self
 
     # ------------------------------------------------------------- stations
@@ -134,10 +392,16 @@ class Blade:
     def cross_section(self, st):
         """Resolved 2-D cross-section dict of one station (current state).
 
+        pyNuMAD dialect: the contour carries the EXACT pyNuMAD 12-region
+        segmentation (stackdb.segments); v2 windIO keeps the data-driven
+        breakpoints.
+
         In:  st -- st-id token (0-based index | r | str).
         Out: dict from windio.build_cross_section."""
-        return build_cross_section(self._reader, self.resolve(st),
-                                   mesh_size=self.mesh_size)
+        r = self.resolve(st)
+        segs = self.stackdb.segments(r) if self.dialect == "v1" else None
+        return build_cross_section(self._reader, r,
+                                   mesh_size=self.mesh_size, segments=segs)
 
     def write_station_yaml(self, st, path=None):
         """Emit the 1-D shell SG yaml of one station from the current state.
@@ -147,9 +411,11 @@ class Blade:
         r = self.resolve(st)
         tag = "%s_r%04d" % (self._stem(), round(r * 1000))
         path = path or os.path.join(self.workdir, tag + "_shell.yaml")
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         info = emit_shell_yaml(self.cross_section(r), path,
                                reference=self.reference)
         info["r"] = r
+        info["out"] = path
         return info
 
     def timo(self, st, xml=False, view=False):
@@ -165,11 +431,26 @@ class Blade:
              "yaml", "tag", "mesh", "chord", "twist", "r",
              "file_K"/"file_M" (6,6) | None)."""
         r = self.resolve(st)
-        P = _station_timo(self._path or "blade.yaml", r,
-                          mesh_size=self.mesh_size, reference=self.reference,
-                          out_dir=self.workdir, prefix=self._stem(),
-                          blade=self._reader, xml=xml, view=view,
-                          k_ext=".out")
+        info = self.write_station_yaml(r)
+        from .windio.sg_props import beam_props
+        P = beam_props(info["out"], out_k=info["out"]
+                       .replace("_shell.yaml", ".out"), abd_out=False)
+        if xml:
+            from .windio.sg_windio import emit_prevabs_xml
+            tag = os.path.basename(info["out"])[:-len("_shell.yaml")]
+            emit_prevabs_xml(self.cross_section(r),
+                             os.path.join(self.workdir, "xml", tag), name=tag)
+        if view:
+            from opensg_shell import auto_emit
+            from .windio.sg_windio import plot_ring_mesh
+            plot_ring_mesh(info["out"], info["out"]
+                           .replace("_shell.yaml", "_mesh.png"))
+            auto_emit(info["out"], out_png=info["out"]
+                      .replace("_shell.yaml", "_orient.png"))
+        tag = os.path.basename(info["out"])[:-len("_shell.yaml")]
+        P.update(yaml=info["out"], tag=tag, mesh=info,
+                 chord=self.geometry.chord(r),
+                 twist=self._reader.scalar("twist", r))
         ref = file_six_by_six(self._reader, r)
         P.update(r=r, file_K=None if ref is None else ref[0],
                  file_M=None if ref is None else ref[1])

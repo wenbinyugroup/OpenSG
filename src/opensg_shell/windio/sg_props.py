@@ -329,7 +329,7 @@ def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None,
 
 def station_timo(windio_path, r, mesh_size=0.01, reference="center",
                  out_dir=".", prefix=None, blade=None, xml=False, view=False,
-                 k_ext=".K"):
+                 k_ext=".K", segments=None):
     """Timoshenko 6x6 of one windIO blade station, straight from the windIO file.
 
     The one-shot bypass behind `opensg windio_st <windio.yaml> <r>`: builds the
@@ -352,6 +352,9 @@ def station_timo(windio_path, r, mesh_size=0.01, reference="center",
             orientation PNG (out_dir/<tag>_{mesh,orient}.png).
         k_ext: str, extension of the stored VABS-layout record
             (".K" default; the pynumad route stores ".out").
+        segments: list[(s_a, s_b, laminate)] | None, external contour
+            segmentation passed to build_cross_section (the pyNuMAD
+            12-region scheme); None = data-driven breakpoints.
     Out:
         dict: the beam_props result ("Timo" (6,6), "Mass" (6,6), "info",
         "bundle", "k_file") + "yaml" str emitted station yaml, "tag" str,
@@ -367,7 +370,8 @@ def station_timo(windio_path, r, mesh_size=0.01, reference="center",
         prefix = os.path.splitext(os.path.basename(windio_path))[0]
     tag = "%s_r%04d" % (prefix, round(float(r) * 1000))
     os.makedirs(out_dir, exist_ok=True)
-    cs = build_cross_section(blade, float(r), mesh_size=mesh_size)
+    cs = build_cross_section(blade, float(r), mesh_size=mesh_size,
+                             segments=segments)
     ypath = os.path.join(out_dir, tag + "_shell.yaml")
     mesh = emit_shell_yaml(cs, ypath, reference=reference)
     if xml:

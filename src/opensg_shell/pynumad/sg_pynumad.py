@@ -145,6 +145,22 @@ def file_six_by_six(blade, r):
 FILE_DIAG_TO_VABS = (2, 1, 0, 5, 4, 3)
 
 
+def pynumad_segments(blade, r):
+    """The exact pyNuMAD 12-region contour segmentation at span r.
+
+    Built from the same keypoint scheme pyNuMAD's stackdb uses
+    (te,e,d,c,b,a,le,a,b,c,d,e,te from the LE band / spar cap / TE band
+    placements); the lazy import avoids a module cycle with sg_blade.
+
+    In:  blade PyNuMADBlade; r float span.
+    Out: list of (s_a, s_b, laminate) for build_cross_section(segments=).
+    """
+    from ..sg_blade import Definition, Geometry, KeyPoints, StackDatabase
+    geo = Geometry().generate(blade)
+    kp = KeyPoints().generate(Definition(blade, "v1"), geo, blade)
+    return StackDatabase().generate(kp, blade).segments(r)
+
+
 def _append_file_crosscheck(out_path, K6, mpus, file_K, file_M):
     """Append the elastic_properties_mb cross-check block to the station .out.
 
@@ -198,7 +214,8 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
     r = resolve_station(blade, station)
     P = _station_timo(blade_yaml, r, mesh_size=mesh_size, reference=reference,
                       out_dir=out_dir, prefix=prefix, blade=blade,
-                      xml=xml, view=view, k_ext=".out")
+                      xml=xml, view=view, k_ext=".out",
+                      segments=pynumad_segments(blade, r))
     ref = file_six_by_six(blade, r)
     P.update(r=r, file_K=None if ref is None else ref[0],
              file_M=None if ref is None else ref[1])

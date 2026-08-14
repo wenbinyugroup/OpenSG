@@ -270,13 +270,16 @@ def blade_length(blade):
     return blade.length()
 
 
-def build_cross_section(blade, r, mesh_size=0.01):
+def build_cross_section(blade, r, mesh_size=0.01, segments=None):
     """Resolve one span station into a 2-D cross-section (nodes, line elements, laminates).
 
     In:
         blade: WindIOBlade | WindIOBladeV1.
         r: float, non-dimensional span in [0, 1].
         mesh_size: float, target element arc length in chord-normalised units.
+        segments: list[(s_a, s_b, laminate_tuple)] | None -- EXTERNAL contour
+            segmentation (e.g. the pyNuMAD 12-region scheme); None = the
+            data-driven breakpoints from the layer start/end arcs.
     Out:
         dict cs: "r", "chord" [m], "twist" [rad], "nodes" (n,2) [m] (LE origin, shifted
         to the reference axis at emit), "elems" [(n1,n2)], "elem_lam" [int], "laminates"
@@ -315,22 +318,27 @@ def build_cross_section(blade, r, mesh_size=0.01):
     perim = float(np.r_[0, np.cumsum(np.hypot(np.diff(xy[:, 0]), np.diff(xy[:, 1])))][-1])
     nodes = []; node_arc = []; elems = []; elem_lam = []
     laminates = {}
-    segments = []                                # ordered skin (s_a, s_b, set_id) for the XML
+    seg_records = []                             # ordered skin (s_a, s_b, set_id) for the XML
 
     def add_node(starc):
         nodes.append(pt(starc)); node_arc.append(starc); return len(nodes) - 1
 
+    if segments is not None:
+        seg_list = [(float(a), float(b), tuple(lam))
+                    for (a, b, lam) in segments if b - a > 1e-9]
+    else:
+        seg_list = [(float(brks[bi]), float(brks[bi + 1]), None)
+                    for bi in range(len(brks) - 1)]
     prev = None
-    for bi in range(len(brks) - 1):
-        a, b = brks[bi], brks[bi + 1]
+    for a, b, lam_given in seg_list:
         seg_len = (b - a) * perim
         nsub = max(1, int(round(seg_len / (mesh_size * chord))))
         ss = np.linspace(a, b, nsub + 1)
-        lam = laminate_at(0.5 * (a + b))
+        lam = lam_given if lam_given is not None else laminate_at(0.5 * (a + b))
         if lam not in laminates:
             laminates[lam] = len(laminates)
         lid = laminates[lam]
-        segments.append(dict(s_a=float(a), s_b=float(b), set_id=lid))
+        seg_records.append(dict(s_a=float(a), s_b=float(b), set_id=lid))
         if prev is None:
             prev = add_node(ss[0])
         for sN in ss[1:]:
@@ -356,7 +364,7 @@ def build_cross_section(blade, r, mesh_size=0.01):
 
     return dict(r=r, chord=chord, twist=blade.scalar("twist", r), nodes=nodes, elems=elems,
                 elem_lam=elem_lam, laminates=laminates, webs=web_chains, blade=blade,
-                segments=segments, xy=xy, s_arc=s_arc, perim=perim)
+                segments=seg_records, xy=xy, s_arc=s_arc, perim=perim)
 
 
 class _Flow(list):

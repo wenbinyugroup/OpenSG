@@ -52,10 +52,12 @@ def test_blade_edit_propagates(tmp_path):
 
     b = Blade(BLADE, workdir=str(tmp_path / "w"))
     ea0 = float(b.timo(9)["Timo"][0, 0])
-    b.scale_layer_thickness("Shell_skin", 2.0)
+    # x4 so the pyNuMAD ply quantization cannot absorb the change at the
+    # thin tip laminate (x2 of a sub-ply thickness rounds to the same count)
+    b.scale_layer_thickness("Shell_skin", 4.0)
     b.update_blade()
     ea1 = float(b.timo(9)["Timo"][0, 0])
-    assert ea1 > 1.2 * ea0                              # skin doubled -> EA up
+    assert ea1 > 1.2 * ea0                              # skin x4 -> EA up
     # material edit through the object: soften everything -> EA drops
     b2 = Blade(BLADE, workdir=str(tmp_path / "w2"))
     E = b2.materials["glass_triax"]["E"]
