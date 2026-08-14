@@ -12,10 +12,12 @@ the section perimeter and never drops material silently.
 ## The command
 
 ```bash
-opensg pynumad <blade.yaml> <st-id> [flags]
+opensg pynumad <blade.yaml> [st-id] [flags]
 ```
 
-`st-id` selects the station, one of:
+`st-id` selects the station and is OPTIONAL -- omitted, it defaults to
+`all` (the full sweep), so `opensg pynumad IEA-15-240-RWT.yaml` emits every
+station.  It is one of:
 
 - a 0-BASED integer index into the blade file's OWN spanwise stations
   (`0` = root; an out-of-range id prints the station list),
@@ -49,10 +51,11 @@ No ABDG record, no abd/ cache, no PNGs.  Opt extra artifacts in:
 opensg pynumad IEA-15-240-RWT.yaml all
 ```
 
-homogenizes EVERY station: prints the Timoshenko 6x6 per station and
-stores, under `cross_sections/`, the per-station 1-D shell SG yaml +
-VABS-layout `.out` (+ PreVABS XML, `--no-xml` to skip) + mesh/orientation
-PNGs, plus three spanwise tables: `<stem>_stations.dat`,
+homogenizes EVERY station, printing one `r = ...` line per station as it
+sweeps; the matrices live in the stored files: per-station 1-D shell SG
+yaml + VABS-layout `.out` (Timoshenko + mass + the elastic_properties_mb
+cross-check; PreVABS XML too, `--no-xml` to skip) + mesh/orientation PNGs,
+plus three spanwise tables under `cross_sections/`: `<stem>_stations.dat`,
 `<stem>_timo_by_r.dat`, `<stem>_mass_by_r.dat`.
 
 ## Flags and conventions

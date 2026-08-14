@@ -40,6 +40,15 @@ def test_station_id_resolution():
         resolve_station(b, "99")
 
 
+def test_pynumad_bare_defaults_to_all():
+    from opensg_shell.cli import main
+
+    # st-id omitted -> "all"; a missing blade file proves the parse accepted
+    # the bare form and reached the existence check (never argparse usage)
+    with pytest.raises(SystemExit, match="no such file"):
+        main(["pynumad", "nope_missing.yaml"])
+
+
 def test_pynumad_cli_lean_and_optins(tmp_path):
     from opensg_shell.cli import main
 

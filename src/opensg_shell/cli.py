@@ -363,9 +363,10 @@ def pynumad(argv):
                     " layers) -> Timoshenko 6x6 at one station, or all"
                     " cross-sections with st-id \"all\".")
     p.add_argument("blade", help="pyNuMAD blade yaml")
-    p.add_argument("station",
+    p.add_argument("station", nargs="?", default="all",
                    help='st-id: 0-based station index, a span r in [0, 1]'
-                        ' (with a decimal point), or "all"')
+                        ' (with a decimal point), or "all" -- the default'
+                        " when omitted")
     p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
                    help="target element arc length / chord (default 0.01)")
     p.add_argument("--reference", choices=("center", "oml"), default="oml",
@@ -400,10 +401,6 @@ def pynumad(argv):
                              reference=a.reference, out_dir=out,
                              xml=not a.no_xml, view=True)
             print(" r = %.4f" % P["r"])
-            print("Timoshenko Beam Stiffness Matrix  "
-                  "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
-            print(P["Timo"])
-            print("Homogenization stored in %s" % P["k_file"])
             m = P["mesh"]
             rows.append([P["r"], P["chord"], P["twist"], m["n_nodes"],
                          m["n_elems"], m["n_sets"], m["n_webs"]])
