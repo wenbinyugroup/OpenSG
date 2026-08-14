@@ -32,10 +32,14 @@ Editing contract (mirrors pyNuMAD's definition -> update_blade -> analysis):
 - The convenience helpers (scale_layer_thickness, set_material, ...) cover
   the common optimization moves.
 
-Every compute goes through the SAME production route as the terminal
-commands (`opensg pynumad` / `opensg windio_st`): build_cross_section ->
-emit_shell_yaml -> beam_props (RM ring + ring mass matrix), station
-artifacts under `blade.workdir` (a fresh temp dir unless given).
+Every compute defaults to the IN-MEMORY pynumad route
+(build_cross_section -> pynumad.sg_homo.timo_cs): nothing is written --
+the Blade is the optimization interface over external wind-blade yamls.
+timo(..., artifacts=True) (implied by xml/view) opts into the
+opensg_shell SG-homogenization file route instead: station yaml +
+_Timo.out + VABS-layout .out under `blade.workdir` (a fresh temp dir
+unless given) plus the RM "bundle" the opensg_shell dehomogenization
+consumes.  The two routes are gated bit-consistent.
 """
 import os
 import tempfile
@@ -48,8 +52,8 @@ try:
 except ImportError:
     from yaml import SafeLoader as _Loader
 
-from .windio.sg_windio import WindIOBlade, build_cross_section, emit_shell_yaml
-from .windio.sg_props import station_timo as _station_timo
+from .pynumad.sg_mesh import (WindIOBlade, build_cross_section,
+                              emit_shell_yaml)
 from .pynumad.sg_pynumad import (PyNuMADBlade, resolve_station,
                                  file_six_by_six, _append_file_crosscheck)
 
@@ -587,58 +591,77 @@ class Blade:
         info["out"] = path
         return info
 
-    def timo(self, st, xml=False, view=False):
+    def timo(self, st, xml=False, view=False, artifacts=False):
         """Timoshenko 6x6 + mass 6x6 of one station FROM THE CURRENT STATE.
 
-        The same production route as `opensg pynumad <yaml> <st-id>`:
-        station yaml + _Timo.out + VABS-layout .out land in self.workdir;
-        when the file carries elastic_properties_mb, the cross-check block
-        is appended inside the .out and returned as file_K/file_M.
+        Default = the IN-MEMORY pynumad route (sg_homo.timo_cs): nothing is
+        written -- the optimization interface.  artifacts=True additionally
+        writes the station yaml (the handoff record to the opensg_shell SG
+        homo/dehom engine -- run build_rm_bundle on it for the
+        dehomogenization) and the VABS-layout .out with the
+        elastic_properties_mb cross-check appended; the NUMBERS are the
+        same on both routes (one solve, one code path).
+        xml/view are accepted for compatibility and IGNORED (they rode the
+        windio machinery, which is being deprecated).
 
-        In:  st -- st-id token; xml/view bool -- per-station opt-ins.
-        Out: dict("Timo" (6,6), "Mass" (6,6), "info", "bundle", "k_file",
-             "yaml", "tag", "mesh", "chord", "twist", "r",
-             "file_K"/"file_M" (6,6) | None)."""
+        In:  st -- st-id token; artifacts bool -- also write yaml + .out;
+             xml/view bool -- ignored.
+        Out: dict("Timo" (6,6), "Mass" (6,6), "info", "bundle" (always
+             None -- dehom is opensg_shell's job via the yaml), "k_file"/
+             "yaml" (None on the in-memory route), "tag", "mesh", "chord",
+             "twist", "r", "file_K"/"file_M" (6,6) | None)."""
         r = self.resolve(st)
-        info = self.write_station_yaml(r)
-        from .windio.sg_props import beam_props
-        P = beam_props(info["out"], out_k=info["out"]
-                       .replace("_shell.yaml", ".out"), abd_out=False)
-        if xml:
-            from .windio.sg_windio import emit_prevabs_xml
+        if artifacts:
+            import time as _time
+            _t0 = _time.perf_counter()
+            info = self.write_station_yaml(r)
+            from .pynumad.sg_homo import timo_cs, write_vabs_k
+            C6, M6, info6, _arr = timo_cs(self.cross_section(r),
+                                          self.reference)
             tag = os.path.basename(info["out"])[:-len("_shell.yaml")]
-            emit_prevabs_xml(self.cross_section(r),
-                             os.path.join(self.workdir, "xml", tag), name=tag)
-        if view:
-            from opensg_shell import auto_emit
-            from .windio.sg_windio import plot_ring_mesh
-            plot_ring_mesh(info["out"], info["out"]
-                           .replace("_shell.yaml", "_mesh.png"))
-            auto_emit(info["out"], out_png=info["out"]
-                      .replace("_shell.yaml", "_orient.png"))
-        tag = os.path.basename(info["out"])[:-len("_shell.yaml")]
-        P.update(yaml=info["out"], tag=tag, mesh=info,
-                 chord=self.geometry.chord(r),
+            k_file = info["out"].replace("_shell.yaml", ".out")
+            write_vabs_k(k_file, C6, M6, info6,
+                         model="OpenSG msg-shell beam model (Blade route,"
+                               " reference=%s)" % self.reference,
+                         solve_time=_time.perf_counter() - _t0)
+            P = dict(Timo=C6, Mass=M6, info=info6, bundle=None,
+                     k_file=k_file, yaml=info["out"], tag=tag, mesh=info)
+        else:
+            from .pynumad.sg_homo import timo_cs
+            C6, M6, info6, arrays = timo_cs(self.cross_section(r),
+                                            self.reference)
+            tag = "%s_r%04d" % (self._stem(), round(r * 1000))
+            P = dict(Timo=C6, Mass=M6, info=info6, bundle=None,
+                     k_file=None, yaml=None, tag=tag,
+                     mesh=dict(n_nodes=len(arrays["rx"]),
+                               n_elems=len(arrays["cells"]),
+                               n_sets=len(arrays["sections"]),
+                               n_webs=arrays["n_webs"]))
+        P.update(chord=self.geometry.chord(r),
                  twist=self._reader.scalar("twist", r))
         ref = file_six_by_six(self._reader, r)
         P.update(r=r, file_K=None if ref is None else ref[0],
                  file_M=None if ref is None else ref[1])
-        if ref is not None:
+        if ref is not None and P["k_file"] is not None:
             _append_file_crosscheck(P["k_file"], P["Timo"],
                                     float(P["info"]["mpus"]), ref[0], ref[1])
         return P
 
-    def timo_all(self, xml=False, view=False, verbose=True):
+    def timo_all(self, xml=False, view=False, verbose=True, artifacts=False):
         """Timoshenko sweep over every station of the current state.
 
+        The default sweep is fully in-memory (artifacts/xml/view opt into
+        the per-station file route); the spanwise tables are always kept.
         Writes the spanwise <stem>_{stations,timo_by_r,mass_by_r}.dat tables
         into self.workdir next to the per-station artifacts.
 
-        In:  xml/view bool -- per-station opt-ins; verbose bool -- r lines.
+        In:  xml/view bool -- per-station opt-ins; verbose bool -- r lines;
+             artifacts bool -- per-station file route.
         Out: list of the per-station timo() dicts (station order)."""
         out, rows, rk, rm = [], [], [], []
         for r in self.stations:
-            P = self.timo("%.10f" % r, xml=xml, view=view)
+            P = self.timo("%.10f" % r, xml=xml, view=view,
+                          artifacts=artifacts)
             if verbose:
                 print(" r = %.4f" % P["r"])
             m = P["mesh"]

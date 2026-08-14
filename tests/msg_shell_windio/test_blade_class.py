@@ -47,12 +47,17 @@ def test_blade_timo_matches_pynumad_route(tmp_path):
     from opensg_shell.pynumad import station_timo
 
     b = Blade(BLADE, workdir=str(tmp_path / "w"))
-    R = b.timo(9)                                       # tip, fast
+    R = b.timo(9, artifacts=True)                       # tip; file route
     P = station_timo(BLADE, "9", out_dir=str(tmp_path / "p"))
     assert np.allclose(np.diag(R["Timo"]), np.diag(P["Timo"]), rtol=1e-8)
     assert np.allclose(R["Mass"], P["Mass"], rtol=1e-8)
     assert R["k_file"].endswith(".out") and os.path.exists(R["k_file"])
     assert R["file_K"] is not None                      # cross-check present
+    # the DEFAULT route is in-memory: same numbers, no files, no bundle
+    D = b.timo(9)
+    assert D["k_file"] is None and D["yaml"] is None and D["bundle"] is None
+    assert np.allclose(np.asarray(D["Timo"]), np.asarray(R["Timo"]),
+                       rtol=1e-8, atol=1e-9 * np.abs(R["Timo"]).max())
 
 
 def test_blade_edit_propagates(tmp_path):
@@ -100,7 +105,7 @@ def test_pynumad_sg_homo_bypass(tmp_path):
 
     b = Blade(BLADE, workdir=str(tmp_path / "w"))
     K, M = timo_mem(b, 9)
-    R = b.timo(9)                                       # yaml/file route
+    R = b.timo(9, artifacts=True)                       # yaml/file route
     Kf, Mf = np.asarray(R["Timo"]), np.asarray(R["Mass"])
     assert np.allclose(K, Kf, rtol=1e-8, atol=1e-9 * np.abs(Kf).max())
     assert np.allclose(M, Mf, rtol=1e-8, atol=1e-9 * np.abs(Mf).max())
@@ -112,7 +117,7 @@ def test_pynumad_sg_homo_bypass(tmp_path):
     S.scale_thickness(2.0, region="LP_SPAR")
     S.scale_thickness(2.0, region="HP_SPAR")
     K4e, _ = timo_mem(b, 4)
-    R4e = b.timo(4)
+    R4e = b.timo(4, artifacts=True)
     assert np.allclose(K4e, np.asarray(R4e["Timo"]), rtol=1e-8,
                        atol=1e-9 * np.abs(K4e).max())
     assert K4e[4, 4] > 1.1 * K4[4, 4]                   # the edit is in
@@ -176,6 +181,24 @@ def test_pynumad_sg_homo_kernel_only_imports():
         if isinstance(node, ast.Import):
             for a in node.names:
                 assert "windio" not in a.name, a.name
+
+
+def test_blade_and_pynumad_are_windio_free():
+    """The Blade class and the whole pynumad package must not import the
+    windio machinery (it is being deprecated)."""
+    import opensg_shell.sg_blade as blade_mod
+    import opensg_shell.pynumad.sg_mesh as mesh_mod
+    import opensg_shell.pynumad.sg_pynumad as pyn_mod
+    import opensg_shell.pynumad.sg_homo as homo_mod
+
+    for mod in (blade_mod, mesh_mod, pyn_mod, homo_mod):
+        src = open(mod.__file__.replace(".pyc", ".py")).read()
+        for line in src.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("from ", "import ")):
+                assert ".windio" not in stripped and \
+                    not stripped.startswith("from opensg_shell.windio"), \
+                    "%s imports windio: %s" % (mod.__name__, stripped)
 
 
 def test_section_mirror_edit_reset(tmp_path):

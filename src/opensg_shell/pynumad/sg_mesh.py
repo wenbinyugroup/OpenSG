@@ -42,6 +42,119 @@ def _arc_param(xy):
     return d / d[-1]
 
 
+class WindIOBlade:
+    """windIO v2 reader (outer_shape / structure / anchors) -- the
+    pynumad-owned copy, so the editable Blade serves v2 blades without the
+    windio package.
+
+    In (constructor): yaml_path str | dict (a pre-parsed dict is accepted:
+        the editable Blade binds its reader to the SAME dict so definition
+        edits propagate live).
+    Out: reader with .d/.bl/.osh/.st/.mats/.afs/.anch and the accessors."""
+
+    def __init__(self, yaml_path):
+        self.d = yaml_path if isinstance(yaml_path, dict) else \
+            yaml.load(open(yaml_path), Loader=_Loader)
+        self.bl = self.d["components"]["blade"]
+        self.osh = self.bl["outer_shape"]
+        self.st = self.bl["structure"]
+        self.mats = {m["name"]: m for m in self.d["materials"]}
+        self.afs = {a["name"]: a for a in self.d["airfoils"]}
+        self.anch = {}
+        for a in self.st["anchors"]:
+            self.anch[a["name"]] = a
+        for w in self.st["webs"]:
+            for a in w.get("anchors", []):
+                self.anch[a["name"]] = a
+
+    def scalar(self, name, r):
+        """Outer-shape scalar (chord [m], twist [rad], ...) at span r."""
+        return _interp(self.osh[name], r)
+
+    def resolve(self, spec, r):
+        """Resolve a direct spec or an {anchor: {name, handle}} reference."""
+        if spec is None:
+            return None
+        if "anchor" in spec:
+            ref = spec["anchor"]
+            return _interp(self.anch[ref["name"]].get(ref["handle"]), r)
+        return _interp(spec, r)
+
+    def offset_y(self, r):
+        """Chordwise distance LE -> reference axis [m] (section_offset_y)."""
+        return _interp(self.osh["section_offset_y"], r) or 0.0
+
+    def length(self):
+        """Blade length [m] from the reference-axis polyline."""
+        ra = self.bl["reference_axis"]
+        x, y, z = (np.array(ra[k]["values"], float) for k in ("x", "y", "z"))
+        return float(np.sqrt(np.diff(x) ** 2 + np.diff(y) ** 2
+                             + np.diff(z) ** 2).sum())
+
+    def stations(self):
+        """The blade's own airfoil spanwise positions (sorted, unique)."""
+        return sorted({float(a["spanwise_position"])
+                       for a in self.osh["airfoils"]})
+
+    def airfoil_coords(self, r, n=400):
+        """Blend the two bracketing airfoils at span r.
+
+        In:  r float span; n int resample count.
+        Out: (n, 2) float chord-normalised contour (TE=1..LE=0..TE=1)."""
+        ent = sorted(self.osh["airfoils"],
+                     key=lambda a: a["spanwise_position"])
+        pos = [a["spanwise_position"] for a in ent]
+        i = int(np.clip(np.searchsorted(pos, r) - 1, 0, len(ent) - 2))
+        a0, a1 = ent[i], ent[i + 1]
+        w = 0.0 if a1["spanwise_position"] == a0["spanwise_position"] else \
+            (r - a0["spanwise_position"]) / (a1["spanwise_position"]
+                                             - a0["spanwise_position"])
+        w = float(np.clip(w, 0, 1))
+
+        def resample(afname):
+            c = self.afs[afname]["coordinates"]
+            xy = np.column_stack([c["x"], c["y"]]).astype(float)
+            s = _arc_param(xy); sn = np.linspace(0, 1, n)
+            return np.column_stack([np.interp(sn, s, xy[:, 0]),
+                                    np.interp(sn, s, xy[:, 1])])
+        p0 = resample(a0["name"]); p1 = resample(a1["name"])
+        return (1 - w) * p0 + w * p1
+
+    def layers_at(self, r, tol=1e-6):
+        """Skin layers present at span r.
+
+        In:  r float; tol float thickness cutoff [m].
+        Out: list of dict(name, material, s, e, t, fiber, order)."""
+        out = []
+        for idx, L in enumerate(self.st["layers"]):
+            t = _interp(L.get("thickness"), r)
+            if not t or t < tol:
+                continue
+            out.append(dict(name=L["name"], material=L["material"],
+                            s=self.resolve(L.get("start_nd_arc"), r),
+                            e=self.resolve(L.get("end_nd_arc"), r), t=t,
+                            fiber=_interp(L.get("fiber_orientation"), r)
+                            or 0.0, order=idx))
+        return out
+
+    def webs_at(self, r, tol=1e-6):
+        """Webs present at span r (laminate = the layers named after the
+        web).
+
+        In:  r float; tol float thickness cutoff [m].
+        Out: list of dict(name, s, e, layers)."""
+        webs = []
+        for w in self.st["webs"]:
+            s = self.resolve(w.get("start_nd_arc"), r)
+            e = self.resolve(w.get("end_nd_arc"), r)
+            if s is None or e is None:
+                continue
+            lam = [L for L in self.layers_at(r, tol)
+                   if L["name"].startswith(w["name"])]
+            webs.append(dict(name=w["name"], s=s, e=e, layers=lam))
+        return webs
+
+
 class WindIOBladeV1:
     """windIO v1 reader (outer_shape_bem / internal_structure_2d_fem) --
     the standalone pynumad-owned copy.  v1 has no anchors: start/end_nd_arc
@@ -264,3 +377,141 @@ def build_cross_section(blade, r, mesh_size=0.01, segments=None):
                 nodes=nodes, elems=elems, elem_lam=elem_lam,
                 laminates=laminates, webs=web_chains, blade=blade,
                 segments=seg_records, xy=xy, s_arc=s_arc, perim=perim)
+
+
+class _Flow(list):
+    pass
+
+
+yaml.add_representer(_Flow, lambda d, data:
+                     d.represent_sequence("tag:yaml.org,2002:seq", data,
+                                          flow_style=True))
+
+
+def _mat_card_yaml(blade, name):
+    """OpenSG material card (elastic-nested) from the blade reader.
+
+    In:  blade reader (for blade.mats); name str material name.
+    Out: dict(name, density, elastic={E, G, nu} 3-lists)."""
+    m = blade.mats[name]
+    E, G, nu = m.get("E"), m.get("G"), m.get("nu")
+    if not isinstance(E, (list, tuple)):                 # isotropic
+        nu = 0.3 if nu is None else nu
+        G = E / (2.0 * (1.0 + nu)) if G is None else G
+        E = [E, E, E]; G = [G, G, G]; nu = [nu, nu, nu]
+    return dict(name=name, density=float(m.get("rho", 1.0)),
+                elastic=dict(E=[float(x) for x in E],
+                             G=[float(x) for x in G],
+                             nu=[float(x) for x in nu]))
+
+
+def emit_shell_yaml(cs, out_path, web_mesh=None, reference="center"):
+    """Write the 1-D shell SG yaml of a station (pynumad-owned copy).
+
+    The same station transformation the in-memory route performs
+    (reference-surface offset, web chains, reference-axis shift, closed-
+    loop inward frames), serialized: the yaml is the record artifact and
+    the handoff to the opensg_shell SG homo/dehom engine.
+
+    In:
+        cs: dict from build_cross_section.
+        out_path: str, output yaml path.
+        web_mesh: float | None, web element length [m] (default 0.01*chord).
+        reference: "center" | "oml", shell reference surface.
+    Out:
+        dict(n_nodes, n_elems, n_sets, n_webs, n_mats, out).
+    """
+    blade = cs["blade"]; chord = cs["chord"]
+    fraction = {"center": 0.5, "oml": 0.0}[reference]
+    nodes = [np.asarray(p, float) for p in cs["nodes"]]
+    elems = list(cs["elems"]); elem_lam = list(cs["elem_lam"])
+    web_mesh = web_mesh if web_mesh else 0.01 * chord
+    set_of_lam = {v: k for k, v in cs["laminates"].items()}
+
+    nskin = len(cs["nodes"])
+    web_sets_pre = {w["lam"] for w in cs["webs"]}
+    skin_xy0 = np.asarray(cs["nodes"])
+    area2 = float(np.sum(skin_xy0[:, 0] * np.roll(skin_xy0[:, 1], -1)
+                         - np.roll(skin_xy0[:, 0], -1) * skin_xy0[:, 1]))
+    inward = 1.0 if area2 > 0 else -1.0
+    if fraction:
+        acc_n = np.zeros((nskin, 2)); acc_t = np.zeros(nskin)
+        acc_c = np.zeros(nskin)
+        for ei, (n1, n2) in enumerate(elems):
+            if elem_lam[ei] in web_sets_pre:
+                continue
+            e2 = nodes[n2] - nodes[n1]
+            e2 = e2 / (np.linalg.norm(e2) + 1e-30)
+            nin = inward * np.array([-e2[1], e2[0]])
+            tlam = float(sum(t for (_m, t, _a) in set_of_lam[elem_lam[ei]]))
+            for nd in (n1, n2):
+                if nd < nskin:
+                    acc_n[nd] += nin; acc_t[nd] += tlam; acc_c[nd] += 1.0
+        offs = [np.asarray(p, float) for p in nodes]
+        for i in range(nskin):
+            if acc_c[i] > 0 and np.linalg.norm(acc_n[i]) > 1e-12:
+                nrm = acc_n[i] / np.linalg.norm(acc_n[i])
+                offs[i] = nodes[i] + fraction * (acc_t[i] / acc_c[i]) * nrm
+        nodes = offs
+
+    for w in cs["webs"]:
+        a, b = w["a"], w["b"]
+        if nodes[a][1] > nodes[b][1]:
+            a, b = b, a
+        Pa, Pb = nodes[a].copy(), nodes[b].copy()
+        nseg = max(2, int(round(np.linalg.norm(Pb - Pa) / web_mesh)))
+        ts = np.linspace(0, 1, nseg + 1)
+        chain = [a]
+        for t in ts[1:-1]:
+            nodes.append(Pa + t * (Pb - Pa)); chain.append(len(nodes) - 1)
+        chain.append(b)
+        for ia, ib in zip(chain[:-1], chain[1:]):
+            elems.append((ia, ib)); elem_lam.append(w["lam"])
+
+    dx = blade.offset_y(cs["r"])
+    nodes = np.array(nodes); nodes[:, 0] -= dx
+
+    nsets = len(cs["laminates"])
+    web_sets = {w["lam"] for w in cs["webs"]}
+    skin_xy = np.asarray(cs["nodes"])
+    area2 = float(np.sum(skin_xy[:, 0] * np.roll(skin_xy[:, 1], -1)
+                         - np.roll(skin_xy[:, 0], -1) * skin_xy[:, 1]))
+    inward = 1.0 if area2 > 0 else -1.0
+
+    seg = {"msg": "shell", "refined": 1, "reference": reference,
+           "nodes": [], "elements": [], "sets": {"element": []},
+           "sections": [], "elementOrientations": [], "materials": []}
+    for (X, Y) in nodes:
+        seg["nodes"].append(_Flow(["%.8f %.8f %.8f" % (X, Y, 0.0)]))
+    for (n1, n2) in elems:
+        seg["elements"].append(_Flow(["%d %d" % (n1 + 1, n2 + 1)]))
+    for k in range(nsets):
+        labels = [i + 1 for i, s in enumerate(elem_lam) if s == k]
+        seg["sets"]["element"].append({"name": "layup_%d" % k,
+                                       "labels": labels})
+    for k in range(nsets):
+        layup = [[mat, float(t), float(ang)]
+                 for (mat, t, ang) in set_of_lam[k]]
+        seg["sections"].append({"type": "shell",
+                                "elementSet": "layup_%d" % k,
+                                "layup": layup})
+    for ei, (n1, n2) in enumerate(elems):
+        P1, P2 = nodes[n1], nodes[n2]
+        e2 = (P2 - P1) / (np.linalg.norm(P2 - P1) + 1e-30)
+        e3 = np.array([-e2[1], e2[0]])
+        if elem_lam[ei] not in web_sets:
+            e3 = inward * e3
+        seg["elementOrientations"].append(
+            _Flow([0.0, 0.0, 1.0, float(e2[0]), float(e2[1]), 0.0,
+                   float(e3[0]), float(e3[1]), 0.0]))
+    used = []
+    for k in range(nsets):
+        for (mat, t, ang) in set_of_lam[k]:
+            if mat not in used:
+                used.append(mat)
+    for name in used:
+        seg["materials"].append(_mat_card_yaml(blade, name))
+    with open(out_path, "w") as f:
+        yaml.dump(seg, f, sort_keys=False, default_flow_style=False)
+    return dict(n_nodes=len(nodes), n_elems=len(elems), n_sets=nsets,
+                n_webs=len(cs["webs"]), n_mats=len(used), out=out_path)
