@@ -97,3 +97,35 @@ after adding/removing layers, webs, materials or airfoils call
 `update_blade()`.  Station artifacts (yaml + `_Timo.out` + `.out`) land in
 `blade.workdir` (a fresh temp dir unless you pass one).  See
 `blade_optimization_demo.py` for the design-sweep pattern.
+
+## The three-line entry point and per-section edits
+
+```python
+import opensg
+
+blade = opensg.read("IEA-15-240-RWT.yaml")   # windIO v1/v2 or pyNuMAD dialect
+K, M = blade(4)                              # one station: Timoshenko + mass 6x6
+Ks, Ms = blade()                             # full spanwise sweep (two lists)
+```
+
+A **Section** is one station's resolved layup (the pyNuMAD 12-region stacks
+plus the webs), returned as an editable object and registered as a live
+override -- the next `blade(st)` computes from the edit, `reset()` returns
+to the definition. Unlike `scale_layer_thickness` (a spanwise move on the
+definition), a Section edit touches exactly one station:
+
+```python
+S = blade.section(4)                  # {region: [[mat, t, ang], ...]} + S.webs
+S.scale_thickness(1.3, region="LP_SPAR")
+S.set_ply("HP_SPAR", 2, thickness=0.12)      # ply 2 = the CarbonUD cap ply
+S.add_ply("LP_TE_REINF", "glass_triax", 0.002, angle=45.0)
+S.scale_thickness(1.1, web=0)                # webs by index
+K2, M2 = blade(4)                            # honors the edits
+S.reset()                                    # back to the definition
+```
+
+An untouched Section reproduces the baseline digit-for-digit (gated in
+`tests/msg_shell_windio/test_blade_class.py`); edited thicknesses are used
+verbatim, with no ply re-quantization. `blade_section_edit_demo.py` shows the
+spar-cap move: x1.3 at station 4 gives EA +25.4 %, flapwise EI2 +24.4 %,
+edgewise EI3 +1.3 %.
