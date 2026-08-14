@@ -368,13 +368,11 @@ def pynumad(argv):
                         ' (with a decimal point), or "all"')
     p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
                    help="target element arc length / chord (default 0.01)")
-    p.add_argument("--reference", choices=("center", "oml"), default="center",
-                   help="shell reference surface (default center)")
+    p.add_argument("--reference", choices=("center", "oml"), default="oml",
+                   help="shell reference surface (default oml)")
     p.add_argument("--out", default=None, metavar="DIR",
                    help="output folder (default: cross_sections for"
                         ' "all", the current directory for one station)')
-    p.add_argument("--prefix", default=None, metavar="TAG",
-                   help="station tag prefix (default: the blade file stem)")
     p.add_argument("--no-xml", action="store_true",
                    help='"all" only: skip the per-station PreVABS XML')
     p.add_argument("--xml", action="store_true",
@@ -396,8 +394,7 @@ def pynumad(argv):
         _t0 = _time.perf_counter()
         R = generate_cross_sections(a.blade, out_dir=a.out or "cross_sections",
                                     mesh_size=a.mesh_size,
-                                    reference=a.reference, xml=not a.no_xml,
-                                    prefix=a.prefix)
+                                    reference=a.reference, xml=not a.no_xml)
         print("Cross-sections stored in %s (%d yaml%s + PNGs + %s)"
               % (R["out_dir"], len(R["yamls"]), "" if a.no_xml else " + xml",
                  os.path.basename(R["dat"])))
@@ -407,7 +404,7 @@ def pynumad(argv):
     _t0 = _time.perf_counter()
     P = station_timo(a.blade, a.station, mesh_size=a.mesh_size,
                      reference=a.reference, out_dir=a.out or ".",
-                     prefix=a.prefix, xml=a.xml, view=a.view)
+                     xml=a.xml, view=a.view)
     m = P["mesh"]
     print(" station   : st-id %s  ->  r = %.4f   chord = %.3f m   %d nodes"
           "  %d elems  %d sets  %d webs"

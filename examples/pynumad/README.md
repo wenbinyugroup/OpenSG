@@ -9,31 +9,59 @@ on this blade that is up to -84 % edgewise stiffness and -19 % mass per
 span.  The `opensg_shell.pynumad` package resolves those placements against
 the section perimeter and never drops material silently.
 
-One command, st-id = a 0-based index into the blade file's OWN spanwise
-stations, a span `r` in [0, 1] (any token with a decimal point), or `all`:
+## The command
 
 ```bash
-opensg pynumad IEA-15-240-RWT.yaml 4 --prefix iea15
+opensg pynumad <blade.yaml> <st-id> [flags]
 ```
 
-prints the Timoshenko 6x6 at station 4 (r = 0.3288), the cross-check table
-against the file's own `elastic_properties_mb` (pyNuMAD/WISDEM 6x6, 3 =
-axial frame), and stores `<tag>_shell.yaml` + `<tag>_shell_Timo.out` +
-the VABS-layout `<tag>.K` (nothing else: no ABDG record, no abd/ cache,
-no PNGs on the single-station route).  Add `--xml` (PreVABS XML byproduct)
-and/or `--view` (mesh + orientation PNGs) to opt extra artifacts in.
+`st-id` selects the station, one of:
+
+- a 0-BASED integer index into the blade file's OWN spanwise stations
+  (`0` = root; an out-of-range id prints the station list),
+- a span fraction r between 0 and 1 -- any token WITH a decimal point
+  (e.g. `0.3288`),
+- `all` -- every station of the file.
+
+Output names derive from the blade file stem: station tag =
+`<stem>_rXXXX`, `XXXX = round(r * 1000)` (there is no prefix flag).
+
+## One station
 
 ```bash
-opensg pynumad IEA-15-240-RWT.yaml all --prefix iea15
+opensg pynumad IEA-15-240-RWT.yaml 4
 ```
 
-generates every station: 1-D shell SG yaml (+ PreVABS XML byproduct,
-`--no-xml` to skip) + mesh/orientation PNGs + `iea15_stations.dat` under
-`cross_sections/`.
+prints the Timoshenko 6x6 at station 4 (r = 0.3288) and the cross-check
+table against the file's own `elastic_properties_mb` (pyNuMAD/WISDEM 6x6,
+3 = axial frame), and stores EXACTLY three files:
+`IEA-15-240-RWT_r0329_shell.yaml` + `IEA-15-240-RWT_r0329_shell_Timo.out`
++ the VABS-layout `IEA-15-240-RWT_r0329.K` -- no ABDG record, no abd/
+cache, no PNGs.  Opt extra artifacts in per station:
 
-Conventions match the windIO route: section origin = the pitch axis
-(`pitch_axis * chord` chordwise shift), shell reference surface = laminate
-center, emitted headers carry `refined: 1` (RM -> Timoshenko), twist is
-passed through in the file's own unit (radians here).  Stations where a
-web's layers have zero thickness (the circular root, the tip) get no web,
-matching the file.
+- `--xml`   also write the PreVABS XML byproduct (`xml/<tag>/`)
+- `--view`  also write the layup-colored mesh PNG + e1/e2/e3 orientation PNG
+
+## All stations
+
+```bash
+opensg pynumad IEA-15-240-RWT.yaml all
+```
+
+generates every station under `cross_sections/`: 1-D shell SG yaml
+(+ PreVABS XML byproduct, `--no-xml` to skip) + mesh/orientation PNGs +
+`<stem>_stations.dat`.
+
+## Flags and conventions
+
+- `--reference` DEFAULTS TO `oml` for this dialect (the outer mold line is
+  the shell reference surface; `--reference center` for the laminate
+  mid-surface, the windio route's default).
+- `--mesh-size` (default 0.01) = target element arc length / chord;
+  `--out` redirects the output folder (default: current directory for one
+  station, `cross_sections/` for `all`).
+- Section origin = the pitch axis (`pitch_axis * chord` chordwise shift);
+  emitted headers carry `refined: 1` (RM -> Timoshenko); twist is passed
+  through in the file's own unit (radians here).  Stations where a web's
+  layers have zero thickness (the circular root, the tip) get no web,
+  matching the file.

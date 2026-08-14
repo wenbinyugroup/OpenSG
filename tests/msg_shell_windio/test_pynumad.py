@@ -43,20 +43,24 @@ def test_station_id_resolution():
 def test_pynumad_cli_lean_and_optins(tmp_path):
     from opensg_shell.cli import main
 
-    tag = "iea15_r1000"
+    # no prefix flag on this route: names derive from the blade file stem
+    tag = "IEA-15-240-RWT_r1000"
     out = str(tmp_path / "st")
-    rc = main(["pynumad", BLADE, "9", "--prefix", "iea15", "--out", out])
+    rc = main(["pynumad", BLADE, "9", "--out", out])
     assert rc == 0
     assert os.path.exists(os.path.join(out, tag + ".K"))
-    assert os.path.exists(os.path.join(out, tag + "_shell.yaml"))
+    ypath = os.path.join(out, tag + "_shell.yaml")
+    assert os.path.exists(ypath)
+    # this dialect defaults the shell reference surface to the OML
+    hdr = open(ypath).read(200)
+    assert "reference: oml" in hdr
     # lean default: no xml/, no ABDG, no abd/
     assert not os.path.exists(os.path.join(out, "xml"))
     assert not os.path.exists(os.path.join(out, tag + "_shell_ABDG.out"))
     assert not os.path.exists(os.path.join(out, "abd"))
 
     out2 = str(tmp_path / "st_optin")
-    rc = main(["pynumad", BLADE, "9", "--prefix", "iea15", "--out", out2,
-               "--xml", "--view"])
+    rc = main(["pynumad", BLADE, "9", "--out", out2, "--xml", "--view"])
     assert rc == 0
     for f in (tag + ".xml", tag + ".dat", "materials.xml"):
         assert os.path.exists(os.path.join(out2, "xml", tag, f))

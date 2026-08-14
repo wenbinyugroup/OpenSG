@@ -145,7 +145,7 @@ def file_six_by_six(blade, r):
 FILE_DIAG_TO_VABS = (2, 1, 0, 5, 4, 3)
 
 
-def station_timo(blade_yaml, station, mesh_size=0.01, reference="center",
+def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
                  out_dir=".", prefix=None, xml=False, view=False):
     """Timoshenko 6x6 of one pyNuMAD blade station (steps 1 + 2 fused).
 
@@ -157,7 +157,9 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="center",
     In:
         blade_yaml: str, pyNuMAD blade yaml.
         station: str | int | float, st-id token (see resolve_station).
-        mesh_size, reference, out_dir, prefix: as windio.station_timo.
+        mesh_size, reference, out_dir, prefix: as windio.station_timo --
+            except reference DEFAULTS TO "oml" for this dialect (user choice;
+            the windio route keeps "center").
     Out:
         the windio station_timo dict + "r" float + "file_K"/"file_M" the
         blade file's own 6x6 at r ((6,6) or None).
@@ -175,14 +177,15 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="center",
 
 def generate_cross_sections(blade_yaml, out_dir="cross_sections",
                             stations="airfoil", mesh_size=0.01,
-                            reference="center", xml=True, plots=True,
+                            reference="oml", xml=True, plots=True,
                             prefix=None, verbose=True):
     """All pyNuMAD blade stations -> 1-D shell SG yamls (+ XML byproduct).
 
     The pynumad twin of windio's generate_cross_sections (same outputs,
     PyNuMADBlade reader).
 
-    In/Out: as windio.generate_cross_sections.
+    In/Out: as windio.generate_cross_sections -- except reference DEFAULTS
+    TO "oml" for this dialect (user choice; the windio route keeps "center").
     """
     return _generate(blade_yaml, out_dir=out_dir, stations=stations,
                      mesh_size=mesh_size, reference=reference, xml=xml,
