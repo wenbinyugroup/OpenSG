@@ -635,6 +635,54 @@ def emit_prevabs_xml(cs, outdir, name="xsec", mesh_size=0.005):
                 n_layups=len(inv), n_webs=len(cs["webs"]), out=outdir)
 
 
+def plot_ring_mesh(shell_yaml, out_png):
+    """Layup-colored ring-mesh figure of an emitted 1-D shell SG yaml.
+
+    The figure comes from the EMITTED file, never the in-memory state, so it
+    shows exactly what downstream consumers read.
+
+    In:
+        shell_yaml: str, 1-D shell SG yaml path.
+        out_png: str, output PNG path.
+    Out:
+        str out_png.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    d = yaml.load(open(shell_yaml), Loader=_Loader)
+    nd = np.array([[float(v) for v in _sp(row)][:2] for row in d["nodes"]])
+    el = np.array([[int(v) for v in _sp(row)] for row in d["elements"]]) - 1
+    lam = np.zeros(len(el), int)
+    for k, grp in enumerate(d["sets"]["element"]):
+        for lab in grp["labels"]:
+            lam[int(lab) - 1] = k
+    cmap = plt.get_cmap("tab20")
+    fig, ax = plt.subplots(figsize=(9.0, 5.0))
+    for k in range(lam.max() + 1):
+        first = True
+        for e in np.where(lam == k)[0]:
+            sxy = nd[el[e]]
+            ax.plot(sxy[:, 0], sxy[:, 1], "-", color=cmap(k % 20), lw=2.0,
+                    label="layup_%d" % k if first else None)
+            first = False
+    ax.plot(nd[:, 0], nd[:, 1], ".", color="0.25", ms=1.5)
+    ax.set_aspect("equal")
+    ax.set_xlabel("y2 (m)"); ax.set_ylabel("y3 (m)")
+    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False,
+              fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out_png, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return out_png
+
+
+def _sp(row):
+    """Yaml mesh row -> list of str tokens (rows are 1-element flow lists)."""
+    return (row[0] if isinstance(row, (list, tuple)) else row).split()
+
+
 def generate_cross_sections(windio_path, out_dir="cross_sections",
                             stations="airfoil", mesh_size=0.01,
                             reference="center", xml=True, plots=True,
@@ -684,9 +732,6 @@ def generate_cross_sections(windio_path, out_dir="cross_sections",
               % (windio_path, len(rs), reference, ", xml" if xml else ""))
 
     if plots:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
         from opensg_shell import auto_emit
 
     rows, yamls = [], []
@@ -706,34 +751,7 @@ def generate_cross_sections(windio_path, out_dir="cross_sections",
                   % (tag, r, cs["chord"], info["n_nodes"], info["n_elems"],
                      info["n_sets"], info["n_webs"]))
         if plots:
-            # figures come from the EMITTED file, never the in-memory state
-            d = yaml.load(open(ypath), Loader=_Loader)
-            nd = np.array([[float(v) for v in row[0].split()][:2]
-                           for row in d["nodes"]])
-            el = np.array([[int(v) for v in row[0].split()]
-                           for row in d["elements"]]) - 1
-            lam = np.zeros(len(el), int)
-            for k, grp in enumerate(d["sets"]["element"]):
-                for lab in grp["labels"]:
-                    lam[int(lab) - 1] = k
-            cmap = plt.get_cmap("tab20")
-            fig, ax = plt.subplots(figsize=(9.0, 5.0))
-            for k in range(lam.max() + 1):
-                first = True
-                for e in np.where(lam == k)[0]:
-                    sxy = nd[el[e]]
-                    ax.plot(sxy[:, 0], sxy[:, 1], "-", color=cmap(k % 20),
-                            lw=2.0, label="layup_%d" % k if first else None)
-                    first = False
-            ax.plot(nd[:, 0], nd[:, 1], ".", color="0.25", ms=1.5)
-            ax.set_aspect("equal")
-            ax.set_xlabel("y2 (m)"); ax.set_ylabel("y3 (m)")
-            ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5),
-                      frameon=False, fontsize=8)
-            fig.tight_layout()
-            fig.savefig(os.path.join(out_dir, tag + "_mesh.png"), dpi=150,
-                        bbox_inches="tight")
-            plt.close(fig)
+            plot_ring_mesh(ypath, os.path.join(out_dir, tag + "_mesh.png"))
             auto_emit(ypath, out_png=os.path.join(out_dir, tag + "_orient.png"))
 
     dat = os.path.join(out_dir, prefix + "_stations.dat")

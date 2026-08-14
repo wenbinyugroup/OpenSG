@@ -20,7 +20,8 @@ prints the Timoshenko 6x6 at station 4 (r = 0.3288), the cross-check table
 against the file's own `elastic_properties_mb` (pyNuMAD/WISDEM 6x6, 3 =
 axial frame), and stores `<tag>_shell.yaml` + `<tag>_shell_Timo.out` +
 the VABS-layout `<tag>.K` (nothing else: no ABDG record, no abd/ cache,
-no PNGs on the single-station route).
+no PNGs on the single-station route).  Add `--xml` (PreVABS XML byproduct)
+and/or `--view` (mesh + orientation PNGs) to opt extra artifacts in.
 
 ```bash
 opensg pynumad IEA-15-240-RWT.yaml all --prefix iea15

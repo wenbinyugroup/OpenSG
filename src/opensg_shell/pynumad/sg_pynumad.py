@@ -146,7 +146,7 @@ FILE_DIAG_TO_VABS = (2, 1, 0, 5, 4, 3)
 
 
 def station_timo(blade_yaml, station, mesh_size=0.01, reference="center",
-                 out_dir=".", prefix=None):
+                 out_dir=".", prefix=None, xml=False, view=False):
     """Timoshenko 6x6 of one pyNuMAD blade station (steps 1 + 2 fused).
 
     The pynumad twin of windio's station_timo: same emitted artifacts
@@ -165,7 +165,8 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="center",
     blade = load_blade_pynumad(blade_yaml)
     r = resolve_station(blade, station)
     P = _station_timo(blade_yaml, r, mesh_size=mesh_size, reference=reference,
-                      out_dir=out_dir, prefix=prefix, blade=blade)
+                      out_dir=out_dir, prefix=prefix, blade=blade,
+                      xml=xml, view=view)
     ref = file_six_by_six(blade, r)
     P.update(r=r, file_K=None if ref is None else ref[0],
              file_M=None if ref is None else ref[1])

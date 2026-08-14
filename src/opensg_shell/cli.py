@@ -304,6 +304,10 @@ def windio_st(argv):
                    help="output folder (default: the current directory)")
     p.add_argument("--prefix", default=None, metavar="TAG",
                    help="station tag prefix (default: the windIO file stem)")
+    p.add_argument("--xml", action="store_true",
+                   help="ALSO emit the PreVABS XML byproduct per station")
+    p.add_argument("--view", action="store_true",
+                   help="ALSO emit the mesh + e1/e2/e3 orientation PNGs")
     a = p.parse_args(argv)
     if not os.path.exists(a.windio):
         raise SystemExit("no such file: %s" % a.windio)
@@ -317,7 +321,8 @@ def windio_st(argv):
     for r in a.r:
         t0 = _time.perf_counter()
         P = station_timo(a.windio, r, mesh_size=a.mesh_size,
-                         reference=a.reference, out_dir=a.out, prefix=a.prefix)
+                         reference=a.reference, out_dir=a.out, prefix=a.prefix,
+                         xml=a.xml, view=a.view)
         m = P["mesh"]
         print(" station   : r = %.4f   chord = %.3f m   %d nodes  %d elems"
               "  %d sets  %d webs"
@@ -327,6 +332,9 @@ def windio_st(argv):
               "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
         print(P["Timo"])
         print(" mass/span = %.6g kg/m" % P["info"]["mpus"])
+        if a.xml:
+            print("PreVABS XML stored in %s"
+                  % os.path.join(a.out, "xml", P["tag"]))
         print("Homogenization stored in %s" % P["k_file"])
         print("Time taken: %.2f sec" % (_time.perf_counter() - t0))
     return 0
@@ -369,6 +377,10 @@ def pynumad(argv):
                    help="station tag prefix (default: the blade file stem)")
     p.add_argument("--no-xml", action="store_true",
                    help='"all" only: skip the per-station PreVABS XML')
+    p.add_argument("--xml", action="store_true",
+                   help="one station: ALSO emit the PreVABS XML byproduct")
+    p.add_argument("--view", action="store_true",
+                   help="one station: ALSO emit the mesh + orientation PNGs")
     a = p.parse_args(argv)
     if not os.path.exists(a.blade):
         raise SystemExit("no such file: %s" % a.blade)
@@ -395,7 +407,7 @@ def pynumad(argv):
     _t0 = _time.perf_counter()
     P = station_timo(a.blade, a.station, mesh_size=a.mesh_size,
                      reference=a.reference, out_dir=a.out or ".",
-                     prefix=a.prefix)
+                     prefix=a.prefix, xml=a.xml, view=a.view)
     m = P["mesh"]
     print(" station   : st-id %s  ->  r = %.4f   chord = %.3f m   %d nodes"
           "  %d elems  %d sets  %d webs"
@@ -418,6 +430,9 @@ def pynumad(argv):
         print("   %-3s  OpenSG %12.5g   file %12.5g   %+7.2f %%"
               % ("mu", P["info"]["mpus"], mu_f,
                  100.0 * (P["info"]["mpus"] / mu_f - 1.0)))
+    if a.xml:
+        print("PreVABS XML stored in %s"
+              % os.path.join(a.out or ".", "xml", P["tag"]))
     print("Homogenization stored in %s" % P["k_file"])
     print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
     return 0

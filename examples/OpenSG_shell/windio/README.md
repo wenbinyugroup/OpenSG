@@ -29,7 +29,7 @@ shear-refined RM -> Timoshenko route directly.
 
 And the one-shot station bypass (steps 1 + 2 fused: windIO in, Timoshenko
 6x6 out -- prints the matrix and stores the station SG yaml + `_Timo.out` +
-VABS-layout `.K`):
+VABS-layout `.K`; add `--xml` for the PreVABS XML byproduct, `--view` for the mesh + orientation PNGs):
 
 ```bash
 opensg windio_st IEA-22-280-RWT.yaml 0.1967

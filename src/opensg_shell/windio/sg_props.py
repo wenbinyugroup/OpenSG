@@ -328,7 +328,7 @@ def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None,
 
 
 def station_timo(windio_path, r, mesh_size=0.01, reference="center",
-                 out_dir=".", prefix=None, blade=None):
+                 out_dir=".", prefix=None, blade=None, xml=False, view=False):
     """Timoshenko 6x6 of one windIO blade station, straight from the windIO file.
 
     The one-shot bypass behind `opensg windio_st <windio.yaml> <r>`: builds the
@@ -346,6 +346,9 @@ def station_timo(windio_path, r, mesh_size=0.01, reference="center",
         prefix: str | None, station tag prefix (None = the windIO file stem).
         blade: reader | None, a pre-built blade reader (e.g. the pynumad
             dialect subclass); None = load_blade(windio_path).
+        xml: bool, ALSO emit the PreVABS XML byproduct (out_dir/xml/<tag>/).
+        view: bool, ALSO emit the layup-colored mesh PNG + e1/e2/e3
+            orientation PNG (out_dir/<tag>_{mesh,orient}.png).
     Out:
         dict: the beam_props result ("Timo" (6,6), "Mass" (6,6), "info",
         "bundle", "k_file") + "yaml" str emitted station yaml, "tag" str,
@@ -353,7 +356,8 @@ def station_timo(windio_path, r, mesh_size=0.01, reference="center",
         "twist" float (windIO unit).
     """
     import os
-    from .sg_windio import load_blade, build_cross_section, emit_shell_yaml
+    from .sg_windio import (load_blade, build_cross_section, emit_shell_yaml,
+                            emit_prevabs_xml, plot_ring_mesh)
 
     blade = load_blade(windio_path) if blade is None else blade
     if prefix is None:
@@ -363,8 +367,14 @@ def station_timo(windio_path, r, mesh_size=0.01, reference="center",
     cs = build_cross_section(blade, float(r), mesh_size=mesh_size)
     ypath = os.path.join(out_dir, tag + "_shell.yaml")
     mesh = emit_shell_yaml(cs, ypath, reference=reference)
-    # terminal st-id contract: yaml + _Timo.out + .K ONLY -- no _ABDG.out,
-    # no abd/ cache, no PNGs
+    if xml:
+        emit_prevabs_xml(cs, os.path.join(out_dir, "xml", tag), name=tag)
+    if view:
+        from opensg_shell import auto_emit
+        plot_ring_mesh(ypath, os.path.join(out_dir, tag + "_mesh.png"))
+        auto_emit(ypath, out_png=os.path.join(out_dir, tag + "_orient.png"))
+    # terminal st-id contract DEFAULT: yaml + _Timo.out + .K only -- no
+    # _ABDG.out, no abd/ cache; --xml / --view opt in per station
     P = beam_props(ypath, out_k=os.path.join(out_dir, tag + ".K"),
                    abd_out=False)
     P.update(yaml=ypath, tag=tag, mesh=mesh, chord=cs["chord"], twist=cs["twist"])

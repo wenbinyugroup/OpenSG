@@ -56,6 +56,14 @@ def test_windio_st_cli(tmp_path):
     assert os.path.exists(os.path.join(out, "iea22_r1000.K"))
     assert not os.path.exists(os.path.join(out, "iea22_r1000_shell_ABDG.out"))
     assert not os.path.exists(os.path.join(out, "abd"))
+    assert not os.path.exists(os.path.join(out, "xml"))
+    # --xml opts the PreVABS byproduct in per station
+    out2 = os.path.join(str(tmp_path), "st_xml")
+    rc = main(["windio_st", WINDIO, "1.0", "--out", out2, "--prefix", "iea22",
+               "--xml"])
+    assert rc == 0
+    for f in ("iea22_r1000.xml", "iea22_r1000.dat", "materials.xml"):
+        assert os.path.exists(os.path.join(out2, "xml", "iea22_r1000", f))
 
 
 def test_windio_st_bad_station():
