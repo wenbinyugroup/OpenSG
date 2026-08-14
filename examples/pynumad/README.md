@@ -71,3 +71,29 @@ plus three spanwise tables under `cross_sections/`: `<stem>_stations.dat`,
   through in the file's own unit (radians here).  Stations where a web's
   layers have zero thickness (the circular root, the tip) get no web,
   matching the file.
+
+## The Blade class (optimization workflow)
+
+For optimization loops, skip the CLI: the `Blade` object (modeled on
+pyNuMAD's `pynumad.objects.blade.Blade`) holds the WHOLE editable blade
+definition and computes from its current state:
+
+```python
+from opensg_shell import Blade
+
+b = Blade("IEA-15-240-RWT.yaml")          # windIO v1/v2 or pyNuMAD dialect
+b.scale_layer_thickness("Spar_Cap_SS", 1.2)
+b.set_material("glass_triax", E=[...])    # any material constant
+b.update_blade()                          # re-sync after structural edits
+R = b.timo(4)                             # st-id or r; R["Timo"], R["Mass"]
+rows = b.timo_all()                       # full sweep + spanwise tables
+```
+
+`blade.layers[name]`, `blade.webs`, `blade.materials[name]`,
+`blade.airfoils[name]`, `blade.chord`, `blade.twist`, `blade.offset` are
+references into `blade.raw` (the parsed yaml dict) -- edit them directly
+for anything the helpers do not cover.  Value edits propagate immediately;
+after adding/removing layers, webs, materials or airfoils call
+`update_blade()`.  Station artifacts (yaml + `_Timo.out` + `.out`) land in
+`blade.workdir` (a fresh temp dir unless you pass one).  See
+`blade_optimization_demo.py` for the design-sweep pattern.

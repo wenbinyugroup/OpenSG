@@ -55,7 +55,10 @@ class WindIOBlade:
     """windIO v2 reader (outer_shape / structure / anchors)."""
 
     def __init__(self, yaml_path):
-        self.d = yaml.load(open(yaml_path), Loader=_Loader)
+        # a pre-parsed dict is accepted too: the editable Blade object binds
+        # its reader to the SAME dict, so definition edits propagate live
+        self.d = yaml_path if isinstance(yaml_path, dict) else \
+            yaml.load(open(yaml_path), Loader=_Loader)
         self.bl = self.d["components"]["blade"]
         self.osh = self.bl["outer_shape"]
         self.st = self.bl["structure"]
@@ -159,7 +162,9 @@ class WindIOBladeV1(WindIOBlade):
     `web:` key; airfoils are placed by outer_shape_bem.airfoil_position."""
 
     def __init__(self, yaml_path):
-        self.d = yaml.load(open(yaml_path), Loader=_Loader)
+        # dict-in accepted, exactly as WindIOBlade (the Blade object route)
+        self.d = yaml_path if isinstance(yaml_path, dict) else \
+            yaml.load(open(yaml_path), Loader=_Loader)
         self.bl = self.d["components"]["blade"]
         self.osh = self.bl["outer_shape_bem"]
         self.ist = self.bl["internal_structure_2d_fem"]
