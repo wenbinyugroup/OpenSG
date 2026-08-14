@@ -6,15 +6,19 @@ editable plain-python structures, and computes cross-sections and Timoshenko
 properties FROM THE CURRENT STATE -- an optimization loop edits the blade
 object, never a yaml file:
 
-    from opensg_shell import Blade
+    import opensg
 
-    b = Blade("IEA-15-240-RWT.yaml")
-    b.scale_layer_thickness("Spar_Cap_SS", 1.2)     # design move
-    b.update_blade()                                # re-sync derived views
-    R = b.timo(4)                                   # st-id (0-based) or r
-    print(R["Timo"], R["Mass"])
+    blade = opensg.read("IEA-15-240-RWT.yaml")
+    K, M = blade(4)                                 # st-id (0-based) or r
+    Ks, Ms = blade()                                # full spanwise sweep
 
-    rows = b.timo_all()                             # every station + tables
+    blade.scale_layer_thickness("Spar_Cap_SS", 1.2) # spanwise design move
+    blade.update_blade()                            # re-sync derived views
+
+    S = blade.section(4)                            # ONE station's stacks
+    S.scale_thickness(1.3, region="LP_SPAR")        # per-section design move
+    K2, M2 = blade(4)                               # honors the edit
+    S.reset()                                       # back to the definition
 
 Editing contract (mirrors pyNuMAD's definition -> update_blade -> analysis):
 - `blade.raw` is the full parsed yaml dict; `blade.layers[name]`,
@@ -319,6 +323,139 @@ class MaterialDatabase:
         return name in self.materials
 
 
+class Section:
+    """One station's RESOLVED layup, user-editable (per-station override).
+
+    Creating a Section registers it on the blade: every later
+    cross_section/timo at this station computes from the EDITED stacks until
+    reset().  The stacks are captured through the same resolution
+    (ply-quantized) the un-edited route uses, so an untouched Section
+    reproduces the baseline digit-for-digit; edited thicknesses are used
+    verbatim (no re-quantization).
+
+    In (constructor):
+        blade: Blade (v1/pyNuMAD dialect).
+        r: float, non-dimensional span of the station.
+    Out:
+        .stacks {region: [[mat, t, ang], ...] outer->inner} -- editable;
+        .webs   [[[mat, t, ang], ...] per web]              -- editable;
+        edit helpers scale_thickness / set_ply / add_ply / drop_ply / reset.
+    """
+
+    def __init__(self, blade, r):
+        self.blade = blade
+        self.r = float(r)
+        kp = blade.keypoints
+        sd = blade.stackdb
+        # capture per REGION exactly as stackdb.segments resolves it (no
+        # TE_FLAT fallback), so an un-edited Section mirrors the baseline
+        self.stacks = {nm: [list(p) for p in sd._laminate_at(self.r, a, b,
+                                                             nm)]
+                       for nm, a, b in kp.regions(self.r)}
+        # webs are captured from the cross-section's OWN resolution (before
+        # this override registers), so an un-edited web repoints to the
+        # identical laminate set and the baseline yaml is unchanged
+        cs = blade.cross_section(self.r)
+        by_id = {v: k for k, v in cs["laminates"].items()}
+        self.webs = [[list(p) for p in by_id[w["lam"]]] for w in cs["webs"]]
+        blade._overrides[self._key(self.r)] = self
+
+    @staticmethod
+    def _key(r):
+        return round(float(r), 9)
+
+    # ------------------------------------------------------------- editing
+    def _lam_ref(self, region):
+        """The editable ply list: region name (str) or web index (int)."""
+        return (self.stacks[region] if isinstance(region, str)
+                else self.webs[int(region)])
+
+    def scale_thickness(self, factor, region=None, web=None):
+        """Scale ply thicknesses of one region, one web, or the whole section.
+
+        In:  factor float; region str | None; web int | None (both None =
+             every skin region and every web).
+        Out: self."""
+        if region is not None:
+            tgt = [self.stacks[region]]
+        elif web is not None:
+            tgt = [self.webs[int(web)]]
+        else:
+            tgt = list(self.stacks.values()) + self.webs
+        for lam in tgt:
+            for p in lam:
+                p[1] = float(p[1]) * float(factor)
+        return self
+
+    def set_ply(self, region, ply, material=None, thickness=None,
+                angle=None):
+        """Update one ply in place.
+
+        In:  region str (region name) | int (web index); ply int (0 =
+             outermost); material str | None; thickness float [m] | None;
+             angle float [deg] | None (None = keep).
+        Out: self."""
+        p = self._lam_ref(region)[int(ply)]
+        if material is not None:
+            p[0] = str(material)
+        if thickness is not None:
+            p[1] = float(thickness)
+        if angle is not None:
+            p[2] = float(angle)
+        return self
+
+    def add_ply(self, region, material, thickness, angle=0.0, index=None):
+        """Insert a ply (default innermost).
+
+        In:  region str | int; material str; thickness float [m]; angle
+             float [deg]; index int | None (None = append inside).
+        Out: self."""
+        lam = self._lam_ref(region)
+        ply = [str(material), float(thickness), float(angle)]
+        lam.insert(len(lam) if index is None else int(index), ply)
+        return self
+
+    def drop_ply(self, region, ply):
+        """Remove one ply.
+
+        In:  region str | int; ply int index.
+        Out: self."""
+        del self._lam_ref(region)[int(ply)]
+        return self
+
+    def reset(self):
+        """Drop this override: the station computes from the definition again.
+
+        In:  --
+        Out: self (deregistered)."""
+        self.blade._overrides.pop(self._key(self.r), None)
+        return self
+
+    # -------------------------------------------------- compute resolution
+    def _laminate(self, region):
+        return tuple((str(m), round(float(t), 8), round(float(a), 3))
+                     for m, t, a in self.stacks[region] if float(t) > 1e-9)
+
+    def segments(self):
+        """The contour segmentation from the EDITED stacks (baseline arcs).
+
+        In:  --
+        Out: list of (s_a, s_b, laminate tuple), stackdb.segments layout."""
+        kp = self.blade.keypoints
+        segs = [(a, b, self._laminate(nm))
+                for nm, a, b in kp.regions(self.r) if b - a > 1e-9]
+        return sorted(segs, key=lambda t: t[0])
+
+    def web_laminates(self):
+        """The edited web laminates, resolution-ready.
+
+        In:  --
+        Out: list of laminate tuples (web order; empty tuple = unchanged)."""
+        return [tuple((str(m), round(float(t), 8), round(float(a), 3))
+                      for m, t, a in lam if float(t) > 1e-9)
+                for lam in self.webs]
+
+
 class Blade:
     """The editable blade definition + its cross-section/beam analyses.
 
@@ -343,6 +480,7 @@ class Blade:
         self.dialect = None
         self._path = None
         self._reader = None
+        self._overrides = {}
         if path is not None:
             self.read_yaml(path)
 
@@ -414,9 +552,25 @@ class Blade:
         In:  st -- st-id token (0-based index | r | str).
         Out: dict from windio.build_cross_section."""
         r = self.resolve(st)
-        segs = self.stackdb.segments(r) if self.dialect == "v1" else None
-        return build_cross_section(self._reader, r,
-                                   mesh_size=self.mesh_size, segments=segs)
+        ov = self._overrides.get(Section._key(r))
+        if self.dialect != "v1":
+            segs = None
+        elif ov is not None:
+            segs = ov.segments()
+        else:
+            segs = self.stackdb.segments(r)
+        cs = build_cross_section(self._reader, r,
+                                 mesh_size=self.mesh_size, segments=segs)
+        if ov is not None and self.dialect == "v1":
+            # web overrides: repoint each web at its edited laminate's set id
+            for w, lam in zip(cs["webs"], ov.web_laminates()):
+                if not lam:
+                    continue
+                if lam not in cs["laminates"]:
+                    cs["laminates"][lam] = (max(cs["laminates"].values())
+                                            + 1)
+                w["lam"] = cs["laminates"][lam]
+        return cs
 
     def write_station_yaml(self, st, path=None):
         """Emit the 1-D shell SG yaml of one station from the current state.
@@ -508,7 +662,50 @@ class Blade:
                           " (VABS frame)")
         return out
 
+    def __call__(self, st=None, xml=False, view=False):
+        """The shortest interface:  K, M = blade(st).
+
+            import opensg
+            blade = opensg.read("IEA-15-240-RWT.yaml")
+            K, M = blade(4)          # one station (st-id or span r)
+            Ks, Ms = blade()         # every station (two lists)
+
+        In:  st -- st-id token (0-based index | span r | str) | None
+             (None = full sweep); xml/view bool -- per-station opt-ins.
+        Out: (K, M) -- (6,6) Timoshenko stiffness (VABS order) and mass
+             matrix; for st=None two station-ordered lists."""
+        if st is None:
+            out = self.timo_all(verbose=False)
+            return ([np.asarray(P["Timo"]) for P in out],
+                    [np.asarray(P["Mass"]) for P in out])
+        P = self.timo(st, xml=xml, view=view)
+        return np.asarray(P["Timo"]), np.asarray(P["Mass"])
+
     # ----------------------------------------------------- editing helpers
+    def section(self, st):
+        """The user-updatable SECTION at one station (v1/pyNuMAD dialect).
+
+        Returns the station's resolved layup as an editable Section and
+        registers it as a live override: every later cross_section/timo at
+        this station uses the edits until section.reset().
+
+            S = blade.section(4)
+            S.stacks["LP_SPAR"]                  # [[mat, t, ang], ...]
+            S.scale_thickness(1.3, region="LP_SPAR")
+            K, M = blade(4)                      # computed from the edit
+
+        In:  st -- st-id token (0-based index | span r | str).
+        Out: Section (an existing override at that station is returned
+             instead of being recaptured)."""
+        if self.dialect != "v1":
+            raise NotImplementedError(
+                "section() edits the resolved pyNuMAD 12-region stacks; for "
+                "windIO v2 blades edit blade.layers / blade.webs and call "
+                "update_blade()")
+        r = self.resolve(st)
+        ov = self._overrides.get(Section._key(r))
+        return ov if ov is not None else Section(self, r)
+
     def scale_layer_thickness(self, name, factor):
         """Multiply one layer's thickness distribution by a factor.
 

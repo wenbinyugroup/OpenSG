@@ -73,3 +73,33 @@ def test_opensg_blade_one_call(tmp_path):
     K, M = opensg_blade(b, 9)
     assert K.shape == (6, 6) and M.shape == (6, 6)
     assert np.all(np.diag(K) > 0) and M[0, 0] > 0
+
+
+def test_opensg_read_and_call(tmp_path):
+    import opensg
+
+    b = opensg.read(BLADE, workdir=str(tmp_path / "w"))
+    K, M = b(9)                                         # blade(st) -> (K, M)
+    assert K.shape == (6, 6) and M.shape == (6, 6)
+    K2, _ = opensg.Blade(BLADE, workdir=str(tmp_path / "w2"))(9)
+    assert np.allclose(K, K2, rtol=1e-12)
+
+
+def test_section_mirror_edit_reset(tmp_path):
+    from opensg_shell import Blade
+
+    b = Blade(BLADE, workdir=str(tmp_path / "w"))
+    K0, _ = b(4)                                        # caps are thick here
+    S = b.section(4)
+    Km, _ = b(4)                                        # override, UNEDITED
+    assert np.allclose(K0, Km, rtol=1e-12, atol=0.0)    # exact mirror
+    assert S.stacks["LP_SPAR"] and S.stacks["HP_SPAR"]
+    S.scale_thickness(3.0, region="LP_SPAR")
+    S.scale_thickness(3.0, region="HP_SPAR")
+    K1, _ = b(4)
+    assert K1[4, 4] > 1.15 * K0[4, 4]                   # EI2 tracks the caps
+    assert abs(K1[5, 5] / K0[5, 5] - 1.0) < 0.30        # EI3 much less so
+    assert b.section(4) is S                            # returns the live one
+    S.reset()
+    K2, _ = b(4)
+    assert np.allclose(K0, K2, rtol=1e-12, atol=0.0)    # definition restored
