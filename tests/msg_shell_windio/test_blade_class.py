@@ -1,8 +1,16 @@
 """Unit tests: the editable Blade object (pyNuMAD-style workflow).
 
-Blade must load both dialects, its timo() must match the pynumad terminal
-route digit-for-digit (same production path), and DEFINITION EDITS on the
-object must propagate into the next homogenization without touching a yaml.
+Coverage:
+  - Blade loads both dialects; definition views are live references.
+  - timo() matches the pynumad terminal route digit-for-digit.
+  - Definition edits (layers, materials) propagate without touching a yaml.
+  - opensg.read / callable blade / opensg_blade one-call interfaces.
+  - Section: per-station override mirrors the baseline exactly, edits move
+    the right stiffness channels, reset restores the definition.
+  - pynumad.sg_homo (the standalone in-memory homogenizer): bit-parity
+    with the file route, Section overrides honored, and the OWNERSHIP
+    gates -- its homo-layer copies (ring_indep, laws, k22) must not drift
+    from the core originals, and it must import only kernel layers.
 
 Run:  pytest tests/msg_shell_windio -q      (env opensg_2_0)
 """
@@ -109,6 +117,65 @@ def test_pynumad_sg_homo_bypass(tmp_path):
                        atol=1e-9 * np.abs(K4e).max())
     assert K4e[4, 4] > 1.1 * K4[4, 4]                   # the edit is in
     S.reset()
+
+
+def test_pynumad_owns_homo_no_drift(tmp_path):
+    """The pynumad-owned homo copies must equal the core originals on the
+    SAME inputs -- the drift gate for the ownership split."""
+    from opensg_shell import Blade
+    from opensg_shell.pynumad import sg_homo as own
+    from opensg_shell import sg_homo as core_homo
+    from opensg_shell import sg_assembly as core_asm
+    from opensg_shell import sg_materials as core_mat
+
+    b = Blade(BLADE, workdir=str(tmp_path / "w"))
+    r = b.resolve(9)
+    A = own.station_arrays(b.cross_section(r), reference=b.reference)
+
+    # laws: owned vs core, identical dicts
+    D1, G1 = own._material_by_section(A["sections"], A["materials"],
+                                      center_ref=False)
+    D2, G2 = core_mat._material_by_section(A["sections"], A["materials"],
+                                           center_ref=False)
+    for si in range(len(A["sections"])):
+        assert np.array_equal(np.asarray(D1[si]), np.asarray(D2[si]))
+        assert np.array_equal(np.asarray(G1[si]), np.asarray(G2[si]))
+
+    # k22: owned vs core, identical
+    cen = A["rx"][A["cells"]].mean(1)
+    k1 = own.compute_k22(cen, A["re2"], A["re3"], A["cells"])
+    k2 = core_asm.compute_k22(cen, A["re2"], A["re3"], A["cells"])
+    assert np.array_equal(k1, k2)
+
+    # ring driver: owned vs core on the same arrays, identical 6x6
+    D_by, G_by = own.ring_laws(A["sections"], A["materials"], b.reference)
+    C1 = own.ring_indep(A["rx"], A["cells"], A["rsub"], A["re3"],
+                        D_by, G_by, k1, 2, [0, 1])
+    C2 = core_homo.ring_indep(A["rx"], A["cells"], A["rsub"], A["re3"],
+                              D_by, G_by, k1, 2, [0, 1])
+    d = np.abs(np.asarray(C1) - np.asarray(C2)).max()
+    assert d <= 1e-12 * np.abs(C2).max()
+
+
+def test_pynumad_sg_homo_kernel_only_imports():
+    """Ownership gate: pynumad/sg_homo may import ONLY the kernel layers
+    (sg_assembly element kernels, fe_jax msg_*, opensg_solid rm_plate_msg)
+    -- never the core homo/materials/mesh drivers or windio."""
+    import ast
+    import opensg_shell.pynumad.sg_homo as m
+
+    src = open(m.__file__.replace(".pyc", ".py")).read()
+    banned = ("sg_homo", "sg_materials", "sg_mesh", "sg_dehom", "windio")
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            mod = node.module
+            if mod.startswith("opensg_shell.") or node.level > 0:
+                leaf = mod.split(".")[-1] if mod else ""
+                assert leaf not in banned and "windio" not in mod, \
+                    "forbidden core import in pynumad.sg_homo: %s" % mod
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                assert "windio" not in a.name, a.name
 
 
 def test_section_mirror_edit_reset(tmp_path):
