@@ -88,7 +88,7 @@
  The principal shear axes rotated from user coordinate system by
    92.8811368133 degrees about the positive direction of x1 axis.
 
- Time taken: 3.25 sec
+ Time taken: 3.19 sec
 
  Cross-check vs the blade file's own elastic_properties_mb (pyNuMAD/WISDEM)
  ========================================================

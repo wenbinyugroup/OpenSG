@@ -64,3 +64,12 @@ def test_blade_edit_propagates(tmp_path):
     b2.set_material("glass_triax", E=[0.5 * float(v) for v in E])
     ea2 = float(b2.timo(9)["Timo"][0, 0])
     assert ea2 < ea0
+
+
+def test_opensg_blade_one_call(tmp_path):
+    from opensg_shell import Blade, opensg_blade
+
+    b = Blade(BLADE, workdir=str(tmp_path / "w"))
+    K, M = opensg_blade(b, 9)
+    assert K.shape == (6, 6) and M.shape == (6, 6)
+    assert np.all(np.diag(K) > 0) and M[0, 0] > 0

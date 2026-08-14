@@ -72,4 +72,4 @@ from .sg_materials import emit_station_abd, load_station_abd               # noq
 from .fe_jax.msg_rm_timo import timoshenko_rm                              # noqa: E402
 from .fe_jax.orient_plot import plot_orient, auto_emit                     # noqa: E402
 
-from .sg_blade import Blade                                                # noqa: E402,F401
+from .sg_blade import Blade, opensg_blade                                                # noqa: E402,F401

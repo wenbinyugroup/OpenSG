@@ -231,15 +231,30 @@ class StackDatabase:
             n = float(np.round(t_resolved * 1000.0 / ply_mm))
         return n * ply_mm / 1000.0
 
-    def _laminate_at(self, r, a, b):
-        # pyNuMAD assigns a component to EVERY region it overlaps (partial
-        # overlap counts; a pure boundary touch does not)
+    _ROLES = (("te_reinforcement_ss", ("LP_TE_REINF", "LP_TE_FLAT")),
+              ("te_reinforcement_ps", ("HP_TE_REINF", "HP_TE_FLAT")),
+              ("spar_cap_ss", ("LP_SPAR",)),
+              ("spar_cap_ps", ("HP_SPAR",)),
+              ("le_reinf", ("HP_LE", "LP_LE")))
+
+    def _laminate_at(self, r, a, b, region=None):
+        # pyNuMAD component-to-region assignment: full-surface 'shell'
+        # classes sit everywhere; PLACED components (caps, reinforcements)
+        # belong ONLY to their designated regions; everything else (fillers)
+        # by overlap with the region interval (boundary touches excluded)
         cov = []
         for L in self._reader.layers_at(r):
-            lo, hi = min(L["s"], L["e"]), max(L["s"], L["e"])
+            nm = L["name"].lower()
+            role = next((regs for frag, regs in self._ROLES if frag in nm),
+                        None)
             if L["name"] in self._full:
-                lo, hi = 0.0, 1.0
-            if min(hi, b) - max(lo, a) > 1e-4:
+                ok = True
+            elif role is not None:
+                ok = region in role
+            else:
+                lo, hi = min(L["s"], L["e"]), max(L["s"], L["e"])
+                ok = min(hi, b) - max(lo, a) > 1e-4
+            if ok:
                 cov.append(L)
         cov.sort(key=lambda L: L["order"])
         out = []
@@ -254,7 +269,7 @@ class StackDatabase:
         """{region name: laminate} at span r (region-midpoint coverage)."""
         out = {}
         for nm, a, b in self._kp.regions(r):
-            out[nm] = self._laminate_at(r, a, b) if b - a > 1e-9 \
+            out[nm] = self._laminate_at(r, a, b, nm) if b - a > 1e-9 \
                 else tuple()
         # pyNuMAD extends the TE band component into the TE flat region
         for side in ("HP", "LP"):
@@ -283,8 +298,8 @@ class StackDatabase:
         In:  r float span.
         Out: list of (s_a, s_b, laminate) with zero-width regions dropped,
              ordered by arc position."""
-        segs = [(a, b, self._laminate_at(r, a, b))
-                for _nm, a, b in self._kp.regions(r) if b - a > 1e-9]
+        segs = [(a, b, self._laminate_at(r, a, b, nm))
+                for nm, a, b in self._kp.regions(r) if b - a > 1e-9]
         return sorted(segs, key=lambda t: t[0])
 
 
@@ -551,3 +566,34 @@ class Blade:
             "values length must match the twist grid"
         self.twist["values"] = [float(v) for v in values]
         return self
+
+
+def opensg_blade(blade, st=None, **kw):
+    """One call: blade (file or Blade) + station -> Timoshenko K and mass M.
+
+    The shortest optimization interface:
+
+        from opensg_shell import Blade, opensg_blade
+
+        b = Blade("IEA-15-240-RWT.yaml")
+        K, M = opensg_blade(b, 4)          # st-id (0-based) or span r
+        b.scale_layer_thickness("Spar_Cap_SS", 1.2)
+        b.update_blade()
+        K2, M2 = opensg_blade(b, 4)        # the edited design
+
+    In:
+        blade: str | Blade -- blade yaml path (a Blade is built with **kw:
+            reference, mesh_size, workdir) or an existing editable Blade.
+        st: st-id token (0-based index | span r | str) | None -- None
+            returns the FULL sweep as (list of K, list of M) station order.
+    Out:
+        (K, M): (6,6) float ndarrays -- Timoshenko stiffness (VABS order,
+        1 = axial) and mass matrix; for st=None, two lists over stations.
+    """
+    b = blade if isinstance(blade, Blade) else Blade(blade, **kw)
+    if st is None:
+        out = b.timo_all(verbose=False)
+        return ([np.asarray(P["Timo"]) for P in out],
+                [np.asarray(P["Mass"]) for P in out])
+    P = b.timo(st)
+    return np.asarray(P["Timo"]), np.asarray(P["Mass"])
