@@ -16,11 +16,12 @@ is never dropped silently.  The file's own `elastic_properties_mb.six_x_six`
 block (pyNuMAD/WISDEM beam properties, 3 = axial frame) is exposed for the
 station cross-check the `opensg pynumad` command prints.
 """
+import os
+import time
+
 import numpy as np
 
-from ..windio.sg_windio import WindIOBladeV1, _interp
-from ..windio.sg_props import station_timo as _station_timo
-from ..windio.sg_windio import generate_cross_sections as _generate
+from .sg_mesh import WindIOBladeV1, _interp, build_cross_section
 
 
 class PyNuMADBlade(WindIOBladeV1):
@@ -192,52 +193,119 @@ def _append_file_crosscheck(out_path, K6, mpus, file_K, file_M):
 
 
 def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
-                 out_dir=".", prefix=None, xml=False, view=False):
-    """Timoshenko 6x6 of one pyNuMAD blade station (steps 1 + 2 fused).
+                 out_dir=".", prefix=None, xml=False, view=False,
+                 blade=None):
+    """Timoshenko 6x6 of one pyNuMAD blade station, fully IN MEMORY.
 
-    The pynumad twin of windio's station_timo: same emitted artifacts
-    (<tag>_shell.yaml, <tag>_shell_Timo.out, VABS-layout <tag>.K, nothing
-    else), built with the PyNuMADBlade reader so the width-placed layers are
-    in the laminate.
+    The whole station runs through the pynumad-owned chain
+    (sg_mesh.build_cross_section with the 12-region segmentation ->
+    sg_homo.timo_cs); the ONLY artifact is the VABS-layout <tag>.out
+    record (with the elastic_properties_mb cross-check appended when the
+    file carries the block).  The 1-D yaml emission of the old
+    windio-backed route is gone -- that was windio's job, and this route
+    does not need it.
 
     In:
         blade_yaml: str, pyNuMAD blade yaml.
         station: str | int | float, st-id token (see resolve_station).
-        mesh_size, reference, out_dir, prefix: as windio.station_timo --
-            except reference DEFAULTS TO "oml" for this dialect (user choice;
-            the windio route keeps "center").
+        mesh_size: float, element arc length / chord.
+        reference: "center" | "oml" -- DEFAULTS TO "oml" for this dialect
+            (the windio route keeps "center").
+        out_dir: str, folder of the <tag>.out record.
+        prefix: str | None, tag prefix (None = the blade-file stem).
+        xml, view: accepted for CLI compatibility, IGNORED (no yaml/XML/PNG
+            artifacts on this route).
+        blade: PyNuMADBlade | None -- a pre-loaded reader (sweep reuse).
     Out:
-        the windio station_timo dict + "r" float + "file_K"/"file_M" the
-        blade file's own 6x6 at r ((6,6) or None).
+        dict: "Timo"/"Mass" (6,6), "info" mass/geometry dict, "k_file" str,
+        "tag" str, "mesh" dict(n_nodes, n_elems, n_sets, n_webs), "chord",
+        "twist", "r" float, "file_K"/"file_M" (6,6) | None.
     """
-    blade = load_blade_pynumad(blade_yaml)
+    from .sg_homo import timo_cs, write_vabs_k
+
+    t0 = time.perf_counter()
+    if blade is None:
+        blade = load_blade_pynumad(blade_yaml)
     r = resolve_station(blade, station)
-    P = _station_timo(blade_yaml, r, mesh_size=mesh_size, reference=reference,
-                      out_dir=out_dir, prefix=prefix, blade=blade,
-                      xml=xml, view=view, k_ext=".out",
-                      segments=pynumad_segments(blade, r))
-    ref = file_six_by_six(blade, r)
-    P.update(r=r, file_K=None if ref is None else ref[0],
-             file_M=None if ref is None else ref[1])
-    if ref is not None:
-        _append_file_crosscheck(P["k_file"], P["Timo"],
-                                float(P["info"]["mpus"]), ref[0], ref[1])
+    cs = build_cross_section(blade, r, mesh_size=mesh_size,
+                             segments=pynumad_segments(blade, r))
+    K, M, info, arrays = timo_cs(cs, reference)
+    stem = prefix or os.path.splitext(os.path.basename(blade_yaml))[0]
+    tag = "%s_r%04d" % (stem, round(r * 1000))
+    os.makedirs(out_dir, exist_ok=True)
+    k_file = os.path.join(out_dir, tag + ".out")
+    write_vabs_k(k_file, K, M, info,
+                 model="OpenSG msg-shell beam model (pynumad in-memory,"
+                       " reference=%s)" % reference,
+                 solve_time=time.perf_counter() - t0)
+    P = dict(Timo=K, Mass=M, info=info, k_file=k_file, tag=tag, r=r,
+             mesh=dict(n_nodes=len(arrays["rx"]),
+                       n_elems=len(arrays["cells"]),
+                       n_sets=len(arrays["sections"]),
+                       n_webs=arrays["n_webs"]),
+             chord=cs["chord"], twist=cs["twist"])
+    ref6 = file_six_by_six(blade, r)
+    P.update(file_K=None if ref6 is None else ref6[0],
+             file_M=None if ref6 is None else ref6[1])
+    if ref6 is not None:
+        _append_file_crosscheck(k_file, K, float(info["mpus"]),
+                                ref6[0], ref6[1])
     return P
 
 
 def generate_cross_sections(blade_yaml, out_dir="cross_sections",
                             stations="airfoil", mesh_size=0.01,
-                            reference="oml", xml=True, plots=True,
+                            reference="oml", xml=False, plots=False,
                             prefix=None, verbose=True):
-    """All pyNuMAD blade stations -> 1-D shell SG yamls (+ XML byproduct).
+    """Every pyNuMAD blade station, fully IN MEMORY -> .out + spanwise .dat.
 
-    The pynumad twin of windio's generate_cross_sections (same outputs,
-    PyNuMADBlade reader).
+    Per station: the VABS-layout <tag>.out record (station_timo); at the
+    end the spanwise <stem>_{stations,timo_by_r,mass_by_r}.dat tables.
+    The 1-D yaml / XML / PNG emission of the old windio-backed route is
+    gone; xml/plots are accepted for compatibility and ignored.
 
-    In/Out: as windio.generate_cross_sections -- except reference DEFAULTS
-    TO "oml" for this dialect (user choice; the windio route keeps "center").
+    In:
+        blade_yaml: str, pyNuMAD blade yaml.
+        out_dir: str, output folder.
+        stations: "airfoil" (the blade's own) | int N (uniform grid) |
+            list of float r.
+        mesh_size, reference, prefix: as station_timo.
+        verbose: bool, one "r = X" line per station.
+    Out:
+        list of the per-station station_timo dicts (station order).
     """
-    return _generate(blade_yaml, out_dir=out_dir, stations=stations,
-                     mesh_size=mesh_size, reference=reference, xml=xml,
-                     plots=plots, prefix=prefix, verbose=verbose,
-                     blade=load_blade_pynumad(blade_yaml))
+    blade = load_blade_pynumad(blade_yaml)
+    if stations == "airfoil":
+        rs = blade.stations()
+    elif isinstance(stations, int):
+        rs = list(np.linspace(0.0, 1.0, stations))
+    else:
+        rs = [float(v) for v in stations]
+    stem = prefix or os.path.splitext(os.path.basename(blade_yaml))[0]
+    os.makedirs(out_dir, exist_ok=True)
+    out, rows, rows_k, rows_m = [], [], [], []
+    for r in rs:
+        P = station_timo(blade_yaml, "%.10f" % r, mesh_size=mesh_size,
+                         reference=reference, out_dir=out_dir,
+                         prefix=prefix, blade=blade)
+        if verbose:
+            print(" r = %.4f" % P["r"])
+        m = P["mesh"]
+        rows.append([P["r"], P["chord"], P["twist"], m["n_nodes"],
+                     m["n_elems"], m["n_sets"], m["n_webs"]])
+        rows_k.append(np.r_[P["r"], np.asarray(P["Timo"]).flatten()])
+        rows_m.append(np.r_[P["r"], P["info"]["mpus"],
+                            np.asarray(P["Mass"]).flatten()])
+        out.append(P)
+    np.savetxt(os.path.join(out_dir, stem + "_stations.dat"),
+               np.array(rows), fmt="%.4f %10.4f %10.6f %6d %6d %3d %3d",
+               header="r chord[m] twist[windIO unit] n_nodes n_elems"
+                      " n_sets n_webs")
+    np.savetxt(os.path.join(out_dir, stem + "_timo_by_r.dat"),
+               np.array(rows_k), fmt="%.8e",
+               header="r then Timoshenko 6x6 row-major (VABS order)")
+    np.savetxt(os.path.join(out_dir, stem + "_mass_by_r.dat"),
+               np.array(rows_m), fmt="%.8e",
+               header="r mass_per_span then mass 6x6 row-major"
+                      " (VABS frame)")
+    return out

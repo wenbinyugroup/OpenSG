@@ -11,19 +11,6 @@ is untouched; this module is the in-memory pyNuMAD workflow:
 
     K, M = timo(blade, 4)              # st-id (0-based) or span r
 
-Digit-parity with the file route: node coordinates are quantized exactly
-as the yaml emitter prints them (%.8f), and the element frames are built
-from the un-quantized nodes exactly as the emitter writes them, so the
-ring solver sees the same numbers the yaml round-trip would deliver.
-Section overrides (blade.section) are honored because the cross-section
-comes from blade.cross_section.
-
-OWNERSHIP: this module carries its OWN homogenization layer -- the ring
-Timoshenko driver (ring_indep), the section laws (_material_by_section /
-material_db_from_yaml), the hoop curvature (compute_k22), the station
-transformation and the ring mass -- and imports only the shared KERNEL
-layers: the sg_assembly element/assembly kernels, the fe_jax msg_*
-kernels, and opensg_solid's rm_plate_msg (the Yu-2002 MSG plate G).
 """
 from collections import defaultdict
 
@@ -464,12 +451,39 @@ def mass_ring(rx, cells, re3, rsub, sections, materials, reference):
     return M, info
 
 
+def timo_cs(cs, reference, shear="mitc4_g23"):
+    """Cross-section dict -> Timoshenko 6x6 + mass 6x6, fully in memory.
+
+    The homogenization core both entries share: station arrays, ring laws,
+    hoop curvature, the ring driver, the ring mass.
+
+    In:
+        cs: dict from build_cross_section (any reader).
+        reference: "center" | "oml", shell reference surface.
+        shear: str, RM transverse-shear tying scheme (production default).
+    Out:
+        (K (6,6), M (6,6), info dict, arrays dict) -- stiffness (VABS
+        order), mass matrix, mass/geometry info, and the station_arrays
+        output (rx/cells/sections/... for mesh bookkeeping).
+    """
+    A = station_arrays(cs, reference=reference)
+    D_by, G_by = ring_laws(A["sections"], A["materials"], reference)
+    k22 = compute_k22(A["rx"][A["cells"]].mean(1), A["re2"], A["re3"],
+                      A["cells"])
+    C6 = ring_indep(A["rx"], A["cells"], A["rsub"], A["re3"], D_by, G_by,
+                    k22, 2, [0, 1], shear=shear, lam_space="elem")
+    C6 = 0.5 * (np.asarray(C6) + np.asarray(C6).T)
+    M6, info = mass_ring(A["rx"], A["cells"], A["re3"], A["rsub"],
+                         A["sections"], A["materials"], reference)
+    return C6, M6, info, A
+
+
 def timo(blade, st, shear="mitc4_g23", full=False):
     """Blade -> Timoshenko 6x6 + mass 6x6, fully in memory.
 
     The bypass the optimization loop wants: no yaml, no .out, no windio --
     the Blade's own cross-section (Section overrides included) goes
-    straight into the core RM ring solver.
+    straight into the ring solver.
 
         from opensg_shell.pynumad.sg_homo import timo
         K, M = timo(blade, 4)
@@ -484,13 +498,105 @@ def timo(blade, st, shear="mitc4_g23", full=False):
         with full=True, (K, M, info).
     """
     r = blade.resolve(st)
-    A = station_arrays(blade.cross_section(r), reference=blade.reference)
-    D_by, G_by = ring_laws(A["sections"], A["materials"], blade.reference)
-    k22 = compute_k22(A["rx"][A["cells"]].mean(1), A["re2"], A["re3"],
-                      A["cells"])
-    C6 = ring_indep(A["rx"], A["cells"], A["rsub"], A["re3"], D_by, G_by,
-                    k22, 2, [0, 1], shear=shear, lam_space="elem")
-    C6 = 0.5 * (np.asarray(C6) + np.asarray(C6).T)
-    M6, info = mass_ring(A["rx"], A["cells"], A["re3"], A["rsub"],
-                         A["sections"], A["materials"], blade.reference)
+    C6, M6, info, _ = timo_cs(blade.cross_section(r), blade.reference,
+                              shear=shear)
     return (C6, M6, info) if full else (C6, M6)
+
+
+def _principal_2x2(J22, J33, J23):
+    """Principal values/axis of the plane tensor [[J22, -J23], [-J23, J33]].
+
+    In:  J22, J33, J23 floats -- the plane moments about the center.
+    Out: (j22p, j33p, angle_deg) -- j22p the smaller principal value;
+         angle_deg the rotation of its axis from +x2 about +x1 in
+         [0, 180)."""
+    T = np.array([[J22, -J23], [-J23, J33]])
+    w, V = np.linalg.eigh(T)
+    return (float(w[0]), float(w[1]),
+            float(np.degrees(np.arctan2(V[1, 0], V[0, 0]))) % 180.0)
+
+
+def _fmt66(Mtx, fmt="  %18.10E"):
+    """6x6 -> VABS-style text rows.
+
+    In:  Mtx (6,6); fmt str per-entry format.
+    Out: str, 6 joined rows."""
+    return "\n".join("".join(fmt % Mtx[i, j] for j in range(6))
+                     for i in range(6))
+
+
+def write_vabs_k(path, K, M, info, model="OpenSG msg-shell beam model",
+                 solve_time=None):
+    """Write a VABS .K-layout output (pynumad-owned copy): mass blocks +
+    Timoshenko stiffness/compliance + center/principal summaries.
+
+    In:
+        path: str, output file.
+        K: (6,6) Timoshenko stiffness (VABS order).
+        M: (6,6) mass matrix; info: dict from mass_ring.
+        model: str banner; solve_time: float | None seconds.
+    Out:
+        str path.
+    """
+    K = np.asarray(K, float); S = np.linalg.inv(K)
+    bar = " ========================================================\n"
+    L = [" %s [F1 F2 F3 M1 M2 M3] (1 = axial)\n" % model]
+    L.append("\n The 6X6 Mass Matrix\n" + bar + "\n" + _fmt66(M) + "\n")
+    L.append("\n The Mass Center of the Cross Section\n" + bar +
+             "\n  %18.10E  %18.10E\n" % tuple(info["mass_center"]))
+    L.append("\n The 6X6 Mass Matrix at the Mass Center\n" + bar + "\n"
+             + _fmt66(info["M_center"]) + "\n")
+    L.append("\n The Mass Properties with respect to Principal Inertial"
+             " Axes\n" + bar +
+             "\n Mass per unit span                     =  %14.10E\n"
+             % info["mpus"] +
+             " Mass moment of inertia i11             =  %14.10E\n"
+             % info["i11"] +
+             " Principal mass moments of inertia i22  =  %14.10E\n"
+             % info["i22p"] +
+             " Principal mass moments of inertia i33  =  %14.10E\n"
+             % info["i33p"] +
+             " The principal inertial axes rotated from user coordinate"
+             " system by\n"
+             "   %.10f degrees about the positive direction of x1 axis.\n"
+             % info["angle_deg"] +
+             " The mass-weighted radius of gyration   =  %14.10E\n"
+             % info["rgyr"])
+    L.append("\n The Geometric Center of the Cross Section\n" + bar +
+             "\n  %18.10E  %18.10E\n" % tuple(info["geometric_center"]))
+    L.append("\n The Area of the Cross Section\n" + bar +
+             "\n Area =  %18.10E\n" % info["area"])
+    L.append("\n Timoshenko Stiffness Matrix (1-extension; 2,3-shear,"
+             " 4-twist; 5,6-bending)\n" + bar + "\n" + _fmt66(K) + "\n")
+    L.append("\n Timoshenko Compliance Matrix (1-extension; 2,3-shear,"
+             " 4-twist; 5,6-bending)\n" + bar + "\n" + _fmt66(S) + "\n")
+
+    x2t, x3t = -K[0, 5] / K[0, 0], K[0, 4] / K[0, 0]
+    L.append("\n The Tension Center of the Cross Section\n" + bar +
+             "\n  %18.10E  %18.10E\n" % (x2t, x3t))
+    EI22c = K[4, 4] - K[0, 4] ** 2 / K[0, 0]
+    EI33c = K[5, 5] - K[0, 5] ** 2 / K[0, 0]
+    EI23c = K[4, 5] - K[0, 4] * K[0, 5] / K[0, 0]
+    ei22p, ei33p, eang = _principal_2x2(EI22c, EI33c, -EI23c)
+    L.append("\n The extension stiffness EA           %18.10E\n" % K[0, 0] +
+             " The torsional stiffness GJ           %18.10E\n" % K[3, 3] +
+             " Principal bending stiffness EI22     %18.10E\n" % ei22p +
+             " Principal bending stiffness EI33     %18.10E\n" % ei33p +
+             " The principal bending axes rotated from the user coordinate"
+             " system by\n"
+             "   %.10f degrees about the positive direction of x1 axis.\n"
+             % eang)
+    x2s, x3s = -S[2, 3] / S[3, 3], S[1, 3] / S[3, 3]
+    L.append("\n The Shear Center of the Cross Section\n" + bar +
+             "\n  %18.10E  %18.10E\n" % (x2s, x3s))
+    ga22p, ga33p, gang = _principal_2x2(K[1, 1], K[2, 2], -K[1, 2])
+    L.append("\n Principal shear stiffness GA22 =  %18.10E\n" % ga22p +
+             " Principal shear stiffness GA33 =  %18.10E\n" % ga33p +
+             " The principal shear axes rotated from user coordinate"
+             " system by\n"
+             "   %.10f degrees about the positive direction of x1 axis.\n"
+             % gang)
+    if solve_time is not None:
+        L.append("\n Time taken: %.2f sec\n" % solve_time)
+    open(path, "w").write("".join(L))
+    return path

@@ -4,13 +4,19 @@ pyNuMAD exports look like windIO v1 but place TE/LE reinforcements with
 width-based forms (start/end/midpoint_nd_arc + width [m]) that the plain
 windio reader would drop from the laminate.  This package owns that dialect:
 
+    sg_mesh.py       pynumad-owned blade reader (windIO-v1 shape) and
+                     cross-section builder -- _interp, WindIOBladeV1,
+                     build_cross_section.
     sg_pynumad.py    PyNuMADBlade reader (width-form placement resolution,
                      loud skip warnings), st-id resolution, the file's own
-                     elastic_properties_mb 6x6 accessor, and the station /
-                     all-stations drivers built on the windio machinery.
-    sg_homo.py       STANDALONE in-memory homogenizer: Blade object ->
-                     Timoshenko + mass 6x6, no yaml, no .out, no windio
-                     import -- `timo(blade, st)`.
+                     elastic_properties_mb 6x6 accessor, and the IN-MEMORY
+                     station / all-stations drivers (VABS-layout .out is
+                     the only artifact; no 1-D yaml emission).
+    sg_homo.py       STANDALONE in-memory homogenizer: ring driver, laws,
+                     curvature, mass, VABS .K writer -- `timo(blade, st)`.
+
+    The package imports NOTHING from opensg_shell.windio: that machinery's
+    only role here was emitting 1-D yamls, which this route does not need.
 
 Terminal route:
 
