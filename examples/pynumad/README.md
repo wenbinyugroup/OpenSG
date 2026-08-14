@@ -1,13 +1,13 @@
 # pyNuMAD blade -> OpenSG cross-sections and beam properties
 
-The pyNuMAD blade dialect, SEPARATE from the windIO example (`examples/windio`).
-pyNuMAD exports (here `IEA-15-240-RWT.yaml` from sandialabs/pyNuMAD
-`examples/example_data`) look like windIO v1 but place the TE/LE
-reinforcements with width-based forms (`start/end/midpoint_nd_arc` +
-`width` [m]) that the plain windio reader would drop from the laminate --
-on this blade that is up to -84 % edgewise stiffness and -19 % mass per
-span.  The `opensg_shell.pynumad` package resolves those placements against
-the section perimeter and never drops material silently.
+The blade route of OpenSG. pyNuMAD exports (here `IEA-15-240-RWT.yaml`
+from sandialabs/pyNuMAD `examples/example_data`) look like windIO v1 but
+place the TE/LE reinforcements with width-based forms
+(`start/end/midpoint_nd_arc` + `width` [m]) that a plain windIO reader
+would drop from the laminate -- on this blade that is up to -84 % edgewise
+stiffness and -19 % mass per span.  The `opensg_shell.pynumad` package
+resolves those placements against the section perimeter and never drops
+material silently.  windIO v1 and v2 blades run through the same route.
 
 ## The command
 
@@ -16,8 +16,7 @@ opensg pynumad <blade.yaml> [st-id] [flags]
 ```
 
 `st-id` selects the station and is OPTIONAL -- omitted, it defaults to
-`all` (the full sweep), so `opensg pynumad IEA-15-240-RWT.yaml` emits every
-station.  It is one of:
+`all` (the full sweep).  It is one of:
 
 - a 0-BASED integer index into the blade file's OWN spanwise stations
   (`0` = root; an out-of-range id prints the station list),
@@ -25,80 +24,25 @@ station.  It is one of:
   (e.g. `0.3288`),
 - `all` -- every station of the file.
 
-Output names derive from the blade file stem: station tag =
-`<stem>_rXXXX`, `XXXX = round(r * 1000)` (there is no prefix flag).
+One station prints the Timoshenko 6x6 and the mass 6x6 and stores exactly
+ONE file: the VABS-layout `<stem>_rXXXX.out` record (`XXXX =
+round(r * 1000)`; stiffness / compliance, centers, mass blocks, and the
+cross-check table against the file's own `elastic_properties_mb` when the
+block is present).  `all` sweeps every station -- one `.out` per station
+plus three spanwise tables under `--out`: `<stem>_stations.dat`,
+`<stem>_timo_by_r.dat`, `<stem>_mass_by_r.dat`.  Everything runs in
+memory; no yaml, XML or PNG byproducts.
 
-## One station
+## User inputs (flags)
 
-```bash
-opensg pynumad IEA-15-240-RWT.yaml 4
-```
-
-prints the Timoshenko 6x6 and the 6x6 mass matrix at station 4
-(r = 0.3288) and stores EXACTLY three files:
-`IEA-15-240-RWT_r0329_shell.yaml` + `IEA-15-240-RWT_r0329_shell_Timo.out`
-+ the VABS-layout `IEA-15-240-RWT_r0329.out` (mass blocks, stiffness /
-compliance, centers, and the cross-check block against the file's own
-`elastic_properties_mb` -- the pyNuMAD/WISDEM 6x6, 3 = axial frame).
-No ABDG record, no abd/ cache, no PNGs.  Opt extra artifacts in:
-
-- `--xml`   also write the PreVABS XML byproduct (`xml/<tag>/`)
-- `--view`  also write the layup-colored mesh PNG + e1/e2/e3 orientation PNG
-
-## All stations
-
-```bash
-opensg pynumad IEA-15-240-RWT.yaml all
-```
-
-homogenizes EVERY station, printing one `r = ...` line per station as it
-sweeps; the matrices live in the stored files: per-station 1-D shell SG
-yaml + VABS-layout `.out` (Timoshenko + mass + the elastic_properties_mb
-cross-check; PreVABS XML too, `--no-xml` to skip) + mesh/orientation PNGs,
-plus three spanwise tables under `cross_sections/`: `<stem>_stations.dat`,
-`<stem>_timo_by_r.dat`, `<stem>_mass_by_r.dat`.
-
-## Flags and conventions
-
-- `--reference` DEFAULTS TO `oml` for this dialect (the outer mold line is
-  the shell reference surface; `--reference center` for the laminate
-  mid-surface, the windio route's default).
-- `--mesh-size` (default 0.01) = target element arc length / chord;
-  `--out` redirects the output folder (default: current directory for one
+- `--mesh-size H` -- target element arc length / chord (default 0.01).
+- `--out DIR` -- output folder (default: current directory for one
   station, `cross_sections/` for `all`).
-- Section origin = the pitch axis (`pitch_axis * chord` chordwise shift);
-  emitted headers carry `refined: 1` (RM -> Timoshenko); twist is passed
-  through in the file's own unit (radians here).  Stations where a web's
-  layers have zero thickness (the circular root, the tip) get no web,
-  matching the file.
+
+The shell reference surface is ALWAYS the **OML** (outer mold line) on
+the blade route -- there is no flag or option for it.
 
 ## The Blade class (optimization workflow)
-
-For optimization loops, skip the CLI: the `Blade` object (modeled on
-pyNuMAD's `pynumad.objects.blade.Blade`) holds the WHOLE editable blade
-definition and computes from its current state:
-
-```python
-from opensg_shell import Blade
-
-b = Blade("IEA-15-240-RWT.yaml")          # windIO v1/v2 or pyNuMAD dialect
-b.scale_layer_thickness("Spar_Cap_SS", 1.2)
-b.set_material("glass_triax", E=[...])    # any material constant
-b.update_blade()                          # re-sync after structural edits
-R = b.timo(4)                             # st-id or r; R["Timo"], R["Mass"]
-rows = b.timo_all()                       # full sweep + spanwise tables
-```
-
-`blade.layers[name]`, `blade.webs`, `blade.materials[name]`,
-`blade.airfoils[name]`, `blade.chord`, `blade.twist`, `blade.offset` are
-references into `blade.raw` (the parsed yaml dict) -- edit them directly
-for anything the helpers do not cover.  Value edits propagate immediately;
-after adding/removing layers, webs, materials or airfoils call
-`update_blade()`.  Station artifacts (yaml + `_Timo.out` + `.out`) land in
-`blade.workdir` (a fresh temp dir unless you pass one).  See
-`blade_optimization_demo.py` for the design-sweep pattern.
-
-## The three-line entry point and per-section edits
 
 ```python
 import opensg
@@ -108,11 +52,49 @@ K, M = blade(4)                              # one station: Timoshenko + mass 6x
 Ks, Ms = blade()                             # full spanwise sweep (two lists)
 ```
 
-A **Section** is one station's resolved layup (the pyNuMAD 12-region stacks
-plus the webs), returned as an editable object and registered as a live
-override -- the next `blade(st)` computes from the edit, `reset()` returns
-to the definition. Unlike `scale_layer_thickness` (a spanwise move on the
-definition), a Section edit touches exactly one station:
+Everything computes from the Blade's CURRENT state, fully in memory.
+The user-editable inputs:
+
+```python
+blade.scale_layer_thickness("Spar_Cap_SS", 1.2)   # spanwise layer move
+blade.set_material("glass_triax", E=[...])        # any material constant
+blade.chord, blade.twist, blade.offset            # geometry tables (edit in place)
+blade.layers, blade.webs, blade.materials, blade.airfoils
+blade.update_blade()                              # re-sync after add/remove edits
+R = blade.timo(4)                                 # R["Timo"], R["Mass"], R["info"]
+rows = blade.timo_all()                           # sweep + spanwise .dat tables
+```
+
+Value edits propagate immediately; after adding/removing layers, webs,
+materials or airfoils call `update_blade()`.  `blade.timo(st,
+artifacts=True)` additionally writes the station yaml + `.out` record into
+`blade.workdir` (the handoff to the opensg_shell SG homo/dehom engine).
+See `blade_optimization_demo.py` for the design-sweep pattern.
+
+### Reference surface
+
+`blade.timo()` -- and every pynumad route -- ALWAYS uses the OML.  There
+is no reference option on the Blade, the drivers, or the CLI, because the
+airfoil contour in the blade yaml IS the outer mold line: the shell sits
+on the geometry the file states, with the laminate hanging inward.  A
+center-reference (laminate mid-surface) section -- an inward
+half-thickness offset of that geometry, e.g. for matching a 2-D solid /
+VABS model -- is an SG-engine study: emit the station yaml yourself and
+run the `opensg_shell` engine on it --
+
+```python
+from opensg_shell.pynumad import emit_shell_yaml
+emit_shell_yaml(blade.cross_section(4), "st4_shell.yaml",
+                reference="center")   # then: opensg st4_shell.yaml
+```
+
+## Per-section edits (Section)
+
+A **Section** is one station's resolved layup (the pyNuMAD 12-region
+stacks plus the webs), returned as an editable object and registered as a
+live override -- the next `blade(st)` computes from the edit, `reset()`
+returns to the definition.  Unlike `scale_layer_thickness` (a spanwise
+move on the definition), a Section edit touches exactly one station:
 
 ```python
 S = blade.section(4)                  # {region: [[mat, t, ang], ...]} + S.webs
@@ -129,3 +111,13 @@ An untouched Section reproduces the baseline digit-for-digit (gated in
 verbatim, with no ply re-quantization. `blade_section_edit_demo.py` shows the
 spar-cap move: x1.3 at station 4 gives EA +25.4 %, flapwise EI2 +24.4 %,
 edgewise EI3 +1.3 %.
+
+## Verification
+
+`test_timo_pynumad.py` (also a pytest unit test) benchmarks `blade.timo()`
+on the IEA-22 blade against TRUE VABS 2-D solid sections
+(`examples/OpenSG_shell/windio/vabs_K/iea_s{10,25,35}.sg.K`): Timoshenko
+diagonals and the mass matrix, at the measured OML-shell-vs-solid
+tolerance bands.  `7_verify_blade_timo_vs_K.py` (in
+`examples/OpenSG_shell/windio`) gates the same route against the
+committed 16-station `.K` dataset at solver precision.

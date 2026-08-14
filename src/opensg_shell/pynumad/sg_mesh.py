@@ -405,7 +405,28 @@ def _mat_card_yaml(blade, name):
                              nu=[float(x) for x in nu]))
 
 
-def emit_shell_yaml(cs, out_path, web_mesh=None, reference="center"):
+def oml_load_integrals(cs):
+    """OML contour integrals for the surface-traction -> beam-load model, about x1.
+
+    A uniform fixed-direction traction p [Pa] on the OML gives, per unit span,
+    f_flap = p * P and a torsion m1 = p * integral(x2 ds) with x2 measured FROM the
+    reference axis (the same origin as the emitted section and the 6x6).
+
+    In:
+        cs: dict from build_cross_section.
+    Out:
+        (P, Sx2ds): float perimeter [m], float integral of x2 ds [m^2] about x1.
+    """
+    xy = np.asarray(cs["xy"], float).copy()
+    xy[:, 0] -= cs["blade"].offset_y(cs["r"])            # LE origin -> reference axis
+    closed = np.vstack([xy, xy[0]])
+    seg = np.diff(closed, axis=0)
+    ds = np.hypot(seg[:, 0], seg[:, 1])
+    x2mid = 0.5 * (closed[:-1, 0] + closed[1:, 0])
+    return float(ds.sum()), float((x2mid * ds).sum())
+
+
+def emit_shell_yaml(cs, out_path, web_mesh=None, reference="oml"):
     """Write the 1-D shell SG yaml of a station (pynumad-owned copy).
 
     The same station transformation the in-memory route performs
@@ -417,7 +438,8 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="center"):
         cs: dict from build_cross_section.
         out_path: str, output yaml path.
         web_mesh: float | None, web element length [m] (default 0.01*chord).
-        reference: "center" | "oml", shell reference surface.
+        reference: "oml" | "center", shell reference surface (default oml;
+            "center" = laminate mid-surface, matching a 2-D solid section).
     Out:
         dict(n_nodes, n_elems, n_sets, n_webs, n_mats, out).
     """

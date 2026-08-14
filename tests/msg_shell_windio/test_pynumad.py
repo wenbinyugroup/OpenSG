@@ -1,10 +1,10 @@
 """Unit tests: the pyNuMAD dialect route (`opensg pynumad <yaml> <st-id>`).
 
-The width-based TE-reinforcement placements must be IN the laminate (the
-plain windio reader drops them), st-id must map 0-based indices to the
-blade's own stations, and the st-id route must stay LEAN by default --
---xml opts into the PreVABS XML.  --view PNGs are exercised but not
-asserted: tests/conftest.py no-ops Figure.savefig suite-wide.
+The width-based TE-reinforcement placements must be IN the laminate (a
+plain windIO-v1 reader drops them), st-id must map 0-based indices to the
+blade's own stations, and the route must stay LEAN: the VABS-layout
+<tag>.out record is the ONLY artifact; --xml and --view are accepted for
+compatibility and IGNORED (no XML, no PNGs).
 
 Run:  pytest tests/msg_shell_windio -q      (env opensg_2_0)
 """

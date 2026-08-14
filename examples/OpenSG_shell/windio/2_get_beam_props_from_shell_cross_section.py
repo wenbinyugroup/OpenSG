@@ -28,7 +28,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from opensg_shell.windio import beam_props
+from opensg_shell.pynumad import beam_props
 
 ############### User Input #################################
 prefix = "iea22"                   # station tag prefix from step 1

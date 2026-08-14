@@ -135,7 +135,7 @@ def test_pynumad_owns_homo_no_drift(tmp_path):
 
     b = Blade(BLADE, workdir=str(tmp_path / "w"))
     r = b.resolve(9)
-    A = own.station_arrays(b.cross_section(r), reference=b.reference)
+    A = own.station_arrays(b.cross_section(r), reference="oml")
 
     # laws: owned vs core, identical dicts
     D1, G1 = own._material_by_section(A["sections"], A["materials"],
@@ -153,7 +153,7 @@ def test_pynumad_owns_homo_no_drift(tmp_path):
     assert np.array_equal(k1, k2)
 
     # ring driver: owned vs core on the same arrays, identical 6x6
-    D_by, G_by = own.ring_laws(A["sections"], A["materials"], b.reference)
+    D_by, G_by = own.ring_laws(A["sections"], A["materials"], "oml")
     C1 = own.ring_indep(A["rx"], A["cells"], A["rsub"], A["re3"],
                         D_by, G_by, k1, 2, [0, 1])
     C2 = core_homo.ring_indep(A["rx"], A["cells"], A["rsub"], A["re3"],
@@ -184,20 +184,28 @@ def test_pynumad_sg_homo_kernel_only_imports():
 
 
 def test_blade_and_pynumad_are_windio_free():
-    """The Blade class and the whole pynumad package must not import the
-    windio machinery (it is being deprecated)."""
+    """EVERY module of the pynumad package must be free of imports from
+    the DELETED windio machinery.  The scan is case-sensitive on the
+    lowercase token "windio" so it catches `.windio`, `sg_windio` and
+    `opensg_shell.windio` alike (class names like WindIOBlade stay
+    capitalized and do not trip it) -- a lazy in-function import is a
+    line like any other, so function bodies are covered too."""
+    import opensg_shell.pynumad as pkg
+    import opensg_shell.pynumad.sg_beamdyn as bd_mod
     import opensg_shell.pynumad.sg_blade as blade_mod
-    import opensg_shell.pynumad.sg_mesh as mesh_mod
-    import opensg_shell.pynumad.sg_pynumad as pyn_mod
     import opensg_shell.pynumad.sg_homo as homo_mod
+    import opensg_shell.pynumad.sg_mesh as mesh_mod
+    import opensg_shell.pynumad.sg_props as props_mod
+    import opensg_shell.pynumad.sg_pynumad as pyn_mod
+    import opensg_shell.pynumad.sg_recovery as rec_mod
 
-    for mod in (blade_mod, mesh_mod, pyn_mod, homo_mod):
+    for mod in (pkg, bd_mod, blade_mod, homo_mod, mesh_mod, props_mod,
+                pyn_mod, rec_mod):
         src = open(mod.__file__.replace(".pyc", ".py")).read()
         for line in src.splitlines():
             stripped = line.strip()
             if stripped.startswith(("from ", "import ")):
-                assert ".windio" not in stripped and \
-                    not stripped.startswith("from opensg_shell.windio"), \
+                assert "windio" not in stripped, \
                     "%s imports windio: %s" % (mod.__name__, stripped)
 
 

@@ -158,10 +158,10 @@ def test_write_sc_K_round_trip(tmp_path):
 
 def test_legacy_read_k_file_import_path_unchanged():
     """Gate (e): every existing caller imports read_k_file from
-    opensg_shell.windio -- that path must keep working and must return
+    opensg_shell.pynumad -- that path must keep working and must return
     exactly what the promoted reader returns."""
-    from opensg_shell.windio import read_k_file
-    from opensg_shell.windio.sg_beamdyn import read_k_file as rk2
+    from opensg_shell.pynumad import read_k_file
+    from opensg_shell.pynumad.sg_beamdyn import read_k_file as rk2
     from opensg_solid.helper.k_file import read_beam_k
 
     p = os.path.join(VABS_K, "iea_s10.sg.K")

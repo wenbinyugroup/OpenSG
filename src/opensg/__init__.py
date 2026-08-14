@@ -29,7 +29,8 @@ def read(path, **kw):
     """Read a blade file into an editable Blade object.
 
     In:  path str -- blade yaml (windIO v1/v2 or the pyNuMAD dialect);
-         kw -- Blade options (reference="oml"|"center", mesh_size, workdir).
+         kw -- Blade options (mesh_size, workdir); the shell reference
+         surface is always the OML on this route.
     Out: opensg_shell.Blade -- callable: K, M = blade(st); K/M lists for
          blade(); blade.section(st) for per-station edits."""
     from opensg_shell import Blade

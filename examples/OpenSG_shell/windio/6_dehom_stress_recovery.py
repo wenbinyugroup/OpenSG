@@ -28,7 +28,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from opensg_shell.windio import dehom_to_files
+from opensg_shell.pynumad import dehom_to_files
 
 ############### User Input #################################
 prefix = "iea22"                   # station tag prefix

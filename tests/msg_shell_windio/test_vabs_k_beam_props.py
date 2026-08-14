@@ -2,7 +2,7 @@
 
 The VABS 51-station set (OpenSG-TW dehom51/out/VABS_iea51, 2-D solid .sg per station,
 eta = i/50) is the reference: three station .K files are vendored under
-examples/OpenSG_shell/windio/vabs_K/.  The test runs the standalone windIO pipeline
+examples/OpenSG_shell/windio/vabs_K/.  The test runs the pynumad blade pipeline
 end-to-end for each station -- windIO yaml -> 1-D shell SG yaml (center reference,
 reference-axis origin) -> RM ring homogenization + ring mass integration -- and gates
 the Timoshenko diagonals, the mass per span, the mass center, and the mass-matrix
@@ -47,14 +47,14 @@ CASES = [
 
 @pytest.fixture(scope="module")
 def blade():
-    from opensg_shell.windio import load_blade
+    from opensg_shell.pynumad import load_blade
     return load_blade(WINDIO)
 
 
 @pytest.mark.parametrize("r,kref,tol", CASES, ids=["r0.2", "r0.5", "r0.7"])
 def test_beam_props_vs_vabs(blade, tmp_path, r, kref, tol):
-    from opensg_shell.windio import (build_cross_section, emit_shell_yaml,
-                                     beam_props, read_k_file)
+    from opensg_shell.pynumad import (build_cross_section, emit_shell_yaml,
+                                      beam_props, read_k_file)
     from opensg_solid.helper.k_file import compare_to_K
 
     cs = build_cross_section(blade, r, mesh_size=0.01)
@@ -158,8 +158,8 @@ def _dang(a, b):
 def test_vabs_k_center_formulas(kref):
     """write_vabs_k's derived blocks must reproduce what VABS prints, given VABS's
     own Timoshenko and mass matrices."""
-    from opensg_shell.windio import read_k_file
-    from opensg_shell.windio.sg_props import _principal_2x2
+    from opensg_shell.pynumad import read_k_file
+    from opensg_shell.pynumad.sg_homo import _principal_2x2
 
     path = os.path.join(WDIR, "vabs_K", kref)
     K, M = read_k_file(path)

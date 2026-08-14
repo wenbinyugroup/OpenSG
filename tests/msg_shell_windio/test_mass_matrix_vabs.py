@@ -66,7 +66,7 @@ def _read_vabs_sg(path):
 
 def test_mass_matrix_2d_vs_vabs():
     from opensg_solid.sg_homo import mass_matrix_2d
-    from opensg_shell.windio import read_k_file
+    from opensg_shell.pynumad import read_k_file
 
     sc, rho = _read_vabs_sg(SG)
     assert len(sc["cells"]) == 55434 and len(rho) == 6

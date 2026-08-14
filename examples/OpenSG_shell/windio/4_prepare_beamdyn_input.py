@@ -21,7 +21,7 @@ import re
 
 import numpy as np
 
-from opensg_shell.windio import load_blade, blade_length, station_loads, \
+from opensg_shell.pynumad import load_blade, blade_length, station_loads, \
     write_bd_primary, write_bd_driver
 
 ############### User Input #################################

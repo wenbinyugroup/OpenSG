@@ -364,7 +364,7 @@ def flag_recovery_points(B, G=None, n_depth=9, k_bl=1.0, ang_tol_deg=1.0):
     Non-mutating by construction: it reads the recovery grid and returns two
     arrays in the SAME (element, depth) order -- point i is element
     i//n_depth at depth i%n_depth, the order of cli.recovery_points,
-    cli.dehom_write and windio.sg_recovery.dehom_station alike.  A consumer of
+    cli.dehom_write and pynumad.sg_recovery.dehom_station alike.  A consumer of
     the fixed-format VABS cloud can therefore partition it without touching
     the writers::
 

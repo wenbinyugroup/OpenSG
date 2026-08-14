@@ -35,11 +35,11 @@ Editing contract (mirrors pyNuMAD's definition -> update_blade -> analysis):
 Every compute defaults to the IN-MEMORY pynumad route
 (build_cross_section -> pynumad.sg_homo.timo_cs): nothing is written --
 the Blade is the optimization interface over external wind-blade yamls.
-timo(..., artifacts=True) (implied by xml/view) opts into the
-opensg_shell SG-homogenization file route instead: station yaml +
-_Timo.out + VABS-layout .out under `blade.workdir` (a fresh temp dir
-unless given) plus the RM "bundle" the opensg_shell dehomogenization
-consumes.  The two routes are gated bit-consistent.
+timo(..., artifacts=True) additionally writes the station yaml (the
+handoff record to the opensg_shell SG homo/dehom engine) and the
+VABS-layout <tag>.out under `blade.workdir` (a fresh temp dir unless
+given); xml/view are accepted for compatibility and IGNORED.  The two
+routes are gated bit-consistent.
 """
 import os
 import tempfile
@@ -463,11 +463,18 @@ class Section:
 class Blade:
     """The editable blade definition + its cross-section/beam analyses.
 
+    The shell reference surface is ALWAYS the OML (outer mold line) on
+    this route -- there is no option, because the airfoil contour the
+    blade yaml describes IS the OML: the shell sits on the geometry the
+    file states, and the laminate hangs inward from it.  A
+    center-reference section (an inward half-thickness offset of that
+    geometry, for matching a 2-D solid / VABS model) is an SG-engine
+    study: emit the station yaml with emit_shell_yaml(...,
+    reference="center") and run the opensg_shell engine on it.
+
     In (constructor):
         path: str | None, blade yaml (windIO v1/v2 or pyNuMAD dialect);
             None = empty object, call read_yaml later.
-        reference: "oml" | "center", shell reference surface for every
-            emitted station (default oml, the pynumad-route default).
         mesh_size: float, target element arc length / chord.
         workdir: str | None, station artifact folder (None = fresh temp dir).
     Out:
@@ -475,9 +482,7 @@ class Blade:
         materials, airfoils, chord, twist, offset) and the compute methods.
     """
 
-    def __init__(self, path=None, reference="oml", mesh_size=0.01,
-                 workdir=None):
-        self.reference = reference
+    def __init__(self, path=None, mesh_size=0.01, workdir=None):
         self.mesh_size = mesh_size
         self.workdir = workdir or tempfile.mkdtemp(prefix="opensg_blade_")
         self.raw = None
@@ -554,7 +559,7 @@ class Blade:
         breakpoints.
 
         In:  st -- st-id token (0-based index | r | str).
-        Out: dict from windio.build_cross_section."""
+        Out: dict from pynumad.sg_mesh.build_cross_section."""
         r = self.resolve(st)
         ov = self._overrides.get(Section._key(r))
         if self.dialect != "v1":
@@ -586,7 +591,7 @@ class Blade:
         path = path or os.path.join(self.workdir, tag + "_shell.yaml")
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         info = emit_shell_yaml(self.cross_section(r), path,
-                               reference=self.reference)
+                               reference="oml")
         info["r"] = r
         info["out"] = path
         return info
@@ -616,20 +621,18 @@ class Blade:
             _t0 = _time.perf_counter()
             info = self.write_station_yaml(r)
             from .sg_homo import timo_cs, write_vabs_k
-            C6, M6, info6, _arr = timo_cs(self.cross_section(r),
-                                          self.reference)
+            C6, M6, info6, _arr = timo_cs(self.cross_section(r), "oml")
             tag = os.path.basename(info["out"])[:-len("_shell.yaml")]
             k_file = info["out"].replace("_shell.yaml", ".out")
             write_vabs_k(k_file, C6, M6, info6,
                          model="OpenSG msg-shell beam model (Blade route,"
-                               " reference=%s)" % self.reference,
+                               " reference=oml)",
                          solve_time=_time.perf_counter() - _t0)
             P = dict(Timo=C6, Mass=M6, info=info6, bundle=None,
                      k_file=k_file, yaml=info["out"], tag=tag, mesh=info)
         else:
             from .sg_homo import timo_cs
-            C6, M6, info6, arrays = timo_cs(self.cross_section(r),
-                                            self.reference)
+            C6, M6, info6, arrays = timo_cs(self.cross_section(r), "oml")
             tag = "%s_r%04d" % (self._stem(), round(r * 1000))
             P = dict(Timo=C6, Mass=M6, info=info6, bundle=None,
                      k_file=None, yaml=None, tag=tag,
@@ -650,13 +653,14 @@ class Blade:
     def timo_all(self, xml=False, view=False, verbose=True, artifacts=False):
         """Timoshenko sweep over every station of the current state.
 
-        The default sweep is fully in-memory (artifacts/xml/view opt into
-        the per-station file route); the spanwise tables are always kept.
+        The default sweep is fully in-memory (artifacts=True opts into the
+        per-station file route); the spanwise tables are always kept.
         Writes the spanwise <stem>_{stations,timo_by_r,mass_by_r}.dat tables
         into self.workdir next to the per-station artifacts.
 
-        In:  xml/view bool -- per-station opt-ins; verbose bool -- r lines;
-             artifacts bool -- per-station file route.
+        In:  xml/view bool -- accepted for compatibility, IGNORED;
+             verbose bool -- r lines; artifacts bool -- per-station file
+             route.
         Out: list of the per-station timo() dicts (station order)."""
         out, rows, rk, rm = [], [], [], []
         for r in self.stations:
@@ -694,7 +698,8 @@ class Blade:
             Ks, Ms = blade()         # every station (two lists)
 
         In:  st -- st-id token (0-based index | span r | str) | None
-             (None = full sweep); xml/view bool -- per-station opt-ins.
+             (None = full sweep); xml/view bool -- accepted for
+             compatibility, IGNORED.
         Out: (K, M) -- (6,6) Timoshenko stiffness (VABS order) and mass
              matrix; for st=None two station-ordered lists."""
         if st is None:
@@ -803,7 +808,7 @@ def opensg_blade(blade, st=None, **kw):
 
     In:
         blade: str | Blade -- blade yaml path (a Blade is built with **kw:
-            reference, mesh_size, workdir) or an existing editable Blade.
+            mesh_size, workdir) or an existing editable Blade.
         st: st-id token (0-based index | span r | str) | None -- None
             returns the FULL sweep as (list of K, list of M) station order.
     Out:

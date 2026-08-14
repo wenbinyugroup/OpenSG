@@ -300,7 +300,8 @@ def station_loads(blade, etas, p_traction, mesh_size=0.01, css=None):
     Out:
         (n,6) float loads [Fx 0 0 0 0 Mz] in the BeamDyn blade frame.
     """
-    from .sg_windio import build_cross_section, oml_load_integrals, blade_length
+    from .sg_mesh import build_cross_section, oml_load_integrals
+    from .sg_pynumad import blade_length
 
     etas = np.asarray(etas, float)
     L = blade_length(blade)

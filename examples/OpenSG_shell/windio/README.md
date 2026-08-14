@@ -1,8 +1,8 @@
 # windIO blade -> beam properties -> BeamDyn -> stress recovery (msg-shell)
 
 The full OpenSG shell pipeline from a windIO blade file, standalone (no external
-wrapper).  Core modules: `src/opensg_shell/windio/` (`sg_windio`, `sg_props`,
-`sg_beamdyn`, `sg_recovery`).
+wrapper).  Core modules: `src/opensg_shell/pynumad/` (`sg_mesh`, `sg_pynumad`,
+`sg_blade`, `sg_homo`, `sg_props`, `sg_beamdyn`, `sg_recovery`).
 
 | step | script | in | out |
 |------|--------|----|-----|
@@ -15,21 +15,19 @@ wrapper).  Core modules: `src/opensg_shell/windio/` (`sg_windio`, `sg_props`,
 
 Station tag = `<prefix>_rXXXX`, `XXXX = round(r * 1000)`.
 
-Step 1 also has a terminal route -- all stations, PreVABS XML byproduct ON by
-default, mesh + orientation PNGs and a station table under `cross_sections/`:
+Steps 1 + 2 also have a fused terminal route, fully IN MEMORY (no station
+yamls): every station's VABS-layout `.out` record plus the spanwise
+`<stem>_{stations,timo_by_r,mass_by_r}.dat` tables under `cross_sections/`:
 
 ```bash
 opensg gen_windio_cs IEA-22-280-RWT.yaml
 ```
 
-(`gen_windio_cs --help` for `--stations`, `--mesh-size`, `--reference`,
-`--no-xml`, `--out`, `--prefix`.)  The emitted yamls carry `refined: 1` and
-`reference: center` in the header, so `opensg <station yaml>` runs the
-shear-refined RM -> Timoshenko route directly.
+(`gen_windio_cs --help` for `--stations`, `--mesh-size`, `--out`,
+`--prefix`.)
 
-And the one-shot station bypass (steps 1 + 2 fused: windIO in, Timoshenko
-6x6 out -- prints the matrix and stores the station SG yaml + `_Timo.out` +
-VABS-layout `.K`; add `--xml` for the PreVABS XML byproduct, `--view` for the mesh + orientation PNGs):
+And the one-shot single-station bypass (windIO in, Timoshenko 6x6 printed,
+the VABS-layout `<tag>.out` record stored, nothing else):
 
 ```bash
 opensg windio_st IEA-22-280-RWT.yaml 0.1967
@@ -55,8 +53,13 @@ Conventions
 
 - Section origin = the windIO **reference axis x1** (chordwise `section_offset_y` /
   `pitch_axis` shift); the 6x6, the BeamDyn loads, and the recovery all share it.
-- Shell reference surface = laminate **center** (mid-surface), recorded in the yaml's
-  `reference` field (single source of truth for homogenization and dehom).
+- Shell reference surface = **oml** (the outer mold line), ALWAYS, on every
+  blade route (Blade, `gen_windio_cs`, `windio_st`, `pynumad` -- no option).
+  A **center** (mid-surface) section for matching a 2-D solid / VABS model is
+  an SG-engine study: `reference = "center"` in step 1's `emit_shell_yaml`
+  call, recorded in the emitted yaml's `reference` field (single source of
+  truth for homogenization and dehom), as
+  `tests/msg_shell_windio/test_vabs_k_beam_props.py` does.
 - Cross-section matrices are VABS order/frame (1 = axial); BeamDyn files are written
   in the IEC blade frame via the beam-axis swap `B = [[0,0,1],[0,-1,0],[1,0,0]]`.
 - BeamDyn runs TRAPEZOIDAL quadrature so output nodes coincide with the property

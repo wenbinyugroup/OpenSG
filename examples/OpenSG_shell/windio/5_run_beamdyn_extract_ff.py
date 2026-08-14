@@ -20,7 +20,7 @@ import re
 
 import numpy as np
 
-from opensg_shell.windio import run_beamdyn, extract_ff
+from opensg_shell.pynumad import run_beamdyn, extract_ff
 
 ############### User Input #################################
 prefix = "iea22"                   # station tag prefix
@@ -38,7 +38,7 @@ print("BeamDyn done: %s" % out)
 
 files, tab = extract_ff(out, etas, "ff", prefix=prefix, refine=refine,
                         table=os.path.join("ff", prefix + "_ff.dat"))
-from opensg_shell.windio import read_ff
+from opensg_shell.pynumad import read_ff
 tip = read_ff(files[-1]); root = read_ff(files[0])
 print("extracted %d .ff -> ff/   (tip u = [%.4g %.4g %.4g] m)"
       % (len(files), *tip["u"]))

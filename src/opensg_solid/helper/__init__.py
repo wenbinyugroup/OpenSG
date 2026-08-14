@@ -24,8 +24,8 @@ read_k_blocks, with read_beam_k / read_solid_k the two typed views and
 compare_to_K the reusable term-by-term verifier against a vendor
 reference.  It lives on the solid side because the dependency runs one
 way -- opensg_shell imports opensg_solid, never the reverse -- so both
-engines can reach it, and the shell side's historical
-`opensg_shell.windio.read_k_file` is the entry point to point at it.
+engines can reach it, and the shell side's
+`opensg_shell.pynumad.read_k_file` is the entry point to point at it.
 Import it explicitly
 (`from opensg_solid.helper.k_file import ...`); this package __init__
 stays import-light on purpose.

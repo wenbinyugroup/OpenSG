@@ -10,15 +10,15 @@ Any station outside tolerance fails the final assertion, so a nonzero
 exit code = verification failure (tests/msg_shell_windio/test_blade_vs_k.py
 runs this script as the unit test).
 
-The .K files were produced by the file-based pipeline (steps 1-2) at
-reference=center, so the Blade is built with the same reference.
+The .K files were produced by the file-based pipeline (steps 1-2) at the
+OML reference -- the one reference surface of the blade route.
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS SCRIPT
 # ----------------------------------------------------------------------------
 #   BLADE_YAML       the IEA-22-280-RWT windIO (v2) blade file
 #   K_FOLDER, RTOL   committed .K folder; max-entry-relative tolerance
-#   blade            editable Blade at the .K files' reference (center)
+#   blade            editable Blade (OML reference, the route's only one)
 #   k_path, span_r   one committed .K file and its span (tag rXXXX / 1000)
 #   stiffness_file,  the 6x6 pair parsed from the .K file
 #   mass_file
@@ -73,7 +73,7 @@ def read_vabs_k(path):
     return stiffness, mass
 
 
-blade = opensg.read(BLADE_YAML, reference="center")   # the .K files' reference
+blade = opensg.read(BLADE_YAML)
 k_files = sorted(glob.glob(os.path.join(K_FOLDER, "iea22_r*.K")))
 assert k_files, "no committed iea22_r*.K files under %s/" % K_FOLDER
 # the file tag rXXXX is round(r*1000): map each .K back to the blade's TRUE

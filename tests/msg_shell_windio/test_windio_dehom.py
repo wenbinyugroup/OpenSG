@@ -30,7 +30,7 @@ VABS_SM = os.path.join(ROOT, "examples", "OpenSG_shell", "IEA_blade_beam", "iea_
 
 @pytest.fixture(scope="module")
 def station(tmp_path_factory):
-    from opensg_shell.windio import (load_blade, build_cross_section, emit_shell_yaml,
+    from opensg_shell.pynumad import (load_blade, build_cross_section, emit_shell_yaml,
                                      beam_props)
     tmp = tmp_path_factory.mktemp("windio_dehom")
     blade = load_blade(WINDIO)
@@ -53,7 +53,7 @@ def _cloud_weights(D):
 
 
 def test_stress_closure(station):
-    from opensg_shell.windio import dehom_station
+    from opensg_shell.pynumad import dehom_station
     FF = np.array([5.0e6, 0.0, 0.0, 0.0, -6.0e7, 2.0e7])   # F1, M2, M3
     D = dehom_station(station["yaml"], FF, n_depth=9, frame="plate",
                       bundle=station["bundle"])
@@ -72,7 +72,7 @@ def test_stress_closure(station):
 
 
 def test_dehom_vs_vabs_sm(station):
-    from opensg_shell.windio import dehom_to_files
+    from opensg_shell.pynumad import dehom_to_files
     tab = np.loadtxt(FF51)
     row = tab[np.argmin(np.abs(tab[:, 0] - 0.2))]
     D = dehom_to_files(station["yaml"], row[1:7],
@@ -92,7 +92,7 @@ def test_dehom_vs_vabs_sm(station):
 
 
 def test_ff_and_wm_roundtrip(station):
-    from opensg_shell.windio import write_ff, read_ff, wm_to_dcm, dcm_to_wm
+    from opensg_shell.pynumad import write_ff, read_ff, wm_to_dcm, dcm_to_wm
     rng = np.random.default_rng(7)
     c = 0.2 * rng.standard_normal(3)
     C = wm_to_dcm(c)

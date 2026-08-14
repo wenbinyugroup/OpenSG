@@ -4,25 +4,25 @@
     opensg <sg.yaml> D      dehomogenization: homogenize, then recover
 
     opensg gen_windio_cs <windio.yaml>
-                            windIO blade -> one 1-D shell cross-section SG
-                            yaml per station (+ the PreVABS XML byproduct by
-                            default) -- the opensg_shell windio route
-                            (gen_windio_cs --help for the flags)
+                            every blade station -> VABS-layout .out records
+                            + spanwise .dat tables, fully in memory (any
+                            dialect: windIO v1/v2 or pyNuMAD;
+                            gen_windio_cs --help for the flags)
 
     opensg windio_st <windio.yaml> <r> [r ...]
-                            the one-shot bypass: windIO blade + station r ->
-                            Timoshenko 6x6 printed and stored (station SG
-                            yaml + _Timo.out + VABS-layout .K, nothing else),
-                            no pre-generated SG yaml needed
+                            one-shot station bypass: blade + span r ->
+                            Timoshenko 6x6 printed and stored as the
+                            VABS-layout <tag>.out, nothing else
                             (windio_st --help for the flags)
 
     opensg pynumad <blade.yaml> <st-id>
-                            the pyNuMAD blade dialect (SEPARATE from windio):
-                            st-id = 0-based station index | span r | "all" --
-                            one station prints the Timoshenko 6x6 + the
+                            the blade route by st-id (any dialect; pyNuMAD
+                            width-placed reinforcements resolved): st-id =
+                            0-based station index | span r | "all" -- one
+                            station prints the Timoshenko 6x6 + the
                             cross-check vs the file's own
-                            elastic_properties_mb; "all" generates every
-                            cross-section (pynumad --help for the flags)
+                            elastic_properties_mb; "all" sweeps every
+                            station (pynumad --help for the flags)
 
 The file says which engine owns it.  `msg: shell` in the yaml header sends
 it to opensg_shell (the msg-shell contour / surface SG), `msg: solid` to
@@ -51,7 +51,7 @@ def main(argv=None):
          (0 ok, 2 usage)."""
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv and argv[0] in ("gen_windio_cs", "windio_st", "pynumad"):
-        # the windIO and pyNuMAD routes live in the shell engine
+        # the blade routes live in the shell engine's pynumad package
         from opensg_shell.cli import main as _engine
         return _engine(argv)
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):

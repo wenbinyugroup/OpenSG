@@ -18,7 +18,7 @@ import re
 
 import numpy as np
 
-from opensg_shell.windio import read_k_file, vabs_to_beamdyn, write_bd_props
+from opensg_shell.pynumad import read_k_file, vabs_to_beamdyn, write_bd_props
 
 ############### User Input #################################
 prefix = "iea22"                   # station tag prefix from step 2

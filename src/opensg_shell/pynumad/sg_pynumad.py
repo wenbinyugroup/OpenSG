@@ -21,7 +21,10 @@ import time
 
 import numpy as np
 
-from .sg_mesh import WindIOBladeV1, _interp, build_cross_section
+import yaml as _yaml
+
+from .sg_mesh import (WindIOBlade, WindIOBladeV1, _interp,
+                      build_cross_section)
 
 
 class PyNuMADBlade(WindIOBladeV1):
@@ -84,6 +87,34 @@ def load_blade_pynumad(path):
     In:  path str, pyNuMAD blade yaml (windIO-v1 dialect).
     Out: PyNuMADBlade."""
     return PyNuMADBlade(path)
+
+
+def load_blade(path):
+    """Auto-detect the blade dialect and return the matching reader.
+
+    In:  path str -- blade yaml: windIO v1 / pyNuMAD dialect
+         (outer_shape_bem) or windIO v2 (outer_shape).
+    Out: PyNuMADBlade (v1: the width-form placements resolved) |
+         WindIOBlade (v2)."""
+    bl = _yaml.safe_load(open(path))["components"]["blade"]
+    return PyNuMADBlade(path) if "outer_shape_bem" in bl \
+        else WindIOBlade(path)
+
+
+def blade_stations(blade):
+    """The blade's own airfoil station positions.
+
+    In:  blade reader.
+    Out: list of float r in [0, 1]."""
+    return blade.stations()
+
+
+def blade_length(blade):
+    """Blade length [m] from the reference-axis polyline.
+
+    In:  blade reader.
+    Out: float [m]."""
+    return blade.length()
 
 
 def resolve_station(blade, token):
@@ -192,7 +223,7 @@ def _append_file_crosscheck(out_path, K6, mpus, file_K, file_M):
         f.write("".join(L))
 
 
-def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
+def station_timo(blade_yaml, station, mesh_size=0.01,
                  out_dir=".", prefix=None, xml=False, view=False,
                  blade=None):
     """Timoshenko 6x6 of one pyNuMAD blade station, fully IN MEMORY.
@@ -208,9 +239,10 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
     In:
         blade_yaml: str, pyNuMAD blade yaml.
         station: str | int | float, st-id token (see resolve_station).
-        mesh_size: float, element arc length / chord.
-        reference: "center" | "oml" -- DEFAULTS TO "oml" for this dialect
-            (the windio route keeps "center").
+        mesh_size: float, element arc length / chord.  The shell reference
+            surface is ALWAYS "oml" on this route (no option); a center-
+            reference section is an SG-engine study via
+            emit_shell_yaml(..., reference="center").
         out_dir: str, folder of the <tag>.out record.
         prefix: str | None, tag prefix (None = the blade-file stem).
         xml, view: accepted for CLI compatibility, IGNORED (no yaml/XML/PNG
@@ -225,18 +257,21 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
 
     t0 = time.perf_counter()
     if blade is None:
-        blade = load_blade_pynumad(blade_yaml)
+        blade = load_blade(blade_yaml)
     r = resolve_station(blade, station)
-    cs = build_cross_section(blade, r, mesh_size=mesh_size,
-                             segments=pynumad_segments(blade, r))
-    K, M, info, arrays = timo_cs(cs, reference)
+    # the 12-region segmentation is the v1/pyNuMAD scheme; windIO v2
+    # sections keep their data-driven breakpoints
+    segs = pynumad_segments(blade, r) \
+        if isinstance(blade, WindIOBladeV1) else None
+    cs = build_cross_section(blade, r, mesh_size=mesh_size, segments=segs)
+    K, M, info, arrays = timo_cs(cs, "oml")
     stem = prefix or os.path.splitext(os.path.basename(blade_yaml))[0]
     tag = "%s_r%04d" % (stem, round(r * 1000))
     os.makedirs(out_dir, exist_ok=True)
     k_file = os.path.join(out_dir, tag + ".out")
     write_vabs_k(k_file, K, M, info,
                  model="OpenSG msg-shell beam model (pynumad in-memory,"
-                       " reference=%s)" % reference,
+                       " reference=oml)",
                  solve_time=time.perf_counter() - t0)
     P = dict(Timo=K, Mass=M, info=info, k_file=k_file, tag=tag, r=r,
              mesh=dict(n_nodes=len(arrays["rx"]),
@@ -255,7 +290,7 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
 
 def generate_cross_sections(blade_yaml, out_dir="cross_sections",
                             stations="airfoil", mesh_size=0.01,
-                            reference="oml", xml=False, plots=False,
+                            xml=False, plots=False,
                             prefix=None, verbose=True):
     """Every pyNuMAD blade station, fully IN MEMORY -> .out + spanwise .dat.
 
@@ -269,12 +304,12 @@ def generate_cross_sections(blade_yaml, out_dir="cross_sections",
         out_dir: str, output folder.
         stations: "airfoil" (the blade's own) | int N (uniform grid) |
             list of float r.
-        mesh_size, reference, prefix: as station_timo.
+        mesh_size, prefix: as station_timo (reference surface always oml).
         verbose: bool, one "r = X" line per station.
     Out:
         list of the per-station station_timo dicts (station order).
     """
-    blade = load_blade_pynumad(blade_yaml)
+    blade = load_blade(blade_yaml)
     if stations == "airfoil":
         rs = blade.stations()
     elif isinstance(stations, int):
@@ -286,8 +321,7 @@ def generate_cross_sections(blade_yaml, out_dir="cross_sections",
     out, rows, rows_k, rows_m = [], [], [], []
     for r in rs:
         P = station_timo(blade_yaml, "%.10f" % r, mesh_size=mesh_size,
-                         reference=reference, out_dir=out_dir,
-                         prefix=prefix, blade=blade)
+                         out_dir=out_dir, prefix=prefix, blade=blade)
         if verbose:
             print(" r = %.4f" % P["r"])
         m = P["mesh"]

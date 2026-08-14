@@ -520,8 +520,8 @@ def read_opensg_yaml(path, dim=None):
 
     The msg-SHELL dialect (`sections` + `elementOrientations` + `elements`,
     i.e. a contour with a LAYUP) is refused: a layup is not a mesh, so
-    there is no SG input to write from it -- go through
-    opensg_shell.windio.sg_windio.emit_prevabs_xml and PreVABS instead.
+    there is no SG input to write from it -- build the 2-D solid section
+    with PreVABS (the OpenSG_io XML route) instead.
 
     In:  path str -- the SG yaml (or an already-parsed SG dict, returned
          unchanged); dim int | None -- the SG dimension, None = inferred
@@ -549,7 +549,7 @@ def read_opensg_yaml(path, dim=None):
             "elementOrientations + elements): its `sections` carry a LAYUP,"
             " not a solid mesh, so there is no VABS/SwiftComp SG input to"
             " write from it directly.  Build the 2-D section first --"
-            " opensg_shell.windio.sg_windio.emit_prevabs_xml + PreVABS --"
+            " PreVABS (the OpenSG_io XML route) --"
             " and write the resulting 2-D solid yaml instead." % path)
 
     nd = [[float(v) for v in _tokens(r)] for r in raw["nodes"]]

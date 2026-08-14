@@ -4,8 +4,9 @@ The pyNuMAD-route homogenizer: takes the EDITABLE Blade object, builds the
 station ring arrays directly (the same station transformation the yaml
 emitter performs: reference-surface offset, web chains, reference-axis
 shift, orientation frames) and calls the core RM ring solver -- NO yaml,
-no .out, no windio import.  The file-based pipeline (opensg_shell.windio)
-is untouched; this module is the in-memory pyNuMAD workflow:
+no .out.  The yaml-artifacts route (pynumad.sg_props.beam_props over an
+emitted station yaml) stays available for SG-engine studies; this module
+is the in-memory blade workflow:
 
     from opensg_shell.pynumad.sg_homo import timo
 
@@ -498,8 +499,7 @@ def timo(blade, st, shear="mitc4_g23", full=False):
         with full=True, (K, M, info).
     """
     r = blade.resolve(st)
-    C6, M6, info, _ = timo_cs(blade.cross_section(r), blade.reference,
-                              shear=shear)
+    C6, M6, info, _ = timo_cs(blade.cross_section(r), "oml", shear=shear)
     return (C6, M6, info) if full else (C6, M6)
 
 
