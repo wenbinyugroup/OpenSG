@@ -1,4 +1,4 @@
-"""opensg_shell.windio -- windIO blade -> beam pipeline (standalone, no external
+"""opensg_shell.windio -- DEPRECATED windIO blade -> beam pipeline (standalone, no external
 wrapper): cross-sections, beam properties, BeamDyn coupling, stress recovery.
 
     sg_windio.py     windIO v1/v2 blade reader (plain yaml, no windIO package),
@@ -29,6 +29,15 @@ Pipeline (examples/OpenSG_shell/windio):
     5  beamdyn_driver run  -> per-station <tag>.ff              (sg_beamdyn)
     6  <tag>.ff + yaml     -> <tag>.SM / .EM / .U               (sg_recovery)
 """
+import warnings as _warnings
+
+_warnings.warn(
+    "opensg_shell.windio is DEPRECATED and will be removed: use the"
+    " Blade/pynumad route (import opensg; blade = opensg.read(yaml)) for"
+    " cross-sections and beam properties; the BeamDyn coupling and"
+    " recovery steps remain here until they move.",
+    DeprecationWarning, stacklevel=2)
+
 from .sg_windio import (load_blade, build_cross_section, emit_shell_yaml,   # noqa: F401
                         emit_prevabs_xml, blade_stations, blade_length,
                         generate_cross_sections, oml_load_integrals)

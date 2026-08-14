@@ -12,6 +12,8 @@ windio reader would drop from the laminate.  This package owns that dialect:
                      elastic_properties_mb 6x6 accessor, and the IN-MEMORY
                      station / all-stations drivers (VABS-layout .out is
                      the only artifact; no 1-D yaml emission).
+    sg_blade.py      the editable Blade object (opensg.read entry) +
+                     the per-station Section override.
     sg_homo.py       STANDALONE in-memory homogenizer: ring driver, laws,
                      curvature, mass, VABS .K writer -- `timo(blade, st)`.
 
@@ -27,4 +29,5 @@ Terminal route:
 from .sg_pynumad import (PyNuMADBlade, load_blade_pynumad, resolve_station,  # noqa: F401
                          file_six_by_six, FILE_DIAG_TO_VABS,
                          station_timo, generate_cross_sections)
-from .sg_homo import timo                                                    # noqa: F401
+from .sg_homo import timo
+from .sg_blade import Blade, Section, opensg_blade  # noqa: F401                                                    # noqa: F401

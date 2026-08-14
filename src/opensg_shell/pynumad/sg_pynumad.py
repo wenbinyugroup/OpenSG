@@ -156,7 +156,7 @@ def pynumad_segments(blade, r):
     In:  blade PyNuMADBlade; r float span.
     Out: list of (s_a, s_b, laminate) for build_cross_section(segments=).
     """
-    from ..sg_blade import Definition, Geometry, KeyPoints, StackDatabase
+    from .sg_blade import Definition, Geometry, KeyPoints, StackDatabase
     geo = Geometry().generate(blade)
     kp = KeyPoints().generate(Definition(blade, "v1"), geo, blade)
     return StackDatabase().generate(kp, blade).segments(r)

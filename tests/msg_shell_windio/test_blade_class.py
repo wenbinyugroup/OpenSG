@@ -186,7 +186,7 @@ def test_pynumad_sg_homo_kernel_only_imports():
 def test_blade_and_pynumad_are_windio_free():
     """The Blade class and the whole pynumad package must not import the
     windio machinery (it is being deprecated)."""
-    import opensg_shell.sg_blade as blade_mod
+    import opensg_shell.pynumad.sg_blade as blade_mod
     import opensg_shell.pynumad.sg_mesh as mesh_mod
     import opensg_shell.pynumad.sg_pynumad as pyn_mod
     import opensg_shell.pynumad.sg_homo as homo_mod

@@ -57,23 +57,24 @@ def test_pynumad_cli_lean_and_optins(tmp_path):
     out = str(tmp_path / "st")
     rc = main(["pynumad", BLADE, "9", "--out", out])
     assert rc == 0
-    # the pynumad station record is a VABS-layout .out (not .K), carrying
-    # the elastic_properties_mb cross-check block
+    # the in-memory route's ONLY artifact: the VABS-layout .out record,
+    # carrying the elastic_properties_mb cross-check block and the OML
+    # reference (the dialect default) in its banner
     kout = os.path.join(out, tag + ".out")
     assert os.path.exists(kout)
-    assert "Cross-check vs the blade file" in open(kout).read()
-    ypath = os.path.join(out, tag + "_shell.yaml")
-    assert os.path.exists(ypath)
-    # this dialect defaults the shell reference surface to the OML
-    hdr = open(ypath).read(200)
-    assert "reference: oml" in hdr
-    # lean default: no xml/, no ABDG, no abd/
+    txt = open(kout).read()
+    assert "Cross-check vs the blade file" in txt
+    assert "reference=oml" in txt
+    # nothing else: no station yaml, no xml/, no ABDG, no abd/ (the 1-D
+    # yaml emission was the deprecated windio machinery's job)
+    assert not os.path.exists(os.path.join(out, tag + "_shell.yaml"))
     assert not os.path.exists(os.path.join(out, "xml"))
     assert not os.path.exists(os.path.join(out, tag + "_shell_ABDG.out"))
     assert not os.path.exists(os.path.join(out, "abd"))
 
+    # --xml / --view are accepted for compatibility and IGNORED
     out2 = str(tmp_path / "st_optin")
     rc = main(["pynumad", BLADE, "9", "--out", out2, "--xml", "--view"])
     assert rc == 0
-    for f in (tag + ".xml", tag + ".dat", "materials.xml"):
-        assert os.path.exists(os.path.join(out2, "xml", tag, f))
+    assert os.path.exists(os.path.join(out2, tag + ".out"))
+    assert not os.path.exists(os.path.join(out2, "xml"))

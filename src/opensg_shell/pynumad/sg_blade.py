@@ -1,4 +1,4 @@
-"""opensg_shell.sg_blade -- the editable Blade object (pyNuMAD-style workflow).
+"""opensg_shell.pynumad.sg_blade -- the editable Blade object (pyNuMAD-style workflow).
 
 Modeled on pynumad.objects.blade.Blade: ONE object reads the blade file
 (windIO v1/v2 or the pyNuMAD dialect), exposes the WHOLE definition as
@@ -52,9 +52,9 @@ try:
 except ImportError:
     from yaml import SafeLoader as _Loader
 
-from .pynumad.sg_mesh import (WindIOBlade, build_cross_section,
+from .sg_mesh import (WindIOBlade, build_cross_section,
                               emit_shell_yaml)
-from .pynumad.sg_pynumad import (PyNuMADBlade, resolve_station,
+from .sg_pynumad import (PyNuMADBlade, resolve_station,
                                  file_six_by_six, _append_file_crosscheck)
 
 
@@ -615,7 +615,7 @@ class Blade:
             import time as _time
             _t0 = _time.perf_counter()
             info = self.write_station_yaml(r)
-            from .pynumad.sg_homo import timo_cs, write_vabs_k
+            from .sg_homo import timo_cs, write_vabs_k
             C6, M6, info6, _arr = timo_cs(self.cross_section(r),
                                           self.reference)
             tag = os.path.basename(info["out"])[:-len("_shell.yaml")]
@@ -627,7 +627,7 @@ class Blade:
             P = dict(Timo=C6, Mass=M6, info=info6, bundle=None,
                      k_file=k_file, yaml=info["out"], tag=tag, mesh=info)
         else:
-            from .pynumad.sg_homo import timo_cs
+            from .sg_homo import timo_cs
             C6, M6, info6, arrays = timo_cs(self.cross_section(r),
                                             self.reference)
             tag = "%s_r%04d" % (self._stem(), round(r * 1000))
