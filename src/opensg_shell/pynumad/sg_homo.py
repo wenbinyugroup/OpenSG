@@ -17,17 +17,196 @@ from the un-quantized nodes exactly as the emitter writes them, so the
 ring solver sees the same numbers the yaml round-trip would deliver.
 Section overrides (blade.section) are honored because the cross-section
 comes from blade.cross_section.
+
+OWNERSHIP: this module carries its OWN homogenization layer -- the ring
+Timoshenko driver (ring_indep), the section laws (_material_by_section /
+material_db_from_yaml), the hoop curvature (compute_k22), the station
+transformation and the ring mass -- and imports only the shared KERNEL
+layers: the sg_assembly element/assembly kernels, the fe_jax msg_*
+kernels, and opensg_solid's rm_plate_msg (the Yu-2002 MSG plate G).
 """
+from collections import defaultdict
+
 import numpy as np
 import jax.numpy as jnp
 
-from ..sg_assembly import compute_k22
-from ..sg_homo import ring_indep
-from ..sg_materials import _material_by_section, material_db_from_yaml
-from ..fe_jax.msg_materials import shift_abd_reference
+from ..sg_assembly import assemble_segment_indep, assemble_constraint
+from ..fe_jax.msg_materials import compute_ABD_matrix, shift_abd_reference
+from ..fe_jax.msg_transverse_shear import transverse_shear_stiffness
+from ..fe_jax.msg_rm_timo import build_C_Psi
+from ..fe_jax.msg_solver import finalize_v1_and_compute_deff
 
 _GP = np.array([-1.0, 1.0]) / np.sqrt(3.0)               # 2-pt Gauss (exact: quadratic)
 _FRAC = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}
+
+
+def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None,
+                cop_tol=0.5):
+    """Per-element hoop curvature k22 = d e3/ds . e2 (pynumad-owned copy).
+
+    Estimated from hoop-aligned neighbours; a COPLANARITY filter keeps
+    folds (near-perpendicular normals) out of the curvature, per-neighbour
+    estimates combine with the MEDIAN, flat elements snap to exactly zero.
+
+    In:  centroids (ne,3); e2s/e3s (ne,3) element frames; elems (ne,2);
+         flat_tol float snap threshold; k22_max float | None cap;
+         cop_tol float coplanarity dot threshold.
+    Out: k22 (ne,) float."""
+    node2el = defaultdict(list)
+    for ei, el in enumerate(elems):
+        for n in el:
+            node2el[int(n)].append(ei)
+    centroids = np.asarray(centroids)
+    e2s = np.asarray(e2s); e3s = np.asarray(e3s)
+    k22 = np.zeros(len(elems))
+    for ei in range(len(elems)):
+        neigh = {ej for n in elems[ei] for ej in node2el[int(n)] if ej != ei}
+        ks = []
+        for ej in neigh:
+            if float(np.dot(e3s[ej], e3s[ei])) < cop_tol:
+                continue
+            disp = centroids[ej] - centroids[ei]
+            nd = float(np.linalg.norm(disp))
+            if nd < 1e-12:
+                continue
+            ds = float(np.dot(disp, e2s[ei]))
+            if abs(ds) < 0.5 * nd:
+                continue
+            ks.append(float(np.dot(e3s[ej] - e3s[ei], e2s[ei])) / ds)
+        k = float(np.median(ks)) if ks else 0.0
+        if abs(k) < flat_tol:
+            k = 0.0
+        elif k22_max is not None:
+            k = float(np.clip(k, -k22_max, k22_max))
+        k22[ei] = k
+    return k22
+
+
+def _material_by_section(sections, materials, center_ref=True):
+    """Per-section plate ABD 6x6 + transverse-shear 2x2 (pynumad-owned copy).
+
+    In:  sections list of dicts with 'layup' = [[mat, t, ang], ...];
+         materials list of dicts with 'name' and 'elastic' {E, G, nu};
+         center_ref bool -- True shifts each ABD to the laminate mid-surface.
+    Out: (D_by, G_by): dicts {section index: (6,6)} / {(2,2)}."""
+    matmap = {mm["name"]: {"E": mm["elastic"]["E"], "G": mm["elastic"]["G"],
+                           "nu": mm["elastic"]["nu"]} for mm in materials}
+    D_by, G_by = {}, {}
+    for si, sec in enumerate(sections):
+        layup = sec["layup"]
+        mn = [p[0] for p in layup]
+        th = [float(p[1]) for p in layup]
+        an = [float(p[2]) for p in layup]
+        abd = np.asarray(compute_ABD_matrix(th, an, mn, matmap)[0])
+        if center_ref:
+            abd = shift_abd_reference(abd, 0.5 * sum(th))
+        D_by[si] = abd
+        G_by[si] = np.asarray(transverse_shear_stiffness(th, an, mn,
+                                                         matmap)[0])
+    return D_by, G_by
+
+
+def material_db_from_yaml(materials):
+    """Material lookup dict from a yaml-style materials list (owned copy).
+
+    In:  materials list of dicts with "name", "elastic" {E, G, nu} 3-lists
+         and optional "density".
+    Out: dict name -> {"E", "G", "nu" 3-lists, "rho" float (0.0 absent)}."""
+    db = {}
+    for m in materials:
+        el = m["elastic"]
+        db[m["name"]] = {"E": [float(x) for x in el["E"]],
+                         "G": [float(x) for x in el["G"]],
+                         "nu": [float(x) for x in el["nu"]],
+                         "rho": float(m.get("density", 0.0))}
+    return db
+
+
+def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross,
+               h=None, shear="mitc4_g23", lam_space="elem",
+               return_fields=False):
+    """Constrained 6-DOF ring SG -> Timoshenko C6 (pynumad-owned driver).
+
+    The one-quad-deep dof-mapped prismatic strip over the contour, the
+    element-constant drilling Lagrange constraint, one dense LU of the KKT
+    for the V0 AND V1 solves, and the generalized-Timoshenko finalization
+    (all energy blocks /h).  Dense LU is deliberate: the saddle point
+    carries a near-null drilling/kernel mode that a sparse factorization
+    resolves along a different direction.
+
+    In:  rx (m,3) contour nodes; rcells (ne,2) edges; rsub (ne,) section
+         id; re3 (ne,3) wall normals; D_by/G_by per-section ABD 6x6 /
+         G 2x2; k22_edge (ne,); ax int axial index; cross list[2];
+         h float | None strip depth (None = mean edge length); shear str
+         ('mitc4_g23' = the production ring scheme: tie ONLY gamma_23);
+         lam_space str; return_fields bool.
+    Out: C6 (6,6); with return_fields also V0, V1 (6m,4) warping fields
+         (multiplier rows stripped, drilling omega_3 included)."""
+    m = len(rx)
+    if h is None:
+        h = float(np.mean(np.linalg.norm(rx[rcells[:, 1]] - rx[rcells[:, 0]],
+                                         axis=1)))
+    ez = np.zeros(3); ez[ax] = 1.0
+    nodes = np.vstack([rx, rx + h * ez])
+    dof_map = np.concatenate([np.arange(m), np.arange(m)])
+    quads = np.array([[a, b, m + b, m + a] for a, b in rcells], dtype=int)
+    e3q = np.asarray(re3)
+
+    Dhh, Dhe, Dee, Dhl, Dll, Dle = assemble_segment_indep(
+        nodes, quads, rsub, e3q, D_by, G_by, np.asarray(k22_edge), cross, ax,
+        kg_e=None, dof_map=dof_map, shear=shear)
+    Gc, Gl, Ge = assemble_constraint(nodes, quads, rsub, e3q,
+                                     np.asarray(k22_edge), cross, ax,
+                                     dof_map=dof_map, lam_space=lam_space)
+    Dhh, Dhe, Dhl, Dll, Dle = [np.asarray(A) / h
+                               for A in (Dhh, Dhe, Dhl, Dll, Dle)]
+    Dee = np.asarray(Dee) / h
+    Gc, Gl, Ge = Gc / h, Gl / h, Ge / h
+
+    M = Dhh.shape[0]; P = Gc.shape[0]
+    # 5-DOF rigid kernel embedded into 6 DOF (om3 rigid-free)
+    C5, Psi5 = build_C_Psi(rx[:, cross], rcells, p=1)
+    C6 = np.zeros((4, M)); Psi6 = np.zeros((M, 4))
+    for n in range(m):
+        C6[:, 6 * n:6 * n + 5] = C5[:, 5 * n:5 * n + 5]
+        Psi6[6 * n:6 * n + 5, :] = Psi5[5 * n:5 * n + 5, :]
+    Psi6[3::6, 3] *= -1.0                    # validated-kernel om1 sign flip
+
+    naug = M + P
+    Dhe_a = np.vstack([Dhe, Ge])
+    Dle_a = np.vstack([Dle, np.zeros((P, 4))])
+    Psi_a = np.vstack([Psi6, np.zeros((P, 4))])
+    Dc_a = np.vstack([C6.T, np.zeros((P, 4))])
+
+    from scipy.linalg import lu_factor, lu_solve
+    A = np.zeros((naug + 4, naug + 4))
+    A[:M, :M] = Dhh
+    A[:M, M:naug] = Gc.T; A[M:naug, :M] = Gc
+    A[:M, naug:] = C6.T; A[naug:, :M] = C6
+    Alu = lu_factor(A)
+    R0 = np.zeros((naug + 4, 4)); R0[:naug] = -Dhe_a
+    V0 = lu_solve(Alu, R0)[:naug]
+    Deff = Dee + V0.T @ Dhe_a
+    # V1 RHS projected onto range(Dhh) (block form of prepare_v1_rhs)
+    V0m, V0p = V0[:M], V0[M:naug]
+    DhlV0 = np.vstack([Dhl @ V0m, Gl @ V0m])
+    DhlTV0Dle = np.vstack([Dhl.T @ V0m + Gl.T @ V0p,
+                           np.zeros((P, 4))]) + Dle_a
+    V0DllV0 = V0m.T @ (Dll @ V0m)
+    b_unproj = DhlV0 - DhlTV0Dle
+    bb = Dc_a @ (np.linalg.inv(Psi_a.T @ Dc_a) @ (Psi_a.T @ b_unproj)) \
+        - b_unproj
+    R1 = np.zeros((naug + 4, 4)); R1[:naug] = bb
+    V1 = lu_solve(Alu, R1)[:naug]
+    C6r, *_ = finalize_v1_and_compute_deff(
+        jnp.array(V1), jnp.array(V0), jnp.array(Deff),
+        jnp.array(V0DllV0), jnp.array(DhlV0), jnp.array(DhlTV0Dle),
+        jnp.array(Psi_a), jnp.array(Dc_a))
+    C6r = np.asarray(C6r)
+    C6r = 0.5 * (C6r + C6r.T)
+    if return_fields:
+        return C6r, np.asarray(V0[:M]), np.asarray(V1[:M])
+    return C6r
 
 
 def _mat_card(blade, name):
