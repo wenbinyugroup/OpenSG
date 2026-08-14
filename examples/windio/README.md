@@ -27,6 +27,14 @@ opensg gen_windio_cs IEA-22-280-RWT.yaml
 `reference: center` in the header, so `opensg <station yaml>` runs the
 shear-refined RM -> Timoshenko route directly.
 
+And the one-shot station bypass (steps 1 + 2 fused: windIO in, Timoshenko
+6x6 out -- prints the matrix and stores the station SG yaml + `_Timo.out` +
+VABS-layout `.K`):
+
+```bash
+opensg windio_st IEA-22-280-RWT.yaml 0.1967
+```
+
 Station count is free: `stations = "airfoil"` uses the blade's own windIO airfoil
 positions (IEA-22: 16); `stations = 51` puts 51 uniform stations `r = i/50` (the
 grid of the VABS 51-station reference set); any explicit list of `r` works too.

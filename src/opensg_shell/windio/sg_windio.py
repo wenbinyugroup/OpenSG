@@ -638,7 +638,7 @@ def emit_prevabs_xml(cs, outdir, name="xsec", mesh_size=0.005):
 def generate_cross_sections(windio_path, out_dir="cross_sections",
                             stations="airfoil", mesh_size=0.01,
                             reference="center", xml=True, plots=True,
-                            prefix=None, verbose=True):
+                            prefix=None, verbose=True, blade=None):
     """windIO blade -> one 1-D shell SG yaml per station (+ PreVABS XML byproduct).
 
     The terminal route (`opensg gen_windio_cs <windio.yaml>`): every station
@@ -660,6 +660,8 @@ def generate_cross_sections(windio_path, out_dir="cross_sections",
         plots: bool, ALSO emit the mesh + orientation PNGs (default True).
         prefix: str | None, station tag prefix (None = the windIO file stem).
         verbose: bool, per-station progress lines.
+        blade: reader | None, a pre-built blade reader (e.g. the pynumad
+            dialect subclass); None = load_blade(windio_path).
     Out:
         dict(rows (n, 7) float station table [r chord twist n_nodes n_elems
              n_sets n_webs], yamls list[str], dat str station-table path,
@@ -667,7 +669,7 @@ def generate_cross_sections(windio_path, out_dir="cross_sections",
     """
     import os
 
-    blade = load_blade(windio_path)
+    blade = load_blade(windio_path) if blade is None else blade
     if stations == "airfoil":
         rs = blade.stations()
     elif isinstance(stations, int):

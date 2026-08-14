@@ -15,9 +15,11 @@ wrapper): cross-sections, beam properties, BeamDyn coupling, stress recovery.
                      file; VABS-layout .SM / .EM / .U writers
 
 Terminal route for step 1 (all stations, PreVABS XML byproduct on by
-default):
+default), and the one-shot station bypass (windIO -> Timoshenko 6x6, steps
+1 + 2 fused for one station):
 
     opensg gen_windio_cs <windio.yaml>          (sg_windio.generate_cross_sections)
+    opensg windio_st <windio.yaml> <r> [r ...]  (sg_props.station_timo)
 
 Pipeline (examples/OpenSG_shell/windio):
     1  windIO yaml         -> <tag>_shell.yaml per station     (sg_windio)
@@ -30,7 +32,8 @@ Pipeline (examples/OpenSG_shell/windio):
 from .sg_windio import (load_blade, build_cross_section, emit_shell_yaml,   # noqa: F401
                         emit_prevabs_xml, blade_stations, blade_length,
                         generate_cross_sections, oml_load_integrals)
-from .sg_props import (mass_matrix_ring, beam_props, write_vabs_k)          # noqa: F401
+from .sg_props import (mass_matrix_ring, beam_props, write_vabs_k,          # noqa: F401
+                       station_timo)
 from .sg_beamdyn import (read_k_file, vabs_to_beamdyn, write_bd_props,      # noqa: F401
                          write_bd_primary, write_bd_driver, station_loads,
                          run_beamdyn, read_bd_out, extract_ff, write_ff,

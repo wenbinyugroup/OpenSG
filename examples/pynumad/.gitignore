@@ -1,0 +1,7 @@
+# regenerable pipeline output (opensg pynumad <yaml> all / st-id runs)
+cross_sections/
+run*.log
+*_shell.yaml
+*_shell_Timo.out
+*_shell_ABDG.out
+abd/

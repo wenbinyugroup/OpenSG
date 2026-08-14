@@ -1889,7 +1889,8 @@ def _strip(rx3, cells, ax):
     return nodes, quads, h
 
 
-def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None):
+def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
+                    abd_out=True):
     """Homogenize with the RM ring and package everything the two-step dehom needs.
 
     ``ref=None`` reads the reference surface from the yaml's ``reference`` field -- the single
@@ -1903,6 +1904,9 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None):
         g_source: DEPRECATED, accepted and ignored.  The wall transverse-shear block
             G is always the MSG (Yu-2002 least-squares) projection -- the only route;
             see sg_materials.check_g_source.
+        abd_out: bool, write the <base>_ABDG.out record and the abd/ station
+            cache (default True = the pipeline behavior); False = the terminal
+            st-id routes, which keep only yaml + _Timo.out + .K.
     Out:
         dict bundle: "Timo" (6,6) RM Timoshenko matrix; "solve_time" float (the
         value written into <base>_Timo.out); "V0"/"V1" (6m,4) warping modes;
@@ -1953,8 +1957,9 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None):
                     and np.linalg.det(_Gm) > 0.0 and _Gm[0, 0] > 0.0):
                 G_by[si] = _Gm
     import os as _os2
-    write_abdg_out(_os2.path.splitext(shell_yaml)[0] + "_ABDG.out",
-                   d["sections"], R["D_by"], G_by)
+    if abd_out:
+        write_abdg_out(_os2.path.splitext(shell_yaml)[0] + "_ABDG.out",
+                       d["sections"], R["D_by"], G_by)
     C6, V0, V1 = ring_indep(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], G_by,
                             R["k22"], R["ax"], R["cross"], shear=shear, lam_space="elem",
                             return_fields=True)
@@ -1969,17 +1974,18 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None):
     from .fe_jax.msg_mesh import load_yaml as _load_sg_yaml
     _, _, _mat_db_kl, _layup_db_kl, _ = _load_sg_yaml(shell_yaml)
     # emit the per-station ABD yaml at the SAME reference (once, cached) for dehom + shell buckling
-    try:
-        import os as _os
-        from .sg_materials import emit_station_abd
-        _tag = _os.path.splitext(_os.path.basename(shell_yaml))[0]
-        _ay = _os.path.join(_os.path.dirname(shell_yaml) or ".", "abd", _tag + "_abd.yaml")
-        if not _os.path.exists(_ay):
-            emit_station_abd(shell_yaml, _ay, station=_tag,
-                             ref="mid" if ref == "center" else "oml")
-    except Exception:
-        # intentional best-effort: ABD yaml emission failure must not abort the bundle build
-        pass
+    if abd_out:
+        try:
+            import os as _os
+            from .sg_materials import emit_station_abd
+            _tag = _os.path.splitext(_os.path.basename(shell_yaml))[0]
+            _ay = _os.path.join(_os.path.dirname(shell_yaml) or ".", "abd", _tag + "_abd.yaml")
+            if not _os.path.exists(_ay):
+                emit_station_abd(shell_yaml, _ay, station=_tag,
+                                 ref="mid" if ref == "center" else "oml")
+        except Exception:
+            # intentional best-effort: ABD yaml emission failure must not abort the bundle build
+            pass
     # OpenSG default: SwiftComp-format timed .out for the beam model too
     from opensg_solid.sg_homo import write_sc_K
     _solve_time = _time.perf_counter() - _t0

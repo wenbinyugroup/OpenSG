@@ -9,6 +9,21 @@
                             default) -- the opensg_shell windio route
                             (gen_windio_cs --help for the flags)
 
+    opensg windio_st <windio.yaml> <r> [r ...]
+                            the one-shot bypass: windIO blade + station r ->
+                            Timoshenko 6x6 printed and stored (station SG
+                            yaml + _Timo.out + VABS-layout .K, nothing else),
+                            no pre-generated SG yaml needed
+                            (windio_st --help for the flags)
+
+    opensg pynumad <blade.yaml> <st-id>
+                            the pyNuMAD blade dialect (SEPARATE from windio):
+                            st-id = 0-based station index | span r | "all" --
+                            one station prints the Timoshenko 6x6 + the
+                            cross-check vs the file's own
+                            elastic_properties_mb; "all" generates every
+                            cross-section (pynumad --help for the flags)
+
 The file says which engine owns it.  `msg: shell` in the yaml header sends
 it to opensg_shell (the msg-shell contour / surface SG), `msg: solid` to
 opensg_solid (the general 1-D/2-D/3-D SG engine); without the key the mesh
@@ -35,8 +50,8 @@ def main(argv=None):
     Out: int exit code -- whatever the engine's own main() returns
          (0 ok, 2 usage)."""
     argv = sys.argv[1:] if argv is None else list(argv)
-    if argv and argv[0] == "gen_windio_cs":
-        # the windIO cross-section generator lives in the shell engine
+    if argv and argv[0] in ("gen_windio_cs", "windio_st", "pynumad"):
+        # the windIO and pyNuMAD routes live in the shell engine
         from opensg_shell.cli import main as _engine
         return _engine(argv)
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):

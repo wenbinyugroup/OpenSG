@@ -13,6 +13,27 @@
                                   --mesh-size, --reference, --no-xml, --out,
                                   --prefix)
 
+    opensg_shell windio_st <windio.yaml> <r> [r ...]
+                                  the one-shot bypass: windIO blade + station
+                                  r -> Timoshenko 6x6 printed and stored
+                                  (<tag>_shell.yaml + <tag>_shell_Timo.out +
+                                  VABS-layout <tag>.K -- and NOTHING else: no
+                                  ABDG record, no abd/ cache, no PNGs), no
+                                  pre-generated SG yaml needed (windio_st
+                                  --help for --mesh-size, --reference, --out,
+                                  --prefix)
+
+    opensg_shell pynumad <blade.yaml> <st-id>
+                                  the pyNuMAD blade dialect (windIO-v1 shape
+                                  with width-placed TE/LE reinforcements,
+                                  SEPARATE from windio): st-id = 0-based
+                                  station index | span r | "all".  One
+                                  station prints the Timoshenko 6x6 plus the
+                                  cross-check vs the file's own
+                                  elastic_properties_mb (same lean outputs as
+                                  windio_st); "all" generates every
+                                  cross-section (pynumad --help)
+
 No flags, no codes: everything else lives in the yaml header (the
 leading scalar keys above the mesh blocks), and every key has a default
 -- a headerless msg-shell SG runs as a classical beam homogenization.
@@ -252,17 +273,174 @@ def gen_windio_cs(argv):
     return 0
 
 
+def windio_st(argv):
+    """`windio_st <windio.yaml> <r> [r ...]` -- Timoshenko 6x6 straight from windIO.
+
+    The one-shot bypass: no pre-generated SG yaml -- the station cross-section
+    is built from the windIO blade, emitted as <tag>_shell.yaml and homogenized
+    (production RM ring -> Timoshenko), all in one command.  Per station it
+    stores <tag>_shell.yaml, <tag>_shell_Timo.out and the VABS-layout <tag>.K
+    and NOTHING else (no ABDG record, no abd/ cache, no PNGs), so the bypass
+    artifacts are exactly the step-1 + step-2 pipeline essentials.
+
+    In:  argv list[str] -- [windio_path, r, ..., flags] (the tokens after
+         `windio_st`); see --help
+    Out: int exit code (0 ok, 2 usage)."""
+    import argparse
+
+    p = argparse.ArgumentParser(
+        prog="opensg windio_st",
+        description="windIO blade + station r -> Timoshenko 6x6 (RM ring) in"
+                    " one shot; stores the station SG yaml, its _Timo.out and"
+                    " the VABS-layout .K.")
+    p.add_argument("windio", help="windIO blade yaml (v1 or v2)")
+    p.add_argument("r", nargs="+", type=float,
+                   help="non-dimensional span station(s) in [0, 1]")
+    p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
+                   help="target element arc length / chord (default 0.01)")
+    p.add_argument("--reference", choices=("center", "oml"), default="center",
+                   help="shell reference surface (default center)")
+    p.add_argument("--out", default=".", metavar="DIR",
+                   help="output folder (default: the current directory)")
+    p.add_argument("--prefix", default=None, metavar="TAG",
+                   help="station tag prefix (default: the windIO file stem)")
+    a = p.parse_args(argv)
+    if not os.path.exists(a.windio):
+        raise SystemExit("no such file: %s" % a.windio)
+    for r in a.r:
+        if not 0.0 <= r <= 1.0:
+            raise SystemExit("station r must be in [0, 1], got %r" % r)
+
+    import time as _time
+
+    from .windio.sg_props import station_timo
+    for r in a.r:
+        t0 = _time.perf_counter()
+        P = station_timo(a.windio, r, mesh_size=a.mesh_size,
+                         reference=a.reference, out_dir=a.out, prefix=a.prefix)
+        m = P["mesh"]
+        print(" station   : r = %.4f   chord = %.3f m   %d nodes  %d elems"
+              "  %d sets  %d webs"
+              % (r, P["chord"], m["n_nodes"], m["n_elems"],
+                 m["n_sets"], m["n_webs"]))
+        print("Timoshenko Beam Stiffness Matrix  "
+              "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
+        print(P["Timo"])
+        print(" mass/span = %.6g kg/m" % P["info"]["mpus"])
+        print("Homogenization stored in %s" % P["k_file"])
+        print("Time taken: %.2f sec" % (_time.perf_counter() - t0))
+    return 0
+
+
+def pynumad(argv):
+    """`pynumad <blade.yaml> <st-id>` -- the pyNuMAD blade dialect route.
+
+    st-id = a 0-based integer index into the blade file's OWN spanwise
+    stations, a span r in [0, 1] (any token with a decimal point), or "all".
+    One station: Timoshenko 6x6 printed and stored (<tag>_shell.yaml +
+    <tag>_shell_Timo.out + VABS-layout <tag>.K, nothing else), plus the
+    cross-check table against the file's own elastic_properties_mb when the
+    block is present.  "all": every station -> cross-section yaml + PreVABS
+    XML + PNGs + station table under --out (the gen_windio_cs equivalent for
+    this dialect).
+
+    In:  argv list[str] -- [blade_path, st_id, flags...] (the tokens after
+         `pynumad`); see --help
+    Out: int exit code (0 ok, 2 usage)."""
+    import argparse
+
+    p = argparse.ArgumentParser(
+        prog="opensg pynumad",
+        description="pyNuMAD blade yaml (windIO-v1 dialect with width-placed"
+                    " layers) -> Timoshenko 6x6 at one station, or all"
+                    " cross-sections with st-id \"all\".")
+    p.add_argument("blade", help="pyNuMAD blade yaml")
+    p.add_argument("station",
+                   help='st-id: 0-based station index, a span r in [0, 1]'
+                        ' (with a decimal point), or "all"')
+    p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
+                   help="target element arc length / chord (default 0.01)")
+    p.add_argument("--reference", choices=("center", "oml"), default="center",
+                   help="shell reference surface (default center)")
+    p.add_argument("--out", default=None, metavar="DIR",
+                   help="output folder (default: cross_sections for"
+                        ' "all", the current directory for one station)')
+    p.add_argument("--prefix", default=None, metavar="TAG",
+                   help="station tag prefix (default: the blade file stem)")
+    p.add_argument("--no-xml", action="store_true",
+                   help='"all" only: skip the per-station PreVABS XML')
+    a = p.parse_args(argv)
+    if not os.path.exists(a.blade):
+        raise SystemExit("no such file: %s" % a.blade)
+
+    import time as _time
+
+    import numpy as np
+
+    from .pynumad import (FILE_DIAG_TO_VABS, file_six_by_six,
+                          generate_cross_sections, station_timo)
+
+    if a.station == "all":
+        _t0 = _time.perf_counter()
+        R = generate_cross_sections(a.blade, out_dir=a.out or "cross_sections",
+                                    mesh_size=a.mesh_size,
+                                    reference=a.reference, xml=not a.no_xml,
+                                    prefix=a.prefix)
+        print("Cross-sections stored in %s (%d yaml%s + PNGs + %s)"
+              % (R["out_dir"], len(R["yamls"]), "" if a.no_xml else " + xml",
+                 os.path.basename(R["dat"])))
+        print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
+        return 0
+
+    _t0 = _time.perf_counter()
+    P = station_timo(a.blade, a.station, mesh_size=a.mesh_size,
+                     reference=a.reference, out_dir=a.out or ".",
+                     prefix=a.prefix)
+    m = P["mesh"]
+    print(" station   : st-id %s  ->  r = %.4f   chord = %.3f m   %d nodes"
+          "  %d elems  %d sets  %d webs"
+          % (a.station, P["r"], P["chord"], m["n_nodes"], m["n_elems"],
+             m["n_sets"], m["n_webs"]))
+    print("Timoshenko Beam Stiffness Matrix  "
+          "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
+    print(P["Timo"])
+    print(" mass/span = %.6g kg/m" % P["info"]["mpus"])
+    if P["file_K"] is not None:
+        LBL = ("EA", "GA2", "GA3", "GJ", "EI2", "EI3")
+        dv = np.diag(np.asarray(P["Timo"]))
+        df = np.diag(np.asarray(P["file_K"]))
+        print(" cross-check vs the file's own elastic_properties_mb"
+              " (pyNuMAD/WISDEM 6x6):")
+        for b, v in enumerate(FILE_DIAG_TO_VABS):
+            print("   %-3s  OpenSG %12.5g   file %12.5g   %+7.2f %%"
+                  % (LBL[v], dv[v], df[b], 100.0 * (dv[v] / df[b] - 1.0)))
+        mu_f = float(np.asarray(P["file_M"])[0, 0])
+        print("   %-3s  OpenSG %12.5g   file %12.5g   %+7.2f %%"
+              % ("mu", P["info"]["mpus"], mu_f,
+                 100.0 * (P["info"]["mpus"] / mu_f - 1.0)))
+    print("Homogenization stored in %s" % P["k_file"])
+    print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
+    return 0
+
+
 def main(argv=None):
     """Run the analysis the shell SG yaml (and an optional H|D argument) asks for.
 
     In:  argv (list[str] | None) -- [yaml_path, "H"|"D" (optional)], or
          ["gen_windio_cs", windio_path, flags...] for the windIO
-         cross-section generator; None reads sys.argv
+         cross-section generator, or ["windio_st", windio_path, r, ...] for
+         the one-shot windIO station Timoshenko bypass, or
+         ["pynumad", blade_path, st_id, ...] for the pyNuMAD blade dialect;
+         None reads sys.argv
     Out: int exit code (0 ok, 2 usage)."""
     print(BANNER)
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv and argv[0] == "gen_windio_cs":
         return gen_windio_cs(argv[1:])
+    if argv and argv[0] == "windio_st":
+        return windio_st(argv[1:])
+    if argv and argv[0] == "pynumad":
+        return pynumad(argv[1:])
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):
         print(__doc__)
         return 2

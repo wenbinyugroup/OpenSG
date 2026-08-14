@@ -286,7 +286,8 @@ def _append_mass_to_timo_out(timo_out, M):
     return timo_out
 
 
-def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None):
+def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None,
+               abd_out=True):
     """Timoshenko 6x6 + mass 6x6 of a 1-D shell SG, written as a VABS .K-layout file.
 
     Also inserts the same 6x6 mass block into the station's <base>_Timo.out
@@ -298,6 +299,9 @@ def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None):
         shear: str, passed to build_rm_bundle (production RM default).
         g_source: DEPRECATED, accepted and ignored -- the wall transverse-shear G is
             always the MSG construction (see sg_materials.check_g_source).
+        abd_out: bool, passed to build_rm_bundle -- False skips the
+            <base>_ABDG.out record and the abd/ station cache (the terminal
+            st-id routes).
     Out:
         dict: "Timo" (6,6), "Mass" (6,6), "info" mass/geometry dict, "bundle" the RM
         bundle (reusable by the dehom), "k_file" str path.
@@ -307,7 +311,8 @@ def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None):
     from ..sg_homo import build_rm_bundle
 
     t0 = time.perf_counter()
-    B = build_rm_bundle(shell_yaml, shear=shear, g_source=g_source)
+    B = build_rm_bundle(shell_yaml, shear=shear, g_source=g_source,
+                        abd_out=abd_out)
     C6 = np.asarray(B["Timo"])
     M6, info = mass_matrix_ring(shell_yaml)
     if out_k is None:
@@ -320,3 +325,47 @@ def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None):
                  solve_time=time.perf_counter() - t0)
     _append_mass_to_timo_out(os.path.splitext(shell_yaml)[0] + "_Timo.out", M6)
     return dict(Timo=C6, Mass=M6, info=info, bundle=B, k_file=out_k)
+
+
+def station_timo(windio_path, r, mesh_size=0.01, reference="center",
+                 out_dir=".", prefix=None, blade=None):
+    """Timoshenko 6x6 of one windIO blade station, straight from the windIO file.
+
+    The one-shot bypass behind `opensg windio_st <windio.yaml> <r>`: builds the
+    station cross-section (sg_windio), emits <prefix>_rXXXX_shell.yaml under
+    out_dir and homogenizes it with beam_props -- the emitted yaml, the
+    <tag>.K and the <tag>_shell_Timo.out are exactly the step-1 + step-2
+    artifacts of that station, so the bypass and the pipeline can never drift.
+
+    In:
+        windio_path: str, windIO blade yaml (v1 or v2).
+        r: float, non-dimensional span in [0, 1].
+        mesh_size: float, target element arc length (chord-normalised).
+        reference: "center" | "oml", shell reference surface.
+        out_dir: str, output folder (created; default the current directory).
+        prefix: str | None, station tag prefix (None = the windIO file stem).
+        blade: reader | None, a pre-built blade reader (e.g. the pynumad
+            dialect subclass); None = load_blade(windio_path).
+    Out:
+        dict: the beam_props result ("Timo" (6,6), "Mass" (6,6), "info",
+        "bundle", "k_file") + "yaml" str emitted station yaml, "tag" str,
+        "mesh" dict(n_nodes, n_elems, n_sets, n_webs, ...), "chord" float [m],
+        "twist" float (windIO unit).
+    """
+    import os
+    from .sg_windio import load_blade, build_cross_section, emit_shell_yaml
+
+    blade = load_blade(windio_path) if blade is None else blade
+    if prefix is None:
+        prefix = os.path.splitext(os.path.basename(windio_path))[0]
+    tag = "%s_r%04d" % (prefix, round(float(r) * 1000))
+    os.makedirs(out_dir, exist_ok=True)
+    cs = build_cross_section(blade, float(r), mesh_size=mesh_size)
+    ypath = os.path.join(out_dir, tag + "_shell.yaml")
+    mesh = emit_shell_yaml(cs, ypath, reference=reference)
+    # terminal st-id contract: yaml + _Timo.out + .K ONLY -- no _ABDG.out,
+    # no abd/ cache, no PNGs
+    P = beam_props(ypath, out_k=os.path.join(out_dir, tag + ".K"),
+                   abd_out=False)
+    P.update(yaml=ypath, tag=tag, mesh=mesh, chord=cs["chord"], twist=cs["twist"])
+    return P
