@@ -29,18 +29,20 @@ ONE file: the VABS-layout `<stem>_rXXXX.out` record (`XXXX =
 round(r * 1000)`; stiffness / compliance, centers, mass blocks, and the
 cross-check table against the file's own `elastic_properties_mb` when the
 block is present).  `all` sweeps every station -- one `.out` per station
-plus three spanwise tables under `--out`: `<stem>_stations.dat`,
+plus three spanwise tables: `<stem>_stations.dat`,
 `<stem>_timo_by_r.dat`, `<stem>_mass_by_r.dat`.  Everything runs in
 memory; no yaml, XML or PNG byproducts.
+
+**Output location: the directory you run the command from.**  There is no
+output-folder flag -- `cd` to where you want the records and run it there.
 
 ## User inputs (flags)
 
 - `--mesh-size H` -- target element arc length / chord (default 0.01).
-- `--out DIR` -- output folder (default: current directory for one
-  station, `cross_sections/` for `all`).
 
-The shell reference surface is ALWAYS the **OML** (outer mold line) on
-the blade route -- there is no flag or option for it.
+That is the whole flag surface.  The shell reference surface is ALWAYS the
+**OML** (outer mold line) on the blade route -- there is no flag or option
+for it either.
 
 ## The Blade class (optimization workflow)
 
@@ -108,7 +110,13 @@ S.reset()                                    # back to the definition
 
 An untouched Section reproduces the baseline digit-for-digit (gated in
 `tests/msg_shell_windio/test_blade_class.py`); edited thicknesses are used
-verbatim, with no ply re-quantization. `blade_section_edit_demo.py` shows the
+verbatim, with no ply re-quantization.  The un-edited route quantizes every
+layer to whole plies, exactly as pyNuMAD's stack database does (the
+realistic manufactured layup) -- so cross-checks against the file's
+`elastic_properties_mb`, which WISDEM computes from the CONTINUOUS
+thickness distributions, legitimately differ where a layer is near a
+half-ply boundary (most visibly the sub-ply tip spar caps).
+`blade_section_edit_demo.py` shows the
 spar-cap move: x1.3 at station 4 gives EA +25.4 %, flapwise EI2 +24.4 %,
 edgewise EI3 +1.3 %.
 

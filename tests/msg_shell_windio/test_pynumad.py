@@ -49,13 +49,16 @@ def test_pynumad_bare_defaults_to_all():
         main(["pynumad", "nope_missing.yaml"])
 
 
-def test_pynumad_cli_lean_and_optins(tmp_path):
+def test_pynumad_cli_lean_and_optins(tmp_path, monkeypatch):
     from opensg_shell.cli import main
 
-    # no prefix flag on this route: names derive from the blade file stem
+    # no prefix and no output-folder flag on this route: names derive from
+    # the blade file stem and the record lands in the CURRENT directory
     tag = "IEA-15-240-RWT_r1000"
     out = str(tmp_path / "st")
-    rc = main(["pynumad", BLADE, "9", "--out", out])
+    os.makedirs(out)
+    monkeypatch.chdir(out)
+    rc = main(["pynumad", BLADE, "9"])
     assert rc == 0
     # the in-memory route's ONLY artifact: the VABS-layout .out record,
     # carrying the elastic_properties_mb cross-check block and the OML
@@ -67,14 +70,22 @@ def test_pynumad_cli_lean_and_optins(tmp_path):
     assert "reference=oml" in txt
     # nothing else: no station yaml, no xml/, no ABDG, no abd/ (the 1-D
     # yaml emission was the deprecated windio machinery's job)
-    assert not os.path.exists(os.path.join(out, tag + "_shell.yaml"))
-    assert not os.path.exists(os.path.join(out, "xml"))
-    assert not os.path.exists(os.path.join(out, tag + "_shell_ABDG.out"))
-    assert not os.path.exists(os.path.join(out, "abd"))
+    assert os.listdir(out) == [tag + ".out"]
 
     # --xml / --view are accepted for compatibility and IGNORED
     out2 = str(tmp_path / "st_optin")
-    rc = main(["pynumad", BLADE, "9", "--out", out2, "--xml", "--view"])
+    os.makedirs(out2)
+    monkeypatch.chdir(out2)
+    rc = main(["pynumad", BLADE, "9", "--xml", "--view"])
     assert rc == 0
-    assert os.path.exists(os.path.join(out2, tag + ".out"))
-    assert not os.path.exists(os.path.join(out2, "xml"))
+    assert os.listdir(out2) == [tag + ".out"]
+
+
+def test_pynumad_out_flag_removed():
+    """The route writes where it is called: --out must be REJECTED
+    (argparse usage error, exit 2), not silently accepted."""
+    from opensg_shell.cli import main
+
+    with pytest.raises(SystemExit) as e:
+        main(["pynumad", BLADE, "4", "--out", "somewhere"])
+    assert e.value.code == 2

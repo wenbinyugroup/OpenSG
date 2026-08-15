@@ -225,6 +225,16 @@ class StackDatabase:
         """pyNuMAD ply quantization: n = round(interp(grid,
         round(values*1000/layerthickness), r)), thickness = n plies.
 
+        This is the DELIBERATE pyNuMAD convention (user-confirmed): stacks
+        are built from whole manufacturable plies, exactly as pyNuMAD's own
+        stack database does.  Consequences to be aware of when comparing
+        against the file's elastic_properties_mb (computed from the
+        CONTINUOUS thickness distributions): a layer thinner than half a
+        ply rounds to ZERO plies and drops (e.g. the 1 mm tip spar caps
+        against a 5.16 mm CarbonUD ply -> tip EA reads ~-46 % vs the file),
+        and mid-span caps can round up by up to half a ply.  These are
+        convention differences, not defects.
+
         In:  name/mat str; t_resolved float [m] fallback; r float span.
         Out: float thickness [m] (0.0 when the count rounds to zero)."""
         ply_mm = 1000.0 * float(self._kp._def.materials

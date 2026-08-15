@@ -328,8 +328,12 @@ def pynumad(argv):
     <tag>.out record, nothing else, with the cross-check table against the
     file's own elastic_properties_mb appended when the block is present.
     "all": every station -> <tag>.out + the spanwise
-    stations/timo_by_r/mass_by_r .dat tables under --out, fully in memory
-    (the gen_windio_cs equivalent for this dialect).
+    stations/timo_by_r/mass_by_r .dat tables, fully in memory (the
+    gen_windio_cs equivalent for this dialect).
+
+    Everything is written into the CURRENT DIRECTORY -- the folder the
+    command is run from.  There is no output-folder flag: cd to where you
+    want the records and run it there.
 
     In:  argv list[str] -- [blade_path, st_id, flags...] (the tokens after
          `pynumad`); see --help
@@ -348,9 +352,6 @@ def pynumad(argv):
                         " when omitted")
     p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
                    help="target element arc length / chord (default 0.01)")
-    p.add_argument("--out", default=None, metavar="DIR",
-                   help="output folder (default: cross_sections for"
-                        ' "all", the current directory for one station)')
     p.add_argument("--no-xml", action="store_true",
                    help="accepted for compatibility; ignored")
     p.add_argument("--xml", action="store_true",
@@ -369,7 +370,7 @@ def pynumad(argv):
         import numpy as np
 
         rs = load_blade_pynumad(a.blade).stations()
-        out = a.out or "cross_sections"
+        out = "."                       # always the invocation directory
         stem = os.path.splitext(os.path.basename(a.blade))[0]
         rows, rows_k, rows_m = [], [], []
         _t0 = _time.perf_counter()
@@ -395,13 +396,12 @@ def pynumad(argv):
                    header="r mass_per_span then mass 6x6 row-major"
                           " (VABS frame)")
         print("Cross-sections + Timoshenko stored in %s (%d stations)"
-              % (out, len(rs)))
+              % (os.getcwd(), len(rs)))
         print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
         return 0
 
     _t0 = _time.perf_counter()
-    P = station_timo(a.blade, a.station, mesh_size=a.mesh_size,
-                     out_dir=a.out or ".")
+    P = station_timo(a.blade, a.station, mesh_size=a.mesh_size, out_dir=".")
     print("Timoshenko Beam Stiffness Matrix  "
           "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
     print(P["Timo"])
