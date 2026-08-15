@@ -333,8 +333,9 @@ def pynumad(argv):
 
     Everything is written into the CURRENT DIRECTORY -- the folder the
     command is run from.  There is no output-folder flag: cd to where you
-    want the records and run it there.  --reference picks the shell
-    reference surface (oml default, center opt-in).
+    want the records and run it there.  The reference surface is the OML
+    unless --center asks for the laminate mid-surface; --xml additionally
+    writes the PreVABS XML per station (xml/<tag>/ next to the blade yaml).
 
     In:  argv list[str] -- [blade_path, st_id, flags...] (the tokens after
          `pynumad`); see --help
@@ -353,20 +354,22 @@ def pynumad(argv):
                         " when omitted")
     p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
                    help="target element arc length / chord (default 0.01)")
-    p.add_argument("--reference", choices=("oml", "center"), default="oml",
-                   help="shell reference surface: oml (default -- the blade"
-                        " yaml's airfoil contour IS the outer mold line) |"
-                        " center (laminate mid-surface, for matching a 2-D"
-                        " solid / VABS section)")
+    p.add_argument("--center", action="store_true",
+                   help="put the shell on the laminate MID-SURFACE (for"
+                        " matching a 2-D solid / VABS section); omit it and"
+                        " the reference is the OML, the blade yaml's own"
+                        " airfoil contour")
     p.add_argument("--no-xml", action="store_true",
                    help="accepted for compatibility; ignored")
     p.add_argument("--xml", action="store_true",
-                   help="accepted for compatibility; ignored")
+                   help="ALSO write the PreVABS XML byproduct per station"
+                        " (xml/<tag>/ in the blade yaml's own directory)")
     p.add_argument("--view", action="store_true",
                    help="accepted for compatibility; ignored")
     a = p.parse_args(argv)
     if not os.path.exists(a.blade):
         raise SystemExit("no such file: %s" % a.blade)
+    reference = "center" if a.center else "oml"
 
     import time as _time
 
@@ -382,7 +385,7 @@ def pynumad(argv):
         _t0 = _time.perf_counter()
         for r in rs:
             P = station_timo(a.blade, "%.10f" % r, mesh_size=a.mesh_size,
-                             reference=a.reference, out_dir=out)
+                             reference=reference, out_dir=out, xml=a.xml)
             print(" r = %.4f" % P["r"])
             m = P["mesh"]
             rows.append([P["r"], P["chord"], P["twist"], m["n_nodes"],
@@ -408,12 +411,14 @@ def pynumad(argv):
 
     _t0 = _time.perf_counter()
     P = station_timo(a.blade, a.station, mesh_size=a.mesh_size,
-                     reference=a.reference, out_dir=".")
+                     reference=reference, out_dir=".", xml=a.xml)
     print("Timoshenko Beam Stiffness Matrix  "
           "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
     print(P["Timo"])
     print("Mass Matrix  [F1 F2 F3 M1 M2 M3]:")
     print(P["Mass"])
+    if P.get("xml_dir"):
+        print("PreVABS XML stored in %s" % P["xml_dir"])
     print("Homogenization stored in %s" % P["k_file"])
     print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
     return 0

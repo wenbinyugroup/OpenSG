@@ -39,13 +39,16 @@ output-folder flag -- `cd` to where you want the records and run it there.
 ## User inputs (flags)
 
 - `--mesh-size H` -- target element arc length / chord (default 0.01).
-- `--reference {oml,center}` -- the shell reference surface.  **Default
-  `oml`**: the airfoil contour in the blade yaml IS the outer mold line, so
-  the shell sits on the geometry the file states with the laminate hanging
-  inward.  Pass `--reference center` to put the shell on the laminate
-  mid-surface instead (an inward half-thickness offset), which is the right
-  choice when matching a 2-D solid / VABS section.  The surface used is
-  named in the `.out` banner.
+- `--center` -- put the shell on the laminate **mid-surface** instead of the
+  OML.  Omit it and the reference is the **OML** (always the default): the
+  airfoil contour in the blade yaml IS the outer mold line, so the shell
+  sits on the geometry the file states with the laminate hanging inward.
+  Use `--center` when matching a 2-D solid / VABS section.  The surface
+  used is named in the `.out` banner.
+- `--xml` -- ALSO write the PreVABS XML byproduct per station
+  (`{tag}.xml` + `{tag}.dat` + `materials.xml` under `xml/<tag>/` **in the
+  blade yaml's own directory**) -- the cross-check input for the
+  XML -> prevabs -> 2-D-solid pathway.
 
 That is the whole flag surface.
 
@@ -87,11 +90,11 @@ sits on the geometry the file states, with the laminate hanging inward.
 The terminal route lets you choose per run:
 
 ```bash
-opensg pynumad IEA-15-240-RWT.yaml 4                      # oml (default)
-opensg pynumad IEA-15-240-RWT.yaml 4 --reference center   # mid-surface
+opensg pynumad IEA-15-240-RWT.yaml 4             # OML (always the default)
+opensg pynumad IEA-15-240-RWT.yaml 4 --center    # laminate mid-surface
 ```
 
-`center` displaces every skin node inward by half the local laminate
+`--center` displaces every skin node inward by half the local laminate
 thickness along the averaged inward normal (connectivity unchanged, webs
 re-chained between the moved attachment points) AND re-references the ABD
 and the mass moments to that same surface, so geometry and wall law stay

@@ -356,7 +356,28 @@ def build_cross_section(blade, r, mesh_size=0.01, segments=None):
         elems[-1] = (elems[-1][0], 0)
         nodes = nodes[:-1]; node_arc = node_arc[:-1]
     else:
-        elems.append((len(nodes) - 1, 0)); elem_lam.append(elem_lam[-1])
+        # flatback TE: mesh the closing chord at mesh_size like every other
+        # segment and give each half its OWN side's TE laminate (pyNuMAD
+        # extends the TE band into the TE flat) -- not ONE element carrying
+        # whichever laminate happened to come last in the loop
+        Pa, Pb = nodes[-1].copy(), nodes[0].copy()
+        gap = float(np.linalg.norm(Pb - Pa))
+        nseg = max(1, int(round(gap / (mesh_size * chord))))
+        lam_end, lam_start = elem_lam[-1], elem_lam[0]
+        nodes = list(nodes)
+        prev = len(nodes) - 1
+        for k, t in enumerate(np.linspace(0.0, 1.0, nseg + 1)[1:], 1):
+            if k < nseg:
+                nodes.append(Pa + t * (Pb - Pa))
+                node_arc.append(-10.0)      # off the arc: never a web anchor
+                cur = len(nodes) - 1
+            else:
+                cur = 0
+            elems.append((prev, cur))
+            elem_lam.append(lam_end if k <= nseg // 2 or nseg == 1
+                            else lam_start)
+            prev = cur
+        nodes = np.array(nodes)
 
     node_arc = np.array(node_arc)
     web_chains = []
@@ -424,6 +445,141 @@ def oml_load_integrals(cs):
     ds = np.hypot(seg[:, 0], seg[:, 1])
     x2mid = 0.5 * (closed[:-1, 0] + closed[1:, 0])
     return float(ds.sum()), float((x2mid * ds).sum())
+
+
+def _mat_xml(blade, name):
+    """PreVABS material card (isotropic replicated to orthotropic so the .sg
+    parser gets uniform cards)."""
+    m = blade.mats[name]
+    E, G, nu, rho = m.get("E"), m.get("G"), m.get("nu"), float(m.get("rho", 1.0))
+    if not isinstance(E, (list, tuple)):
+        nu = 0.3 if nu is None else nu
+        G = E / (2.0 * (1.0 + nu)) if G is None else G
+        E = [E, E, E]; G = [G, G, G]; nu = [nu, nu, nu]
+    return ('  <material name="%s" type="orthotropic">\n    <density>%g</density>\n    <elastic>\n'
+            '      <e1>%g</e1><e2>%g</e2><e3>%g</e3>\n      <g12>%g</g12><g13>%g</g13><g23>%g</g23>\n'
+            '      <nu12>%g</nu12><nu13>%g</nu13><nu23>%g</nu23>\n    </elastic>\n  </material>\n'
+            % (name, rho, E[0], E[1], E[2], G[0], G[1], G[2], nu[0], nu[1], nu[2]))
+
+
+def emit_prevabs_xml(cs, outdir, name="xsec", mesh_size=0.005):
+    """Write the PreVABS XML byproduct of a station: {name}.dat (normalised
+    airfoil), materials.xml (materials + laminae) and {name}.xml (baselines,
+    dividing points, webs, layups) -- the cross-check input for the established
+    XML -> prevabs -> 2-D-solid pathway (the same emitter validated against the
+    2-D solid orientations; the 1-D yaml route stays the primary output).
+
+    In:
+        cs: dict from build_cross_section (carries `segments`).
+        outdir: str, output directory (created).
+        name: str, file stem.
+        mesh_size: float, PreVABS 2-D mesh size (chord-normalised).
+    Out:
+        dict(dat, xml, materials, n_layups, n_webs, out).
+    """
+    import os
+    blade = cs["blade"]; chord = cs["chord"]
+    os.makedirs(outdir, exist_ok=True)
+    inv = {v: k for k, v in cs["laminates"].items()}
+    web_sets = {w["lam"] for w in cs["webs"]}
+    used = []
+    for k in range(len(inv)):
+        for (mat, t, a) in inv[k]:
+            if mat not in used:
+                used.append(mat)
+
+    def ply_t(mat):
+        pt = blade.mats[mat].get("ply_t")
+        return float(pt) if pt else 0.001            # cores have no manufacturing ply_t
+
+    # per-(material, thickness) lamina, through-thickness ply count CAPPED (a thick
+    # core split into 1 mm plies makes high-aspect layers that crash the mesher)
+    MAX_PLIES = 8
+    lam_reg = {}
+    for k in range(len(inv)):
+        for (mat, t, a) in inv[k]:
+            key = (mat, round(t, 8))
+            if key not in lam_reg:
+                n = min(max(1, int(round(t / ply_t(mat)))), MAX_PLIES)
+                lam_reg[key] = ("la_%s_%d" % (mat, len(lam_reg)), n, t / n)
+
+    xyn = cs["xy"] / chord
+    with open(os.path.join(outdir, name + ".dat"), "w") as f:
+        f.write("%s\n" % name)
+        for X, Y in xyn:
+            f.write("% .8f % .8f\n" % (X, Y))
+
+    mx = "<materials>\n" + "".join(_mat_xml(blade, m) for m in used)
+    for (mat, _tr), (lname, _n, lthk) in lam_reg.items():
+        mx += ('  <lamina name="%s">\n    <material>%s</material>\n    <thickness>%g</thickness>\n  </lamina>\n'
+               % (lname, mat, lthk))
+    mx += "</materials>\n"
+    open(os.path.join(outdir, "materials.xml"), "w").write(mx)
+
+    def layup_xml(k):
+        s = '    <layup name="layup_%d">\n' % k
+        for (mat, t, a) in inv[k]:
+            lname, n, _lthk = lam_reg[(mat, round(t, 8))]
+            s += '      <layer lamina="%s">%g:%d</layer>\n' % (lname, a, n)
+        return s + '    </layup>\n'
+
+    s_arc = cs["s_arc"]; xyc = cs["xy"]; segs = cs["segments"]
+
+    LE_XMIN = 0.02      # keep dividing points off the degenerate LE nose (by-x placement)
+
+    def xn(s):
+        x = float(np.interp(s, s_arc, xyc[:, 0])) / chord
+        return x if x >= LE_XMIN else LE_XMIN
+
+    def side(s):
+        return "top" if s < 0.5 else "bottom"
+    bks = sorted({round(float(v), 6) for seg in segs for v in (seg["s_a"], seg["s_b"])
+                  if 1e-6 < v < 1 - 1e-6})
+    pn = {s: "d%d" % i for i, s in enumerate(bks)}
+    pts = "".join('    <point name="%s" on="ln_af" by="x2" which="%s">%.6f</point>\n'
+                  % (pn[s], side(s), xn(s)) for s in bks)
+    skin = [seg for seg in segs if seg["set_id"] not in web_sets]
+    bls = ""; comps = ""; bi = 0
+    te_first = skin[0]; te_last = skin[-1]
+    for seg in skin[1:-1]:
+        a, b = round(seg["s_a"], 6), round(seg["s_b"], 6)
+        bls += '    <line name="bl_%d"><points>%s:%s</points></line>\n' % (bi, pn[a], pn[b])
+        comps += ('    <segment name="sg_%d">\n      <baseline>bl_%d</baseline>\n'
+                  '      <layup>layup_%d</layup>\n    </segment>\n' % (bi, bi, seg["set_id"]))
+        bi += 1
+    sm = round(te_last["s_a"], 6); s1 = round(te_first["s_b"], 6)
+    bls += '    <line name="bl_te"><points>%s:%s</points></line>\n' % (pn[sm], pn[s1])
+    comps += ('    <segment name="sg_te">\n      <baseline>bl_te</baseline>\n'
+              '      <layup>layup_%d</layup>\n    </segment>\n' % te_first["set_id"])
+
+    # webs: midpoint on the web line + the ACTUAL web angle from the attachments
+    web_xml = ""; web_comp = ""
+    for wi, w in enumerate(cs["webs"]):
+        Ps = np.asarray(cs["nodes"][w["a"]], float); Pe = np.asarray(cs["nodes"][w["b"]], float)
+        if Ps[1] < Pe[1]:
+            Ps, Pe = Pe, Ps
+        ang = float(np.degrees(np.arctan2(Ps[1] - Pe[1], Ps[0] - Pe[0])))
+        M = 0.5 * (Ps + Pe) / chord
+        web_xml += ('    <point name="wp_%d">%.6f %.6f</point>\n'
+                    '    <line name="bl_web_%d"><point>wp_%d</point><angle>%.4f</angle></line>\n'
+                    % (wi, M[0], M[1], wi, wi, ang))
+        web_comp += ('  <component name="web_%d" depend="surface">\n    <segment name="sg_web_%d">\n'
+                     '      <baseline>bl_web_%d</baseline>\n      <layup>layup_%d</layup>\n'
+                     '    </segment>\n  </component>\n' % (wi, wi, wi, w["lam"]))
+
+    layups = "".join(layup_xml(k) for k in range(len(inv)))
+    xml = ('<cross_section name="%s">\n  <include><material>materials</material></include>\n'
+           '  <analysis><model>1</model></analysis>\n'
+           '  <general>\n    <scale>%.6f</scale>\n    <mesh_size>%g</mesh_size>\n'
+           '    <element_type>linear</element_type>\n  </general>\n'
+           '  <baselines>\n    <line name="ln_af" type="airfoil"><points data="file" format="1" header="1">%s.dat</points></line>\n'
+           '%s%s%s  </baselines>\n  <layups>\n%s  </layups>\n'
+           '  <component name="surface">\n%s  </component>\n%s'
+           '  <global><loads>1 2 3 4 5 6</loads></global>\n</cross_section>\n'
+           % (name, chord, mesh_size, name, pts, bls, web_xml, layups, comps, web_comp))
+    open(os.path.join(outdir, name + ".xml"), "w").write(xml)
+    return dict(dat=name + ".dat", xml=name + ".xml", materials="materials.xml",
+                n_layups=len(inv), n_webs=len(cs["webs"]), out=outdir)
 
 
 def emit_shell_yaml(cs, out_path, web_mesh=None, reference="oml"):

@@ -230,11 +230,12 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
 
     The whole station runs through the pynumad-owned chain
     (sg_mesh.build_cross_section with the 12-region segmentation ->
-    sg_homo.timo_cs); the ONLY artifact is the VABS-layout <tag>.out
-    record (with the elastic_properties_mb cross-check appended when the
-    file carries the block).  The 1-D yaml emission of the old
-    windio-backed route is gone -- that was windio's job, and this route
-    does not need it.
+    sg_homo.timo_cs); the default artifact is the VABS-layout <tag>.out
+    record alone (with the elastic_properties_mb cross-check appended
+    when the file carries the block).  xml=True ALSO writes the PreVABS
+    XML byproduct into xml/<tag>/ NEXT TO THE BLADE YAML (the cross-check
+    input for the XML -> prevabs -> 2-D-solid pathway).  The 1-D yaml
+    emission of the old windio-backed route is gone.
 
     In:
         blade_yaml: str, pyNuMAD blade yaml.
@@ -246,13 +247,15 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
             named in the .out banner.
         out_dir: str, folder of the <tag>.out record.
         prefix: str | None, tag prefix (None = the blade-file stem).
-        xml, view: accepted for CLI compatibility, IGNORED (no yaml/XML/PNG
-            artifacts on this route).
+        xml: bool -- True writes the PreVABS XML ({tag}.xml + {tag}.dat +
+            materials.xml) into xml/<tag>/ in the blade yaml's directory.
+        view: accepted for CLI compatibility, IGNORED (no PNG artifacts).
         blade: PyNuMADBlade | None -- a pre-loaded reader (sweep reuse).
     Out:
         dict: "Timo"/"Mass" (6,6), "info" mass/geometry dict, "k_file" str,
         "tag" str, "mesh" dict(n_nodes, n_elems, n_sets, n_webs), "chord",
-        "twist", "r" float, "file_K"/"file_M" (6,6) | None.
+        "twist", "r" float, "file_K"/"file_M" (6,6) | None, "xml_dir"
+        str | None.
     """
     from .sg_homo import timo_cs, write_vabs_k
 
@@ -286,6 +289,12 @@ def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
     if ref6 is not None:
         _append_file_crosscheck(k_file, K, float(info["mpus"]),
                                 ref6[0], ref6[1])
+    P["xml_dir"] = None
+    if xml:
+        from .sg_mesh import emit_prevabs_xml
+        xdir = os.path.join(os.path.dirname(os.path.abspath(blade_yaml)),
+                            "xml", tag)
+        P["xml_dir"] = emit_prevabs_xml(cs, xdir, name=tag)["out"]
     return P
 
 
@@ -295,10 +304,11 @@ def generate_cross_sections(blade_yaml, out_dir="cross_sections",
                             prefix=None, verbose=True):
     """Every pyNuMAD blade station, fully IN MEMORY -> .out + spanwise .dat.
 
-    Per station: the VABS-layout <tag>.out record (station_timo); at the
-    end the spanwise <stem>_{stations,timo_by_r,mass_by_r}.dat tables.
-    The 1-D yaml / XML / PNG emission of the old windio-backed route is
-    gone; xml/plots are accepted for compatibility and ignored.
+    Per station: the VABS-layout <tag>.out record (station_timo), plus --
+    with xml=True -- the PreVABS XML under xml/<tag>/ next to the blade
+    yaml; at the end the spanwise <stem>_{stations,timo_by_r,mass_by_r}
+    .dat tables.  The 1-D yaml / PNG emission of the old windio-backed
+    route is gone; plots is accepted for compatibility and ignored.
 
     In:
         blade_yaml: str, pyNuMAD blade yaml.
@@ -323,7 +333,7 @@ def generate_cross_sections(blade_yaml, out_dir="cross_sections",
     for r in rs:
         P = station_timo(blade_yaml, "%.10f" % r, mesh_size=mesh_size,
                          reference=reference, out_dir=out_dir,
-                         prefix=prefix, blade=blade)
+                         prefix=prefix, xml=xml, blade=blade)
         if verbose:
             print(" r = %.4f" % P["r"])
         m = P["mesh"]

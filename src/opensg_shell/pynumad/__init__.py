@@ -37,7 +37,7 @@ from .sg_pynumad import (PyNuMADBlade, load_blade_pynumad, load_blade,       # n
                          file_six_by_six, FILE_DIAG_TO_VABS,
                          station_timo, generate_cross_sections)
 from .sg_mesh import (WindIOBlade, WindIOBladeV1, build_cross_section,       # noqa: F401
-                      emit_shell_yaml)
+                      emit_shell_yaml, emit_prevabs_xml)
 from .sg_homo import timo, timo_cs, write_vabs_k                             # noqa: F401
 from .sg_props import mass_matrix_ring, beam_props                           # noqa: F401
 from .sg_beamdyn import (read_k_file, vabs_to_beamdyn, write_bd_props,       # noqa: F401

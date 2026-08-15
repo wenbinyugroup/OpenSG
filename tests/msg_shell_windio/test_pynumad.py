@@ -72,13 +72,25 @@ def test_pynumad_cli_lean_and_optins(tmp_path, monkeypatch):
     # yaml emission was the deprecated windio machinery's job)
     assert os.listdir(out) == [tag + ".out"]
 
-    # --xml / --view are accepted for compatibility and IGNORED
+    # --xml writes the PreVABS XML NEXT TO THE BLADE YAML (xml/<tag>/);
+    # a tmp copy of the yaml keeps the repo clean and proves the location
+    # follows the yaml, not the cwd
+    import shutil
+    ydir = tmp_path / "ycopy"
+    ydir.mkdir()
+    ycopy = str(ydir / os.path.basename(BLADE))
+    shutil.copy(BLADE, ycopy)
     out2 = str(tmp_path / "st_optin")
     os.makedirs(out2)
     monkeypatch.chdir(out2)
-    rc = main(["pynumad", BLADE, "9", "--xml", "--view"])
+    rc = main(["pynumad", ycopy, "9", "--xml", "--view"])
     assert rc == 0
-    assert os.listdir(out2) == [tag + ".out"]
+    assert os.listdir(out2) == [tag + ".out"]        # .out still in the cwd
+    xdir = os.path.join(str(ydir), "xml", tag)
+    for f in (tag + ".xml", tag + ".dat", "materials.xml"):
+        assert os.path.exists(os.path.join(xdir, f)), f
+    # without --xml nothing appears next to the yaml
+    assert sorted(os.listdir(str(ydir))) == [os.path.basename(BLADE), "xml"]
 
 
 def test_pynumad_out_flag_removed():
@@ -92,16 +104,15 @@ def test_pynumad_out_flag_removed():
 
 
 def test_pynumad_reference_option(tmp_path, monkeypatch):
-    """--reference selects the shell reference surface: oml (the yaml's own
-    airfoil contour) by default, center (laminate mid-surface) on request.
-    The .out banner must name the surface actually used, and the two must
-    give DIFFERENT numbers -- the mid-surface ring is a smaller contour."""
+    """The reference surface is the OML unless --center is passed.  The
+    .out banner must name the surface actually used, and the two must give
+    DIFFERENT numbers -- the mid-surface ring is a smaller contour."""
     from opensg_shell.cli import main
     from opensg_shell.pynumad import read_k_file
 
     tag = "IEA-15-240-RWT_r0329"
     got = {}
-    for ref, argv in (("oml", []), ("center", ["--reference", "center"])):
+    for ref, argv in (("oml", []), ("center", ["--center"])):
         d = tmp_path / ref
         d.mkdir()
         monkeypatch.chdir(d)
@@ -117,3 +128,8 @@ def test_pynumad_reference_option(tmp_path, monkeypatch):
     # percent to a couple of percent -- not a different model)
     assert 0.9 < Kc[0, 0] / Ko[0, 0] < 1.0
     assert 0.9 < Mc[0, 0] / Mo[0, 0] < 1.0
+
+    # --center is the ONLY spelling: the value-taking form is rejected
+    with pytest.raises(SystemExit) as e:
+        main(["pynumad", BLADE, "4", "--reference", "center"])
+    assert e.value.code == 2
