@@ -38,7 +38,7 @@ SC_K = {"1": os.path.join(S6, "sample_1", "Sample_1.sc.k"),
 def test_vabs_beam_block_structure(name):
     """A native VABS cross-section .K: every block, and the printed
     scalars must equal the entries of the matrices they summarize."""
-    from opensg_solid.helper.k_file import read_k_blocks, read_beam_k
+    from opensg_solid.io.k_file import read_k_blocks, read_beam_k
 
     path = os.path.join(VABS_K, name)
     b = read_k_blocks(path)
@@ -88,7 +88,7 @@ def test_vabs_beam_block_structure(name):
 def test_write_vabs_k_station_files_read_back():
     """The 16 OpenSG-written station .K files (write_vabs_k layout, no
     classical 4x4 block) go through the same reader."""
-    from opensg_solid.helper.k_file import read_beam_k, read_k_blocks
+    from opensg_solid.io.k_file import read_beam_k, read_k_blocks
 
     files = sorted(f for f in os.listdir(PROPS) if f.endswith(".K"))
     assert len(files) >= 10, files
@@ -106,7 +106,7 @@ def test_write_vabs_k_station_files_read_back():
 def test_swiftcomp_solid_block_structure(s):
     """A SwiftComp 3-D solid .sc.k: 6x6 stiffness + compliance + the nine
     orthotropic-approximated engineering constants + effective density."""
-    from opensg_solid.helper.k_file import read_solid_k
+    from opensg_solid.io.k_file import read_solid_k
 
     d = read_solid_k(SC_K[s])
     C, S = d["C"], d["S"]
@@ -129,7 +129,7 @@ def test_opensg_out_reads_with_the_macro_law_infix():
     """OpenSG's write_sc_K splices the macro-law name into the title
     ('The Effective Cauchy Continuum Stiffness Matrix'); the reader must
     strip it and land on the same key as a bare SwiftComp .sc.k."""
-    from opensg_solid.helper.k_file import read_solid_k, read_k_blocks
+    from opensg_solid.io.k_file import read_solid_k, read_k_blocks
 
     p = os.path.join(S6, "sample_1", "Sample_1.out")
     b = read_k_blocks(p)
@@ -144,7 +144,7 @@ def test_write_sc_K_round_trip(tmp_path):
     """write_sc_K -> read_solid_k is lossless to the format's 8 printed
     significant digits, so a driver's .out is a usable reference."""
     from opensg_solid.sg_homo import write_sc_K
-    from opensg_solid.helper.k_file import read_solid_k
+    from opensg_solid.io.k_file import read_solid_k
 
     rng = np.random.default_rng(0)
     A = rng.normal(size=(6, 6))
@@ -162,7 +162,7 @@ def test_legacy_read_k_file_import_path_unchanged():
     exactly what the promoted reader returns."""
     from opensg_shell.pynumad import read_k_file
     from opensg_shell.pynumad.sg_beamdyn import read_k_file as rk2
-    from opensg_solid.helper.k_file import read_beam_k
+    from opensg_solid.io.k_file import read_beam_k
 
     p = os.path.join(VABS_K, "iea_s10.sg.K")
     K, M = read_k_file(p)
@@ -176,7 +176,7 @@ def test_legacy_read_k_file_import_path_unchanged():
 
 # ----------------------------------------------------------------- verifier
 def test_verifier_identity_and_report_shape():
-    from opensg_solid.helper.k_file import compare_to_K, read_beam_k
+    from opensg_solid.io.k_file import compare_to_K, read_beam_k
 
     p = os.path.join(VABS_K, "iea_s10.sg.K")
     K, _ = read_beam_k(p)
@@ -196,7 +196,7 @@ def test_verifier_identity_and_report_shape():
 def test_verifier_unit_convention_is_load_bearing():
     """A SwiftComp .sc.k is MPa while opensg_solid writes Pa: state it and
     the comparison passes, get it wrong and it fails by 1e6."""
-    from opensg_solid.helper.k_file import compare_to_K, read_solid_k
+    from opensg_solid.io.k_file import compare_to_K, read_solid_k
 
     C_mpa = read_solid_k(SC_K["1"])["C"]
     C_pa = C_mpa * 1.0e6
@@ -213,7 +213,7 @@ def test_verifier_catches_an_index_permutation():
     """Swapping the two bending indices is a silent-wrong-answer mode: the
     default gate must reject it, and declaring the permutation must undo
     it exactly."""
-    from opensg_solid.helper.k_file import compare_to_K, read_beam_k
+    from opensg_solid.io.k_file import compare_to_K, read_beam_k
 
     p = os.path.join(VABS_K, "iea_s10.sg.K")
     K, _ = read_beam_k(p)
@@ -231,7 +231,7 @@ def test_verifier_catches_an_index_permutation():
 def test_verifier_catches_a_relative_density_rescale():
     """The omega regression in miniature: C scaled by the relative density
     must fail every term of the solid gate."""
-    from opensg_solid.helper.k_file import compare_to_K, read_solid_k
+    from opensg_solid.io.k_file import compare_to_K, read_solid_k
 
     C = read_solid_k(SC_K["1"])["C"]
     rep = compare_to_K(C * 0.3, SC_K["1"], "swiftcomp_solid",
@@ -242,7 +242,7 @@ def test_verifier_catches_a_relative_density_rescale():
 
 def test_verifier_refuses_what_it_cannot_resolve():
     """Every unresolvable request raises instead of comparing."""
-    from opensg_solid.helper.k_file import compare_to_K, read_beam_k
+    from opensg_solid.io.k_file import compare_to_K, read_beam_k
 
     p = os.path.join(VABS_K, "iea_s10.sg.K")
     K, _ = read_beam_k(p)
@@ -267,7 +267,7 @@ def test_verifier_refuses_what_it_cannot_resolve():
 
 
 def test_verifier_term_selectors():
-    from opensg_solid.helper.k_file import compare_to_K, read_beam_k
+    from opensg_solid.io.k_file import compare_to_K, read_beam_k
 
     p = os.path.join(VABS_K, "iea_s10.sg.K")
     K, _ = read_beam_k(p)

@@ -1,6 +1,6 @@
 """sg_mesh.py -- SG input parsing and mesh utilities of the general SG
 engine, split out of rm_plate_2D.py (SSDM provenance, see sg_homo.py):
-load_sg_input (.sc via opensg_solid.helper, or the helper's yaml),
+load_sg_input (.sc via opensg_solid.io, or the io package's yaml),
 _cell_basis (SG dim + nodes/elem -> basix cell type/degree), and
 plot_sg_mesh (the ACTUAL mesh, elements colored by material, no title).
 
@@ -39,7 +39,7 @@ import yaml
 
 from fe_jax.basis_quadrature import CellType
 
-from opensg_solid.helper.sc_to_yaml import convert as sc_convert
+from opensg_solid.io.sc_to_yaml import convert as sc_convert
 
 
 def _cell_basis(dim, nodes_per_elem):

@@ -1,4 +1,4 @@
-"""Gate: the yaml -> SG-INPUT writer (opensg_solid.helper.sg_input).
+"""Gate: the yaml -> SG-INPUT writer (opensg_solid.io.sg_input).
 
 The failure mode this exists to prevent is NOT a crash.  It is a file that
 parses and means something else -- a connectivity record one slot short, a
@@ -176,7 +176,7 @@ def tube_sg(angle=None, frames=True, density=1600.0):
     `density=None` drops the density, which the `.sc` writer refuses to
     place (its aux-pair order is unvalidated) but the `.sg` writer carries
     -- see test_writer_refuses_the_unvalidated_paths."""
-    from opensg_solid.helper.sg_input import vabs_angles_to_frame
+    from opensg_solid.io.sg_input import vabs_angles_to_frame
 
     nodes = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0],
                       [0.0, 1.0, 0.0], [0.5, 0.5, 0.0], [2.0, 0.0, 0.0]])
@@ -213,7 +213,7 @@ def test_vendor_2d_sc_pads_to_twenty_slots_not_nine(path, dim):
 def test_write_sc_uses_twenty_slots_at_every_dimension(tmp_path):
     """What we WRITE: 20 slots for a 1-, 2- and 3-D SG alike, with the
     padding zeros beyond the real nodes."""
-    from opensg_solid.helper.sg_input import SC_SLOTS, write_sc
+    from opensg_solid.io.sg_input import SC_SLOTS, write_sc
 
     assert SC_SLOTS == 20, "SC_SLOTS is the record width, not a per-dim map"
     for dim, cells, nodes in [
@@ -240,7 +240,7 @@ def test_write_sc_uses_twenty_slots_at_every_dimension(tmp_path):
 def test_submodel_line_is_present_for_a_3d_macro_model(tmp_path):
     """Rule 2.  Both SwiftComp-accepted 3-D decks carry it; so must we, and
     the negative control is that dropping it shifts every later field."""
-    from opensg_solid.helper.sg_input import write_sc
+    from opensg_solid.io.sg_input import write_sc
 
     for name in ("Sample_1.sc", "Sample_2.sc"):
         vend = sc_fields_header_only(os.path.join(TPMS, name))
@@ -284,7 +284,7 @@ def test_sc_header_line_count_by_macro_model(tmp_path, n_model, nhdr):
     line.  So 2 lines for a solid and 3 for a plate -- the two shapes the
     vendor decks show.  The BEAM header is refused, see
     test_writer_refuses_the_unvalidated_paths."""
-    from opensg_solid.helper.sg_input import write_sc
+    from opensg_solid.io.sg_input import write_sc
 
     nodes = np.array([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]])
     sg = {"dim": 2, "nodes": nodes, "cells": [[0, 1, 2]],
@@ -311,8 +311,8 @@ def test_sc_header_line_count_by_macro_model(tmp_path, n_model, nhdr):
 def test_sc_round_trip_is_lossless_for_mesh_and_materials(tmp_path, path):
     """vendor .sc -> yaml -> our .sc -> read_sc must land on the same mesh
     and the same material constants as reading the vendor file directly."""
-    from opensg_solid.helper.sc_to_yaml import convert as sc_to_yaml, read_sc
-    from opensg_solid.helper import sg_input
+    from opensg_solid.io.sc_to_yaml import convert as sc_to_yaml, read_sc
+    from opensg_solid.io import sg_input
 
     src = read_sc(path)
     base = str(tmp_path / "rt")
@@ -344,7 +344,7 @@ def test_omega_header_survives_the_round_trip(tmp_path):
     """A yaml that STATES its SG measure must re-emit that number, not a
     fresh measurement of the mesh -- the 3-D case where the solver consumes
     `omega:`."""
-    from opensg_solid.helper.sg_input import read_opensg_yaml, write_sc
+    from opensg_solid.io.sg_input import read_opensg_yaml, write_sc
 
     y = tmp_path / "o.yaml"
     y.write_text(
@@ -373,7 +373,7 @@ def test_omega_is_remeasured_when_the_macro_model_is_overridden(tmp_path):
     Before the fix, writing this yaml at n_model=2 emitted the header's
     7.0 where the plate measure is 6.0.
     """
-    from opensg_solid.helper.sg_input import (read_opensg_yaml, write_sc,
+    from opensg_solid.io.sg_input import (read_opensg_yaml, write_sc,
                                               sg_omega)
 
     # a tet whose three coordinate spans differ, so the solid measure
@@ -427,7 +427,7 @@ def test_sg_omega_mirrors_the_solver_measure():
     """omega must be the number sg_assembly divides by.  The trap: a 2-D SG
     under the SOLID macro model is measured by its INTEGRATED area, not its
     bounding box -- 0.12 vs 1.0609 for the square tube, an 8.8x error."""
-    from opensg_solid.helper.sg_input import sg_omega, integrated_measure
+    from opensg_solid.io.sg_input import sg_omega, integrated_measure
 
     # a 1.03 square annulus of wall 0.03, meshed as two rectangles per wall
     o, i = 0.515, 0.485
@@ -463,8 +463,8 @@ def test_sg_omega_reproduces_the_vendor_trailing_lines():
     """The two trailing values this repo can check: RHC's 35.248 is the y1
     span of its 2-D plate SG, and the TPMS cell's 1.0 is its bounding-box
     volume."""
-    from opensg_solid.helper.sc_to_yaml import read_sc
-    from opensg_solid.helper.sg_input import sg_omega
+    from opensg_solid.io.sc_to_yaml import read_sc
+    from opensg_solid.io.sg_input import sg_omega
 
     rhc = read_sc(RHC)
     got = sg_omega(rhc["nodes"], 2, 2, rhc["cells"])
@@ -478,7 +478,7 @@ def test_sg_omega_reproduces_the_vendor_trailing_lines():
                                    (-90.0, -45.0), (37.5, 12.25),
                                    (-164.0, 30.0)])
 def test_frame_angle_round_trip_is_exact(t1, t3):
-    from opensg_solid.helper.sg_input import (frame_to_vabs_angles,
+    from opensg_solid.io.sg_input import (frame_to_vabs_angles,
                                               vabs_angles_to_frame)
 
     R = vabs_angles_to_frame(t1, t3)
@@ -492,7 +492,7 @@ def test_frame_angle_round_trip_is_exact(t1, t3):
 def test_frame_to_vabs_angles_refuses_what_a_sg_cannot_say():
     """A `.sg` can express R1(theta1) R3(theta3) and nothing else, so a
     frame that is not one must raise rather than be projected onto one."""
-    from opensg_solid.helper.sg_input import frame_to_vabs_angles
+    from opensg_solid.io.sg_input import frame_to_vabs_angles
 
     with pytest.raises(ValueError, match="orthonormal"):
         frame_to_vabs_angles(np.diag([1.0, 1.0, 2.0]))
@@ -509,10 +509,10 @@ def test_frame_to_vabs_angles_refuses_what_a_sg_cannot_say():
 def test_theta3_from_the_frame_and_from_the_block_angle_add():
     """The rule that was inverted: frames + a material `angle:` compose,
     they do not conflict.  Saying -45 either way must give one answer."""
-    from opensg_solid.helper.sg_input import element_layups
+    from opensg_solid.io.sg_input import element_layups
 
     a = element_layups(tube_sg(angle=-45.0, frames=True))
-    from opensg_solid.helper.sg_input import vabs_angles_to_frame
+    from opensg_solid.io.sg_input import vabs_angles_to_frame
     sg_b = tube_sg(angle=None, frames=True)
     sg_b["orientation"] = yaml_order(np.stack(
         [vabs_angles_to_frame(t, -45.0) for t in (0.0, 90.0, 180.0, -90.0)]))
@@ -533,8 +533,8 @@ def test_bake_reproduces_the_solver_assembly_stiffness_exactly(tmp_path):
     """orientation='bake' must fold the block angle AND the element frame
     into each type-2 block, so the .sc read back gives element for element
     the same C_asm the solver would have assembled from the yaml."""
-    from opensg_solid.helper.sc_to_yaml import read_sc
-    from opensg_solid.helper.sg_input import write_sc
+    from opensg_solid.io.sc_to_yaml import read_sc
+    from opensg_solid.io.sg_input import write_sc
     from opensg_solid.sg_materials import (elem_rotation_from_yaml,
                                            get_heterogeneous_C_matrix,
                                            build_material_C)
@@ -576,7 +576,7 @@ def test_fold_angles_matches_the_solver_material_table():
     """With no frames a `.sc` still has nowhere to put a ply angle, so it is
     folded into the constants -- and the folded C must be the one the solver
     builds from `angle:`."""
-    from opensg_solid.helper.sg_input import fold_angles, write_sc
+    from opensg_solid.io.sg_input import fold_angles, write_sc
     from opensg_solid.sg_materials import build_material_C
 
     blk = {"type": 1, "engineering": list(ENG), "angle": -45.0}
@@ -593,8 +593,8 @@ def test_fold_angles_matches_the_solver_material_table():
 def test_write_sc_does_not_silently_drop_a_ply_angle(tmp_path):
     """The regression this guards: an `angle:` that never reaches the file.
     The emitted material must differ from the unrotated one."""
-    from opensg_solid.helper.sc_to_yaml import read_sc
-    from opensg_solid.helper.sg_input import write_sc
+    from opensg_solid.io.sc_to_yaml import read_sc
+    from opensg_solid.io.sg_input import write_sc
     from opensg_solid.sg_materials import build_material_C
 
     sg = tube_sg(angle=30.0, frames=False)
@@ -615,7 +615,7 @@ def test_write_sc_does_not_silently_drop_a_ply_angle(tmp_path):
 def _sg_from_vendor(v, variant):
     """Rebuild the OpenSG SG that a vendor `.sg` describes.  variant "A"
     puts theta3 in the element frame, "B" in the material `angle:`."""
-    from opensg_solid.helper.sg_input import vabs_angles_to_frame
+    from opensg_solid.io.sg_input import vabs_angles_to_frame
 
     t3 = np.array([v["layers"][l - 1][1] for l in v["lay"]])
     mat = np.array([v["layers"][l - 1][0] for l in v["lay"]], int)
@@ -635,7 +635,7 @@ def _sg_from_vendor(v, variant):
 
 
 def _assert_sg_matches_vendor(vend_path, tmp_path, node_atol):
-    from opensg_solid.helper.sg_input import write_sg
+    from opensg_solid.io.sg_input import write_sg
 
     v = sg_fields(vend_path)
     paths = {}
@@ -705,10 +705,10 @@ def test_the_vabs_angle_convention_lands_on_vabs_own_answer(tmp_path):
 
     ~20 s (30 271 nodes, 55 434 tri3), hence `slow`.
     """
-    from opensg_solid.helper.sg_input import vabs_angles_to_frame
+    from opensg_solid.io.sg_input import vabs_angles_to_frame
     from opensg_solid.sg_materials import elem_rotation_from_yaml
     from opensg_solid.sg_homo import plate_homo_2d
-    from opensg_solid.helper.k_file import compare_to_K
+    from opensg_solid.io.k_file import compare_to_K
 
     kref = IEA_SG + ".K"
     assert os.path.exists(kref)
@@ -742,7 +742,7 @@ def test_the_yaml_frames_of_the_square_tube_are_prevabs_theta1(tmp_path):
     """The decomposition against a real vendor file, on the real mesh:
     square_tube_2Dsolid.yaml and square_tube.sg are the same 5384 elements
     in the same order, so every theta1 must land on PreVABS's."""
-    from opensg_solid.helper.sg_input import (read_opensg_yaml,
+    from opensg_solid.io.sg_input import (read_opensg_yaml,
                                               yaml_frames_to_beam,
                                               frame_to_vabs_angles)
 
@@ -758,7 +758,7 @@ def test_the_yaml_frames_of_the_square_tube_are_prevabs_theta1(tmp_path):
 
 # =========================================================== loud refusals
 def test_writer_refuses_what_it_cannot_say():
-    from opensg_solid.helper import sg_input
+    from opensg_solid.io import sg_input
 
     sg = tube_sg(frames=True)
     with pytest.raises(ValueError, match="orientation="):
@@ -781,7 +781,7 @@ def test_writer_refuses_the_unvalidated_paths(tmp_path):
     into a solver input.  The failure they would cause is silent: the file
     parses and means something else.  See NOT VALIDATED in the sg_input
     module docstring; the evidence for each is re-measured here."""
-    from opensg_solid.helper import sg_input
+    from opensg_solid.io import sg_input
 
     plain = tube_sg(frames=False, density=None)
 
@@ -857,7 +857,7 @@ def test_writer_refuses_the_unvalidated_paths(tmp_path):
 def test_write_sg_refuses_to_rotate_a_prerotated_C(tmp_path):
     """A type-2 block is already rotated; asking VABS for theta3 on top of
     it would rotate it twice."""
-    from opensg_solid.helper.sg_input import write_sg, material_C
+    from opensg_solid.io.sg_input import write_sg, material_C
 
     sg = tube_sg(frames=False)
     sg["materials"] = {1: {"type": 2,
@@ -868,7 +868,7 @@ def test_write_sg_refuses_to_rotate_a_prerotated_C(tmp_path):
 
 
 def test_shell_dialect_is_refused_with_the_prevabs_route_named(tmp_path):
-    from opensg_solid.helper.sg_input import read_opensg_yaml
+    from opensg_solid.io.sg_input import read_opensg_yaml
 
     y = tmp_path / "shell.yaml"
     y.write_text("nodes:\n- [0.0, 0.0, 0.0]\nelements:\n- [1, 1, 1, 1]\n"
@@ -883,7 +883,7 @@ def test_only_one_yaml_to_sg_input_implementation_survives():
     """The historical module must be a pure re-export: no second writer, and
     the old import path unchanged."""
     from opensg_solid.rm_plate_1D.helper import yaml_to_sc
-    from opensg_solid.helper import sg_input
+    from opensg_solid.io import sg_input
 
     assert yaml_to_sc.convert is sg_input.convert_yaml_to_sc
     assert yaml_to_sc.write_sc is sg_input.write_sc

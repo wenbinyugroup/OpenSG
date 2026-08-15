@@ -791,13 +791,13 @@ The solver reads \texttt{<name>.yaml}. A SwiftComp \texttt{.sc} is converted
 once with the packaged helper. That helper is a library function, not a
 command-line tool: the module \texttt{sc\_to\_yaml} has no \texttt{\_\_main\_\_}
 block, so
-\texttt{python -m opensg\_solid.helper.sc\_to\_yaml file.sc}
+\texttt{python -m opensg\_solid.io.sc\_to\_yaml file.sc}
 does nothing. Call
 \texttt{convert} instead, which writes \texttt{<base>.yaml} and
 \texttt{<base>.msh} and returns the parsed dictionary:
 
 \begin{lstlisting}[style=opensg,caption={Converting a SwiftComp .sc once.}]
-from opensg_solid.helper.sc_to_yaml import convert
+from opensg_solid.io.sc_to_yaml import convert
 
 sc = convert("RHC_SW_2UC_45.sc")   # writes RHC_SW_2UC_45.yaml + .msh
 \end{lstlisting}

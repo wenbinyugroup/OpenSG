@@ -1,6 +1,6 @@
 """sg_input.py -- an OpenSG SG yaml -> a NATIVE Yu-group SG INPUT file, in
 EITHER of the two dialects of that family: the SwiftComp `.sc` and the VABS
-`.sg`.  The write side of helper.sc_to_yaml (`.sc` -> yaml), and the one
+`.sg`.  The write side of io.sc_to_yaml (`.sc` -> yaml), and the one
 yaml -> SG-input path in the repo (the historical
 opensg_solid.rm_plate_1D.helper.yaml_to_sc is now a shim onto this module).
 
@@ -168,7 +168,7 @@ naturally written), so element_layups sums the two into theta3 and
 _bake_frames folds the angle in before the frame.  Neither rejects it.
 
 WHAT A `.sc` CANNOT SAY, AND WHAT write_sc DOES ABOUT IT.  With
-trans_flag = 0 and nlayer = 0 -- the only shape helper.sc_to_yaml.read_sc
+trans_flag = 0 and nlayer = 0 -- the only shape io.sc_to_yaml.read_sc
 can read back -- a `.sc` carries ONE material id per element and no frame.
 An SG yaml's per-element `elementOrientations` therefore has no slot, and
 write_sc refuses to guess: `orientation=` must be stated as
@@ -404,7 +404,7 @@ def _material_from_list_entry(m):
 
     The 2-D solid dialect spells a material either flat
     (`name/E/G/nu/rho`, opensg_io) or nested (`name/density/elastic:
-    {E,G,nu}`, helper.msh_to_yaml).  Both are the nine engineering
+    {E,G,nu}`, io.msh_to_yaml).  Both are the nine engineering
     constants, i.e. a type-1 block.
 
     In:  m dict
@@ -437,7 +437,7 @@ def _material_from_list_entry(m):
 def _material_from_dict_entry(m):
     """One entry of the DICT-form `materials:` block -> a canonical block.
 
-    The canonical solid dialect (what helper.sc_to_yaml emits and
+    The canonical solid dialect (what io.sc_to_yaml emits and
     sg_mesh.load_sg_input reads): `type` 0 (E/nu), 1 (nine `engineering`
     constants) or 2 (the stored 6x6 `C`), plus optional `angle`/`density`.
 
@@ -474,7 +474,7 @@ def _mat_id_from_sets(sets, n_elem, materials, mat_names):
     """(n_elem,) 1-based material ids from the `sets: element:` block.
 
     Sets are matched to materials by NAME when every set name is a material
-    name, and by POSITION otherwise -- the contract helper.msh_to_yaml
+    name, and by POSITION otherwise -- the contract io.msh_to_yaml
     writes (one set per material, same order).
 
     In:  sets list of {name, labels (1-based)}; n_elem int;
@@ -513,10 +513,10 @@ def read_opensg_yaml(path, dim=None):
 
       canonical   `nodes` / `cells` (0-based) / `mat_id` (1-based) /
                   `materials` (a MAPPING id -> block) -- what
-                  helper.sc_to_yaml emits and sg_mesh.load_sg_input reads.
+                  io.sc_to_yaml emits and sg_mesh.load_sg_input reads.
       2-D solid   `nodes` / `elements` (1-based) / `sets: element:` /
                   `elementOrientations` / `materials` (a LIST) -- what
-                  helper.msh_to_yaml and the opensg_io mesh pipelines emit.
+                  io.msh_to_yaml and the opensg_io mesh pipelines emit.
 
     The msg-SHELL dialect (`sections` + `elementOrientations` + `elements`,
     i.e. a contour with a LAYUP) is refused: a layup is not a mesh, so
@@ -866,7 +866,7 @@ def _slots(conn, dim, width):
     preovios_try.sc, tet4 in slots 1-4 of 20).
 
     The 10-node tetrahedron is REFUSED, because it is the one case that is
-    not a contiguous fill: the layout helper.sc_to_yaml.read_sc decodes
+    not a contiguous fill: the layout io.sc_to_yaml.read_sc decodes
     (4 corners, slots 5-6 zero, the 6 midsides in slots 7-12) is this
     repo's own convention read back by this repo, and no shipped deck
     exercises it.  See NOT VALIDATED in the module docstring.
@@ -1130,7 +1130,7 @@ def _write_material_sc(f, mid, blk, temperature, fe):
     constants -- the shape read off the vendor decks (RHC_SW_2UC_45.sc
     heads a type-2 block `1 2 1`, Sample_1.sc a type-0 block `1 0 1`, both
     with the aux pair on the next line, BEFORE the constants) and the
-    shape helper.sc_to_yaml.read_sc parses back.
+    shape io.sc_to_yaml.read_sc parses back.
 
     The PAIR's shape and position are validated; the ORDER of its two
     numbers is not, so _guard_sc_aux has already ensured both are 0.0 by
@@ -1164,7 +1164,7 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
     """Write an SG as a SwiftComp `.sc`.
 
     The layout is the one the vendor decks in this repo use (named in the
-    module docstring), and only the shape helper.sc_to_yaml.read_sc reads
+    module docstring), and only the shape io.sc_to_yaml.read_sc reads
     back is written by default: nslave = 0 (SwiftComp pairs the periodic
     boundary itself) and nlayer = 0 (the element record carries the
     material id directly).

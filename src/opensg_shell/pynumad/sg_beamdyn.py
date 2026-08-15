@@ -42,7 +42,7 @@ def read_k_file(path):
     OpenSG "Stiffness :" block as a fallback).
 
     This is the historical msg-shell import path and stays exactly that; the parser
-    itself was promoted to opensg_solid.helper.k_file (read_beam_k), the ONE .K reader
+    itself was promoted to opensg_solid.io.k_file (read_beam_k), the ONE .K reader
     both engines and the tests use -- that module also reads the SwiftComp 3-D solid
     .sc.k and carries the compare_to_K verifier.
 
@@ -51,7 +51,7 @@ def read_k_file(path):
     Out:
         (K, M): (6,6) Timoshenko stiffness, (6,6) mass matrix (VABS order).
     """
-    from opensg_solid.helper.k_file import read_beam_k
+    from opensg_solid.io.k_file import read_beam_k
     return read_beam_k(path)
 
 

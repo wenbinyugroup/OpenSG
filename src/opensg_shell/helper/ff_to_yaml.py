@@ -1,5 +1,5 @@
 """ff_to_yaml.py -- BeamDyn/VABS beam-FF .dat -> per-station yaml, the beam
-analog of opensg_solid.helper.sc_to_yaml (mesh) and abq2ff (plate FF field).
+analog of opensg_solid.io.sc_to_yaml (mesh) and abq2ff (plate FF field).
 
 The .dat this reads is the spanwise beam force/moment table a 1-D solver
 hands the cross-section recovery:

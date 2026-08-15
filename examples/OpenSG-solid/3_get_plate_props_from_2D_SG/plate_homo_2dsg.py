@@ -8,7 +8,7 @@ one argument:
     opensg_solid RHC_SW_2UC_45.yaml
 One-time SwiftComp conversion (the helper defines no __main__ -- import
 its convert):
-    from opensg_solid.helper.sc_to_yaml import convert
+    from opensg_solid.io.sc_to_yaml import convert
     convert("RHC_SW_2UC_45.sc")     # writes the .yaml + .msh
 
 # ----------------------------------------------------------------------------

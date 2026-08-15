@@ -1,6 +1,6 @@
 """msh_to_yaml.py -- gmsh `.msh` 2-D/3-D SOLID mesh -> OpenSG solid SG yaml,
 the solid-side twin of opensg_shell.helper.msh_to_yaml (which writes the
-msg-shell surface dialect) and the mesh-side companion of helper.sc_to_yaml
+msg-shell surface dialect) and the mesh-side companion of io.sc_to_yaml
 (which reads a SwiftComp `.sc` instead of a gmsh mesh).
 
 A gmsh mesh knows the geometry and the physical tags and nothing else: it
@@ -24,7 +24,7 @@ triangles (gmsh type 2), 4-node quads (type 3), 4-node tets (type 4) and
 8-node hexes (type 5).  The 0-/1-D entities gmsh writes for physical points
 and curves are skipped; anything else is an error.
 
-Use:  from opensg_solid.helper.msh_to_yaml import convert
+Use:  from opensg_solid.io.msh_to_yaml import convert
       convert("UDcomp_2D.msh", materials=[...], phases=[("matrix", 0),
                                                         ("fiber", 1)])
 """

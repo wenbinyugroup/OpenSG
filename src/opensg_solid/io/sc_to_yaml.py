@@ -377,3 +377,130 @@ def convert(sc_path, out_base=None, n_model=None, refined=0):
     if note is not None:
         print("sc_to_yaml: %s" % note)
     return sc
+
+
+SIGN3 = +1.0   # sign of the theta3 fiber rotation about the ply normal
+               # (validated against the mh104 .sg.K off-diagonals)
+
+
+def _sg_frame(t1, t3):
+    """Material frame [e1(fiber), e2, e3(ply normal)] as a 9-list.
+
+    theta1 sets the ply-plane in the x-y cross-section (e3 = normal,
+    e2 = tangent, e1 = beam axis Z); theta3 then rotates the fiber about
+    the ply normal e3, tilting e1 from Z toward the tangent e2."""
+    c1, s1 = np.cos(np.deg2rad(t1)), np.sin(np.deg2rad(t1))
+    c3, s3 = np.cos(np.deg2rad(SIGN3 * t3)), np.sin(np.deg2rad(SIGN3 * t3))
+    e1 = [s3 * c1, s3 * s1, c3]
+    e2 = [c3 * c1, c3 * s1, -s3]
+    e3 = [-s1, c1, 0.0]
+    return [float(v) for v in e1 + e2 + e3]
+
+
+def sg_to_yaml(sg_path, out_path=None):
+    """PreVABS/VABS `.sg` -> the 2-D solid mesh-dialect OpenSG yaml.
+
+    The port of the VALIDATED OpenSG_io converter
+    (scripts/convert_sg_to_yaml.py -- mh104: solid vs VABS to ~1e-5): the
+    .sg PreVABS writes (e.g. from the pynumad `--xml` route) becomes the
+    nodes/elements/sets/elementOrientations/materials yaml the solid
+    engine reads.  Per-element theta1 (contour angle) and per-layup-group
+    theta3 (fiber angle) compose into the elementOrientations frames --
+    theta3 is NOT baked into the materials.  Material names come from the
+    `<stem>.sg.mat` sidecar when PreVABS wrote one.
+
+    The emitted yaml is the MESH dialect (node/element rows are
+    space-separated strings, `materials` a LIST), so it is read back with
+    io.sg_input.read_opensg_yaml -- NOT sg_mesh.load_sg_input, which takes
+    the canonical dialect sc_to_yaml.convert writes.
+
+    In:  sg_path str -- the VABS `.sg` (format_flag 1, curve/oblique off,
+         orthotropic materials -- exactly what PreVABS 2.x writes);
+         out_path str | None -- the yaml (None = `<stem>.yaml` beside it).
+    Out: dict {yaml, n_nodes, n_elems, n_layups, n_mats, names}.
+    """
+    with open(sg_path) as f:
+        data = [ln.rstrip("\n") for ln in f if ln.strip()]
+    grp = int(data[0].split()[1])
+    flags = [int(v) for v in data[2].split()]
+    if len(flags) != 4 or flags[0] or flags[1]:
+        raise ValueError(
+            "%s: expected the PreVABS header (curve_flag oblique_flag "
+            "trapeze_flag Vlasov_flag with the first two 0), got %r"
+            % (sg_path, data[2]))
+    nnode, nelem, nphases = [int(v) for v in data[3].split()]
+
+    points = []                                    # (x2, x3)
+    for i in range(nnode):
+        d = data[4 + i].split()
+        points.append((float(d[1]), float(d[2])))
+    cells = []                                     # 0-based, zero-padding dropped
+    for i in range(nelem):
+        d = data[4 + nnode + i].split()
+        cells.append([int(x) - 1 for x in d[1:] if int(x) != 0])
+    p = 4 + nnode + 2 * nelem                      # layup group -> (mat, theta3)
+    gmat = [int(data[p + i].split()[1]) - 1 for i in range(grp)]
+    gth3 = [float(data[p + i].split()[2]) for i in range(grp)]
+    p = 4 + nnode + nelem                          # element -> (group, theta1)
+    sub, th1, th3 = [], [], []
+    for e in range(nelem):
+        _eid, g, t1 = data[p + e].split()
+        sub.append(gmat[int(g) - 1])
+        th1.append(float(t1))
+        th3.append(gth3[int(g) - 1])
+    p = 4 + nnode + 2 * nelem + grp                # materials: 5 rows/phase
+    mat_par, density = [], []
+    for m in range(nphases):
+        head = data[p + 5 * m].split()
+        if int(head[1]) != 1:
+            raise ValueError(
+                "%s: material %s is orth %s -- this converter handles the "
+                "orthotropic (orth 1) blocks PreVABS writes" %
+                (sg_path, head[0], head[1]))
+        rows = [data[p + 5 * m + k].split() for k in (1, 2, 3)]
+        density.append(float(data[p + 5 * m + 4].split()[0]))
+        mat_par.append(np.array(rows, float).flatten().tolist())
+
+    names = {}
+    side = sg_path + ".mat"
+    if os.path.exists(side):
+        for ln in open(side):
+            t = ln.split()
+            if len(t) >= 2 and t[0].isdigit():
+                names[int(t[0])] = t[1]
+    name_of = lambda i: names.get(i + 1, "Material_%d" % (i + 1))  # noqa: E731
+
+    class _Flow(list):
+        pass
+
+    class _D(yaml.SafeDumper):
+        pass
+
+    _D.add_representer(_Flow, lambda d, v: d.represent_sequence(
+        "tag:yaml.org,2002:seq", v, flow_style=True))
+
+    seg = {"nodes": [_Flow(["%.6f %.6f %.6f" % (x2, x3, 0.0)])
+                     for (x2, x3) in points],
+           "elements": [_Flow([" ".join(str(n + 1) for n in c)])
+                        for c in cells],
+           "sets": {"element": [
+               {"name": name_of(mi),
+                "labels": _Flow([e + 1 for e, s in enumerate(sub)
+                                 if s == mi])}
+               for mi in sorted(set(sub))]},
+           "elementOrientations": [_Flow(_sg_frame(a, b))
+                                   for a, b in zip(th1, th3)],
+           "materials": [{"name": name_of(m),
+                          "E": _Flow(mat_par[m][0:3]),
+                          "G": _Flow(mat_par[m][3:6]),
+                          "nu": _Flow(mat_par[m][6:9]),
+                          "rho": float(density[m])}
+                         for m in range(nphases)]}
+    out_path = out_path or os.path.splitext(sg_path)[0] + ".yaml"
+    with open(out_path, "w") as f:
+        yaml.dump(seg, f, Dumper=_D, sort_keys=False,
+                  default_flow_style=False)
+    print("sg_to_yaml: %d nodes, %d elems, %d layup groups, %d materials"
+          " -> %s" % (nnode, nelem, grp, nphases, out_path))
+    return dict(yaml=out_path, n_nodes=nnode, n_elems=nelem, n_layups=grp,
+                n_mats=nphases, names=[name_of(m) for m in range(nphases)])

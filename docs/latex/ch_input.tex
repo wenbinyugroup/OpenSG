@@ -673,7 +673,7 @@ file's own units, and the footer reads \texttt{ Time taken: 1.89 sec}.
 A \texttt{.sc} file can be used directly --- \texttt{load\_sg\_input} dispatches
 on the extension and converts --- or converted once and kept as YAML. The
 anatomy the reader expects is documented in the
-\texttt{opensg\_solid.helper.sc\_to\_yaml} module docstring, implemented in its
+\texttt{opensg\_solid.io.sc\_to\_yaml} module docstring, implemented in its
 \texttt{read\_sc}, and summarized in Table~\ref{tab:input-sc}. (The historical
 \texttt{opensg\_solid.rm\_plate\_1D.helper.sc\_to\_yaml} path still imports:
 it is now a thin shim that re-exports the module above. New code should use the
@@ -722,7 +722,7 @@ the lone line \texttt{35.248}. The file's last triangle, element 6640 of materia
 The documented way to run the conversion is the module's own \texttt{convert}:
 
 \begin{lstlisting}[style=opensg,caption={Converting a .sc by hand.}]
-from opensg_solid.helper.sc_to_yaml import convert
+from opensg_solid.io.sc_to_yaml import convert
 
 sc = convert("RHC_SW_2UC_45.sc")
 print(sc["dim"], len(sc["nodes"]), len(sc["cells"]), sc["scale"])

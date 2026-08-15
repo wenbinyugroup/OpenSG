@@ -442,7 +442,7 @@ same cell.
 
 A `.sc` file can be used directly — `load_sg_input` dispatches on the extension and converts —
 or converted once and kept as YAML. The anatomy the reader expects, from the
-`opensg_solid.helper.sc_to_yaml` module docstring:
+`opensg_solid.io.sc_to_yaml` module docstring:
 
 | block | content |
 |---|---|
@@ -464,7 +464,7 @@ triangle, element 6640 of material 3 on nodes 4251/2988/3079, shows the zero pad
 The documented way to run the conversion is the module's own `convert`:
 
 ```python
-from opensg_solid.helper.sc_to_yaml import convert
+from opensg_solid.io.sc_to_yaml import convert
 
 sc = convert("RHC_SW_2UC_45.sc")
 print(sc["dim"], len(sc["nodes"]), len(sc["cells"]))

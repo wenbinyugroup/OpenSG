@@ -1,5 +1,5 @@
 """MOVED -- the yaml -> SG-input writer now lives in
-opensg_solid.helper.sg_input (the solid-side `helper` subpackage, beside
+opensg_solid.io.sg_input (the solid-side `helper` subpackage, beside
 sc_to_yaml.py, which reads the same files back, and k_file.py); this
 module re-exports it so the historical import path keeps working.
 
@@ -17,11 +17,11 @@ yaml -> SG-input path would have kept alive:
   * no trailing omega line at all, and no way at all to say a
     per-element material frame.
 
-opensg_solid.helper.sg_input fixes all three, adds the VABS `.sg`
+opensg_solid.io.sg_input fixes all three, adds the VABS `.sg`
 dialect beside the SwiftComp one, and states every place the two differ.
 `convert` below keeps the legacy (yaml_path, out_path, dim) signature and
 its printed one-liner; new code should call
-`opensg_solid.helper.sg_input.convert(path, dialect="sc" | "sg")`.
+`opensg_solid.io.sg_input.convert(path, dialect="sc" | "sg")`.
 
 NOTE for the one caller in the tree (tests/08072026_square_shell_mesh/
 four_case/make_inputs.py): the new writer REFUSES rather than guesses.
@@ -30,5 +30,5 @@ call now needs `orientation="bake"` (or "ignore") and
 `drop_density=True`; see VALIDATED / NOT VALIDATED in the sg_input module
 docstring for why each is a refusal and not a default.
 """
-from opensg_solid.helper.sg_input import (             # noqa: F401
+from opensg_solid.io.sg_input import (             # noqa: F401
     convert_yaml_to_sc as convert, read_opensg_yaml, write_sc, write_sg)

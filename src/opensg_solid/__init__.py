@@ -7,7 +7,7 @@ input), split file-per-concern:
                      sparse/KKT solvers
     sg_homo.py       homogenization drivers + plate_homo_2d
     sg_dehom.py      recovery kernels + plate_dehom_2d, export_gauss
-    helper/          format conversions (sc_to_yaml: SwiftComp .sc -> the
+    io/              format conversions (sc_to_yaml: SwiftComp .sc -> the
                      SG yaml + .msh; sg_input: the yaml -> .sc / VABS .sg
                      writer), the opensg_shell.helper analog, plus
                      k_file.py -- the ONE .K reader/verifier both engines

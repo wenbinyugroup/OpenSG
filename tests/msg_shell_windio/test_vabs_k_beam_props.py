@@ -55,7 +55,7 @@ def blade():
 def test_beam_props_vs_vabs(blade, tmp_path, r, kref, tol):
     from opensg_shell.pynumad import (build_cross_section, emit_shell_yaml,
                                       beam_props, read_k_file)
-    from opensg_solid.helper.k_file import compare_to_K
+    from opensg_solid.io.k_file import compare_to_K
 
     cs = build_cross_section(blade, r, mesh_size=0.01)
     y = str(tmp_path / ("st_r%04d_shell.yaml" % round(r * 1000)))

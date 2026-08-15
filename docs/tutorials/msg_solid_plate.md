@@ -372,7 +372,7 @@ The module defines no `__main__` block and reads no command-line arguments, so i
 `convert` function rather than invoking it with `python -m`:
 
 ```python
-from opensg_solid.helper.sc_to_yaml import convert
+from opensg_solid.io.sc_to_yaml import convert
 
 convert("RHC_SW_2UC_45.sc")   # writes RHC_SW_2UC_45.yaml + .msh
 ```

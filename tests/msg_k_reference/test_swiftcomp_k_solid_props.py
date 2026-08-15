@@ -59,7 +59,7 @@ TERMS = ["C11", "C12", "C13", "C22", "C23", "C33", "C44", "C55", "C66"]
 @pytest.mark.parametrize("s,rho_rel", CASES, ids=["Sample_1", "Sample_2"])
 def test_solid_3d_props_vs_swiftcomp_k(tmp_path, s, rho_rel):
     from opensg_solid.sg_homo import plate_homo_2d
-    from opensg_solid.helper.k_file import compare_to_K, read_solid_k
+    from opensg_solid.io.k_file import compare_to_K, read_solid_k
 
     yml = os.path.join(S6, "Sample_%s.yaml" % s)
     kref = os.path.join(S6, "sample_%s" % s, "Sample_%s.sc.k" % s)

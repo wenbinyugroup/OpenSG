@@ -1,6 +1,6 @@
 """One-time converter: UDcomp_2D.msh (gmsh 2.2) -> UDcomp_2D.yaml (OpenSG dialect).
 
-The mesh -> yaml work is opensg_solid.helper.msh_to_yaml.convert (nodes,
+The mesh -> yaml work is opensg_solid.io.msh_to_yaml.convert (nodes,
 elements, the constant e1/e2/e3 frame and the physical-tag element sets);
 this driver only owns the PATHS and the MATERIALS -- the modelling choices
 the mesh cannot supply.  Everything the analysis needs then lives in the
@@ -13,7 +13,7 @@ sets.element for the matrix and fiber phases.
 
 Run (from this folder):  python make_udcomp_yaml.py
 """
-from opensg_solid.helper.msh_to_yaml import convert
+from opensg_solid.io.msh_to_yaml import convert
 
 MSH = "UDcomp_2D.msh"
 YAML = "UDcomp_2D.yaml"

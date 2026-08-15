@@ -1,4 +1,14 @@
-"""Format conversions of the general SG engine (the opensg_shell.helper
+"""opensg_solid.io -- format conversions of the general SG engine.
+
+    sc_to_yaml.convert     SwiftComp `.sc` -> the canonical SG yaml + .msh
+    sc_to_yaml.sg_to_yaml  PreVABS/VABS `.sg` -> the 2-D solid MESH-dialect
+                           yaml (theta1 x theta3 material frames; read back
+                           with sg_input.read_opensg_yaml)
+    msh_to_yaml.convert    gmsh mesh -> the solid mesh dialect
+    sg_input               yaml -> SwiftComp `.sc` / VABS `.sg` writers
+    k_file                 the ONE `.K` / `.sc.k` reader + compare_to_K
+
+(the opensg_shell.helper
 analog on the solid side): sc_to_yaml turns a SwiftComp `.sc` structure
 gene into the OpenSG solid SG yaml (+ a gmsh `.msh` sidecar), and
 msh_to_yaml goes the other way round the loop -- a gmsh `.msh` mesh plus
@@ -27,6 +37,6 @@ way -- opensg_shell imports opensg_solid, never the reverse -- so both
 engines can reach it, and the shell side's
 `opensg_shell.pynumad.read_k_file` is the entry point to point at it.
 Import it explicitly
-(`from opensg_solid.helper.k_file import ...`); this package __init__
+(`from opensg_solid.io.k_file import ...`); this package __init__
 stays import-light on purpose.
 """
