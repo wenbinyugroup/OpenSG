@@ -39,10 +39,15 @@ output-folder flag -- `cd` to where you want the records and run it there.
 ## User inputs (flags)
 
 - `--mesh-size H` -- target element arc length / chord (default 0.01).
+- `--reference {oml,center}` -- the shell reference surface.  **Default
+  `oml`**: the airfoil contour in the blade yaml IS the outer mold line, so
+  the shell sits on the geometry the file states with the laminate hanging
+  inward.  Pass `--reference center` to put the shell on the laminate
+  mid-surface instead (an inward half-thickness offset), which is the right
+  choice when matching a 2-D solid / VABS section.  The surface used is
+  named in the `.out` banner.
 
-That is the whole flag surface.  The shell reference surface is ALWAYS the
-**OML** (outer mold line) on the blade route -- there is no flag or option
-for it either.
+That is the whole flag surface.
 
 ## The Blade class (optimization workflow)
 
@@ -75,19 +80,28 @@ See `blade_optimization_demo.py` for the design-sweep pattern.
 
 ### Reference surface
 
-`blade.timo()` -- and every pynumad route -- ALWAYS uses the OML.  There
-is no reference option on the Blade, the drivers, or the CLI, because the
-airfoil contour in the blade yaml IS the outer mold line: the shell sits
-on the geometry the file states, with the laminate hanging inward.  A
-center-reference (laminate mid-surface) section -- an inward
-half-thickness offset of that geometry, e.g. for matching a 2-D solid /
-VABS model -- is an SG-engine study: emit the station yaml yourself and
-run the `opensg_shell` engine on it --
+`blade.timo()` -- the optimization API -- always uses the **OML**, because
+the airfoil contour in the blade yaml IS the outer mold line: the shell
+sits on the geometry the file states, with the laminate hanging inward.
+
+The terminal route lets you choose per run:
+
+```bash
+opensg pynumad IEA-15-240-RWT.yaml 4                      # oml (default)
+opensg pynumad IEA-15-240-RWT.yaml 4 --reference center   # mid-surface
+```
+
+`center` displaces every skin node inward by half the local laminate
+thickness along the averaged inward normal (connectivity unchanged, webs
+re-chained between the moved attachment points) AND re-references the ABD
+and the mass moments to that same surface, so geometry and wall law stay
+consistent.  On IEA-15 it moves EA by about -1.3% and mass by -1.7%.
+
+From Python, either driver takes it directly:
 
 ```python
-from opensg_shell.pynumad import emit_shell_yaml
-emit_shell_yaml(blade.cross_section(4), "st4_shell.yaml",
-                reference="center")   # then: opensg st4_shell.yaml
+from opensg_shell.pynumad import station_timo
+P = station_timo("IEA-15-240-RWT.yaml", 4, reference="center")
 ```
 
 ## Per-section edits (Section)

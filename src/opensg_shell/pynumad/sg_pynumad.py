@@ -223,7 +223,7 @@ def _append_file_crosscheck(out_path, K6, mpus, file_K, file_M):
         f.write("".join(L))
 
 
-def station_timo(blade_yaml, station, mesh_size=0.01,
+def station_timo(blade_yaml, station, mesh_size=0.01, reference="oml",
                  out_dir=".", prefix=None, xml=False, view=False,
                  blade=None):
     """Timoshenko 6x6 of one pyNuMAD blade station, fully IN MEMORY.
@@ -239,10 +239,11 @@ def station_timo(blade_yaml, station, mesh_size=0.01,
     In:
         blade_yaml: str, pyNuMAD blade yaml.
         station: str | int | float, st-id token (see resolve_station).
-        mesh_size: float, element arc length / chord.  The shell reference
-            surface is ALWAYS "oml" on this route (no option); a center-
-            reference section is an SG-engine study via
-            emit_shell_yaml(..., reference="center").
+        mesh_size: float, element arc length / chord.
+        reference: "oml" (default -- the blade yaml's own airfoil contour
+            IS the outer mold line) | "center" (laminate mid-surface, for
+            matching a 2-D solid / VABS section).  The chosen surface is
+            named in the .out banner.
         out_dir: str, folder of the <tag>.out record.
         prefix: str | None, tag prefix (None = the blade-file stem).
         xml, view: accepted for CLI compatibility, IGNORED (no yaml/XML/PNG
@@ -264,14 +265,14 @@ def station_timo(blade_yaml, station, mesh_size=0.01,
     segs = pynumad_segments(blade, r) \
         if isinstance(blade, WindIOBladeV1) else None
     cs = build_cross_section(blade, r, mesh_size=mesh_size, segments=segs)
-    K, M, info, arrays = timo_cs(cs, "oml")
+    K, M, info, arrays = timo_cs(cs, reference)
     stem = prefix or os.path.splitext(os.path.basename(blade_yaml))[0]
     tag = "%s_r%04d" % (stem, round(r * 1000))
     os.makedirs(out_dir, exist_ok=True)
     k_file = os.path.join(out_dir, tag + ".out")
     write_vabs_k(k_file, K, M, info,
                  model="OpenSG msg-shell beam model (pynumad in-memory,"
-                       " reference=oml)",
+                       " reference=%s)" % reference,
                  solve_time=time.perf_counter() - t0)
     P = dict(Timo=K, Mass=M, info=info, k_file=k_file, tag=tag, r=r,
              mesh=dict(n_nodes=len(arrays["rx"]),
@@ -290,7 +291,7 @@ def station_timo(blade_yaml, station, mesh_size=0.01,
 
 def generate_cross_sections(blade_yaml, out_dir="cross_sections",
                             stations="airfoil", mesh_size=0.01,
-                            xml=False, plots=False,
+                            reference="oml", xml=False, plots=False,
                             prefix=None, verbose=True):
     """Every pyNuMAD blade station, fully IN MEMORY -> .out + spanwise .dat.
 
@@ -304,7 +305,7 @@ def generate_cross_sections(blade_yaml, out_dir="cross_sections",
         out_dir: str, output folder.
         stations: "airfoil" (the blade's own) | int N (uniform grid) |
             list of float r.
-        mesh_size, prefix: as station_timo (reference surface always oml).
+        mesh_size, reference, prefix: as station_timo.
         verbose: bool, one "r = X" line per station.
     Out:
         list of the per-station station_timo dicts (station order).
@@ -321,7 +322,8 @@ def generate_cross_sections(blade_yaml, out_dir="cross_sections",
     out, rows, rows_k, rows_m = [], [], [], []
     for r in rs:
         P = station_timo(blade_yaml, "%.10f" % r, mesh_size=mesh_size,
-                         out_dir=out_dir, prefix=prefix, blade=blade)
+                         reference=reference, out_dir=out_dir,
+                         prefix=prefix, blade=blade)
         if verbose:
             print(" r = %.4f" % P["r"])
         m = P["mesh"]

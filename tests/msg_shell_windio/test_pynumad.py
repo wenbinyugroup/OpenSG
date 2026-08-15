@@ -89,3 +89,31 @@ def test_pynumad_out_flag_removed():
     with pytest.raises(SystemExit) as e:
         main(["pynumad", BLADE, "4", "--out", "somewhere"])
     assert e.value.code == 2
+
+
+def test_pynumad_reference_option(tmp_path, monkeypatch):
+    """--reference selects the shell reference surface: oml (the yaml's own
+    airfoil contour) by default, center (laminate mid-surface) on request.
+    The .out banner must name the surface actually used, and the two must
+    give DIFFERENT numbers -- the mid-surface ring is a smaller contour."""
+    from opensg_shell.cli import main
+    from opensg_shell.pynumad import read_k_file
+
+    tag = "IEA-15-240-RWT_r0329"
+    got = {}
+    for ref, argv in (("oml", []), ("center", ["--reference", "center"])):
+        d = tmp_path / ref
+        d.mkdir()
+        monkeypatch.chdir(d)
+        assert main(["pynumad", BLADE, "4"] + argv) == 0
+        out = str(d / (tag + ".out"))
+        assert "reference=%s" % ref in open(out).read()
+        got[ref] = read_k_file(out)
+
+    Ko, Mo = got["oml"]
+    Kc, Mc = got["center"]
+    # the mid-surface ring is strictly inside the OML ring: less material,
+    # so lower axial stiffness and lower mass per span (a few tenths of a
+    # percent to a couple of percent -- not a different model)
+    assert 0.9 < Kc[0, 0] / Ko[0, 0] < 1.0
+    assert 0.9 < Mc[0, 0] / Mo[0, 0] < 1.0

@@ -333,7 +333,8 @@ def pynumad(argv):
 
     Everything is written into the CURRENT DIRECTORY -- the folder the
     command is run from.  There is no output-folder flag: cd to where you
-    want the records and run it there.
+    want the records and run it there.  --reference picks the shell
+    reference surface (oml default, center opt-in).
 
     In:  argv list[str] -- [blade_path, st_id, flags...] (the tokens after
          `pynumad`); see --help
@@ -352,6 +353,11 @@ def pynumad(argv):
                         " when omitted")
     p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
                    help="target element arc length / chord (default 0.01)")
+    p.add_argument("--reference", choices=("oml", "center"), default="oml",
+                   help="shell reference surface: oml (default -- the blade"
+                        " yaml's airfoil contour IS the outer mold line) |"
+                        " center (laminate mid-surface, for matching a 2-D"
+                        " solid / VABS section)")
     p.add_argument("--no-xml", action="store_true",
                    help="accepted for compatibility; ignored")
     p.add_argument("--xml", action="store_true",
@@ -376,7 +382,7 @@ def pynumad(argv):
         _t0 = _time.perf_counter()
         for r in rs:
             P = station_timo(a.blade, "%.10f" % r, mesh_size=a.mesh_size,
-                             out_dir=out)
+                             reference=a.reference, out_dir=out)
             print(" r = %.4f" % P["r"])
             m = P["mesh"]
             rows.append([P["r"], P["chord"], P["twist"], m["n_nodes"],
@@ -401,7 +407,8 @@ def pynumad(argv):
         return 0
 
     _t0 = _time.perf_counter()
-    P = station_timo(a.blade, a.station, mesh_size=a.mesh_size, out_dir=".")
+    P = station_timo(a.blade, a.station, mesh_size=a.mesh_size,
+                     reference=a.reference, out_dir=".")
     print("Timoshenko Beam Stiffness Matrix  "
           "[eps11 gam12 gam13 kappa1 kappa2 kappa3]:")
     print(P["Timo"])
