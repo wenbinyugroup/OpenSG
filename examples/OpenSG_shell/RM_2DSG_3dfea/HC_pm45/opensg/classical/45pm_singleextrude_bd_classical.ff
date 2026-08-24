@@ -1,0 +1,7 @@
+# dehomogenization load for 45pm_singleextrude_bd_classical.yaml
+# FF = the SAME station resultants as ../dehomo/45pm_singleextrude_bd.ff
+#      (plate run 45pm_singleextrude_bd_plate_clamped, centre element 270
+#      at x1 = 37.000906, x2 = 30.102440)
+# The classical route (refined: 0) consumes FF only: eps = C_classical^-1 FF.
+# No strain derivatives, no face pressure -- those need the refined: 1 ladder.
+FF: [3.43329000e-03, 1.90031000e-04, 3.13533000e-06, -2.34107000e+01, -7.37409000e+00, -2.48681000e-02]

@@ -1,0 +1,26 @@
+path     comp segment         cl  rm(new)
+path_1   S11  ply -45      29.96     6.55  -
+path_1   S22  ply -45      33.91     6.55  -
+path_1   S33  ply -45      72.54     4.69  -
+path_1   S12  ply -45      29.57     6.26  -
+path_1   S13  ply -45      54.56     8.42  -
+path_1   S23  ply -45      53.30    17.58  -
+path_2   S11  Al core       4.26     1.30  -
+path_2   S11  ply -45      28.88     7.80  -
+path_2   S11  ply +45      15.40     6.07  -
+path_2   S22  Al core      14.12     3.67  -
+path_2   S22  ply -45      11.11     3.07  -
+path_2   S22  ply +45       3.24     1.74  -
+path_2   S33  Al core      42.24     8.82  -
+path_2   S33  ply -45       7.06     3.76  -
+path_2   S33  ply +45       7.04     3.30  -
+path_2   S12  Al core       1.19     0.65  -
+path_2   S12  ply -45      23.43     6.58  -
+path_2   S12  ply +45      10.22     5.21  -
+path_2   S13  Al core       2.61     2.38  -
+path_2   S13  ply -45      66.10    28.40  -
+path_2   S13  ply +45      87.72    26.48  -
+path_2   S23  Al core      39.73    10.16  -
+path_2   S23  ply -45      18.83    13.24  -
+path_2   S23  ply +45      52.76    12.82  -
+VERDICT: classical beats the shipped-pipeline RM in 0 of 24 cells

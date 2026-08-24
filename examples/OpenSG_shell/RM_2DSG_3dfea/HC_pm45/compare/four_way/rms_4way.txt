@@ -1,0 +1,14 @@
+# normalised RMS of (model - 3-D) along each path, material frame
+# path     comp     MSG-RM %    OpenSG-cl %   SwiftComp-cl %
+path_1   S11          6.55          29.96            29.96
+path_1   S22          6.55          33.91            33.91
+path_1   S33          4.69          72.54            72.54
+path_1   S12          6.26          29.57            29.57
+path_1   S13          8.42          54.56            54.56
+path_1   S23         17.58          53.30            53.30
+path_2   S11          2.43           8.04             8.04
+path_2   S22          3.58          13.70            13.70
+path_2   S33          8.48          40.35            40.35
+path_2   S12          1.88           5.54             5.54
+path_2   S13          8.54          23.42            23.42
+path_2   S23         10.45          39.72            39.72

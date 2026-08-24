@@ -1,0 +1,30 @@
+# per-material-segment RMS % (of path max|3-D|):
+#   rm   = shipped RM (uniform reaction, full 2nd order)
+#   fix  = tau-reacted q column + Eq.63 first order only
+#   fix2 = tau-reacted q column + MIDSPAN drivers (odd first
+#          derivatives = 0, even second derivatives kept)
+# path     comp segment         cl       rm      fix     fix2   verdict
+path_1     S11  ply -45      29.99     9.14     5.30     6.66   -
+path_1     S22  ply -45      33.94     9.99     5.12     6.56   -
+path_1     S33  ply -45      72.51     3.20     3.12     4.67   -
+path_1     S12  ply -45      29.60     8.91     6.12     6.28   -
+path_1     S13  ply -45      54.56     5.56     5.77     8.33   -
+path_1     S23  ply -45      53.30    15.70    15.76    17.49   -
+path_2     S11  Al core       4.23     1.46     1.46     1.27   -
+path_2     S11  ply -45      28.94    12.89     5.47     7.90   -
+path_2     S11  ply +45      15.44     8.06     5.20     6.06   -
+path_2     S22  Al core      14.12     4.37     4.30     3.66   -
+path_2     S22  ply -45      11.12     5.20     2.23     3.07   -
+path_2     S22  ply +45       3.24     2.17     1.59     1.76   -
+path_2     S33  Al core      42.24     5.37     7.31     8.82   -
+path_2     S33  ply -45       7.06     1.61     1.33     3.76   -
+path_2     S33  ply +45       7.03     1.30     0.88     3.29   -
+path_2     S12  Al core       1.19     3.80     4.15     0.64   cl<rm,cl<fix
+path_2     S12  ply -45      23.44    10.15     5.93     6.59   -
+path_2     S12  ply +45      10.22     5.98     5.61     5.20   -
+path_2     S13  Al core       2.61    23.51    25.81     1.86   cl<rm,cl<fix
+path_2     S13  ply -45      66.08    17.87    11.79    28.36   -
+path_2     S13  ply +45      87.69    14.55    11.45    26.17   -
+path_2     S23  Al core      39.73    10.42    13.02    10.15   -
+path_2     S23  ply -45      18.85    12.62     8.17    13.07   -
+path_2     S23  ply +45      52.83     5.62     5.89    12.79   -

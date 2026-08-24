@@ -1,0 +1,4 @@
+# normalised RMS of (model - 3-D) U3 along each path, LINEAR reference
+# path       MSG-RM %    classical %
+path_1           2.16           7.10
+path_2           2.68           2.50
