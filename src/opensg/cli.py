@@ -234,14 +234,14 @@ def sc_to_yaml(argv):
         description="SwiftComp .sc -> OpenSG solid SG yaml (+ gmsh "
                     ".msh).  An existing up-to-date <base>.yaml is kept"
                     " -- hand edits win; delete it to re-emit")
-    p.add_argument("sc", nargs="+",
-                   help=".sc file(s); globs expand")
+    p.add_argument("sc", metavar="file.sc",
+                   help="the SwiftComp .sc to convert")
     p.add_argument("--n_model", "--n-model", dest="n_model", type=int,
                    required=True, choices=(1, 2, 3),
                    help="yaml header n_model: 1 beam, 2 plate, 3 solid")
     a = p.parse_args(argv)
 
-    paths = sum((sorted(glob.glob(s)) or [s] for s in a.sc), [])
+    paths = sorted(glob.glob(a.sc)) or [a.sc]
     failed = 0
     for sc in paths:
         base = os.path.splitext(sc)[0]
