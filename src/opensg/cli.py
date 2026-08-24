@@ -34,14 +34,14 @@
                             elastic_properties_mb; "all" sweeps every
                             station (pynumad --help for the flags)
 
-    opensg sc_to_yaml <file.sc> [...] --n_model {1,2,3} [--refined]
+    opensg sc_to_yaml <file.sc> [...] --n_model {1,2,3}
                             SwiftComp .sc -> <base>.yaml + <base>.msh (the
                             solid-dialect SG yaml opensg_solid reads).
-                            --n_model is REQUIRED (never guessed);
-                            --refined is off by default (classical ABD).
-                            Globs expand, up-to-date sidecars are skipped
-                            unless --force (sc_to_yaml --help for the
-                            flags)
+                            --n_model is the ONLY flag; everything else
+                            (refined: 1, omega, ...) the user adds BY HAND
+                            in the emitted yaml header.  An existing
+                            <base>.yaml is therefore KEPT (hand edits
+                            win) -- delete it to re-emit
 
     opensg yaml_to_sc <file.yaml> [...]
                             the REVERSE: SG yaml -> SwiftComp <base>.sc.
@@ -215,79 +215,49 @@ def _yaml_header_matches(yml, n_model, refined):
 def sc_to_yaml(argv):
     """The `opensg sc_to_yaml` subcommand: SwiftComp .sc -> SG yaml + .msh.
 
-    A thin batch driver over opensg_solid.io.sc_to_yaml.convert.  The
-    freshness check lives HERE, not in convert(): convert()'s own
-    up-to-date short-circuit silently ignores n_model/refined (an
-    existing yaml wins there by design), so this driver decides skip vs
-    re-emit itself and DELETES the stale <base>.yaml/.msh and the
-    <base>_sg.npz mesh cache before calling convert -- the requested
-    header flags always land, and the skip path never imports the
-    engine.
+    A thin batch driver over opensg_solid.io.sc_to_yaml.convert.
+    --n_model is the ONLY flag: every other header key (refined:,
+    omega:, ...) the user adds BY HAND in the emitted yaml afterwards.
+    For exactly that reason an existing UP-TO-DATE <base>.yaml is KEPT,
+    never overwritten (convert()'s hand-edits-win rule); a stale pair
+    (the .sc is newer) is re-emitted with the requested n_model.
+    Delete the yaml to force a fresh emit.
 
     In:  argv (list[str]) -- everything after the `sc_to_yaml` keyword:
-         .sc paths/globs, plus --n_model {1,2,3} (REQUIRED -- never
-         guessed from the SG dimension), --out-base BASE (single input
-         only), --refined (default off = classical), --force
+         .sc paths/globs + --n_model {1,2,3}
     Out: int exit code (0 ok, 1 any file failed, 2 usage)."""
     import argparse
     import glob
 
     p = argparse.ArgumentParser(
         prog="opensg sc_to_yaml",
-        description="SwiftComp .sc -> OpenSG solid SG yaml (+ gmsh .msh); "
-                    "existing up-to-date sidecars are skipped unless "
-                    "--force")
+        description="SwiftComp .sc -> OpenSG solid SG yaml (+ gmsh "
+                    ".msh).  An existing up-to-date <base>.yaml is kept"
+                    " -- hand edits win; delete it to re-emit")
     p.add_argument("sc", nargs="+",
-                   help=".sc file(s); globs expand (PowerShell passes "
-                        "them through literally)")
-    p.add_argument("--out-base", default=None, metavar="BASE",
-                   help="basename for the emitted sidecars (single input "
-                        "only; default: the .sc stem)")
+                   help=".sc file(s); globs expand")
     p.add_argument("--n_model", "--n-model", dest="n_model", type=int,
                    required=True, choices=(1, 2, 3),
-                   help="REQUIRED. yaml header n_model: 1 beam, 2 plate,"
-                        " 3 solid -- the macro model this SG homogenizes"
-                        " to.  Not guessed: the SG dimension does not"
-                        " determine it (a 2-D SG serves a plate OR a"
-                        " beam), so the caller states it")
-    p.add_argument("--refined", action="store_true",
-                   help="emit `refined: 1` (shear-refined: plate ABDG / "
-                        "beam Timoshenko).  Default 0 = classical "
-                        "(plate ABD 6x6 / beam EB 4x4)")
-    p.add_argument("--force", action="store_true",
-                   help="re-emit even when <base>.yaml/.msh are newer "
-                        "than the .sc AND already carry the requested "
-                        "n_model/refined (a changed header re-emits on "
-                        "its own)")
+                   help="yaml header n_model: 1 beam, 2 plate, 3 solid")
     a = p.parse_args(argv)
 
     paths = sum((sorted(glob.glob(s)) or [s] for s in a.sc), [])
-    if a.out_base is not None and len(paths) != 1:
-        raise SystemExit("--out-base needs exactly one input .sc, got %d"
-                         % len(paths))
     failed = 0
     for sc in paths:
-        base = a.out_base or os.path.splitext(sc)[0]
+        base = os.path.splitext(sc)[0]
         yml, msh = base + ".yaml", base + ".msh"
         try:
             if not os.path.exists(sc):
                 raise FileNotFoundError("no such file: %s" % sc)
-            fresh = (not a.force and os.path.exists(yml)
-                     and os.path.exists(msh)
-                     and os.path.getmtime(yml) >= os.path.getmtime(sc)
-                     and os.path.getmtime(msh) >= os.path.getmtime(sc)
-                     and _yaml_header_matches(yml, a.n_model,
-                                              int(a.refined)))
-            if fresh:
-                print("sc_to_yaml: %s.yaml/.msh up to date (--force to "
-                      "re-emit)" % base)
-                continue
-            for stale in (yml, msh, base + "_sg.npz"):
-                if os.path.exists(stale):
-                    os.remove(stale)
+            kept = (os.path.exists(yml) and os.path.exists(msh)
+                    and os.path.getmtime(yml) >= os.path.getmtime(sc)
+                    and os.path.getmtime(msh) >= os.path.getmtime(sc))
             from opensg_solid.io.sc_to_yaml import convert
-            convert(sc, out_base=a.out_base, n_model=a.n_model,
-                    refined=int(a.refined))
+            convert(sc, n_model=a.n_model)
+            if kept:
+                print("sc_to_yaml: kept the existing %s.yaml (hand"
+                      " edits win) -- delete it to re-emit from the"
+                      " .sc" % base)
         except Exception as e:
             print("sc_to_yaml: %s FAILED: %s" % (sc, e))
             failed += 1
