@@ -215,7 +215,9 @@ def _rm_ls_reduction(A6, H11, H12, H22, S1, S2):
          blocks; S1/S2 (2, 6) constraint couplings
     Out: G (2, 2) shear stiffness (inv(X)); X (2, 2) shear compliance;
          ev_min float min eigenvalue of X (SPD gate); Ustar_rel float
-         relative LS residual."""
+         relative LS residual; c1, c2 (2, 6) the kernel-translation
+         constants of the LS solution -- the V1bar tilt columns of the
+         Eq. 63 recovery (msg_rm_plate Eq. 58)."""
     H11 = 0.5 * (H11 + H11.T)
     H22 = 0.5 * (H22 + H22.T)
     H_tt = np.block([[H11, H12], [H12.T, H22]])
@@ -250,11 +252,31 @@ def _rm_ls_reduction(A6, H11, H12, H22, S1, S2):
     Ustar_rel = np.linalg.norm(res) / (np.linalg.norm(H_tt) + 1e-30)
     ev_min = float(np.linalg.eigvalsh(X).min())
     G = np.linalg.inv(X)
-    return G, X, ev_min, Ustar_rel
+    return G, X, ev_min, Ustar_rel, c1, c2
+
+
+def _detilt_cols_2d(cols, y2_n, wA_n):
+    """The 2-D analog of rm_plate_1D._detilt_inplane: project the TILT
+    (thickness-linear content) out of the IN-PLANE components of a
+    warping-column block; w3 keeps its tilt.  The 1-D trapezoid line
+    integrals become MATERIAL-AREA-weighted nodal sums (the same lumped
+    areas the <w> = 0 constraint uses), which reduces to the 1-D form
+    on a uniform through-thickness line.
+
+    In:  cols (n_unique, 6); y2_n (n_nodes,) reduced-node thickness
+         coordinate; wA_n (n_nodes,) lumped nodal material areas
+    Out: (n_unique, 6) detilted copy."""
+    W = np.asarray(cols).reshape(-1, 3, 6).copy()
+    z2 = float((wA_n * y2_n * y2_n).sum())
+    for comp in (0, 1):
+        m1 = (wA_n[:, None] * y2_n[:, None] * W[:, comp, :]).sum(axis=0)
+        W[:, comp, :] -= np.outer(y2_n, m1 / z2)
+    return W.reshape(-1, 6)
 
 
 def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
-                       reduced_cells, n_unique, n_sg, omega):
+                       reduced_cells, n_unique, n_sg, omega,
+                       f_faces=None, node_y2=None):
     """The RM transverse-shear block G (2x2) of a plate SG via the
     first-order warping ladder -- rm_plate_1D.msg_rm_plate's Eq. 30-61
     flow on the general SG assembly.
@@ -269,46 +291,43 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
     must reproduce its 1-D G under refinement).  NOT yet validated
     against an external reference for SGs heterogeneous IN-PLANE
     (e.g. the RHC honeycomb) -- SwiftComp cross-check is the open item.
-    The shear-refined RECOVERY (Eq. 63-66 ladder) is not ported --
-    plate dehom stays the classical Kirchhoff-mode recovery.
+    The Eq. 63 FIRST-ORDER refined recovery IS ported (sg_dehom.
+    _v2_batch, driven by the .ff strain derivatives; gated on the
+    homogeneous-plate sigma13 parabola, 1-D and 2-D SG).  The
+    second-order Eq. 64-66 stage (V2x chains, tilt/detilt row split)
+    and the qt6/qb6 pressure load ladder are ALSO ported for 2-D
+    single-batch SGs (this function's node_y2/f_faces inputs;
+    sg_dehom._v266_batch/_vq_batch) -- gated on Pagano [0/90/0] s=4
+    vs exact elasticity and on flat/iso/sandwich closed-form loads.
 
     In:  x_end/dphi_hi/phi_hi/W_hi -- geometry + a quadrature exact to
          degree 2p+2; C_ess (E, 6, 6); reduced_cells (E, N); n_unique
-         dofs; n_sg; omega -- the IN-PLANE SG measure (1-D SG: 1)
+         dofs; n_sg; omega -- the IN-PLANE SG measure (1-D SG: 1).
+         Every per-element argument may also be a PER-BATCH LIST (one
+         entry per element type of a mixed SG, all over the SHARED
+         reduced dof space): the element blocks run per batch and
+         scatter-add into the same global csr/dense objects, so the RM
+         math below never sees the batching (the fe_jax ElementBatch /
+         shell_sg3d tri+quad doctrine).
+         f_faces OPTIONAL (n_unique, 2) -- consistent nodal loads of a
+         UNIT face pressure on the [top, bottom] SG face (already
+         /omega, signs top -, bottom +, exactly the msg_rm_plate Lt/Lb
+         convention).  When given, the PRESSURE-DRIVEN warping ladder
+         (Yu Eqs. 29/45/64, the rm_plate_1D load columns) is solved on
+         the same constrained system and returned: V1Lt/V1Lb
+         (n_unique,) first-order load columns and V2Lt/V2Lb
+         (n_unique, 5) quintets for the (q,1 q,2 q,11 q,12 q,22)
+         drivers.  sg_dehom consumes them for the qt6/qb6 recovery.
     Out: dict A6 (6, 6), G_msg (2, 2, None unless X SPD), X, ev_min,
-         Ustar_rel, V0/V11/V12 (n_unique, 6)."""
-    out = plate_ladder_element_blocks(x_end, dphi_hi, phi_hi, W_hi,
-                                      jnp.asarray(C_ess), n_sg)
-    (hh_b, he_b, ee_b, hl1_b, hl2_b, l11_b, l12_b, l22_b,
-     l1e_b, l2e_b, wN_b) = [np.asarray(o) for o in out]
-
-    E_elem, n_ed = he_b.shape[0], he_b.shape[1]
-    N_nodes = n_ed // 3
-    dof_map = ((np.asarray(reduced_cells, dtype=np.int64) * 3)
-               .reshape(E_elem, N_nodes, 1)
-               + np.arange(3)).reshape(E_elem, n_ed)
-    rows = np.repeat(dof_map, n_ed, axis=1).ravel()
-    cols = np.tile(dof_map, (1, n_ed)).ravel()
-
-    def nn(Be):
-        return csr_matrix((Be.ravel() / omega, (rows, cols)),
-                          shape=(n_unique, n_unique))
-
-    def ns(Be):
-        M = np.zeros((n_unique, 6))
-        np.add.at(M, dof_map.ravel(),
-                  Be.reshape(-1, 6) / omega)
-        return M
-
-    D_hh = nn(hh_b); D_hl1 = nn(hl1_b); D_hl2 = nn(hl2_b)
-    D_l11 = nn(l11_b); D_l12 = nn(l12_b); D_l22 = nn(l22_b)
-    D_he = ns(he_b); D_l1e = ns(l1e_b); D_l2e = ns(l2e_b)
-    D_ee = ee_b.sum(axis=0) / omega
-
-    w_node = np.zeros(n_unique // 3)
-    np.add.at(w_node, np.asarray(reduced_cells,
-                                 dtype=np.int64).ravel(), wN_b.ravel())
-    w_dof = np.repeat(w_node, 3)
+         Ustar_rel, V0/V11/V12/V11bar/V12bar (n_unique, 6)
+         [+ V1Lt/V2Lt/V1Lb/V2Lb when f_faces is given]."""
+    from opensg_solid.sg_mixed import ladder_blocks   # assembly layer
+    blk = ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess,
+                        reduced_cells, n_unique, n_sg, omega)
+    D_hh, D_hl1, D_hl2 = blk["D_hh"], blk["D_hl1"], blk["D_hl2"]
+    D_l11, D_l12, D_l22 = blk["D_l11"], blk["D_l12"], blk["D_l22"]
+    D_he, D_l1e, D_l2e = blk["D_he"], blk["D_l1e"], blk["D_l2e"]
+    D_ee, w_dof = blk["D_ee"], blk["w_dof"]
 
     kernel = np.zeros((n_unique, 3))
     kernel[0::3, 0] = kernel[1::3, 1] = kernel[2::3, 2] = 1.0
@@ -338,10 +357,69 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
     S1 = (kernel.T @ D1bar)[:2]
     S2 = (kernel.T @ D2bar)[:2]
 
-    G, X, ev_min, Ustar_rel = _rm_ls_reduction(A6, H11, H12, H22, S1, S2)
-    return {"A6": A6, "G_msg": (G if ev_min > 0 else None), "X": X,
-            "ev_min": ev_min, "Ustar_rel": float(Ustar_rel),
-            "V0": V0, "V11": V11, "V12": V12}
+    G, X, ev_min, Ustar_rel, c1, c2 = _rm_ls_reduction(A6, H11, H12,
+                                                       H22, S1, S2)
+    # the Eq. 63 recovery columns: V1bar = V1 + kernel c_a with the
+    # kernel constants of the LS solution IN-PLANE only (w3 keeps its
+    # gauge) -- msg_rm_plate Eq. 58; raw V1bar feeds Gamma_h (the tilt
+    # carries the mean shear), the ladder V0 feeds Gamma_l1/Gamma_l2
+    c1_ks = np.zeros((3, 6)); c1_ks[:2] = c1
+    c2_ks = np.zeros((3, 6)); c2_ks[:2] = c2
+    out = {"A6": A6, "G_msg": (G if ev_min > 0 else None), "X": X,
+           "ev_min": ev_min, "Ustar_rel": float(Ustar_rel),
+           "V0": V0, "V11": V11, "V12": V12,
+           "V11bar": V11 + kernel @ c1_ks,
+           "V12bar": V12 + kernel @ c2_ks}
+    if node_y2 is not None:
+        # ---- second-order warping V2 (Eq. 64), msg_rm_plate lines
+        # 308-330 ported term for term.  V2 energy is O((h/l)^4): A6/G
+        # untouched; the columns exist purely for the Eq. 65-66
+        # recovery.  TWO variants -- the source must MATCH the
+        # recovery's Gamma_l columns: D-chain (detilted) feeds the
+        # in-plane stress rows, T-chain (tilted) the 33/23/13 rows.
+        wA = np.asarray(blk["w_dof"])[0::3]
+        V11bar, V12bar = out["V11bar"], out["V12bar"]
+        V11barD = _detilt_cols_2d(V11bar, node_y2, wA)
+        V12barD = _detilt_cols_2d(V12bar, node_y2, wA)
+        AH1 = lambda M: D_hl1 @ M - D_hl1.T @ M          # noqa: E731
+        AH2 = lambda M: D_hl2 @ M - D_hl2.T @ M          # noqa: E731
+        D21D = AH1(V11barD) - D_l11 @ V0
+        D22D = (AH1(V12barD) + AH2(V11barD)
+                - (D_l12 @ V0 + D_l12.T @ V0))
+        D23D = AH2(V12barD) - D_l22 @ V0
+        D21T = AH1(V11bar) - D_l11 @ V0
+        D22T = (AH1(V12bar) + AH2(V11bar)
+                - (D_l12 @ V0 + D_l12.T @ V0))
+        D23T = AH2(V12bar) - D_l22 @ V0
+        V2 = solve_constrained(np.concatenate(
+            [D21D, D22D, D23D, D21T, D22T, D23T], axis=1))
+        out["V11barD"], out["V12barD"] = V11barD, V12barD
+        out["V21"], out["V22"], out["V23"] = (V2[:, :6], V2[:, 6:12],
+                                              V2[:, 12:18])
+        out["V21t"], out["V22t"], out["V23t"] = (V2[:, 18:24],
+                                                 V2[:, 24:30],
+                                                 V2[:, 30:36])
+    if f_faces is not None:
+        # ---- the pressure-driven load ladder (rm_plate_1D lines
+        # 332-352, ported term for term).  The KKT <w> = 0 rows absorb
+        # the net face force exactly as the 1-D node constraint does,
+        # so the pure-Neumann columns are well posed.
+        V1L = solve_constrained(np.asarray(f_faces, float))
+        V1Lt, V1Lb = V1L[:, 0], V1L[:, 1]
+
+        def v2l(vl):
+            """the five second-order load columns of one face
+            (q,1 q,2 q,11 q,12 q,22 drivers) -- msg_rm_plate v2l"""
+            return solve_constrained(np.stack(
+                [(D_hl1 @ vl - D_hl1.T @ vl),
+                 (D_hl2 @ vl - D_hl2.T @ vl),
+                 -(D_l11 @ vl),
+                 -((D_l12 @ vl) + (D_l12.T @ vl)),
+                 -(D_l22 @ vl)], axis=1))
+
+        out["V1Lt"], out["V2Lt"] = V1Lt, v2l(V1Lt)
+        out["V1Lb"], out["V2Lb"] = V1Lb, v2l(V1Lb)
+    return out
 
 
 # ------------------------------------- beam Timoshenko/KKT drivers (n_model=1)
@@ -573,15 +651,24 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
 
 
 def _to_basix_order(cells, n_sg, nn):
-    """gmsh/.sc -> basix (tensor) vertex order for quad4 and hex8; tri,
-    tet and interval orders coincide.
+    """gmsh -> basix order for quad4, hex8 and tet10; tri3, tet4 and the
+    interval degrees coincide (the interval only because sc_to_yaml swaps
+    the raw .sc 5-node order [end,end,25%,75%,50%] at read time).
+
+    tet10: gmsh lists the 6 midsides on edges (12, 23, 13, 14, 34, 24)
+    after the 4 corners; basix tetrahedron-P2 orders its edge DOFs
+    (34, 24, 23, 14, 13, 12) -- the permutation below.  Without it det J
+    changes sign inside every element and nothing raises.
 
     In:  cells (E, nn) connectivity; n_sg SG dimension; nn nodes/elem
-    Out: (E, nn) reordered connectivity (unchanged unless quad4/hex8)."""
+    Out: (E, nn) reordered connectivity (unchanged unless quad4/hex8/
+         tet10)."""
     if n_sg == 2 and nn == 4:
         return cells[:, jnp.array([0, 1, 3, 2])]
     if n_sg == 3 and nn == 8:
         return cells[:, jnp.array([0, 1, 3, 2, 4, 5, 7, 6])]
+    if n_sg == 3 and nn == 10:
+        return cells[:, jnp.array([0, 1, 2, 3, 8, 9, 5, 7, 6, 4])]
     return cells
 
 
@@ -665,7 +752,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     plot: bool = True,                  # <base>_mesh.png if absent
                     boundary: Optional[str] = None,     # 'aperiodic'|'periodic'
                     density=None,                       # (n_mat,) beam mass rho
-                    omega: Optional[float] = None       # user SG measure (3-D solid)
+                    omega: Optional[float] = None,      # user SG measure (3-D solid)
+                    q_reaction: Optional[str] = None    # 'uniform' | 'tau'
                     ) -> Dict[str, Any]:
     """Homogenize ONE structure gene (1-D/2-D/3-D .sc) to the macro law.
 
@@ -713,7 +801,29 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     (3-D solid macro model only; the yaml header key `omega:` fills it in,
     and an explicit argument wins over the header).  The measured default
     for a 3-D SG is the node bounding box -- the periodic unit cell; pass
-    `omega` only when the equivalent continuum occupies something else."""
+    `omega` only when the equivalent continuum occupies something else.
+    q_reaction: how the pressure LOAD COLUMN balances the net face force
+    (refined 2-D plate SG only).  NOT a yaml key: the yaml describes the
+    structure alone, and this choice belongs to the LOADING side -- it
+    rides in the `.ff` (`q_reaction: tau`), which the cli reads and
+    passes here for a dehomogenization run.  The load column is a
+    pure-Neumann cell solve, so the applied face force must be reacted
+    somewhere inside the cell:
+      'uniform' (DEFAULT, and every result before this key existed) lets
+          the <w> = 0 KKT rows absorb it -- mechanically a uniform body
+          force over the material area.  Exact for a cell that is
+          HOMOGENEOUS IN-PLANE (a laminate), where the reaction is
+          uniform anyway; that is the regime the ladder was gated on.
+      'tau' reacts it along the cell's OWN transverse-shear path: the
+          weight is sigma_xz under a unit Q1, taken from this SG's Eq. 63
+          first-order recovery (integral gated to 1).  For an
+          in-plane-heterogeneous cell (sandwich core, stiffened panel)
+          the spanwise shear really does flow through the webs, and the
+          uniform reaction under-loads the face-sheet bays: on the
+          HC_pm45 honeycomb it damps the face-sheet bay bending ~20 %
+          (compare/four_way/bay_load_check.png).  Costs one extra ladder
+          factorization; A6/G/ABDG are unchanged (the load columns feed
+          recovery only)."""
     from .sg_mesh import read_yaml_header
     _hdr = read_yaml_header(sc_path) if isinstance(sc_path, str) else {}
     if omega is None and _hdr.get("omega") is not None:
@@ -754,41 +864,63 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     n_sg = sc["dim"]
 
     def _emit_plot():
-        # visualization stays OUT of the timed span and is drawn only when
-        # missing (same mesh -> same figure; delete the PNG to refresh)
+        # visualization stays OUT of the timed span.  Same mesh -> same
+        # figure, so it is drawn only when the PNG is MISSING or OLDER
+        # than the yaml it depicts: a re-converted SG (new mesh, new
+        # material binding) must not keep showing the previous picture.
         png = base + "_mesh.png"
-        if plot and not os.path.exists(png):
+        if not plot:
+            return
+        stale = True
+        if os.path.exists(png):
+            stale = (isinstance(sc_path, str) and os.path.exists(sc_path)
+                     and os.path.getmtime(png) < os.path.getmtime(sc_path))
+        if stale:
             plot_sg_mesh(sc, png, msh_path=base + ".msh")
 
     nn = sorted({len(c) for c in sc["cells"]})
-    if len(nn) != 1:
-        raise ValueError("mixed element types in one SG are unsupported "
-                         "(single homogeneous batch): %s nodes/elem" % nn)
+    mixed = len(nn) != 1
+    if mixed and n_model == 1:
+        raise ValueError("mixed element types: the beam (n_model 1) "
+                         "KKT route is single-batch; split the mesh or "
+                         "use one element type: %s nodes/elem" % nn)
+    if mixed and solver == "cg":
+        raise ValueError("mixed element types need solver='direct' "
+                         "(the EBE/Chebyshev CG operators are "
+                         "single-batch): %s nodes/elem" % nn)
     points = jnp.array(np.asarray(sc["nodes"], float)[:, 0:n_sg])
-    cells = jnp.array(np.asarray(sc["cells"], np.uint64))
-    cells = _to_basix_order(cells, n_sg, nn[0])
     cell_domain_ids = jnp.array(np.asarray(sc["mat_id"], int) - 1)
-
-    ctype, bdeg = _cell_basis(n_sg, nn[0])
-    # enum member names differ across fe_jax vintages (default vs Default)
-    _qt = getattr(QuadratureType, "default", None) or getattr(
-        QuadratureType, "Default")
-    fe_type = FiniteElementType(
-        cell_type=ctype, family=ElementFamily.P, basis_degree=bdeg,
-        lagrange_variant=LagrangeVariant.equispaced,
-        quadrature_type=_qt, quadrature_degree=6 if bdeg > 1 else 2)
-    xi_qp, W_q = get_quadrature(fe_type=fe_type)
-    phi_qn, dphi_dxi_qnp = eval_basis_and_derivatives(fe_type=fe_type,
-                                                      xi_qp=xi_qp)
-    x_end = mesh_to_jax(vertices=points, cells=cells)
     V = points.shape[0]
+
+    from opensg_solid.sg_mixed import (attach_periodic_maps,
+                                       build_batches, fe_tables,
+                                       homo_direct_batched)
+    if not mixed:
+        cells = jnp.array(np.asarray(sc["cells"], np.uint64))
+        cells = _to_basix_order(cells, n_sg, nn[0])
+        phi_qn, dphi_dxi_qnp, W_q = fe_tables(n_sg, nn[0])
+        x_end = mesh_to_jax(vertices=points, cells=cells)
+    else:
+        # per-element-type batches over the SHARED nodes-x-3 dof space:
+        # the batching layer lives in sg_mixed; element ORDER within a
+        # batch follows the global mesh order, so mat_id/C_ess split by
+        # the same index lists
+        bat = build_batches(sc, points, n_sg)
 
     # boundary defaults to periodic on every route; aperiodic only on request
     if boundary is None:
         boundary = "periodic"
     if boundary == "periodic":
-        periodic_cells_en, dof_map_np = mesh_to_periodic_sparse_assembly_map(
-            V, cells, points, n_model, atol=1e-6)
+        # the periodic NODE reduction inside the map is built from the
+        # points alone (cells only route the reduced ids), so per-batch
+        # calls share one consistent reduced numbering
+        if not mixed:
+            periodic_cells_en, dof_map_np = \
+                mesh_to_periodic_sparse_assembly_map(
+                    V, cells, points, n_model, atol=1e-6)
+        else:
+            dof_map_np = attach_periodic_maps(bat, V, points, n_model,
+                                              boundary)
         bdofs = None
     else:
         if n_model == 1 or solver == "cg":
@@ -796,7 +928,11 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                              "models with solver='direct'")
         # boundary solution mapped to the boundary nodes: zero fluctuation
         # (w = 0, Dirichlet) on every bounding-box-face node of the SG
-        periodic_cells_en, dof_map_np = cells, np.arange(V*3)
+        if not mixed:
+            periodic_cells_en, dof_map_np = cells, np.arange(V*3)
+        else:
+            dof_map_np = attach_periodic_maps(bat, V, points, n_model,
+                                              boundary)
         pts = np.asarray(points)
         box0, box1 = pts.min(0), pts.max(0)
         tol = 1e-6*float(np.max(box1 - box0))
@@ -843,12 +979,20 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     # sg_materials.elem_rotation_from_yaml.
     C_ess, _ = get_heterogeneous_C_matrix(sc, material_param, angles,
                                           elem_rotation)
+    if mixed:
+        C_all = jnp.asarray(C_ess)
+        for b in bat:
+            b["C_ess"] = C_all[jnp.asarray(b["idx"])]
 
     unique_dofs = jnp.unique(dof_map_np)
     n_unique = len(unique_dofs)
 
     u_0_g_full = jnp.zeros(shape=(V * 3))
-    if solver == "direct":
+    if mixed:
+        C_eff, V0_matrix, omega = homo_direct_batched(
+            bat, u_0_g_full, unique_dofs, n_unique, points, n_model,
+            n_sg, bdofs=bdofs)
+    elif solver == "direct":
         C_eff, V0_matrix, omega = _homo_direct(
             x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
             periodic_cells_en, unique_dofs, n_unique, n_model, n_sg,
@@ -865,31 +1009,158 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         C_eff = np.asarray(C_eff) * (float(omega) / omega_user)
         omega = omega_user
 
-    r = {"C_eff": np.asarray(C_eff), "V0": V0_matrix, "C_ess": C_ess,
-         "x_end": x_end, "phi_qn": phi_qn, "dphi_dxi_qnp": dphi_dxi_qnp,
-         "W_q": W_q, "periodic_cells_en": periodic_cells_en,
-         "n_sg": n_sg, "n_model": n_model, "omega": float(omega),
-         "boundary": boundary,
-         "n_boundary_nodes": 0 if bdofs is None else len(bdofs)//3,
-         "sc": sc}
+    if not mixed:
+        r = {"C_eff": np.asarray(C_eff), "V0": V0_matrix, "C_ess": C_ess,
+             "x_end": x_end, "phi_qn": phi_qn,
+             "dphi_dxi_qnp": dphi_dxi_qnp,
+             "W_q": W_q, "periodic_cells_en": periodic_cells_en,
+             "n_sg": n_sg, "n_model": n_model, "omega": float(omega),
+             "boundary": boundary,
+             "n_boundary_nodes": 0 if bdofs is None else len(bdofs)//3,
+             "sc": sc}
+    else:
+        # the per-mesh arrays become PER-BATCH LISTS (same batch order
+        # everywhere); sg_dehom loops them and concatenates flat clouds
+        r = {"C_eff": np.asarray(C_eff), "V0": V0_matrix,
+             "C_ess": [b["C_ess"] for b in bat],
+             "x_end": [b["x_end"] for b in bat],
+             "phi_qn": [b["phi_qn"] for b in bat],
+             "dphi_dxi_qnp": [b["dphi_dxi_qnp"] for b in bat],
+             "W_q": [b["W_q"] for b in bat],
+             "periodic_cells_en": [b["periodic_cells"] for b in bat],
+             "batch_nn": [b["nn"] for b in bat],
+             "batch_idx": [np.asarray(b["idx"]) for b in bat],
+             "n_sg": n_sg, "n_model": n_model, "omega": float(omega),
+             "boundary": boundary,
+             "n_boundary_nodes": 0 if bdofs is None else len(bdofs)//3,
+             "sc": sc}
 
     if shear_refined:
         # (the model/shear_refined guard lives at the top of the function)
         # the l-blocks integrate basis VALUE products -> degree 2p+2
-        fe_hi = FiniteElementType(
-            cell_type=ctype, family=ElementFamily.P, basis_degree=bdeg,
-            lagrange_variant=LagrangeVariant.equispaced,
-            quadrature_type=_qt, quadrature_degree=2 * bdeg + 2)
-        xi_hi, W_hi = get_quadrature(fe_type=fe_hi)
-        phi_hi, dphi_hi = eval_basis_and_derivatives(fe_type=fe_hi,
-                                                     xi_qp=xi_hi)
-        lad = plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
-                                 periodic_cells_en, n_unique, n_sg,
-                                 float(omega))
+        #
+        # consistent nodal loads of a UNIT face pressure on the top and
+        # bottom SG faces, for the qt6/qb6 load-recovery ladder.  Signs
+        # follow msg_rm_plate's Lt/Lb (-1 top w3, +1 bottom w3): a
+        # positive pressure pushes INTO each face.  /omega matches the
+        # ladder_blocks normalization.  2-D single-batch SGs only; the
+        # trapezoid weights are the exact consistent load of linear
+        # edges on a flat face, and periodic end nodes scatter to one
+        # master dof, which is exactly the tiled-face integral.
+        f_faces = None
+        node_y2 = None
+        if not mixed and n_sg == 2:
+            pts2 = np.asarray(points)[:, :2]
+            red_of = np.full(pts2.shape[0], -1, dtype=np.int64)
+            red_of[np.asarray(cells, dtype=np.int64).ravel()] = \
+                np.asarray(periodic_cells_en).ravel()
+            # reduced-node thickness coordinate for the V2 detilt --
+            # periodic partners share y2, so scatter order is immaterial
+            node_y2 = np.zeros(n_unique // 3)
+            node_y2[red_of] = pts2[:, 1]
+            ftol = 1e-6 * float(max(np.ptp(pts2[:, 0]),
+                                    np.ptp(pts2[:, 1])))
+            f_faces = np.zeros((n_unique, 2))
+            # SIGNS: solve_constrained negates its rhs internally, so
+            # the stored columns are the NEGATIVE of the physical load
+            # (top +, bottom -); calibrated against the flat-laminate
+            # closed-form sigma33 profile (-q at the top face, 0 at
+            # the bottom).
+            for col, (yf, sgn) in enumerate(
+                    ((pts2[:, 1].max(), 1.0), (pts2[:, 1].min(), -1.0))):
+                nid = np.where(np.abs(pts2[:, 1] - yf) < ftol)[0]
+                nid = nid[np.argsort(pts2[nid, 0])]
+                seg = np.diff(pts2[nid, 0])
+                wgt = np.zeros(len(nid))
+                wgt[:-1] += 0.5 * seg
+                wgt[1:] += 0.5 * seg
+                np.add.at(f_faces[:, col], 3 * red_of[nid] + 2,
+                          sgn * wgt / float(omega))
+        if not mixed:
+            phi_hi, dphi_hi, W_hi = fe_tables(n_sg, nn[0], hi=True)
+            lad = plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
+                                     periodic_cells_en, n_unique, n_sg,
+                                     float(omega), f_faces=f_faces,
+                                     node_y2=node_y2)
+        else:
+            hi = [fe_tables(n_sg, b["nn"], hi=True) for b in bat]
+            lad = plate_shear_ladder(
+                [b["x_end"] for b in bat],
+                [h[1] for h in hi], [h[0] for h in hi],
+                [h[2] for h in hi],
+                [b["C_ess"] for b in bat],
+                [b["periodic_cells"] for b in bat],
+                n_unique, n_sg, float(omega))
         r["G_msg"] = lad["G_msg"]
         r["X_shear"] = lad["X"]
         r["A6_ladder"] = lad["A6"]
         r["Ustar_rel"] = lad["Ustar_rel"]
+        # the ladder triple, in ITS OWN <w> = 0 gauge -- what the Eq. 63
+        # refined recovery consumes (sg_dehom).  The classical r["V0"]
+        # (pinned-node gauge) cannot feed the Gamma_l VALUE operators.
+        r["V0_ladder"] = lad["V0"]
+        r["V11"] = lad["V11"]
+        r["V12"] = lad["V12"]
+        r["V11bar"] = lad["V11bar"]
+        r["V12bar"] = lad["V12bar"]
+        # the pressure-driven load columns (qt6/qb6 recovery) and the
+        # second-order Eq. 64 chains, when the SG shape supports them
+        # (2-D, single batch)
+        for k in ("V1Lt", "V2Lt", "V1Lb", "V2Lb", "V11barD", "V12barD",
+                  "V21", "V22", "V23", "V21t", "V22t", "V23t"):
+            if k in lad:
+                r[k] = lad[k]
+        # optional tau reaction of the load columns -- see the q_reaction
+        # docstring (the flag arrives from the .ff via the cli, never
+        # from the yaml).  A6/G above are already final: the load columns
+        # feed the recovery only, so this re-solves just that block.
+        if q_reaction is None:
+            q_reaction = "uniform"
+        q_reaction = str(q_reaction).strip().lower()
+        if q_reaction not in ("uniform", "tau"):
+            raise ValueError("q_reaction must be 'uniform' (the <w> = 0"
+                             " KKT reaction) or 'tau' (react along the"
+                             " cell's shear path), got %r" % q_reaction)
+        r["q_reaction"] = q_reaction
+        if (q_reaction == "tau" and f_faces is not None
+                and lad.get("V1Lt") is not None and nn[0] == 4):
+            from .sg_dehom import _v2_batch
+            dE1u = np.linalg.solve(np.asarray(r["C_eff"], float),
+                                   np.array([0.0, 0, 0, 1.0, 0, 0]))
+            _, dSig = _v2_batch(periodic_cells_en,
+                                jnp.asarray(lad["V0"]),
+                                jnp.asarray(lad["V11bar"]),
+                                jnp.asarray(lad["V12bar"]),
+                                x_end, C_ess, dphi_dxi_qnp, phi_qn,
+                                jnp.asarray(dE1u), jnp.zeros(6), n_sg)
+            tau_e = np.asarray(dSig).mean(axis=1)[:, 4]      # sigma_xz
+            cyc = np.asarray(cells, dtype=np.int64)[:, [0, 1, 3, 2]]
+            xq, yq = pts2[cyc][:, :, 0], pts2[cyc][:, :, 1]
+            area_e = 0.5 * np.abs(
+                (xq * np.roll(yq, -1, axis=1)
+                 - np.roll(xq, -1, axis=1) * yq).sum(axis=1))
+            I_tau = float((tau_e * area_e).sum() / float(omega))
+            tau_w = np.zeros(n_unique // 3)
+            np.add.at(tau_w, red_of[cyc.ravel()],
+                      np.repeat(tau_e * area_e / 4.0, 4))
+            fv = f_faces.copy()
+            for col in (0, 1):
+                fv[2::3, col] -= (fv[2::3, col].sum()
+                                  * tau_w / tau_w.sum())
+            lad_q = plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi,
+                                       C_ess, periodic_cells_en,
+                                       n_unique, n_sg, float(omega),
+                                       f_faces=fv, node_y2=node_y2)
+            for k in ("V1Lt", "V2Lt", "V1Lb", "V2Lb"):
+                r[k] = lad_q[k]
+            print("q_reaction: tau -- load columns re-reacted along the"
+                  " cell's shear path (integral sigma_xz under unit Q1"
+                  " = %.6f, target 1)" % I_tau)
+        elif q_reaction == "tau":
+            print("note: q_reaction: tau needs a single-batch quad4 2-D"
+                  " plate SG with the load ladder -- keeping the"
+                  " uniform reaction")
+            r["q_reaction"] = "uniform"
         r["ABDG"] = None
         if lad["G_msg"] is not None:
             ABDG = np.zeros((8, 8))

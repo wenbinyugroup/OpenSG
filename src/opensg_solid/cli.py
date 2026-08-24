@@ -2,6 +2,9 @@
 
     opensg_solid <sg.yaml>        homogenization (the default)
     opensg_solid <sg.yaml> D      dehomogenization: homogenize, then recover
+    opensg_solid <sg.yaml> --mesh  the run above, AND force a redraw of
+                                  <base>_mesh.png (a flag, not an
+                                  analysis: combines with H | D)
 
 No flags, no codes: everything else lives in the yaml header (the
 leading scalar keys above the mesh blocks), and every key has a default
@@ -40,7 +43,18 @@ D drives the recovery from `epsilon_bar`.  A 1-D plate SG instead
 recovers a whole FIELD from a `.ff` station table found next to the
 yaml (or named by `ff:` in the header) -- see the 1-D dehom example.
 
-H writes the timed <base>.out (SwiftComp .K layout) + <base>_mesh.png;
+D output frame: --material (the DEFAULT) rotates every element's
+stress/strain into its own PLY axes (theta = -angle about the thickness
+axis, the flat_pm45-gated Abaqus equivalence -- what an Abaqus odb shows
+UNTRANSFORMED when the section carries *Orientation); --global keeps
+the SG axes, the frame the recovery computes in and the one every .SM
+written before this flag existed carries.  The .SM/.EM header names the
+frame; .U is never rotated.  Block-angle yamls only -- per-element
+frames (elementOrientations) refuse --material.
+
+H writes the timed <base>.out (SwiftComp .K layout) + <base>_mesh.png
+(redrawn whenever the PNG is older than the yaml, so a re-converted SG
+never keeps the previous picture);
 D additionally writes <base>_dehom.txt/.vtk/.SM/.EM/.U.
 """
 import glob
@@ -64,6 +78,20 @@ def main(argv=None):
     Out: int exit code (0 ok, 2 usage)."""
     print(BANNER)
     argv = sys.argv[1:] if argv is None else list(argv)
+    # --mesh is a FLAG, not the analysis: strip it, keep the rest
+    want_mesh = any(str(a).strip().lower() in ("--mesh", "-m", "mesh")
+                    for a in argv)
+    argv = [a for a in argv
+            if str(a).strip().lower() not in ("--mesh", "-m", "mesh")]
+    # D output frame: --material (ply axes, the DEFAULT) | --global (SG
+    # axes, the frame every pre-flag .SM was written in).  A flag, not an
+    # analysis -- strip it the same way; the last one given wins.
+    frame = "material"
+    for a in argv:
+        if str(a).strip().lower() in ("--material", "--global"):
+            frame = str(a).strip().lower().lstrip("-")
+    argv = [a for a in argv
+            if str(a).strip().lower() not in ("--material", "--global")]
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):
         print(__doc__)
         return 2
@@ -74,6 +102,14 @@ def main(argv=None):
             path, "" if not os.path.exists(alt) else
             "\ndid you mean %s ?" % alt))
 
+    # an unfilled msh_to_yaml template: name the missing `materials:` fields
+    # instead of failing deep inside the material parse (cheap line scan,
+    # never a full parse)
+    from .io.msh_to_yaml import check_filled
+    _todo = check_filled(path)
+    if _todo:
+        raise SystemExit(_todo)
+
     from .sg_mesh import read_yaml_header, resolve_msg, sg_dim, node_span_dim
     from .sg_homo import plate_homo_2d
 
@@ -83,6 +119,12 @@ def main(argv=None):
     if analysis not in ("H", "D"):
         raise SystemExit("the analysis argument must be H (homogenization)"
                          " or D (dehomogenization), got %r" % argv[1])
+    if want_mesh:
+        # --mesh does not replace the analysis, it GUARANTEES the figure:
+        # drop the old PNG so the run's own plot step redraws it
+        _png = os.path.splitext(path)[0] + "_mesh.png"
+        if os.path.exists(_png):
+            os.remove(_png)
     import time as _time
     _t0 = _time.perf_counter()
     _MDL = {1: "beam", 2: "plate", 3: "3-D solid"}
@@ -98,9 +140,15 @@ def main(argv=None):
     print("")
 
     # the terminal route is classical by default for EVERY macro model;
-    # `refined: 1` in the file is the explicit upgrade
-    r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)))
+    # `refined: 1` in the file is the explicit upgrade.  For a dehom run
+    # the .ff is peeked FIRST: its optional `q_reaction:` key is a
+    # LOADING-side declaration the homogenization's load ladder consumes
+    # (the yaml stays purely structural).
     base = os.path.splitext(path)[0]
+    state = read_ff_state(base + ".ff") if analysis == "D" else None
+    r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)),
+                      q_reaction=(None if state is None
+                                  else state.get("q_reaction")))
     print(r["law_title"] + ":")
     print(r["law"])
     if analysis == "H":
@@ -112,7 +160,7 @@ def main(argv=None):
 
         from .sg_dehom import dehom_fields, export_gauss, gauss_coords
 
-        state = read_ff_state(base + ".ff")
+        # state was already read above (its q_reaction fed the ladder)
         if state is not None:
             eps = np.linalg.solve(np.asarray(r["C_eff"], float),
                                   state["FF"])
@@ -124,7 +172,68 @@ def main(argv=None):
                     " C, FF) or `epsilon_bar:` in the yaml header"
                     % os.path.basename(base))
             eps = np.asarray([float(x) for x in eps], float)
-        Gam, Sig, U = dehom_fields(r, eps)
+        # the Eq. 63 refined recovery: strain-derivative + Q drivers
+        # ride in the .ff as OPTIONAL keys; a classical run (refined: 0)
+        # cannot consume them -- warn instead of silently dropping
+        dE1 = dE2 = Qff = None
+        if state is not None and (state.get("dE1") is not None
+                                  or state.get("dE2") is not None):
+            if r.get("V11bar") is None:
+                print("note: %s.ff carries strain derivatives, but the"
+                      " yaml ran classical (refined: 0) -- V2 recovery"
+                      " skipped; set `refined: 1` to use them"
+                      % os.path.basename(base))
+            else:
+                dE1, dE2 = state.get("dE1"), state.get("dE2")
+                Qff = state.get("Q")
+                print("V2 recovery: deps_dx1/deps_dx2 drive the Eq. 63"
+                      " refined term%s" % ("" if Qff is None else
+                                           ", Q-consistency rescale on"))
+        qt6 = qb6 = None
+        if state is not None and (state.get("qt6") is not None
+                                  or state.get("qb6") is not None):
+            if r.get("V1Lt") is None:
+                print("note: %s.ff carries face pressures (qt6/qb6),"
+                      " but this SG stores no load ladder (needs a"
+                      " refined 2-D plate run) -- pressure recovery"
+                      " skipped" % os.path.basename(base))
+            else:
+                qt6, qb6 = state.get("qt6"), state.get("qb6")
+                print("q recovery: face pressure drives the load-ladder"
+                      " term (qt %s, qb %s)"
+                      % ("-" if qt6 is None else "%g" % qt6[0],
+                         "-" if qb6 is None else "%g" % qb6[0]))
+        dE11 = dE12 = dE22 = None
+        if state is not None and any(
+                state.get(k) is not None
+                for k in ("dE11", "dE12", "dE22")):
+            if r.get("V21") is None:
+                print("note: %s.ff carries second strain derivatives"
+                      " (d2eps_*), but this SG stores no V2 chains"
+                      " (needs a refined 2-D single-batch plate run)"
+                      " -- second-order recovery skipped"
+                      % os.path.basename(base))
+            else:
+                dE11 = state.get("dE11")
+                dE12 = state.get("dE12")
+                dE22 = state.get("dE22")
+                print("V2 second order: d2eps drive the Eq. 64-66"
+                      " two-chain recovery (tilt/detilt row split)")
+        Gam, Sig, U = dehom_fields(r, eps, dE1=dE1, dE2=dE2, Q=Qff,
+                                   qt6=qt6, qb6=qb6,
+                                   dE11=dE11, dE12=dE12, dE22=dE22)
+        # recovery computes in the SG-global frame (angle baked into C);
+        # the default output rotates each element into its PLY frame
+        if frame == "material":
+            from .sg_dehom import material_frame_fields
+            Gam, Sig = material_frame_fields(Gam, Sig, r)
+            frame_note = ("material (ply axes, theta = -angle about the"
+                          " thickness axis; U stays SG-global)")
+            print("output frame: MATERIAL (ply) -- pass --global for the"
+                  " SG axes")
+        else:
+            frame_note = "global (SG axes)"
+            print("output frame: GLOBAL (SG axes)")
         if state is not None:
             # total displacement = macro rigid motion + SG warping:
             # U_i = u_i + (C_ij - d_ij) y_j + w_i  (VABS recovery form)
@@ -135,7 +244,8 @@ def main(argv=None):
             rig = state["u"] + y @ (state["C"] - np.eye(3)).T
             U = np.asarray(U).reshape(-1, 3) + rig
             U = U.reshape(np.asarray(Gam).shape[:-1] + (3,))
-        export_gauss(r, Gam, Sig, base + "_dehom", U_eqd=U)
+        export_gauss(r, Gam, Sig, base + "_dehom", U_eqd=U,
+                     frame=frame_note)
         print("Local field files are computed and stored.")
         print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
     return 0
@@ -158,13 +268,45 @@ def read_ff_state(path):
                                    beam  [F1 F2 F3 M1 M2 M3],
                                    solid [S11 S22 S33 S23 S13 S12]
 
+    OPTIONAL refined-recovery drivers (plate, refined: 1 only):
+
+        Q:         [Q1 Q2]         transverse shear resultants -- turns
+                                   on the Q-consistency rescale of the
+                                   recovered sigma_13/sigma_23
+        deps_dx1:  [6 values]      d/dx1 of the plate strain measures
+        deps_dx2:  [6 values]      d/dx2 -- both in the engineering
+                                   order [e11 e22 2e12 k11 k22 2k12];
+                                   they drive the Eq. 63 V2 term
+        qt6:       [6 values]      TOP-face pressure and its in-plane
+                                   derivatives [q q,1 q,2 q,11 q,12
+                                   q,22], q positive pushing INTO the
+                                   face -- drives the load-ladder
+                                   recovery (sigma33 face content,
+                                   sigma22 load content)
+        qb6:       [6 values]      same for the BOTTOM face
+        q_reaction: uniform | tau  how the pressure load column reacts
+                                   its net face force inside the cell:
+                                   'uniform' (default, the <w> = 0 KKT
+                                   reaction) or 'tau' (along the cell's
+                                   own sigma_xz path under unit Q1 --
+                                   for in-plane-heterogeneous cells,
+                                   see plate_homo_2d's q_reaction
+                                   docstring).  A LOADING declaration,
+                                   so it lives here, not in the yaml
+        d2eps_dx1dx1: [6 values]   SECOND derivatives of the plate
+        d2eps_dx1dx2: [6 values]   measures (E,11 E,12 E,22) -- drive
+        d2eps_dx2dx2: [6 values]   the Eq. 64-66 second-order two-chain
+                                   recovery (2-D plate SGs)
+
     The macro strain is C_eff^-1 FF, and u/C add the rigid motion to the
     recovered displacement.
 
     In:  path str -- <base>.ff
-    Out: dict {u (3,), theta (3,), C (3, 3), FF (6,)} | None when the
-         file is absent or is not this format (a whitespace station
-         table, the 1-D plate field route, reads as None)."""
+    Out: dict {u (3,), theta (3,), C (3, 3), FF (6,), dE1 (6,)|None,
+         dE2 (6,)|None, Q (2,)|None, qt6 (6,)|None, qb6 (6,)|None} |
+         None when the file is absent or is not this format (a
+         whitespace station table, the 1-D plate field route, reads as
+         None)."""
     import numpy as np
     import yaml as _yaml
 
@@ -184,5 +326,15 @@ def read_ff_state(path):
         C = np.eye(3) + np.array([[0.0, -th[2], th[1]],
                                   [th[2], 0.0, -th[0]],
                                   [-th[1], th[0], 0.0]])
+    opt = lambda k, n: (None if d.get(k) is None else       # noqa: E731
+                        np.asarray(d[k], float).reshape(n))
     return {"u": u, "theta": th, "C": C,
-            "FF": np.asarray(d["FF"], float).reshape(6)}
+            "FF": np.asarray(d["FF"], float).reshape(6),
+            "dE1": opt("deps_dx1", 6), "dE2": opt("deps_dx2", 6),
+            "Q": opt("Q", 2),
+            "qt6": opt("qt6", 6), "qb6": opt("qb6", 6),
+            "dE11": opt("d2eps_dx1dx1", 6),
+            "dE12": opt("d2eps_dx1dx2", 6),
+            "dE22": opt("d2eps_dx2dx2", 6),
+            "q_reaction": (str(d["q_reaction"]).strip().lower()
+                           if d.get("q_reaction") else None)}
