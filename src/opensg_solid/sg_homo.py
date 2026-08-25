@@ -1216,6 +1216,24 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                                 x_end, C_ess, dphi_dxi_qnp, phi_qn,
                                 jnp.asarray(dE1u), jnp.zeros(6), n_sg)
             tau_e = np.asarray(dSig).mean(axis=1)[:, 4]      # sigma_xz
+            if n_sg == 3:
+                # a 3-D cell spreads the face load along BOTH in-plane
+                # directions: react along the SYMMETRIC shear path,
+                # (sigma_xz under unit Q1 + sigma_yz under unit Q2)/2
+                # (each integrates to 1); the 2-D SG keeps the x-only
+                # path it was validated with
+                dE2u = np.linalg.solve(
+                    np.asarray(r["C_eff"], float),
+                    np.array([0.0, 0, 0, 0, 1.0, 0]))
+                _, dSig2 = _v2_batch(periodic_cells_en,
+                                     jnp.asarray(lad["V0"]),
+                                     jnp.asarray(lad["V11bar"]),
+                                     jnp.asarray(lad["V12bar"]),
+                                     x_end, C_ess, dphi_dxi_qnp,
+                                     phi_qn, jnp.zeros(6),
+                                     jnp.asarray(dE2u), n_sg)
+                tau_e = 0.5 * (tau_e
+                               + np.asarray(dSig2).mean(axis=1)[:, 3])
             if n_sg == 2 and nn[0] == 4:
                 # the original quad4 shoelace route, kept verbatim so
                 # existing 2-D results stay digit-identical
