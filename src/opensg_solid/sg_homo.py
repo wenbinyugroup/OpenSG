@@ -1197,7 +1197,26 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         # from the yaml).  A6/G above are already final: the load columns
         # feed the recovery only, so this re-solves just that block.
         if q_reaction is None:
+            # AUTO default: the uniform (<w> = 0 KKT) reaction is exact
+            # for cells HOMOGENEOUS in-plane (and is what the 1-D/2-D
+            # closed-form anchors pin); an in-plane-HETEROGENEOUS cell
+            # (voids / webs / lattices) needs the tau reaction (the
+            # HC_pm45 finding).  Heterogeneity is read off the cell
+            # itself: material fill fraction of the bounding box < 1.
             q_reaction = "uniform"
+            if f_faces is not None:
+                Je_ = np.einsum("end,qnp->eqdp", np.asarray(x_end),
+                                np.asarray(dphi_dxi_qnp))
+                dJ_ = (np.abs(Je_[..., 0, 0]) if n_sg == 1
+                       else np.abs(np.linalg.det(Je_)))
+                vol_ = float((dJ_ @ np.asarray(W_q)).sum())
+                hsg = float(thick.max() - thick.min())
+                fill = vol_ / (float(omega) * hsg)
+                if fill < 0.999:
+                    q_reaction = "tau"
+                print("q_reaction auto: fill fraction %.3f -> %s"
+                      " reaction (say q_reaction: uniform|tau in the"
+                      " .ff to override)" % (fill, q_reaction))
         q_reaction = str(q_reaction).strip().lower()
         if q_reaction not in ("uniform", "tau"):
             raise ValueError("q_reaction must be 'uniform' (the <w> = 0"
