@@ -30,7 +30,6 @@ import os
 import time
 
 import numpy as np
-import yaml
 
 
 def _weld(nodes, cells, tol):
@@ -88,8 +87,13 @@ def plate_mesh(yaml_path, a, b, out=None, dx=None, tol=1e-6):
     Out: dict {msh, nx, ny, a, b, n_nodes, n_elems, thickness} -- what
          was actually built."""
     t0 = time.perf_counter()
-    d = yaml.safe_load(open(yaml_path))
-    nd = np.asarray(d["nodes"], float)
+    # load_sg_input reads BOTH solid yaml spellings (the canonical
+    # nodes/cells/mat_id and the mesh dialect msh_to_yaml emits, whose
+    # rows are space-separated strings) and caches the parse in the
+    # <base>_sg.npz sidecar
+    from opensg_solid.sg_mesh import load_sg_input
+    d = load_sg_input(yaml_path)
+    nd = np.asarray(d["nodes"], float)[:, :3]
     cells = np.asarray(d["cells"], int)
     mats = np.asarray(d["mat_id"], int)
     span = nd.max(axis=0) - nd.min(axis=0)

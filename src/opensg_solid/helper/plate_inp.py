@@ -40,7 +40,6 @@ import os
 import time
 
 import numpy as np
-import yaml
 
 # Abaqus face tables: which face label carries a pressure when ALL its
 # nodes sit on the loaded surface (0-based local node ids)
@@ -49,6 +48,23 @@ _FACES = {4: [("P1", (0, 1, 2)), ("P2", (0, 3, 1)),
           8: [("P1", (0, 1, 2, 3)), ("P2", (4, 5, 6, 7)),
               ("P3", (0, 1, 5, 4)), ("P4", (1, 2, 6, 5)),
               ("P5", (2, 3, 7, 6)), ("P6", (3, 0, 4, 7))]}
+
+
+def _is_iso(blk, rtol=1e-6):
+    """Is this type-1 (nine engineering constants) block ONE isotropic
+    material?  The loaders broadcast an isotropic E/G/nu to three, so the
+    test is: equal triples and G12 = E/(2(1+nu)), no ply angle.
+
+    In:  blk dict -- canonical material block; rtol float
+    Out: bool."""
+    if float(blk.get("angle", 0.0) or 0.0) != 0.0:
+        return False
+    e = [float(v) for v in blk["engineering"]]
+    E, G, nu = e[0], e[3], e[6]
+    same = all(abs(v - w) <= rtol * abs(v)
+               for v, w in ((e[0], e[1]), (e[1], e[2]), (e[3], e[4]),
+                            (e[4], e[5]), (e[6], e[7]), (e[7], e[8])))
+    return same and abs(G - E / (2.0 * (1.0 + nu))) <= rtol * G
 
 
 def _read_msh(path):
@@ -90,7 +106,10 @@ def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
     if yaml_path is None:
         yaml_path = (base[:-6] if base.endswith("_plate")
                      else base) + ".yaml"
-    mat_blocks = yaml.safe_load(open(yaml_path))["materials"]
+    # load_sg_input reads both solid yaml spellings and hands back the
+    # CANONICAL materials mapping {id: {type, ..., angle?}} either way
+    from opensg_solid.sg_mesh import load_sg_input
+    mat_blocks = load_sg_input(yaml_path)["materials"]
     lo, hi = nodes.min(axis=0), nodes.max(axis=0)
     a = a or float(hi[0] - lo[0])
     b = b or float(hi[1] - lo[1])
@@ -151,7 +170,11 @@ def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
                 f.write(", ".join(str(v) for v in el[i:i + 16]) + "\n")
             blk = mat_blocks[mid]
             ang = float(blk.get("angle", 0.0) or 0.0)
-            if int(blk["type"]) == 1 and ang != 0.0:
+            if int(blk["type"]) == 1 and not _is_iso(blk):
+                # ENGINEERING CONSTANTS is anisotropic to Abaqus, and on
+                # solid elements it REFUSES the material without a local
+                # orientation -- so EVERY orthotropic section gets one,
+                # angle 0 included (OpenSG `angle: a` == Abaqus `3, -a`)
                 f.write("*Orientation, name=ORI%d\n1., 0., 0., 0., 1.,"
                         " 0.\n3, %g\n" % (mid, -ang))
                 f.write("*Solid Section, elset=MAT%d, material=M%d,"
@@ -164,6 +187,13 @@ def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
             f.write("*Material, name=M%d\n" % mid)
             if int(blk["type"]) == 0:
                 f.write("*Elastic\n%g, %g\n" % (blk["E"], blk["nu"]))
+            elif int(blk["type"]) == 1 and _is_iso(blk):
+                # a type-1 block whose nine constants ARE one isotropic
+                # material (the loaders broadcast E/nu to three) goes out
+                # as plain *Elastic: same stiffness, and Abaqus does not
+                # demand the orientation it requires of anisotropy
+                e = [float(v) for v in blk["engineering"]]
+                f.write("*Elastic\n%g, %g\n" % (e[0], e[6]))
             elif int(blk["type"]) == 1:
                 e = [float(v) for v in blk["engineering"]]
                 # yaml order E1 E2 E3 G12 G13 G23 v12 v13 v23 ->
