@@ -274,6 +274,74 @@ def _detilt_cols_2d(cols, y2_n, wA_n):
     return W.reshape(-1, 6)
 
 
+def _plate_face_loads_3d(pts, cells, yf, ftol):
+    """Consistent nodal loads of a UNIT pressure on one thickness face
+    (y3 = yf) of a 3-D plate SG -- the 2-D analog of the trapezoid edge
+    weights: the face of a plate SG is FLAT, so its facets are planar
+    and the loads are exact area integrals of the shape functions.
+
+    Facets are found GEOMETRICALLY (an element's nodes lying on the
+    plane), never through topology tables, so gmsh-vs-basix corner
+    ordering cannot mislabel them: tet4 -> 3 on-plane nodes (linear
+    triangle, A/3 each), hex8 -> 4 (bilinear quad, 2x2 Gauss consistent
+    load), tet10 -> 6 (straight P2 triangle: corners 0, midsides A/3;
+    corner/midside split by the nodes-0..3-are-corners convention both
+    gmsh and basix share).
+
+    In:  pts (V, 3) SG coordinates; cells (E, N) int; yf float the face
+         plane; ftol float the on-plane tolerance
+    Out: (nid (n,) int node ids, wgt (n,) float loads) -- repeated node
+         ids allowed, the caller scatter-adds."""
+    on = np.abs(pts[:, 2] - yf) < ftol
+    onc = on[np.asarray(cells)]
+    N = cells.shape[1]
+    need = {4: 3, 8: 4, 10: 6}.get(N)
+    if need is None:
+        raise ValueError("3-D plate face loads support tet4/hex8/tet10,"
+                         " got %d-node elements" % N)
+    nid_l, wgt_l = [], []
+    for e in np.nonzero(onc.sum(axis=1) == need)[0]:
+        f = np.asarray(cells[e])[onc[e]]
+        p = pts[f][:, :2]
+        if N == 4:
+            A = 0.5 * abs((p[1, 0] - p[0, 0]) * (p[2, 1] - p[0, 1])
+                          - (p[2, 0] - p[0, 0]) * (p[1, 1] - p[0, 1]))
+            nid_l.append(f)
+            wgt_l.append(np.full(3, A / 3.0))
+        elif N == 8:
+            c = p.mean(axis=0)
+            k = np.argsort(np.arctan2(p[:, 1] - c[1], p[:, 0] - c[0]))
+            f, p = f[k], p[k]
+            g = 1.0 / np.sqrt(3.0)
+            xi = np.array([[-g, -g], [g, -g], [g, g], [-g, g]])
+            sn = np.array([[-1.0, -1.0], [1.0, -1.0],
+                           [1.0, 1.0], [-1.0, 1.0]])
+            w = np.zeros(4)
+            for q in range(4):
+                Nq = 0.25 * (1 + sn[:, 0] * xi[q, 0]) \
+                    * (1 + sn[:, 1] * xi[q, 1])
+                dN = 0.25 * np.column_stack(
+                    [sn[:, 0] * (1 + sn[:, 1] * xi[q, 1]),
+                     sn[:, 1] * (1 + sn[:, 0] * xi[q, 0])])
+                J = dN.T @ p
+                w += Nq * abs(np.linalg.det(J))
+            nid_l.append(f)
+            wgt_l.append(w)
+        else:                                   # tet10 P2 facet
+            corner = np.asarray(cells[e])[:4]
+            fc = f[np.isin(f, corner)]
+            fm = f[~np.isin(f, corner)]
+            pc = pts[fc][:, :2]
+            A = 0.5 * abs((pc[1, 0] - pc[0, 0]) * (pc[2, 1] - pc[0, 1])
+                          - (pc[2, 0] - pc[0, 0]) * (pc[1, 1] - pc[0, 1]))
+            nid_l.append(fm)
+            wgt_l.append(np.full(len(fm), A / 3.0))
+    if not nid_l:
+        raise ValueError("no element facet lies on the y3 = %g face --"
+                         " wrong thickness axis or tolerance?" % yf)
+    return np.concatenate(nid_l), np.concatenate(wgt_l)
+
+
 def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
                        reduced_cells, n_unique, n_sg, omega,
                        f_faces=None, node_y2=None):
@@ -1043,23 +1111,29 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         # bottom SG faces, for the qt6/qb6 load-recovery ladder.  Signs
         # follow msg_rm_plate's Lt/Lb (-1 top w3, +1 bottom w3): a
         # positive pressure pushes INTO each face.  /omega matches the
-        # ladder_blocks normalization.  2-D single-batch SGs only; the
-        # trapezoid weights are the exact consistent load of linear
-        # edges on a flat face, and periodic end nodes scatter to one
-        # master dof, which is exactly the tiled-face integral.
+        # ladder_blocks normalization.  Single-batch SGs of ANY
+        # dimension: 1-D faces are the two end NODES (weight 1, omega =
+        # 1 -- exactly rm_plate_1D's Lt/Lb), 2-D faces are the top and
+        # bottom EDGES (trapezoid weights = the exact consistent load
+        # of linear edges on a flat face), 3-D faces are the two
+        # thickness FACES (_plate_face_loads_3d facet integrals).
+        # Periodic in-plane nodes scatter to one master dof, which is
+        # exactly the tiled-face integral.
         f_faces = None
         node_y2 = None
-        if not mixed and n_sg == 2:
-            pts2 = np.asarray(points)[:, :2]
+        if not mixed:
+            pts2 = np.asarray(points)[:, :n_sg]
             red_of = np.full(pts2.shape[0], -1, dtype=np.int64)
             red_of[np.asarray(cells, dtype=np.int64).ravel()] = \
                 np.asarray(periodic_cells_en).ravel()
-            # reduced-node thickness coordinate for the V2 detilt --
-            # periodic partners share y2, so scatter order is immaterial
+            # reduced-node THICKNESS coordinate (always the LAST SG
+            # coordinate) for the V2 detilt -- periodic partners share
+            # it, so scatter order is immaterial
+            thick = pts2[:, n_sg - 1]
             node_y2 = np.zeros(n_unique // 3)
-            node_y2[red_of] = pts2[:, 1]
-            ftol = 1e-6 * float(max(np.ptp(pts2[:, 0]),
-                                    np.ptp(pts2[:, 1])))
+            node_y2[red_of] = thick
+            ftol = 1e-6 * float(max(np.ptp(pts2[:, k])
+                                    for k in range(n_sg)))
             f_faces = np.zeros((n_unique, 2))
             # SIGNS: solve_constrained negates its rhs internally, so
             # the stored columns are the NEGATIVE of the physical load
@@ -1067,13 +1141,21 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             # closed-form sigma33 profile (-q at the top face, 0 at
             # the bottom).
             for col, (yf, sgn) in enumerate(
-                    ((pts2[:, 1].max(), 1.0), (pts2[:, 1].min(), -1.0))):
-                nid = np.where(np.abs(pts2[:, 1] - yf) < ftol)[0]
-                nid = nid[np.argsort(pts2[nid, 0])]
-                seg = np.diff(pts2[nid, 0])
-                wgt = np.zeros(len(nid))
-                wgt[:-1] += 0.5 * seg
-                wgt[1:] += 0.5 * seg
+                    ((thick.max(), 1.0), (thick.min(), -1.0))):
+                if n_sg == 3:
+                    nid, wgt = _plate_face_loads_3d(
+                        pts2, np.asarray(cells, dtype=np.int64), yf,
+                        ftol)
+                else:
+                    nid = np.where(np.abs(thick - yf) < ftol)[0]
+                    if n_sg == 1:
+                        wgt = np.ones(len(nid))     # the face is a node
+                    else:
+                        nid = nid[np.argsort(pts2[nid, 0])]
+                        seg = np.diff(pts2[nid, 0])
+                        wgt = np.zeros(len(nid))
+                        wgt[:-1] += 0.5 * seg
+                        wgt[1:] += 0.5 * seg
                 np.add.at(f_faces[:, col], 3 * red_of[nid] + 2,
                           sgn * wgt / float(omega))
         if not mixed:
@@ -1123,7 +1205,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                              " cell's shear path), got %r" % q_reaction)
         r["q_reaction"] = q_reaction
         if (q_reaction == "tau" and f_faces is not None
-                and lad.get("V1Lt") is not None and nn[0] == 4):
+                and lad.get("V1Lt") is not None):
             from .sg_dehom import _v2_batch
             dE1u = np.linalg.solve(np.asarray(r["C_eff"], float),
                                    np.array([0.0, 0, 0, 1.0, 0, 0]))
@@ -1134,15 +1216,32 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                                 x_end, C_ess, dphi_dxi_qnp, phi_qn,
                                 jnp.asarray(dE1u), jnp.zeros(6), n_sg)
             tau_e = np.asarray(dSig).mean(axis=1)[:, 4]      # sigma_xz
-            cyc = np.asarray(cells, dtype=np.int64)[:, [0, 1, 3, 2]]
-            xq, yq = pts2[cyc][:, :, 0], pts2[cyc][:, :, 1]
-            area_e = 0.5 * np.abs(
-                (xq * np.roll(yq, -1, axis=1)
-                 - np.roll(xq, -1, axis=1) * yq).sum(axis=1))
+            if n_sg == 2 and nn[0] == 4:
+                # the original quad4 shoelace route, kept verbatim so
+                # existing 2-D results stay digit-identical
+                cyc = np.asarray(cells, dtype=np.int64)[:, [0, 1, 3, 2]]
+                xq, yq = pts2[cyc][:, :, 0], pts2[cyc][:, :, 1]
+                area_e = 0.5 * np.abs(
+                    (xq * np.roll(yq, -1, axis=1)
+                     - np.roll(xq, -1, axis=1) * yq).sum(axis=1))
+                scat = cyc
+            else:
+                # any other single-batch SG: the element measure from
+                # the quadrature itself (|det J| . W), the same measure
+                # the assembly integrates with
+                Je = np.einsum("end,qnp->eqdp", np.asarray(x_end),
+                               np.asarray(dphi_dxi_qnp))
+                if n_sg == 1:
+                    dJ = np.abs(Je[..., 0, 0])
+                else:
+                    dJ = np.abs(np.linalg.det(Je))
+                area_e = dJ @ np.asarray(W_q)
+                scat = np.asarray(cells, dtype=np.int64)
             I_tau = float((tau_e * area_e).sum() / float(omega))
             tau_w = np.zeros(n_unique // 3)
-            np.add.at(tau_w, red_of[cyc.ravel()],
-                      np.repeat(tau_e * area_e / 4.0, 4))
+            np.add.at(tau_w, red_of[scat.ravel()],
+                      np.repeat(tau_e * area_e / scat.shape[1],
+                                scat.shape[1]))
             fv = f_faces.copy()
             for col in (0, 1):
                 fv[2::3, col] -= (fv[2::3, col].sum()
@@ -1157,9 +1256,9 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                   " cell's shear path (integral sigma_xz under unit Q1"
                   " = %.6f, target 1)" % I_tau)
         elif q_reaction == "tau":
-            print("note: q_reaction: tau needs a single-batch quad4 2-D"
-                  " plate SG with the load ladder -- keeping the"
-                  " uniform reaction")
+            print("note: q_reaction: tau needs a single-batch plate SG"
+                  " with the load ladder (mixed SGs do not carry it"
+                  " yet) -- keeping the uniform reaction")
             r["q_reaction"] = "uniform"
         r["ABDG"] = None
         if lad["G_msg"] is not None:

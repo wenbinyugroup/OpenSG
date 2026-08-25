@@ -195,8 +195,8 @@ def main(argv=None):
             if r.get("V1Lt") is None:
                 print("note: %s.ff carries face pressures (qt6/qb6),"
                       " but this SG stores no load ladder (needs a"
-                      " refined 2-D plate run) -- pressure recovery"
-                      " skipped" % os.path.basename(base))
+                      " refined single-batch plate run) -- pressure"
+                      " recovery skipped" % os.path.basename(base))
             else:
                 qt6, qb6 = state.get("qt6"), state.get("qb6")
                 print("q recovery: face pressure drives the load-ladder"
@@ -210,7 +210,7 @@ def main(argv=None):
             if r.get("V21") is None:
                 print("note: %s.ff carries second strain derivatives"
                       " (d2eps_*), but this SG stores no V2 chains"
-                      " (needs a refined 2-D single-batch plate run)"
+                      " (needs a refined single-batch plate run)"
                       " -- second-order recovery skipped"
                       % os.path.basename(base))
             else:

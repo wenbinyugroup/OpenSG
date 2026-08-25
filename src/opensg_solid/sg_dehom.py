@@ -145,6 +145,181 @@ def _element_dehomo_kernel(
     return Gamma_qs, Sigma_qs
 
 
+@partial(jax.jit, static_argnames=["n_sg"])
+def _v2_batch(periodic_cells_en, V0lad, V11bar, V12bar, x_end, C_ess,
+              dphi_dxi_qnp, phi_qn, dE1, dE2, n_sg):
+    """The Eq. 63 first-order refined ADDITION to the plate recovery:
+
+        dGam = Gamma_h (V11bar dE1 + V12bar dE2)
+             + Gamma_l1 (V0lad dE1) + Gamma_l2 (V0lad dE2)
+
+    with the strain-derivative drivers dE1/dE2 (d eps / d x_a, the
+    plate measures [e11 e22 2e12 k11 k22 2k12],a) and the ladder's own
+    <w> = 0-gauged warping triple -- Gamma_l consumes warping VALUES,
+    so the pinned-node classical V0 gauge cannot be substituted.
+    Gamma_l1 places the value components per the rm_plate_1D _grad_ops
+    rows (e11 <- w1, 2g13 <- w3, 2g12 <- w2), Gamma_l2 (e22 <- w2,
+    2g23 <- w3, 2g12 <- w1); Gamma_h is the padded SG strain operator
+    of the classical kernel.  Zero drivers -> zero addition (the
+    recovery is linear in its drivers).
+
+    In:
+        periodic_cells_en: (E, N) periodic connectivity.
+        V0lad, V11bar, V12bar: (n_unique, 6) ladder warping columns.
+        x_end: (E, N, d); C_ess: (E, 6, 6).
+        dphi_dxi_qnp: (Q, N, p); phi_qn: (Q, N).
+        dE1, dE2: (6,) strain derivatives.
+        n_sg: static SG dimension.
+    Out:
+        dGam_eqs, dSig_eqs: (E, Q, 6), SwiftComp order
+        (xx, yy, zz, yz, xz, xy)."""
+    gather = jax.vmap(transform_global_unraveled_to_element_node,
+                      in_axes=(None, 1, None), out_axes=-1)
+    # element warping fields, contracted with the drivers up front
+    V0_endH = gather(periodic_cells_en, V0lad, 3)      # (E, N, 3, 6)
+    V11_endH = gather(periodic_cells_en, V11bar, 3)
+    V12_endH = gather(periodic_cells_en, V12bar, 3)
+    wh_end = (jnp.einsum("ends,s->end", V11_endH, dE1)
+              + jnp.einsum("ends,s->end", V12_endH, dE2))
+    wl1_end = jnp.einsum("ends,s->end", V0_endH, dE1)
+    wl2_end = jnp.einsum("ends,s->end", V0_endH, dE2)
+    return jax.vmap(_elem_chain, in_axes=(0, 0, 0, 0, 0, None, None))(
+        wh_end, wl1_end, wl2_end, x_end, C_ess, dphi_dxi_qnp, phi_qn)
+
+
+def _elem_chain(wh_nd, wl1_nd, wl2_nd, x_nd, C_ss, dphi_dxi_qnp,
+                phi_qn):
+    """ONE element of a refined-recovery chain: Gamma_h of the
+    contracted GRADIENT-use field wh + Gamma_l1/Gamma_l2 of the
+    contracted VALUE-use fields wl1/wl2, then stress.  Shared by the
+    Eq. 63 first-order (_v2_batch), the qt6/qb6 load ladder
+    (_vq_batch) and the Eq. 64-66 chains (_v266_batch) -- the callers
+    differ only in HOW the fields are contracted from their columns.
+
+    In:  wh_nd/wl1_nd/wl2_nd (N, 3); x_nd (N, d); C_ss (6, 6);
+         dphi_dxi_qnp (Q, N, p); phi_qn (Q, N)
+    Out: dGam_qs, dSig_qs (Q, 6), SwiftComp order."""
+    J_qdp = jnp.einsum("nd,qnp->qdp", x_nd, dphi_dxi_qnp)
+    G_qpd = jnp.linalg.inv(J_qdp)
+    dphi_dx_qnd = jnp.einsum("qpd,qnp->qnd", G_qpd, dphi_dxi_qnp)
+    Q, N, _ = dphi_dx_qnd.shape
+    z_qn = jnp.zeros((Q, N), dtype=dphi_dx_qnd.dtype)
+    if x_nd.shape[1] == 1:
+        dphi_dx_qnd = jnp.stack(
+            [z_qn, z_qn, dphi_dx_qnd[..., 0]], axis=-1)
+    elif x_nd.shape[1] == 2:
+        dphi_dx_qnd = jnp.stack(
+            [z_qn, dphi_dx_qnd[..., 0], dphi_dx_qnd[..., 1]], axis=-1)
+    dx_qn, dy_qn, dz_qn = (dphi_dx_qnd[..., 0], dphi_dx_qnd[..., 1],
+                           dphi_dx_qnd[..., 2])
+    gx, gy, gz = wh_nd[:, 0], wh_nd[:, 1], wh_nd[:, 2]
+    Gh_qs = jnp.stack([
+        dx_qn @ gx, dy_qn @ gy, dz_qn @ gz,
+        (dy_qn @ gz) + (dz_qn @ gy),
+        (dx_qn @ gz) + (dz_qn @ gx),
+        (dx_qn @ gy) + (dy_qn @ gx)], axis=1)
+    u1_qd = jnp.einsum("qn,nd->qd", phi_qn, wl1_nd)
+    u2_qd = jnp.einsum("qn,nd->qd", phi_qn, wl2_nd)
+    z_q = jnp.zeros_like(u1_qd[:, 0])
+    Gl_qs = jnp.stack([
+        u1_qd[:, 0], u2_qd[:, 1], z_q,
+        u2_qd[:, 2], u1_qd[:, 2],
+        u1_qd[:, 1] + u2_qd[:, 0]], axis=1)
+    dGam_qs = Gh_qs + Gl_qs
+    dSig_qs = jnp.einsum("ij,qj->qi", C_ss, dGam_qs)
+    return dGam_qs, dSig_qs
+
+
+@partial(jax.jit, static_argnames=["n_sg"])
+def _v266_batch(periodic_cells_en, V0lad, V11bar, V12bar, V11barD,
+                V12barD, V21, V22, V23, V21t, V22t, V23t,
+                x_end, C_ess, dphi_dxi_qnp, phi_qn,
+                dE1, dE2, d11, d12, d22, n_sg):
+    """The SECOND-ORDER Eq. 64-66 refined recovery -- the two-chain
+    row-split of rm_plate_1D._warp_terms / msgrm_strain_at_depth on the
+    general SG assembly:
+
+      D-chain (detilted, in-plane stress rows):
+        w   = V11bar dE1 + V12bar dE2 + V21 d11 + V22 d12 + V23 d22
+        g1  = V0 dE1 + V11barD d11 + V12barD d12
+        g2  = V0 dE2 + V11barD d12 + V12barD d22
+      T-chain (tilted, rows 33/23/13):
+        w_t = ... V21t/V22t/V23t ...;  g_at with the RAW V1bar columns
+
+      dGam/dSig rows (11, 22, 12) from the D-chain, rows 2:5
+      (33, 23, 13 -- the same slice in this kernel's SwiftComp order)
+      from the T-chain, exactly msg_rm_plate lines 624-630.
+
+    With zero second-order drivers both chains collapse to the Eq. 63
+    first-order term and the split is a no-op (matches _v2_batch).
+    The element kernel is _v2_batch's `one` body verbatim.
+
+    In:  periodic_cells_en (E, N); the ladder/V2 column blocks
+         (n_unique, 6) each; x_end (E, N, d); C_ess (E, 6, 6);
+         dphi_dxi_qnp (Q, N, p); phi_qn (Q, N); dE1/dE2/d11/d12/d22
+         (6,) drivers; n_sg static.
+    Out: dGam_eqs, dSig_eqs (E, Q, 6), SwiftComp order."""
+    gather = jax.vmap(transform_global_unraveled_to_element_node,
+                      in_axes=(None, 1, None), out_axes=-1)
+    g = {k: gather(periodic_cells_en, v, 3) for k, v in
+         (("V0", V0lad), ("b1", V11bar), ("b2", V12bar),
+          ("d1", V11barD), ("d2", V12barD),
+          ("21", V21), ("22", V22), ("23", V23),
+          ("21t", V21t), ("22t", V22t), ("23t", V23t))}
+    con = lambda G_, v: jnp.einsum("ends,s->end", G_, v)   # noqa: E731
+    whD = (con(g["b1"], dE1) + con(g["b2"], dE2) + con(g["21"], d11)
+           + con(g["22"], d12) + con(g["23"], d22))
+    g1D = con(g["V0"], dE1) + con(g["d1"], d11) + con(g["d2"], d12)
+    g2D = con(g["V0"], dE2) + con(g["d1"], d12) + con(g["d2"], d22)
+    whT = (con(g["b1"], dE1) + con(g["b2"], dE2) + con(g["21t"], d11)
+           + con(g["22t"], d12) + con(g["23t"], d22))
+    g1T = con(g["V0"], dE1) + con(g["b1"], d11) + con(g["b2"], d12)
+    g2T = con(g["V0"], dE2) + con(g["b1"], d12) + con(g["b2"], d22)
+
+    run = jax.vmap(_elem_chain, in_axes=(0, 0, 0, 0, 0, None, None))
+    GamD, SigD = run(whD, g1D, g2D, x_end, C_ess, dphi_dxi_qnp, phi_qn)
+    GamT, SigT = run(whT, g1T, g2T, x_end, C_ess, dphi_dxi_qnp, phi_qn)
+    # ROW SPLIT: rows 2:5 (33, 23, 13) from the TILTED chain
+    dGam = GamD.at[:, :, 2:5].set(GamT[:, :, 2:5])
+    dSig = SigD.at[:, :, 2:5].set(SigT[:, :, 2:5])
+    return dGam, dSig
+
+
+@partial(jax.jit, static_argnames=["n_sg"])
+def _vq_batch(periodic_cells_en, V1L, V2L, x_end, C_ess,
+              dphi_dxi_qnp, phi_qn, q6, n_sg):
+    """The PRESSURE-DRIVEN recovery addition of ONE face -- the qt6/qb6
+    term of rm_plate_1D._warp_terms, on the general SG assembly:
+
+        dGam = Gamma_h (V1L q + V2L [q,1 q,2 q,11 q,12 q,22])
+             + Gamma_l1 (V1L q,1) + Gamma_l2 (V1L q,2)
+
+    with q6 = [q, q,1, q,2, q,11, q,12, q,22] of that face's pressure.
+    For a UNIFORM pressure only the Gamma_h V1L q term is nonzero.  The
+    element kernel is _v2_batch's `one` body verbatim (kept in sync by
+    hand -- the gated function is not refactored).
+
+    In:
+        periodic_cells_en: (E, N) periodic connectivity.
+        V1L: (n_unique,) that face's first-order load column.
+        V2L: (n_unique, 5) its second-order quintet.
+        x_end: (E, N, d); C_ess: (E, 6, 6).
+        dphi_dxi_qnp: (Q, N, p); phi_qn: (Q, N).
+        q6: (6,) the face pressure and its in-plane derivatives.
+        n_sg: static SG dimension.
+    Out:
+        dGam_eqs, dSig_eqs: (E, Q, 6), SwiftComp order."""
+    gather = jax.vmap(transform_global_unraveled_to_element_node,
+                      in_axes=(None, 1, None), out_axes=-1)
+    VL_end = gather(periodic_cells_en, V1L[:, None], 3)[..., 0]
+    V2_end5 = gather(periodic_cells_en, V2L, 3)
+    wh_end = VL_end * q6[0] + jnp.einsum("ends,s->end", V2_end5, q6[1:])
+    wl1_end = VL_end * q6[1]
+    wl2_end = VL_end * q6[2]
+    return jax.vmap(_elem_chain, in_axes=(0, 0, 0, 0, 0, None, None))(
+        wh_end, wl1_end, wl2_end, x_end, C_ess, dphi_dxi_qnp, phi_qn)
+
+
 @partial(jax.jit, static_argnames=["n_model", "n_sg"])
 def _dehom_batch(periodic_cells_en, V0, x_end, C_ess, dphi_dxi_qnp,
                  phi_qn, epsilon_bar, n_model, n_sg):
@@ -381,17 +556,51 @@ def _u_at_gauss(u_flat, cells_en, phi_qn):
 
 # ------------------------------------------------------------- the public API
 def dehom_fields(r: Dict[str, Any],
-                 epsilon_bar: Sequence[float]):
+                 epsilon_bar: Sequence[float],
+                 dE1: Sequence[float] = None,
+                 dE2: Sequence[float] = None,
+                 Q: Sequence[float] = None,
+                 qt6: Sequence[float] = None,
+                 qb6: Sequence[float] = None,
+                 dE11: Sequence[float] = None,
+                 dE12: Sequence[float] = None,
+                 dE22: Sequence[float] = None):
     """One recovery pass: the Gauss strain/stress AND the fluctuation
     displacement (nothing recomputed -- plate_dehom_2d is a view of the
     same pass).
 
-    In:  r (plate_homo_2d dict); epsilon_bar as plate_dehom_2d
+    In:  r (plate_homo_2d dict); epsilon_bar as plate_dehom_2d;
+         dE1/dE2 (6,) OPTIONAL in-plane derivatives of the plate
+         measures (d eps / d x1, d x2) -- when given (plate, refined
+         run) the Eq. 63 first-order refined term is ADDED via the
+         stored shear-ladder warpings (V0_ladder/V11bar/V12bar); with
+         both None the output is the classical recovery, digit-
+         identical to before;
+         Q (2,) OPTIONAL transverse shear resultants [Q1 Q2] -- when
+         given, the recovered sigma_13/sigma_23 profiles are RESCALED
+         per SG so their thickness-integrated force (1/omega
+         integral sigma_a3 dV) equals Q_a exactly (the rm_dehom
+         Q-consistency rule: profile shape from the gradients, carried
+         force from the plate solution); skipped for a channel whose
+         integral is < 1e-3 of max|Q|.
+         qt6/qb6 (6,) OPTIONAL = [q, q,1, q,2, q,11, q,12, q,22] of the
+         TOP/BOTTOM face pressure (q positive pushing INTO the face) --
+         the rm_plate_1D load-ladder recovery on the 2-D SG: adds the
+         pressure-driven local field (sigma33 face content, sigma22
+         load content) that no resultant state carries.  Needs the
+         V1Lt/V2Lt columns from a refined 2-D plate homogenization.
+         dE11/dE12/dE22 (6,) OPTIONAL second in-plane derivatives of
+         the plate measures (E,11 E,12 E,22) -- when any is given the
+         SECOND-ORDER Eq. 64-66 recovery replaces the first-order term:
+         the two V2 chains with the tilt/detilt ROW SPLIT (in-plane
+         stress rows detilted, 33/23/13 tilted).  Needs V21..V23t from
+         a refined 2-D plate homogenization.
     Out: (Gamma_eqs, Sigma_eqs, U_eqd) -- (E, Q, 6), (E, Q, 6),
          (E, Q, 3) np.  U is the FLUCTUATION-ONLY displacement at the
          Gauss points (no macro contribution exists for a unit-state SG
          recovery -- the single-station rm_dehom precedent): n_model
-         2/3 = V0 @ epsilon_bar; n_model 1 = the recovery chain's
+         2/3 = V0 @ epsilon_bar (+ V11 dE1 + V12 dE2 on the refined
+         path, mean-zero columns); n_model 1 = the recovery chain's
          zeroth + first-order warping fields (w_1 + w1s_1)."""
     if r["n_model"] == 1:
         st = jnp.asarray(epsilon_bar, float)
@@ -409,14 +618,123 @@ def dehom_fields(r: Dict[str, Any],
                         r["phi_qn"])
         return np.asarray(Gam), np.asarray(Sig), U
 
-    Gam, Sig = _dehom_batch(r["periodic_cells_en"], r["V0"], r["x_end"],
-                            r["C_ess"], r["dphi_dxi_qnp"], r["phi_qn"],
-                            jnp.asarray(epsilon_bar, float),
-                            r["n_model"], r["n_sg"])
-    U = _u_at_gauss(jnp.asarray(r["V0"])
-                    @ jnp.asarray(epsilon_bar, float),
-                    r["periodic_cells_en"], r["phi_qn"])
-    return np.asarray(Gam), np.asarray(Sig), U
+    second = (dE11 is not None or dE12 is not None or dE22 is not None)
+    refined = (dE1 is not None or dE2 is not None or second)
+    if refined and r.get("V11bar") is None:
+        raise ValueError(
+            "strain-derivative recovery needs the shear ladder: run the"
+            " homogenization with refined: 1 (plate) so V0_ladder/"
+            "V11bar/V12bar are stored")
+    if second and r.get("V21") is None:
+        raise ValueError(
+            "second-order (Eq. 64-66) recovery needs the V2 chains:"
+            " a refined single-batch plate homogenization (any SG"
+            " dimension) stores V21..V23t; mixed SGs do not carry them"
+            " yet")
+    if refined:
+        d1 = jnp.zeros(6) if dE1 is None else jnp.asarray(dE1, float)
+        d2 = jnp.zeros(6) if dE2 is None else jnp.asarray(dE2, float)
+    if second:
+        d11 = jnp.zeros(6) if dE11 is None else jnp.asarray(dE11, float)
+        d12 = jnp.zeros(6) if dE12 is None else jnp.asarray(dE12, float)
+        d22 = jnp.zeros(6) if dE22 is None else jnp.asarray(dE22, float)
+    qpairs = [(q6, v1, v2) for q6, v1, v2
+              in ((qt6, "V1Lt", "V2Lt"), (qb6, "V1Lb", "V2Lb"))
+              if q6 is not None]
+    if qpairs and r.get("V1Lt") is None:
+        raise ValueError(
+            "face-pressure recovery (qt6/qb6) needs the load ladder:"
+            " a refined (refined: 1) single-batch plate homogenization"
+            " (any SG dimension) stores V1Lt/V2Lt/V1Lb/V2Lb; mixed SGs"
+            " do not carry them yet")
+
+    # a MIXED SG stores the per-mesh arrays as PER-BATCH LISTS (one per
+    # element type, shared dof space) -- run every kernel per batch; a
+    # single-batch run keeps its (E, Q, .) shapes, a mixed run returns
+    # FLAT (P, .) Gauss clouds (concatenated in batch order, matching
+    # gauss_coords)
+    mixed = isinstance(r["x_end"], (list, tuple))
+    _l = lambda v: v if isinstance(v, (list, tuple)) else [v]  # noqa: E731
+    B = list(zip(_l(r["periodic_cells_en"]), _l(r["x_end"]),
+                 _l(r["C_ess"]), _l(r["dphi_dxi_qnp"]), _l(r["phi_qn"]),
+                 _l(r["W_q"])))
+
+    Gam_b, Sig_b, dV_b = [], [], []
+    for cells_b, x_b, C_b, dp_b, ph_b, W_b in B:
+        Gam, Sig = _dehom_batch(cells_b, r["V0"], x_b, C_b, dp_b, ph_b,
+                                jnp.asarray(epsilon_bar, float),
+                                r["n_model"], r["n_sg"])
+        Gam, Sig = np.asarray(Gam), np.asarray(Sig)
+        if second:
+            dGam, dSig = _v266_batch(
+                cells_b, jnp.asarray(r["V0_ladder"]),
+                jnp.asarray(r["V11bar"]), jnp.asarray(r["V12bar"]),
+                jnp.asarray(r["V11barD"]), jnp.asarray(r["V12barD"]),
+                jnp.asarray(r["V21"]), jnp.asarray(r["V22"]),
+                jnp.asarray(r["V23"]), jnp.asarray(r["V21t"]),
+                jnp.asarray(r["V22t"]), jnp.asarray(r["V23t"]),
+                x_b, C_b, dp_b, ph_b, d1, d2, d11, d12, d22,
+                r["n_sg"])
+            Gam = Gam + np.asarray(dGam)
+            Sig = Sig + np.asarray(dSig)
+        elif refined:
+            dGam, dSig = _v2_batch(
+                cells_b, jnp.asarray(r["V0_ladder"]),
+                jnp.asarray(r["V11bar"]), jnp.asarray(r["V12bar"]),
+                x_b, C_b, dp_b, ph_b, d1, d2, r["n_sg"])
+            Gam = Gam + np.asarray(dGam)
+            Sig = Sig + np.asarray(dSig)
+        for q6, kv1, kv2 in qpairs:
+            dGam, dSig = _vq_batch(
+                cells_b, jnp.asarray(r[kv1]), jnp.asarray(r[kv2]),
+                x_b, C_b, dp_b, ph_b, jnp.asarray(q6, float),
+                r["n_sg"])
+            Gam = Gam + np.asarray(dGam)
+            Sig = Sig + np.asarray(dSig)
+        if Q is not None and refined:
+            J = jnp.einsum("end,qnp->eqdp", jnp.asarray(x_b), dp_b)
+            detJ = (jnp.abs(jnp.linalg.det(J)) if r["n_sg"] > 1
+                    else jnp.abs(J[..., 0, 0]))
+            dV_b.append(np.asarray(detJ * W_b[None, :]))
+        Gam_b.append(Gam)
+        Sig_b.append(Sig)
+
+    if Q is not None and refined:
+        # Q-consistency: ONE global integral over ALL batches -- the
+        # carried force is a property of the whole SG, so a single
+        # factor rescales slot 4 (xz -> Q1) / slot 3 (yz -> Q2)
+        Qv = np.asarray(Q, float).reshape(2)
+        qmax = max(abs(Qv[0]), abs(Qv[1]), 1e-30)
+        for qi, slot in ((0, 4), (1, 3)):
+            I = sum(float((S[:, :, slot] * dV).sum())
+                    for S, dV in zip(Sig_b, dV_b)) / r["omega"]
+            if abs(I) > 1e-3 * qmax:
+                for S in Sig_b:
+                    S[:, :, slot] *= Qv[qi] / I
+
+    u_flat = jnp.asarray(r["V0"]) @ jnp.asarray(epsilon_bar, float)
+    if refined:
+        u_flat = (jnp.asarray(r["V0_ladder"])
+                  @ jnp.asarray(epsilon_bar, float)
+                  + jnp.asarray(r["V11"]) @ d1
+                  + jnp.asarray(r["V12"]) @ d2)
+    if second:
+        # the physical (tilted) V2 warping, as in _warp_terms' w_t
+        u_flat = (u_flat + jnp.asarray(r["V21t"]) @ d11
+                  + jnp.asarray(r["V22t"]) @ d12
+                  + jnp.asarray(r["V23t"]) @ d22)
+    for q6, kv1, kv2 in qpairs:
+        qv = jnp.asarray(q6, float)
+        u_flat = (u_flat + jnp.asarray(r[kv1]) * qv[0]
+                  + jnp.asarray(r[kv2]) @ qv[1:])
+    U_b = [_u_at_gauss(u_flat, cells_b, ph_b)
+           for (cells_b, _x, _C, _dp, ph_b, _W) in B]
+
+    if not mixed:
+        return Gam_b[0], Sig_b[0], U_b[0]
+    return (np.concatenate([g.reshape(-1, 6) for g in Gam_b]),
+            np.concatenate([s.reshape(-1, 6) for s in Sig_b]),
+            np.concatenate([u.reshape(-1, 3) for u in U_b]))
 
 
 def plate_dehom_2d(r: Dict[str, Any],
@@ -436,9 +754,85 @@ def plate_dehom_2d(r: Dict[str, Any],
 
 
 def gauss_coords(r: Dict[str, Any]) -> np.ndarray:
-    """(E*Q, n_sg) physical coordinates of every recovery point."""
+    """(P, n_sg) physical coordinates of every recovery point (a mixed
+    SG concatenates its per-batch clouds in the same batch order as
+    dehom_fields)."""
+    if isinstance(r["x_end"], (list, tuple)):
+        return np.concatenate([
+            np.asarray(jnp.einsum('qn, end -> eqd', ph, x))
+            .reshape(-1, r["n_sg"])
+            for ph, x in zip(r["phi_qn"], r["x_end"])])
     g = jnp.einsum('qn, end -> eqd', r["phi_qn"], r["x_end"])
     return np.asarray(g).reshape(-1, r["n_sg"])
+
+
+def material_frame_fields(Gam, Sig, r):
+    """Rotate the dehom Gauss clouds from the SG-global frame into each
+    element's PLY MATERIAL frame (SwiftComp storage xx yy zz yz xz xy).
+
+    The block `angle: a` bakes the ply stiffness INTO the SG frame
+    (sg_materials), so the recovery output is SG-global; the material
+    frame is recovered by rotating back by the fiber angle
+    theta = -a about the SG THICKNESS axis (the last SG coordinate).
+    The sign is the flat_pm45 convention (OpenSG `angle: a` == Abaqus
+    `*Orientation ..., 3, -a`) and is GATED against the pm45 3-D
+    material-frame dump: theta = -a lands ply RMS 2.6-6.6 % (the model
+    error), theta = +a blows up to 46-264 %.
+
+    Strain columns are engineering (gamma = 2 eps); the shear pair
+    (yz, xz) rotates as a vector so only the (xx, yy, xy) row needs the
+    half/double bookkeeping, done inline below.
+
+    A yaml with per-element frames (elementOrientations) is REFUSED:
+    there the material frame composes with the element frame and that
+    path is not gated -- run --global instead.
+
+    In:  Gam, Sig -- (E, Q, 6) single-batch or flat (P, 6) mixed clouds
+         (dehom_fields output); r -- the plate_homo_2d dict ("sc" for
+         mat_id/materials, "batch_idx" for the mixed order).
+    Out: (Gam_m, Sig_m) same shapes, material frame.  The fluctuation
+         displacement is NOT rotated (a per-element vector rotation of
+         a continuous field is meaningless) -- .U stays SG-global."""
+    sc = r["sc"]
+    if sc.get("elementOrientations") is not None:
+        raise ValueError(
+            "--material is gated only for block-angle yamls; this SG"
+            " carries per-element frames (elementOrientations) -- use"
+            " --global")
+    ang = {int(k): float(m.get("angle", 0.0) or 0.0)
+           for k, m in sc["materials"].items()}
+    a_e = np.array([ang[int(m_)] for m_ in np.asarray(sc["mat_id"], int)])
+
+    Gs, Ss = np.asarray(Gam, float), np.asarray(Sig, float)
+    if Ss.ndim == 2:                      # mixed: flat, per-batch order
+        th = np.concatenate([
+            np.repeat(-a_e[idx], ph.shape[0])
+            for idx, ph in zip(r["batch_idx"], r["phi_qn"])])
+    else:                                 # single batch: element order
+        th = np.repeat(-a_e, Ss.shape[1]).reshape(Ss.shape[:2])
+    c = np.cos(np.radians(th))
+    s = np.sin(np.radians(th))
+
+    def rot(F, eng):
+        """storage (xx yy zz yz xz xy).  eng flags ENGINEERING shear
+        columns (gamma = 2 eps): the xy column enters the normal rows
+        halved (k) and the (yy - xx) term enters the xy row doubled (m);
+        the (yz, xz) pair rotates as a plain vector either way, the
+        factor 2 cancels."""
+        xx, yy, zz = F[..., 0], F[..., 1], F[..., 2]
+        yz, xz, xy = F[..., 3], F[..., 4], F[..., 5]
+        k = 1.0 if eng else 2.0
+        m = 2.0 if eng else 1.0
+        R = np.empty_like(F)
+        R[..., 0] = c*c*xx + s*s*yy + k*c*s*xy
+        R[..., 1] = s*s*xx + c*c*yy - k*c*s*xy
+        R[..., 2] = zz
+        R[..., 3] = c*yz - s*xz
+        R[..., 4] = s*yz + c*xz
+        R[..., 5] = m*c*s*(yy - xx) + (c*c - s*s)*xy
+        return R
+
+    return rot(Gs, True), rot(Ss, False)
 
 
 def _write_field(path, name, unit, F, xyz, lattice_note, title):
@@ -460,16 +854,53 @@ def _write_field(path, name, unit, F, xyz, lattice_note, title):
         np.savetxt(f, np.hstack([xyz, F]), fmt="%14.6e", delimiter=" ")
 
 
+def _vtk_corner_cell(n_sg, N):
+    """VTK linear cell (type id, corner index list into the element's
+    basix-ordered nodes) for an n_sg-dim N-node element.  Higher-order
+    elements degrade to their CORNERS -- the painted field is
+    element-constant, so nothing is lost visually.  quad4/hex8 undo the
+    _to_basix_order tensor swap (self-inverse permutations); every other
+    supported type keeps gmsh order with corners first.
+
+    In:  n_sg int SG dimension; N int nodes per element.
+    Out: (vtk_type, [corner indices]) | None when unmapped."""
+    if n_sg == 1 and N >= 2:
+        return 3, [0, 1]                          # VTK_LINE
+    if n_sg == 2 and N == 3:
+        return 5, [0, 1, 2]                       # VTK_TRIANGLE
+    if n_sg == 2 and N == 4:
+        return 9, [0, 1, 3, 2]                    # VTK_QUAD (de-basix)
+    if n_sg == 3 and N in (4, 10):
+        return 10, [0, 1, 2, 3]                   # VTK_TETRA
+    if n_sg == 3 and N == 8:
+        return 12, [0, 1, 3, 2, 4, 5, 7, 6]       # VTK_HEXAHEDRON
+    return None
+
+
 def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
-                 U_eqd=None):
-    """The .txt table + point-cloud .vtk of the recovered Gauss fields
-    (verbatim export of the SSDM script, parameterized), PLUS the
-    OpenSG dehom files <prefix>.SM (stress) / .EM (strain) and -- when
-    U_eqd from dehom_fields is given -- .U (fluctuation displacement).
+                 U_eqd=None, frame=None):
+    """The .txt table + rendered .vtk of the recovered Gauss fields,
+    PLUS the OpenSG dehom files <prefix>.SM (stress) / .EM (strain) and
+    -- when U_eqd from dehom_fields is given -- .U (fluctuation
+    displacement).
+
+    The .vtk is the EXPLODED parent-mesh rendering: every element is
+    emitted with its OWN copy of its corner nodes and carries the
+    per-element MEAN of its Q Gauss values, so ParaView draws a filled
+    contour that stays discontinuous across ply/material boundaries
+    (never node-averaged -- junction bleed).  Element-constant is the
+    honest rendering of Gauss data on the SG mesh: a bilinear
+    GP-to-corner extrapolation overshoots ~50x the element's own spread
+    on thin plies.  The raw one-row-per-Gauss-point cloud stays in the
+    .txt; an element type without a VTK map falls back to the old
+    point-cloud .vtk with a printed note.
+
     File component order is the rm_plate_1D convention (11 22 33 12 13
     23; units follow the SG input system); the (x, y, z) columns carry
     the SG coordinates in the LAST n_sg slots (y3 = thickness/last SG
-    coordinate -> the z column), leading slots zero."""
+    coordinate -> the z column), leading slots zero.  The .vtk (like
+    the .SM/.EM) is in whatever FRAME the caller recovered -- the
+    `frame` string is stamped into its title line."""
     coords = gauss_coords(r)
     strains = np.asarray(Gamma_eqs).reshape(-1, 6)
     stresses = np.asarray(Sigma_eqs).reshape(-1, 6)
@@ -486,27 +917,100 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
                fmt="\t".join(['%d'] + ['%.6e'] * (d + 12)),
                header=header, comments='', delimiter='\t')
 
-    coords3 = np.hstack((coords, np.zeros((num_pts, 3 - d)))) \
-        if d < 3 else coords
     names = ["xx", "yy", "zz", "yz", "xz", "xy"]
-    with open(prefix + ".vtk", "w") as f:
-        f.write("# vtk DataFile Version 3.0\nGauss Point Voigt Data\n"
-                "ASCII\nDATASET UNSTRUCTURED_GRID\n")
-        f.write("POINTS %d float\n" % num_pts)
-        np.savetxt(f, coords3, fmt='%.6e')
-        f.write("\nCELLS %d %d\n" % (num_pts, num_pts * 2))
-        np.savetxt(f, np.column_stack((np.ones(num_pts, dtype=int),
-                                       np.arange(num_pts, dtype=int))),
-                   fmt='%d')
-        f.write("\nCELL_TYPES %d\n" % num_pts)
-        np.savetxt(f, np.ones(num_pts, dtype=int), fmt='%d')
-        f.write("\nPOINT_DATA %d\n" % num_pts)
-        for i, nm in enumerate(names):
-            f.write("SCALARS Eps_%s float 1\nLOOKUP_TABLE default\n" % nm)
-            np.savetxt(f, strains[:, i], fmt='%.6e')
-        for i, nm in enumerate(names):
-            f.write("SCALARS Sig_%s float 1\nLOOKUP_TABLE default\n" % nm)
-            np.savetxt(f, stresses[:, i], fmt='%.6e')
+
+    def _cloud_vtk():
+        """The pre-2026-08 point-cloud .vtk -- the fallback for an
+        element type _vtk_corner_cell does not map."""
+        coords3 = np.hstack((coords, np.zeros((num_pts, 3 - d)))) \
+            if d < 3 else coords
+        with open(prefix + ".vtk", "w") as f:
+            f.write("# vtk DataFile Version 3.0\nGauss Point Voigt Data"
+                    " (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
+                    % (frame or "frame unspecified"))
+            f.write("POINTS %d float\n" % num_pts)
+            np.savetxt(f, coords3, fmt='%.6e')
+            f.write("\nCELLS %d %d\n" % (num_pts, num_pts * 2))
+            np.savetxt(f, np.column_stack(
+                (np.ones(num_pts, dtype=int),
+                 np.arange(num_pts, dtype=int))), fmt='%d')
+            f.write("\nCELL_TYPES %d\n" % num_pts)
+            np.savetxt(f, np.ones(num_pts, dtype=int), fmt='%d')
+            f.write("\nPOINT_DATA %d\n" % num_pts)
+            for i, nm in enumerate(names):
+                f.write("SCALARS Eps_%s float 1\nLOOKUP_TABLE default\n"
+                        % nm)
+                np.savetxt(f, strains[:, i], fmt='%.6e')
+            for i, nm in enumerate(names):
+                f.write("SCALARS Sig_%s float 1\nLOOKUP_TABLE default\n"
+                        % nm)
+                np.savetxt(f, stresses[:, i], fmt='%.6e')
+
+    # ---- the exploded parent-mesh .vtk (per-batch: a mixed SG's flat
+    # clouds are consumed in the same batch order dehom_fields wrote)
+    _l = lambda v: v if isinstance(v, (list, tuple)) else [v]  # noqa: E731
+    xbs = [np.asarray(x) for x in _l(r["x_end"])]
+    Qs = [ph.shape[0] for ph in _l(r["phi_qn"])]
+    maps = [_vtk_corner_cell(r["n_sg"], x.shape[1]) for x in xbs]
+    if any(m is None for m in maps):
+        bad = [x.shape[1] for x, m in zip(xbs, maps) if m is None]
+        print("export_gauss: no VTK cell map for n_sg=%d, %s-node"
+              " elements -- point-cloud .vtk written instead"
+              % (r["n_sg"], bad))
+        _cloud_vtk()
+    else:
+        mat_e = None
+        if r.get("sc") is not None and "mat_id" in r["sc"]:
+            mids = np.asarray(r["sc"]["mat_id"], int)
+            mat_e = ([mids[np.asarray(i)] for i in r["batch_idx"]]
+                     if "batch_idx" in r else [mids])
+        pts, conn, ctyp, e_val, e_mat = [], [], [], [], []
+        off = row = 0
+        for bi, (x_b, Q, (vt, corner)) in enumerate(zip(xbs, Qs, maps)):
+            Eb, _N, dd = x_b.shape
+            k = len(corner)
+            xc = np.zeros((Eb, k, 3))
+            xc[:, :, :dd] = x_b[:, corner, :]     # SG coords lead, like
+            pts.append(xc.reshape(-1, 3))          # the old cloud .vtk
+            base = off + k * np.arange(Eb)[:, None]
+            conn.append(np.hstack([np.full((Eb, 1), k, int),
+                                   base + np.arange(k)]))
+            ctyp.append(np.full(Eb, vt, int))
+            e_val.append(np.hstack([
+                strains[row:row + Eb * Q].reshape(Eb, Q, 6).mean(1),
+                stresses[row:row + Eb * Q].reshape(Eb, Q, 6).mean(1)]))
+            if mat_e is not None:
+                e_mat.append(mat_e[bi].astype(float))
+            off += Eb * k
+            row += Eb * Q
+        pts = np.vstack(pts)
+        ev = np.vstack(e_val)
+        E_tot = ev.shape[0]
+        with open(prefix + ".vtk", "w") as f:
+            f.write("# vtk DataFile Version 3.0\n"
+                    "OpenSG dehom, exploded SG mesh, per-element Gauss"
+                    " mean (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
+                    % (frame or "frame unspecified"))
+            f.write("POINTS %d float\n" % len(pts))
+            np.savetxt(f, pts, fmt='%.8e')
+            sz = sum(c.size for c in conn)
+            f.write("\nCELLS %d %d\n" % (E_tot, sz))
+            for c in conn:
+                np.savetxt(f, c, fmt='%d')
+            f.write("\nCELL_TYPES %d\n" % E_tot)
+            np.savetxt(f, np.concatenate(ctyp), fmt='%d')
+            f.write("\nCELL_DATA %d\n" % E_tot)
+            for i, nm in enumerate(names):
+                f.write("SCALARS Eps_%s float 1\nLOOKUP_TABLE default\n"
+                        % nm)
+                np.savetxt(f, ev[:, i], fmt='%.6e')
+            for i, nm in enumerate(names):
+                f.write("SCALARS Sig_%s float 1\nLOOKUP_TABLE default\n"
+                        % nm)
+                np.savetxt(f, ev[:, 6 + i], fmt='%.6e')
+            if mat_e is not None:
+                f.write("SCALARS mat_id float 1\nLOOKUP_TABLE default\n")
+                np.savetxt(f, np.concatenate(e_mat), fmt='%.1f')
 
     # the OpenSG dehom files: SG coords into the LAST n_sg of (x, y, z)
     xyz = np.zeros((num_pts, 3))
@@ -514,6 +1018,10 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
     model = {1: "beam", 2: "plate", 3: "solid"}.get(r["n_model"], "?")
     note = ("element Gauss points (%d), SwiftComp storage reordered to "
             "11 22 33 12 13 23 on write" % num_pts)
+    if frame:
+        # the frame tag makes the files self-describing: material-frame
+        # and SG-global .SM are byte-identical in layout otherwise
+        note += "; frame: %s" % frame
     _write_field(prefix + ".SM", "S", "Pa", stresses, xyz, note,
                  "%s %s dehom stress (units follow the SG input system)"
                  % (prefix, model))
