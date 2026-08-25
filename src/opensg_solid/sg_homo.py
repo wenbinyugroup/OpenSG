@@ -205,8 +205,10 @@ _D2_SG = np.zeros((6, 2)); _D2_SG[4, 1] = 1.0; _D2_SG[5, 0] = 1.0
 
 
 def _rm_ls_reduction(A6, H11, H12, H22, S1, S2):
-    """Yu Eqs. (57)-(61): the 78-equation / 27-unknown U* least squares
-    -> X (2x2 shear compliance), G = X^-1.  NumPy port of the reduction
+    """Yu Eqs. (57)-(61): the U* least squares -> X (2x2 shear
+    compliance), G = X^-1.  144 raveled equations (78 unique entries,
+    off-diagonals counted twice = the Frobenius weighting) in 27
+    unknowns (X(3) + Yu's 24 in-plane relaxation constants).  NumPy port of the reduction
     inside msg_rm_plate._bucket.single (same column equilibration,
     truncated-SVD minimum-norm solve, SPD gate); it consumes only
     assembled quantities, so it is SG-dimension-agnostic.
@@ -379,8 +381,10 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
          shell_sg3d tri+quad doctrine).
          f_faces OPTIONAL (n_unique, 2) -- consistent nodal loads of a
          UNIT face pressure on the [top, bottom] SG face (already
-         /omega, signs top -, bottom +, exactly the msg_rm_plate Lt/Lb
-         convention).  When given, the PRESSURE-DRIVEN warping ladder
+         /omega, signs top +, bottom - as the caller builds them: the
+         NEGATIVE of msg_rm_plate's Lt/Lb, so the two modules' external
+         qt6 conventions are OPPOSITE; here qt6 = +1 recovers the
+         physical sigma33(top) = -q).  When given, the PRESSURE-DRIVEN warping ladder
          (Yu Eqs. 29/45/64, the rm_plate_1D load columns) is solved on
          the same constrained system and returned: V1Lt/V1Lb
          (n_unique,) first-order load columns and V2Lt/V2Lb

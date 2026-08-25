@@ -146,9 +146,28 @@ def main(argv=None):
     # (the yaml stays purely structural).
     base = os.path.splitext(path)[0]
     state = read_ff_state(base + ".ff") if analysis == "D" else None
+    q_react = None if state is None else state.get("q_reaction")
+    has_d2 = state is not None and any(
+        state.get(k) is not None for k in ("dE11", "dE12", "dE22"))
+    if has_d2 and q_react is None:
+        # Yu-2003 composition rule: with the full d2eps chains supplied,
+        # the load column must keep the uniform (<w> = 0 KKT) reaction.
+        # The tau reaction makes the pressure column itself carry the
+        # moment-gradient (shear-outflow) transverse content -- the very
+        # physics the Eq. 64-66 d2eps chains add -- so the pair double-
+        # counts it (measured overshoot ~1x the d2 share).  tau is the
+        # FF/dE-only mode (the HC_pm45 configuration).
+        q_react = "uniform"
+        print("q_reaction auto: full d2eps drivers present -> uniform"
+              " reaction (tau + d2eps double-counts the moment-gradient"
+              " content; say q_reaction: tau in the .ff to force it)")
+    elif has_d2 and q_react == "tau":
+        print("WARNING: q_reaction: tau combined with d2eps_* drivers"
+              " double-counts the moment-gradient transverse content"
+              " (sigma_i3/sigma_33 overshoot) -- use uniform, or drop"
+              " the d2eps lines")
     r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)),
-                      q_reaction=(None if state is None
-                                  else state.get("q_reaction")))
+                      q_reaction=q_react)
     print(r["law_title"] + ":")
     print(r["law"])
     if analysis == "H":

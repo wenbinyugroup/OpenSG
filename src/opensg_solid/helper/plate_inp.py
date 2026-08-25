@@ -31,7 +31,10 @@ that study baked in:
             *Orientation `3, -angle` card (OpenSG `angle: a` == Abaqus
             `3, -a`, the flat_pm45-gated map);
   elements  tet4 -> C3D4, hex8 -> C3D8I (incompatible modes: the
-            established choice for linear-hex bending).
+            established choice for linear-hex bending); order=2 (tet4
+            meshes only) -> C3D10 quadratic tets: conforming midside
+            nodes are APPENDED after the corner nodes, so corner ids
+            and element ids match the C3D4 deck one-to-one.
 
 In:  the plate .msh (plate_mesh output), the SG yaml for materials
 Out: <msh stem>.inp (or `out`)
@@ -85,7 +88,8 @@ def _read_msh(path):
 
 
 def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
-              b=None, bc="clamped", load="uniform", job_note=""):
+              b=None, bc="clamped", load="uniform", job_note="",
+              order=1):
     """The Abaqus deck of a plate_mesh .msh.
 
     In:  msh_path str; yaml_path str | None -- the SG yaml with the
@@ -95,12 +99,19 @@ def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
          the plate span/width for the nonuniform loads (None ->
          measured off the mesh); bc 'clamped' | 'clamped-x';
          load 'uniform' | 'linear-x' | 'linear-y'; job_note str --
-         extra ** comment line
-    Out: dict {inp, n_nodes, n_elems, n_top_faces, bc, load}."""
+         extra ** comment line; order 1 | 2 -- 2 = C3D10 quadratic
+         tets (tet4 meshes only), same element ids as the order=1 deck
+    Out: dict {inp, n_nodes, n_elems, n_midside, n_top_faces, bc,
+         load}."""
     t0 = time.perf_counter()
     nodes, cells, mats = _read_msh(msh_path)
     E, k = cells.shape
-    etype = {4: "C3D4", 8: "C3D8I"}[k]
+    if order not in (1, 2):
+        raise SystemExit("order must be 1 | 2, got %r" % order)
+    if order == 2 and k != 4:
+        raise SystemExit("order=2 -> C3D10 supports tet4 meshes only,"
+                         " got %d-node cells" % k)
+    etype = {4: "C3D4", 8: "C3D8I"}[k] if order == 1 else "C3D10"
     base = os.path.splitext(msh_path)[0]
     out = out or base + ".inp"
     if yaml_path is None:
@@ -114,6 +125,33 @@ def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
     a = a or float(hi[0] - lo[0])
     b = b or float(hi[1] - lo[1])
     tol = 1e-6 * max(hi - lo)
+    cells_out = cells
+    n_mid = 0
+    if order == 2:
+        # C3D10 midside nodes, one per unique edge.  Abaqus C3D10 edge
+        # order: node5=mid(1,2), 6=mid(2,3), 7=mid(3,1), 8=mid(1,4),
+        # 9=mid(2,4), 10=mid(3,4).  Shared edges get ONE shared node
+        # (np.unique on the sorted node-pair key); coords are the EXACT
+        # edge midpoints.  New nodes are APPENDED after the corner
+        # nodes so corner numbering and ELEMENT IDS ARE UNCHANGED --
+        # element k is the SAME parent tet as in the C3D4 deck, which
+        # the element-for-element exact-pairing doctrine relies on.
+        # Midside nodes of clamped-face edges land exactly on those
+        # faces (midpoint of two on-face corners), so the geometric
+        # FIX mask below picks them up with no extra logic; likewise
+        # top-face midsides for the Dload faces.
+        edge = np.array([[0, 1], [1, 2], [2, 0],
+                         [0, 3], [1, 3], [2, 3]])
+        pair = np.sort(cells[:, edge], axis=2).reshape(-1, 2)
+        key = pair[:, 0].astype(np.int64) * len(nodes) + pair[:, 1]
+        _, first, inv = np.unique(key, return_index=True,
+                                  return_inverse=True)
+        mid = 0.5 * (nodes[pair[first, 0]] + nodes[pair[first, 1]])
+        cells_out = np.hstack([cells, len(nodes) + inv.reshape(E, 6)])
+        n_mid = len(mid)
+        nodes = np.vstack([nodes, mid])
+        print("plate_inp : order=2 -> %d midside nodes (unique edges)"
+              % n_mid)
     print("plate_inp : %d nodes, %d %s; plate %.4g x %.4g x %.4g"
           % (len(nodes), E, etype, a, b, hi[2] - lo[2]))
 
@@ -162,7 +200,8 @@ def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
                    fmt=["%d", "%.8f", "%.8f", "%.8f"], delimiter=", ")
         f.write("*Element, type=%s\n" % etype)
         np.savetxt(f, np.column_stack(
-            [np.arange(1, E + 1), cells + 1]), fmt="%d", delimiter=", ")
+            [np.arange(1, E + 1), cells_out + 1]),
+            fmt="%d", delimiter=", ")
         for mid in sorted(set(mats.tolist())):
             el = np.nonzero(mats == mid)[0] + 1
             f.write("*Elset, elset=MAT%d\n" % mid)
@@ -219,4 +258,5 @@ def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
     print("plate_inp : wrote %s  (%.1f s)"
           % (out, time.perf_counter() - t0))
     return {"inp": out, "n_nodes": len(nodes), "n_elems": E,
-            "n_top_faces": len(top), "bc": bc, "load": load}
+            "n_midside": n_mid, "n_top_faces": len(top), "bc": bc,
+            "load": load}

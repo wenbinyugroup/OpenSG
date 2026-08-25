@@ -719,7 +719,10 @@ def dehom_fields(r: Dict[str, Any],
                   + jnp.asarray(r["V11"]) @ d1
                   + jnp.asarray(r["V12"]) @ d2)
     if second:
-        # the physical (tilted) V2 warping, as in _warp_terms' w_t
+        # the physical (tilted) V2 warping, as in _warp_terms' w_t.
+        # DELIBERATE deviation from msgrm_warping_at_depth (which uses
+        # the untilted V21/V22/V23): affects the .U export only, never
+        # stress/strain.
         u_flat = (u_flat + jnp.asarray(r["V21t"]) @ d11
                   + jnp.asarray(r["V22t"]) @ d12
                   + jnp.asarray(r["V23t"]) @ d22)
