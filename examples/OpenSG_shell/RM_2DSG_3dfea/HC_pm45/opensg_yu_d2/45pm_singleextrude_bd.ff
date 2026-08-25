@@ -1,0 +1,25 @@
+# dehomogenization load for 45pm_singleextrude_bd.yaml -- PURE YU
+# (V2-CONSTITUTIVE) COMPOSITION EXPERIMENT: identical drivers to the
+# study's validated tau-mode .ff (opensg/dehomo/45pm_singleextrude_bd.ff,
+# 2026-08-24), ONLY q_reaction changed tau -> uniform so the pressure
+# column reacts with the <w>=0 KKT rows and the Eq. 64-66 d2eps chains
+# are CONSUMED (uniform + qt6 + d2eps = Yu's composition; tau would
+# subsume/double-count them).
+# FF  = section forces of plate run 45pm_singleextrude_bd_plate_clamped at its centre
+#       element 270, x1 = 37.000906, x2 = 30.102440
+# SYMMETRIZED about the panel centre (elements [270, 271, 330, 331]):
+#       FF and d2eps mirror-averaged, deps_dx* = 0
+#       (Q = 0 at the symmetry plane)
+# eps = C_eff^-1 FF with C_eff from 45pm_singleextrude_bd.out; deps_dx* are
+#       central differences of that eps over the neighbouring elements
+# Q is intentionally absent: transverse shear is not a user input.
+FF: [3.43327500e-03, 1.90036000e-04, -4.02000000e-09, -2.34106000e+01, -7.37398500e+00, -1.72224450e-02]
+deps_dx1: [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]
+deps_dx2: [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00]
+# SECOND derivatives of eps, same lattice, second-order central stencils --
+# drive the Eq. 64-66 two-chain recovery.
+d2eps_dx1dx1: [-4.98860054e-12, 2.52990809e-11, 7.39142904e-12, 5.51508022e-08, -5.18277080e-10, -1.42470892e-09]
+d2eps_dx2dx2: [2.20844187e-12, -1.59389657e-11, 1.83302934e-13, -3.33231803e-09, 6.74009845e-09, -3.50475646e-11]
+d2eps_dx1dx2: [2.67426626e-14, -8.63984547e-14, 1.70815567e-11, -1.60718515e-11, -1.67774374e-11, -4.42271348e-09]
+qt6: [0.1, 0.0, 0.0, 0.0, 0.0, 0.0]   # carried from the previous .ff
+q_reaction: uniform   # THE EXPERIMENT: pure Yu composition (uniform + qt6 + d2eps)

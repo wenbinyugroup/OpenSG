@@ -1,0 +1,15 @@
+# normalised RMS of (model - 3-D) along each path, material frame -- opensg_yu_d2 (q_reaction: uniform + d2eps, Yu composition)
+# tau column = the study's validated q_reaction: tau results (opensg/path_N), for the A/B
+# path     comp        RM-Yu %     RM-tau %    OpenSG-cl %   SwiftComp-cl %
+path_1   S11            9.04         6.55          29.96            29.96
+path_1   S22            9.96         6.55          33.91            33.91
+path_1   S33            3.21         4.69          72.54            72.54
+path_1   S12            8.88         6.26          29.57            29.57
+path_1   S13            5.45         8.42          54.56            54.56
+path_1   S23           15.75        17.58          53.30            53.30
+path_2   S11            3.47         2.43           8.04             8.04
+path_2   S22            4.36         3.58          13.70            13.70
+path_2   S33            5.13         8.48          40.35            40.35
+path_2   S12            2.53         1.88           5.54             5.54
+path_2   S13            5.63         8.54          23.42            23.42
+path_2   S23           10.13        10.45          39.72            39.72

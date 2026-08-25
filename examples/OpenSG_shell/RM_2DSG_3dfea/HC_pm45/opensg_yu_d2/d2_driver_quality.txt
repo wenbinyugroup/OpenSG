@@ -1,0 +1,22 @@
+# HC_pm45 d2-driver quality: plate equilibrium identity
+#   I = (C_eff@d2eps_11)[M11] + 2 (C_eff@d2eps_12)[M12] + (C_eff@d2eps_22)[M22]
+# target +q = +0.1000 (build_ff.py clamped-strip convention, qt6 into the top face)
+# C_eff = symmetrized 6x6 of opensg/dehomo/45pm_singleextrude_bd.out
+
+symmetrized (opensg_yu_d2 == opensg/dehomo)
+  opensg_yu_d2/45pm_singleextrude_bd.ff
+  d2M11/dx1^2     = +1.029915e-01
+  2 d2M12/dx1dx2  = -7.472685e-03
+  d2M22/dx2^2     = +4.372024e-03
+  identity I      = +9.989083e-02
+  target +q       = +1.000000e-01
+  I / q           = 0.9989   (99.89 % of the pressure; error -0.11 %)
+
+station, pre-symmetrization (HC_pm45 root)
+  45pm_singleextrude_bd.ff
+  d2M11/dx1^2     = +1.029756e-01
+  2 d2M12/dx1dx2  = -7.575642e-03
+  d2M22/dx2^2     = +4.372576e-03
+  identity I      = +9.977253e-02
+  target +q       = +1.000000e-01
+  I / q           = 0.9977   (99.77 % of the pressure; error -0.23 %)
