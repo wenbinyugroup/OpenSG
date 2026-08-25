@@ -1,0 +1,74 @@
+driver_study.txt -- AR5_yu_d2 d2eps-driver study, crescent path (path 2)
+========================================================================
+2026-08-25.  Binned rel-rms vs the Abaqus C3D4 3-D reference on the
+horseshoe-patch mid-line (616 exactly-paired ply elements), pure
+Yu-2003 asymptotic composition (Eq. 64-66 V2 chains + V1L/V2L load
+columns, q_reaction: uniform).  Chain per variant, PINNED src
+(PYTHONPATH=~/opensg_pin/src): build_ff.py -> python -s -m opensg
+preovios_try.yaml D -> compare/sample_paths_paired_yu_d2.py ->
+compare/path_2_yu_d2/make_path2_plots.py.  FF line, deps_dx1 =
+deps_dx2 = 0, qt6 = [1,0,0,0,0,0], q_reaction: uniform IDENTICAL in
+all variants -- only the d2eps triple differs.
+
+rel rms, % of path reference rms     S11    S22    S33    S12    S13    S23
+---------------------------------------------------------------------------
+baseline stencil (unconstrained LS)  14.9   41.3   17.7    6.5  135.1   99.7
+constrained LS (parity + KKT equil)  18.1   48.1   21.2    8.2  163.6  108.5
+spectral analytic (FINAL, in .ff)    14.7   41.0   18.7    6.6  134.3  105.9
+---------------------------------------------------------------------------
+tau-resummation companion (context   22.1   11.9    9.4   14.5   73.9   26.5
+  only; different composition, out
+  of scope by user decision)
+
+absolute rms, MPa                    S11    S22    S33    S12    S13    S23
+---------------------------------------------------------------------------
+spectral analytic (FINAL)           1.205  0.520  0.342  0.063  0.259  0.402
+path reference signal rms           8.191  1.271  1.828  0.961  0.193  0.380
+C3D4 element-scatter floor           2.47   0.38   0.25   0.23   0.17   0.19
+  floor as % of signal rms           30.2   29.9   13.7   23.9   88.1   50.0
+(The floor is the C3D4 reference's own element scatter on this path;
+binned comparison averages part of it out, so binned rel-rms can sit
+below it -- but errors at or below the floor are reference-limited,
+and the S13 floor is 88% of the S13 signal itself: the C3D4 reference
+cannot arbitrate S13 at this level.  The running C3D10 job will.)
+
+driver diagnostics (station x = (2.5, 2.5))
+-------------------------------------------
+                                      stencil M_ab,ab   gamma1,1 split
+                                      (target +q = +1)  vs plate actual
+baseline stencil (unconstrained LS)   0.9514306         +40% high (Eq.50 audit)
+constrained LS (single KKT equality)  1.0000000         worse split (sum-only pin)
+spectral analytic (hp-Ritz pe=18,     1.0000004810      +0.00% / +0.00%
+  51005 DOF, analytic eps_R,ab)                         (both channels, gate
+                                                         in build_ff.py)
+Eq. 50: all drivers are RM measures R (eps = C_eff^-1 FF, d2eps =
+R,ab); the pinned engine converts to classical measures INTERNALLY via
+the tilt/detilt row split (V11barD/V12barD).  No caller-side
+correction applied -- it would double-correct (would-be terms are
+0.1x-13.7x the drivers, sqrt(D11/G11) = 3.68 vs a = 5).
+
+reading
+-------
+1. The driver inputs are now EXACT to the macro plate solution: the
+   spectral d2eps satisfy the moment-equilibrium identity to 4.8e-7
+   and reproduce the plate's true transverse-shear-gradient split
+   (gamma1,1, gamma2,2) to 0.00% -- the 5%-low stencil and the 40%
+   gamma1,1 misallocation of the LS drivers are both eliminated.
+2. Yet the crescent rms barely moves: S11 14.9 -> 14.7, S22 41.3 ->
+   41.0, S12 6.5 -> 6.6, S13 135.1 -> 134.3, S33 17.7 -> 18.7, S23
+   99.7 -> 105.9.  Driver error is therefore NOT the accuracy
+   bottleneck of the pure-Yu composition on this path: the hypothesis
+   that the S13 channel rode on the gamma1,1 misallocation is
+   DISPROVEN (exact split bought 0.8 points of 134).
+3. The constrained-LS row shows the same thing from the other side:
+   forcing the drivers to exact equilibrium while distorting their
+   pointwise values made every component worse -- the recovery
+   responds to the local d2eps values, not to the integral identity.
+4. What remains is junction cell-scale content the macro derivatives
+   cannot carry: the crescent path crosses the facesheet/core junction
+   where the true 3-D field has cell-boundary layers outside the
+   periodic-SG function space driven by ANY macro polynomial content.
+   S22/S23/S13 sit on that content; S13 is additionally
+   reference-limited (C3D4 scatter floor 88% of signal).  The C3D10
+   reference job currently running will arbitrate how much of the
+   remaining gap is reference discretization vs genuine model content.
