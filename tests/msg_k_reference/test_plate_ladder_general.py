@@ -128,6 +128,87 @@ def test_q_reaction_auto_uniform_for_full_cell(runs, capsys):
         assert r["q_reaction"] == "uniform", tag
 
 
+def test_q_column_inplane_parity_sandwich(tmp_path):
+    """The load column's IN-PLANE content: a flat [45/-45]s-skin
+    sandwich under unit top pressure must recover the SAME
+    sigma11/sigma22/sigma33 profile from a 1-D stack, a 3-D hex slab
+    and a 3-D tet slab -- the in-plane skin stress of the q-column
+    (~0.4 q on this section) is real construction physics and must be
+    dimension-independent (the AR5 S11 debug's verifier)."""
+    import os
+    os.chdir(tmp_path)
+    t, nzc, nply = 0.02, 6, 4
+    ply = {"type": 1,
+           "engineering": [108000.0, 8000.0, 8000.0, 4000.0, 4000.0,
+                           3000.0, 0.32, 0.32, 0.3]}
+    zc = np.linspace(-0.5, 0.5, nzc + 1)
+    zt = 0.5 + t * np.arange(1, nply + 1)
+    zl = np.r_[-zt[::-1], zc, zt]
+    nz = len(zl) - 1
+    lay = [2, 3, 3, 2][::-1] + [1] * nzc + [2, 3, 3, 2]
+    mats = {1: {"type": 0, "E": 4000.0, "nu": 0.3},
+            2: dict(ply, angle=-45.0), 3: dict(ply, angle=45.0)}
+
+    def s1d():
+        nodes = np.zeros((nz + 1, 3))
+        nodes[:, 0] = zl
+        return {"dim": 1, "nodes": nodes,
+                "cells": [[k, k + 1] for k in range(nz)],
+                "mat_id": np.array(lay, int), "materials": mats,
+                "scale": 1.0}
+
+    def slab(split):
+        nx, w = 2, 0.25
+        xs = np.linspace(0, w, nx + 1)
+        nid = lambda i, j, k: (k * (nx + 1) + j) * (nx + 1) + i  # noqa
+        nodes = np.zeros(((nx + 1) ** 2 * (nz + 1), 3))
+        for k in range(nz + 1):
+            for j in range(nx + 1):
+                for i in range(nx + 1):
+                    nodes[nid(i, j, k)] = (xs[i], xs[j], zl[k])
+        hexes, mid = [], []
+        for k in range(nz):
+            for j in range(nx):
+                for i in range(nx):
+                    hexes.append([nid(i, j, k), nid(i + 1, j, k),
+                                  nid(i + 1, j + 1, k),
+                                  nid(i, j + 1, k), nid(i, j, k + 1),
+                                  nid(i + 1, j, k + 1),
+                                  nid(i + 1, j + 1, k + 1),
+                                  nid(i, j + 1, k + 1)])
+                    mid.append(lay[k])
+        if split:
+            T6 = [(0, 1, 2, 6), (0, 2, 3, 6), (0, 3, 7, 6),
+                  (0, 7, 4, 6), (0, 4, 5, 6), (0, 5, 1, 6)]
+            cells = [[h[a], h[b], h[c], h[d]] for h in hexes
+                     for a, b, c, d in T6]
+            mid = list(np.repeat(mid, 6))
+        else:
+            cells = hexes
+        return {"dim": 3, "nodes": nodes, "cells": cells,
+                "mat_id": np.array(mid, int), "materials": mats,
+                "scale": 1.0}
+
+    def prof(sc):
+        r = plate_homo_2d(sc, refined=1)
+        _, Sig, _ = dehom_fields(r, np.zeros(6),
+                                 qt6=np.array([1.0, 0, 0, 0, 0, 0]))
+        xe = np.asarray(r["x_end"])
+        zq = np.einsum("qn,en->eq", np.asarray(r["phi_qn"]),
+                       xe[:, :, r["n_sg"] - 1]).ravel()
+        S = np.asarray(Sig).reshape(-1, 6)
+        k = np.clip(np.digitize(zq, zl) - 1, 0, nz - 1)
+        return np.array([S[k == b].mean(axis=0) for b in range(nz)])
+
+    ref = prof(s1d())
+    assert np.abs(ref[-1, 0]) > 0.2          # real in-plane q content
+    for split in (False, True):
+        p = prof(slab(split))
+        for j in (0, 1, 2):                  # S11, S22, S33
+            assert np.abs(p[:, j] - ref[:, j]).max() <= 1e-8, \
+                (split, j)
+
+
 def test_q_reaction_auto_tau_for_voided_cell(tmp_path):
     """A cell with an in-plane void (fill < 1) must auto-select tau."""
     import os
