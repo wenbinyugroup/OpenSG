@@ -149,23 +149,16 @@ def main(argv=None):
     q_react = None if state is None else state.get("q_reaction")
     has_d2 = state is not None and any(
         state.get(k) is not None for k in ("dE11", "dE12", "dE22"))
-    if has_d2 and q_react is None:
-        # Yu-2003 composition rule: with the full d2eps chains supplied,
-        # the load column must keep the uniform (<w> = 0 KKT) reaction.
-        # The tau reaction makes the pressure column itself carry the
-        # moment-gradient (shear-outflow) transverse content -- the very
-        # physics the Eq. 64-66 d2eps chains add -- so the pair double-
-        # counts it (measured overshoot ~1x the d2 share).  tau is the
-        # FF/dE-only mode (the HC_pm45 configuration).
-        q_react = "uniform"
-        print("q_reaction auto: full d2eps drivers present -> uniform"
-              " reaction (tau + d2eps double-counts the moment-gradient"
-              " content; say q_reaction: tau in the .ff to force it)")
-    elif has_d2 and q_react == "tau":
+    if has_d2 and q_react == "tau":
+        # the forbidden pairing (2026-08-25 audit): the tau-reacted
+        # pressure column already carries the moment-gradient (shear-
+        # outflow) transverse content the Eq. 64-66 d2eps chains add,
+        # so running both double-counts it.  Respect the explicit
+        # override, but say so.
         print("WARNING: q_reaction: tau combined with d2eps_* drivers"
               " double-counts the moment-gradient transverse content"
-              " (sigma_i3/sigma_33 overshoot) -- use uniform, or drop"
-              " the d2eps lines")
+              " (sigma_i3/sigma_33 overshoot) -- drop the d2eps lines"
+              " (tau subsumes them) or use uniform")
     r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)),
                       q_reaction=q_react)
     print(r["law_title"] + ":")
@@ -232,6 +225,20 @@ def main(argv=None):
                       " (needs a refined single-batch plate run)"
                       " -- second-order recovery skipped"
                       % os.path.basename(base))
+            elif (r.get("q_reaction") == "tau"
+                  and (state.get("q_reaction") or "") != "tau"):
+                # AUTO picked tau (in-plane-heterogeneous cell): the
+                # tau-reacted load column subsumes the moment-gradient
+                # content, so the d2eps chains would double-count it
+                # (the HC_pm45-validated mode is tau WITHOUT d2).  The
+                # Yu d2 composition remains available by forcing
+                # q_reaction: uniform in the .ff.
+                print("d2eps drivers DROPPED: the auto-selected tau"
+                      " reaction already carries the moment-gradient"
+                      " content on this heterogeneous cell (HC_pm45"
+                      " mode; tau + d2eps double-counts -- 2026-08-25"
+                      " audit).  Force q_reaction: uniform in the .ff"
+                      " to run the Yu d2 composition instead")
             else:
                 dE11 = state.get("dE11")
                 dE12 = state.get("dE12")

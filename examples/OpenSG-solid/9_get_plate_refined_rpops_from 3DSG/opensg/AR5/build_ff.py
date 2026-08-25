@@ -4,10 +4,13 @@ element per 3-D SG cell, so every shell element position corresponds to
 one SG tile of the 3-D FEA model, and the FULL Yu-2003 driver set is
 always emitted from that grid -- FF, dE1/dE2 (zero at the double-mirror
 station, written explicitly), d2eps (local quadratic LS on the cell
-grid), the uniform top pressure qt6 with the UNIFORM reaction (tau
-would double-count the moment-gradient content the d2eps chains carry
--- the 2026-08-25 audit finding).  There is no coarse/fine mode: the
-cell-matched run IS the model.
+grid, kept as DOCUMENTATION) and the uniform top pressure qt6.  Like
+the HC_pm45 .ff, q_reaction is left to AUTO: the fill fraction picks
+tau on this voided cell, and the cli then DROPS the d2eps drivers --
+the tau-reacted column subsumes the moment-gradient content, so tau +
+d2eps would double-count it (2026-08-25 audit; force q_reaction:
+uniform to run the Yu d2 composition instead).  There is no
+coarse/fine mode: the cell-matched run IS the model.
 
     python build_ff.py
 
@@ -200,10 +203,12 @@ for name, ffv, src, full in (
             " grid,",
             "# parity-cleaned; stencil diagnostic %.4f vs +q = +%.1f),"
             % (eqsum, Q_TOP),
-            "# qt6 = uniform top pressure (deck P = -1.0 -> q = +1.0),"
-            " uniform reaction",
-            "# (tau + d2eps double-counts the moment-gradient content"
-            " -- audit 2026-08-25).",
+            "# qt6 = uniform top pressure (deck P = -1.0 -> q = +1.0);"
+            " q_reaction AUTO",
+            "# as in HC_pm45 (fill -> tau here; the cli drops d2eps"
+            " under tau: it",
+            "# subsumes the moment-gradient content -- audit"
+            " 2026-08-25).",
         ]
         body += "deps_dx1: %s\n" % vec(np.zeros(6))
         body += "deps_dx2: %s\n" % vec(np.zeros(6))
@@ -211,7 +216,6 @@ for name, ffv, src, full in (
         body += "d2eps_dx2dx2: %s\n" % vec(d22)
         body += "d2eps_dx1dx2: %s\n" % vec(d12)
         body += "qt6: [%g, 0.0, 0.0, 0.0, 0.0, 0.0]\n" % Q_TOP
-        body += "q_reaction: uniform\n"
     else:
         hdr += ["# FF-only: the classical model carries no derivative"
                 " or pressure",
