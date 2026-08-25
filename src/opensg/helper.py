@@ -9,4 +9,7 @@ works exactly as documented there (SG yaml -> plate .msh -> Abaqus
 opensg_solid.helper; this module just re-exports it under the short
 import the workflows use.
 """
-from opensg_solid.helper import plate_inp, plate_mesh   # noqa: F401
+from opensg_solid.helper import (                       # noqa: F401
+    abaqus_to_sm, abaqus_to_u, elem_mean_sm, elem_mean_u, load_3d_csv,
+    pair_cell, plate_inp, plate_mesh, ply_region, sg_centroids,
+    write_path_dat)
