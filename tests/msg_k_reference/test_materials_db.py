@@ -1,16 +1,18 @@
-"""Unit test: the material LIBRARY (io.materials_xml + io/materials.xml)
+"""Unit test: the material LIBRARY (io.materials_db + io/materials.yaml)
 and its `opensg msh_to_yaml --mat<K> NAME[:ANGLE]` CLI face, plus the
 --p_refine one-grade elevation route.
 
 Fixtures are synthetic gmsh 2.2 meshes: the two-hex/two-tag mesh of
 test_msh_to_yaml (library fill per physical tag) and a two-tet4 mesh
 (--p_refine -> conforming tet10 twin).  The library tests read the
-PACKAGED default opensg_solid/io/materials.xml; the CLI tests must emit
-yamls that pass check_filled when every tag and n_model are supplied,
-keep FILL_IN placeholders when they are not, and name every available
-material on an unknown-name miss.
+PACKAGED default opensg_solid/io/materials.yaml (the SG yamls' own
+material-block dialect -- filling is a passthrough); the CLI tests must
+emit yamls that pass check_filled when every tag and n_model are
+supplied, keep FILL_IN placeholders when they are not, name every
+available material on an unknown-name miss, and keep the console output
+to the terse two-line shape.
 
-Run:  pytest tests/msg_k_reference/test_materials_xml.py -q   (opensg_2_0)
+Run:  pytest tests/msg_k_reference/test_materials_db.py -q   (opensg_2_0)
 """
 import os
 
@@ -84,32 +86,35 @@ def tet_msh(tmp_path):
 
 
 def test_packaged_library_loads_and_is_seeded():
-    from opensg_solid.io.materials_xml import load_library, load_materials
+    from opensg_solid.io.materials_db import load_library, load_materials
 
     lib = load_library()
     assert lib["path"].replace("\\", "/").endswith(
-        "opensg_solid/io/materials.xml")
+        "opensg_solid/io/materials.yaml")
     mats = lib["materials"]
-    # the seeded cards the task names, case-insensitive, aliases included
+    # the seeded cards, case-insensitive, aliases included; blocks speak
+    # the SG yamls' own material dialect (elastic E/G/nu triples)
     al = mats["al"]
-    assert al["type"] == 0 and al["E"] == 7.0e10 and al["nu"] == 0.3
-    assert al["density"] == 2700.0
+    assert al["elastic"]["E"] == [7.0e10] * 3
+    assert al["elastic"]["nu"] == [0.3] * 3 and al["density"] == 2700.0
     assert mats["aluminum"] is al and mats["alu"] is al
     ply = mats["hc_ply"]
-    assert ply["type"] == 1
-    assert ply["engineering"] == (108000.0, 8000.0, 8000.0, 4000.0,
-                                  4000.0, 3000.0, 0.32, 0.32, 0.30)
-    assert mats["al69"]["E"] == 69000.0 and mats["hc_core"] is mats["al69"]
+    assert ply["elastic"]["E"] == [108000.0, 8000.0, 8000.0]
+    assert ply["elastic"]["G"] == [4000.0, 4000.0, 3000.0]
+    assert ply["elastic"]["nu"] == [0.32, 0.32, 0.30]
+    al69 = mats["al69"]
+    assert al69["elastic"]["E"] == [69000.0] * 3
+    assert mats["hc_core"] is al69
     # layups are informational descriptors, parsed but not solver-bound
     assert lib["layups"]["pm45_sym"] == [("HC_ply", 45.0), ("HC_ply", -45.0),
                                          ("HC_ply", -45.0), ("HC_ply", 45.0)]
     assert load_materials() is not None       # the {name: block} face
 
 
-def test_spec_parse_resolve_and_unknown_name():
-    from opensg_solid.io.materials_xml import (load_library, parse_spec,
-                                               resolve_spec,
-                                               to_solid_material)
+def test_spec_parse_resolve_unknown_and_xml_refusal():
+    from opensg_solid.io.materials_db import (find_library, load_library,
+                                              parse_spec, resolve_spec,
+                                              to_solid_material)
 
     assert parse_spec("Al") == ("Al", None)
     assert parse_spec("HC_ply:-45") == ("HC_ply", -45.0)
@@ -117,9 +122,10 @@ def test_spec_parse_resolve_and_unknown_name():
     lib = load_library()
     blk, ang = resolve_spec("hc_PLY:-45", lib)      # case-insensitive
     assert blk["name"] == "HC_ply" and ang == -45.0
+    # to_solid_material is a near-passthrough of the yaml dialect
     m = to_solid_material(blk, name="skin", angle=ang)
     assert m["name"] == "skin" and m["E"][0] == 108000.0
-    assert m["G"] == (4000.0, 4000.0, 3000.0) and m["angle"] == -45.0
+    assert m["G"] == [4000.0, 4000.0, 3000.0] and m["angle"] == -45.0
     iso = to_solid_material(lib["materials"]["al"])
     assert abs(iso["G"][0] - 7.0e10 / 2.6) < 1.0e-3   # G = E/(2(1+nu))
     with pytest.raises(ValueError, match="unknown material 'unobtanium'"):
@@ -127,6 +133,9 @@ def test_spec_parse_resolve_and_unknown_name():
     # ... and the miss NAMES the available cards
     with pytest.raises(ValueError, match="Al"):
         resolve_spec("unobtanium", lib)
+    # the XML schema is dropped: an explicit .xml path is refused clearly
+    with pytest.raises(ValueError, match="YAML now"):
+        find_library("old_library.xml")
 
 
 def test_cli_full_coverage_emits_filled_yaml(hex_msh, capsys):
@@ -139,7 +148,11 @@ def test_cli_full_coverage_emits_filled_yaml(hex_msh, capsys):
                "--mat2", "HC_ply:45", "--n_model", "3", "--refined", "0"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "FILLED -- runnable" in out and "materials from" in out
+    # the terse two-part shape: ONE transformation line + one mat line
+    # per tag; the packaged default library path is NOT printed
+    assert "two_hex.msh -> two_hex.yaml   (hex8 linear;" in out
+    assert "  mat 1 <- Al69" in out and "  mat 2 <- HC_ply:45" in out
+    assert "library:" not in out and "NOT RUNNABLE" not in out
     yml = os.path.splitext(hex_msh)[0] + ".yaml"
     assert check_filled(yml) is None
     hdr = read_yaml_header(yml)               # mesh_order must be TOLERATED
@@ -190,7 +203,12 @@ def test_cli_p_refine_elevates_then_converts(tet_msh, capsys):
                "--n_model", "3"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "elevated" in out and "ELEVATED" in out
+    # the chain rides INLINE on the one transformation line; the helper's
+    # own progress prints stay silent on this path
+    assert ("two_tet.msh -> two_tet_quad.msh -> two_tet_quad.yaml"
+            "   (tet10 quadratic; 14 nodes / 2 elements)") in out
+    assert "  mat 1 <- Al" in out
+    assert "linear_msh_to_quad" not in out
     quad = os.path.splitext(tet_msh)[0] + "_quad.msh"
     yml = os.path.splitext(tet_msh)[0] + "_quad.yaml"
     assert os.path.exists(quad) and os.path.exists(yml)

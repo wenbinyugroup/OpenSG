@@ -1,0 +1,163 @@
+# ======================================================================
+# materials.yaml : the OpenSG material LIBRARY.
+#
+# Read by opensg_solid.io.materials_db.load_materials and, through it, by
+# the `opensg msh_to_yaml --mat<K> NAME[:ANGLE]` flags (one per gmsh
+# physical tag K).  The schema IS the SG solid yamls' own material-block
+# dialect -- name / density / elastic {E, G, nu} triples (isotropic:
+# repeat the value, G = E/(2(1+nu)) precomputed) -- so filling a yaml is
+# a passthrough; each block may ALSO carry `aliases: [..]`, extra names
+# for the same card (all lookups case-insensitive).  A ply ANGLE is NOT
+# stored here: it is per-use, given on the CLI as NAME:ANGLE (deg, about
+# the thickness axis y3).  `layups:` entries are informational/reusable
+# stacking descriptors (not yet consumed by a solver route).
+#
+# UNITS ARE PER CARD and follow the study each card was lifted from; the
+# SI (Pa, kg/m3) cards and the MPa-mm cards are marked.  Every card was
+# swept from the repo's example yamls (dedupe by values); the source
+# file is named in the comment above it.
+# ======================================================================
+materials:
+
+# aluminum, SI (Pa, kg/m3) : the Bare/homo_convergence SP_solid cores
+# and 6_get_solid_props_from_3D_SG Sample_{1,2}_3Dsolid ("alu")
+- name: Al
+  aliases: [alu, aluminum]
+  density: 2700.0
+  elastic:
+    E: [7.0e+10, 7.0e+10, 7.0e+10]
+    G: [26923076923.076923, 26923076923.076923, 26923076923.076923]
+    nu: [0.3, 0.3, 0.3]
+
+# aluminum 69 GPa in MPa-mm units, density zeroed as in the study : the
+# CMC/HC sandwich core-wall material, "core" of
+# 9_get_plate_refined_rpops_from 3DSG/preovios_try.yaml
+- name: Al69
+  aliases: [hc_core, core_al]
+  density: 0.0
+  elastic:
+    E: [69000.0, 69000.0, 69000.0]
+    G: [26538.461538461539, 26538.461538461539, 26538.461538461539]
+    nu: [0.3, 0.3, 0.3]
+
+# the +-45 facesheet ply of the CMC/HC sandwich studies, MPa-mm, density
+# zeroed as in the study : preovios_try.yaml ply_p45/ply_m45 and
+# 3_get_plate_props_from_2D_SG/RHC_SW_2UC_45.yaml
+- name: HC_ply
+  density: 0.0
+  elastic:
+    E: [108000.0, 8000.0, 8000.0]
+    G: [4000.0, 4000.0, 3000.0]
+    nu: [0.32, 0.32, 0.30]
+
+# graphite-epoxy UD ply, SI : the 1DSG plate examples
+# (1_get_plate_props_from_1DSG/1dsg.yaml "ge")
+- name: ge
+  density: 1500.0
+  elastic:
+    E: [1.28e+11, 1.1e+10, 1.1e+10]
+    G: [4.48e+9, 4.48e+9, 1.53e+9]
+    nu: [0.25, 0.25, 0.25]
+
+# Herex-type foam core, SI : 1dsg.yaml "herex".  The study's G (50 MPa)
+# is NOT E/(2(1+nu)) -- not an isotropic card, the triples stand as is.
+- name: herex
+  density: 130.0
+  elastic:
+    E: [1.0363e+8, 1.0363e+8, 1.0363e+8]
+    G: [5.0e+7, 5.0e+7, 5.0e+7]
+    nu: [0.32, 0.32, 0.32]
+
+# epoxy matrix of the UD micromechanics SG, MPa-mm :
+# 5_get_solid_props_from_SG/UDcomp_2D.yaml "matrix"
+- name: ud_matrix
+  aliases: [epoxy]
+  density: 1200.0
+  elastic:
+    E: [4760.0, 4760.0, 4760.0]
+    G: [1737.2262773722625, 1737.2262773722625, 1737.2262773722625]
+    nu: [0.37, 0.37, 0.37]
+
+# carbon fiber of the UD micromechanics SG, MPa-mm : UDcomp_2D.yaml
+# "fiber"
+- name: ud_fiber
+  density: 1800.0
+  elastic:
+    E: [276000.0, 19500.0, 19500.0]
+    G: [70000.0, 70000.0, 5735.0]
+    nu: [0.28, 0.28, 0.70]
+
+# the Yu-2003 suite ply (psi units) : CS_OpeNSG_exampels/static/yu2003*
+# "yu"
+- name: yu2003
+  aliases: [yu]
+  density: 1.0
+  elastic:
+    E: [2.5e+7, 1.0e+6, 1.0e+6]
+    G: [5.0e+5, 5.0e+5, 2.0e+5]
+    nu: [0.25, 0.25, 0.25]
+
+# the Pagano material, SI : CS_OpeNSG_exampels/static/garg/caseA
+# "pagano"
+- name: pagano
+  density: 1.0
+  elastic:
+    E: [2.5e+10, 1.0e+9, 1.0e+9]
+    G: [5.0e+8, 5.0e+8, 2.0e+8]
+    nu: [0.25, 0.25, 0.25]
+
+# Garg case-B AS4/3501-6 graphite-epoxy, SI : garg/caseB "as4"
+- name: as4
+  density: 1.0
+  elastic:
+    E: [1.81e+11, 1.03e+10, 1.03e+10]
+    G: [7.17e+9, 7.17e+9, 3.5e+9]
+    nu: [0.28, 0.28, 0.28]
+
+# Garg case-C facesheet, SI : garg/caseC "face"
+- name: garg_face
+  density: 1.0
+  elastic:
+    E: [1.31e+11, 1.034e+10, 1.034e+10]
+    G: [6.205e+9, 6.205e+9, 3.0e+9]
+    nu: [0.22, 0.22, 0.22]
+
+# Garg case-C core, SI.  G is not E/(2(1+nu)); the triples stand as is.
+- name: garg_core
+  density: 1.0
+  elastic:
+    E: [5.776e+8, 5.776e+8, 5.776e+8]
+    G: [1.079e+8, 1.079e+8, 1.079e+8]
+    nu: [0.0025, 0.0025, 0.0025]
+
+# the taper-segment benchmarks' iso material, SI :
+# OpenSG_shell/5_taper_segment_aperiodic_boundaries "iso"
+- name: iso_taper
+  density: 1800.0
+  elastic:
+    E: [7.0e+10, 7.0e+10, 7.0e+10]
+    G: [26923076923.076923, 26923076923.076923, 26923076923.076923]
+    nu: [0.3, 0.3, 0.3]
+
+# the taper-segment benchmarks' orthotropic material, SI :
+# 5_taper_segment_aperiodic_boundaries "ani"
+- name: ani_taper
+  density: 1800.0
+  elastic:
+    E: [3.7e+10, 9.0e+9, 9.0e+9]
+    G: [4.0e+9, 4.0e+9, 4.0e+9]
+    nu: [0.3, 0.3, 0.3]
+
+# informational stacking descriptors (not yet consumed by a solver
+# route): the CMC/HC facesheet layups
+layups:
+- name: pm45
+  plies:
+  - {material: HC_ply, angle: 45}
+  - {material: HC_ply, angle: -45}
+- name: pm45_sym
+  plies:
+  - {material: HC_ply, angle: 45}
+  - {material: HC_ply, angle: -45}
+  - {material: HC_ply, angle: -45}
+  - {material: HC_ply, angle: 45}

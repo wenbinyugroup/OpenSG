@@ -20,8 +20,8 @@ check_filled), exactly as the shell twin does for a missing layup.  The
 caller has TWO ways to supply materials: the classic `materials=[...]` list
 (one dict per phase, fully runnable output), or a `materials={tag: mdict}`
 DICT keyed by gmsh physical tag -- the library route `opensg msh_to_yaml
---mat<K> NAME[:ANGLE]` uses (names resolved in io.materials_xml's
-materials.xml).  A dict may cover only SOME tags: covered sets come out
+--mat<K> NAME[:ANGLE]` uses (names resolved in io.materials_db's
+materials.yaml).  A dict may cover only SOME tags: covered sets come out
 filled, uncovered sets keep their FILL_IN placeholders, and the header's
 n_model stays a FILL_IN placeholder unless the caller pins it -- the
 engine's silent default (2, plate) picking the wrong macro model is exactly
@@ -204,7 +204,7 @@ def _template_banner():
          " material",
          "# library instead: --mat<TAG> NAME[:ANGLE] per gmsh physical tag"
          " (see",
-         "# io/materials.xml and io/materials_xml.py).",
+         "# io/materials.yaml and io/materials_db.py).",
          "# " + "=" * 70]
 
 
@@ -288,9 +288,10 @@ def convert(msh_path, out_path=None, materials=None, phases=None,
          refined int | None -- 0 classical, 1 shear-refined: written into
              the header when given, else left to the engine default
     Out: dict {path, n_nodes, n_elements, npe, order str (linear |
-         quadratic), sets {name: count}, missing [str] set names still
-         carrying placeholders, filled bool (False = placeholders
-         remain)}; the yaml is written to `path`."""
+         quadratic), cell str (tet4/hex8/...), sets {name: count},
+         missing [str] set names still carrying placeholders, filled
+         bool (False = placeholders remain)}; the yaml is written to
+         `path`."""
     if n_model is not None and int(n_model) not in (1, 2, 3):
         raise ValueError("n_model must be 1 (beam), 2 (plate) or 3 (solid),"
                          " got %r" % (n_model,))
@@ -385,6 +386,6 @@ def convert(msh_path, out_path=None, materials=None, phases=None,
     with open(path, "w") as f:
         f.write("\n".join(out) + "\n")
     return {"path": path, "n_nodes": len(nd), "n_elements": len(cells),
-            "npe": M["npe"], "order": order, "sets": counts,
-            "missing": missing,
+            "npe": M["npe"], "order": order, "cell": cell_name,
+            "sets": counts, "missing": missing,
             "filled": bool(mats) or (by_tag is not None and not missing)}

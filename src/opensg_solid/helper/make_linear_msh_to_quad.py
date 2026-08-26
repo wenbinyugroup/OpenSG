@@ -24,7 +24,9 @@ gmsh-to-basix permutation expects):
 
 In:  msh_path str -- gmsh ASCII version 2.2 (the project writers'
      dialect; binary or 4.x files are refused with the re-export hint);
-     out str | None -- output path (None -> <stem>_quad.msh)
+     out str | None -- output path (None -> <stem>_quad.msh);
+     verbose bool -- False silences the two progress prints (the
+     `opensg msh_to_yaml --p_refine` path keeps its own output terse)
 Out: dict {msh, n_nodes, n_corner, n_midside, n_elems} -- and the
      written file.
 """
@@ -42,10 +44,11 @@ _EDGE_SLOTS = {
 _NCORNER = {4: 4, 2: 3, 1: 2}
 
 
-def linear_msh_to_quad(msh_path, out=None):
+def linear_msh_to_quad(msh_path, out=None, verbose=True):
     """Convert a linear gmsh 2.2 mesh to its conforming quadratic twin.
 
-    In:  msh_path str; out str | None (None -> <stem>_quad.msh)
+    In:  msh_path str; out str | None (None -> <stem>_quad.msh);
+         verbose bool -- False silences the progress prints
     Out: dict {msh, n_nodes, n_corner, n_midside, n_elems}."""
     t0 = time.perf_counter()
     with open(msh_path) as f:
@@ -115,9 +118,10 @@ def linear_msh_to_quad(msh_path, out=None):
     inv_of = {k: inv[offs[j]:offs[j + 1]]
               for k, j in chunk_of.items()}
 
-    print("linear_msh_to_quad: %s -- %d nodes, %d elements, %d unique"
-          " edges -> +%d midside nodes"
-          % (os.path.basename(msh_path), nn, ne, len(uniq), len(uniq)))
+    if verbose:
+        print("linear_msh_to_quad: %s -- %d nodes, %d elements, %d unique"
+              " edges -> +%d midside nodes"
+              % (os.path.basename(msh_path), nn, ne, len(uniq), len(uniq)))
 
     out = out or os.path.splitext(msh_path)[0] + "_quad.msh"
     with open(out, "w", buffering=1 << 22) as f:
@@ -152,8 +156,9 @@ def linear_msh_to_quad(msh_path, out=None):
             for row in out_rows:
                 f.write(" ".join(str(int(x)) for x in row) + "\n")
         f.write("$EndElements\n")
-    print("linear_msh_to_quad: wrote %s  (%d nodes / %d elements,"
-          " %.1f s)" % (out, nn + len(uniq), ne,
-                        time.perf_counter() - t0))
+    if verbose:
+        print("linear_msh_to_quad: wrote %s  (%d nodes / %d elements,"
+              " %.1f s)" % (out, nn + len(uniq), ne,
+                            time.perf_counter() - t0))
     return {"msh": out, "n_nodes": nn + len(uniq), "n_corner": nn,
             "n_midside": len(uniq), "n_elems": ne}
