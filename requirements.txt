@@ -1,15 +1,12 @@
 numpy
 numba
 meshio
-# CPU-only version
-#jax
-# GPU version with CUDA 12
-#jax[cuda12]
-#cupy-cuda12x
-# GPU version with CUDA 13 (recommended)
-#jax[cuda13]
-#cupy-cuda13x
+# GPU (CUDA 12) by default -- falls back to CPU where no GPU exists.
+# Lean CPU-only alternative: replace the two lines with plain `jax`.
+jax[cuda12]
+cupy-cuda12x
 jaxopt
+pyamg
 libigl
 matplotlib
 mpi4py
@@ -17,5 +14,5 @@ fenics-basix
 psutil
 scipy
 flax
-# Intel MKL Pardiso solver (optional)
-#pypardiso
+# Intel MKL Pardiso solver (the direct default)
+pypardiso

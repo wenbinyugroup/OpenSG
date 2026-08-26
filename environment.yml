@@ -20,14 +20,18 @@ dependencies:
   - psutil
   - pip
   - pip:
-    # JAX stack -- CPU build (verified). For GPU replace the two pins with:
-    #   jax[cuda13]  (recommended) or jax[cuda12], plus cupy-cuda13x / cupy-cuda12x,
-    #   and use the cg solver instead of pypardiso (MKL/CPU only).
-    - jax==0.10.2
-    - jaxlib==0.10.2
+    # JAX stack -- GPU (CUDA 12) by DEFAULT: the env works on any
+    # machine (jax falls back to CPU where no GPU exists; the nvidia
+    # wheels ~2.5 GB are the only cost there).  For a lean CPU-only
+    # env replace jax[cuda12] + cupy-cuda12x with:
+    #   - jax==0.10.2
+    #   - jaxlib==0.10.2
+    - jax[cuda12]
+    - cupy-cuda12x
     - jaxopt
     - flax
     - libigl
+    - pyamg
     - pypardiso
     - windio
     - -e .
