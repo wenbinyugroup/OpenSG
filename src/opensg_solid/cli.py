@@ -335,7 +335,7 @@ def main(argv=None):
               " (tau subsumes them) or use uniform")
     r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)),
                       q_reaction=q_react,
-                      solver=solver or "direct",
+                      solver=solver or "auto",
                       recovery=(analysis == "D"))
     print(r["law_title"] + ":")
     print(r["law"])

@@ -973,6 +973,19 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
 
     nn = sorted({len(c) for c in sc["cells"]})
     mixed = len(nn) != 1
+    if solver == "auto":
+        # pick the fastest LEGAL family for this SG and machine: on a
+        # GPU the matrix-free CG runs device-resident and direct would
+        # waste the card; everywhere else (CPU, mixed SGs, beams,
+        # aperiodic -- the routes CG does not cover) direct/PARDISO is
+        # the right default.  Explicit --solver always wins upstream.
+        has_gpu = any(d.platform == "gpu" for d in jax.devices())
+        solver = ("cg" if (has_gpu and not mixed and n_model != 1
+                           and boundary != "aperiodic")
+                  else "direct")
+        print(" solver    : auto -> %s%s" % (
+            solver, " (GPU detected)" if solver == "cg" else
+            " (no GPU%s)" % ("" if not mixed else "; mixed SG")))
     if mixed and n_model == 1:
         raise ValueError("mixed element types: the beam (n_model 1) "
                          "KKT route is single-batch; split the mesh or "
