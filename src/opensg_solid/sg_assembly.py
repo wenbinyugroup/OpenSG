@@ -51,6 +51,7 @@ core, resolved by opensg_solid/__init__ via $FE_JAX_CORE.
 #   D1                  (cases, cases) = -(V0^T RHS)
 # ----------------------------------------------------------------------------
 """
+import os
 from functools import partial
 
 import numpy as np
@@ -203,10 +204,14 @@ def calculate_RHS_and_Ke_batch_periodic(
     # jacfwd's per-element AD intermediates scale ~ Q * (N*3)^2 doubles;
     # one whole-mesh vmap transiently materializes E times that -- 201 GB
     # for 458k tet10 (Q = 61, 30x30), invisible for tet4.  CHUNK the
-    # element axis so the transient stays ~4 GB; the kernel and digits
-    # are identical, results concatenate on the host.
+    # element axis so the transient stays inside a budget; the kernel and
+    # digits are identical, results concatenate.
+    # OPENSG_SLAB_BYTES sets that budget (default 4 GB, the CPU value).
+    # On a GPU the slab lives in DEVICE memory alongside everything else,
+    # so a 16 GB card wants ~1e9; set it before importing/running.
     E_tot = int(x_end.shape[0])
-    _chunk = max(1, int(4e9 / (int(W_q.shape[0]) * (N * U) ** 2 * 8)))
+    _budget = float(os.environ.get("OPENSG_SLAB_BYTES", 4e9))
+    _chunk = max(1, int(_budget / (int(W_q.shape[0]) * (N * U) ** 2 * 8)))
     if E_tot <= _chunk:
         R_end_cases, J_uu_batch = batch_processor(u_end, x_end, C_ess)
     else:
