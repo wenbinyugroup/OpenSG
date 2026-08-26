@@ -336,16 +336,12 @@ def amg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     fine = {k: levels[0][k] for k in ("d", "c", "r")}
     nnz = A_csr.nnz
     del A_csr
-    print(" amg: %d dofs / %d nnz -> %d+1 levels, B %d modes"
-          " (setup %.1f s)" % (n_unique, nnz, len(levels), B.shape[1],
-                               time.perf_counter() - t0))
+    # terse-console rule: no setup/progress chatter -- the law and the
+    # timed .out are the results; warnings alone are loud
+    del nnz, t0
     RHS = -np.asarray(Dhe)
     RHS[np.asarray(pin, np.int64)] = 0.0
-    t1 = time.perf_counter()
     V0, iters, _ = solve_columns(levels, coarse, fine, RHS, rtol)
-    print(" amg: V0 %d cols, iters %s (%.1f s, jax %s)"
-          % (RHS.shape[1], iters, time.perf_counter() - t1,
-             jax.default_backend()))
     V0_matrix = jnp.asarray(V0)
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
     D_bar, omega = compute_homogenized_constants(
@@ -393,8 +389,7 @@ def make_constrained_solver(ctx, D_hh, w_dof, scl):
                                     b2, ctx["rtol"])
         c = -(w_dof[:, None] * X).reshape(-1, 3, m).sum(axis=0) / sw
         X += c[comp]                                   # <w> = 0 gauge
-        print(" amg ladder: %d cols, iters %s (%.1f s)"
-              % (m, iters, time.perf_counter() - t0))
+        del iters, t0                    # terse console: results only
         return X
 
     return solve_constrained
