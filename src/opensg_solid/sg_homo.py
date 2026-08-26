@@ -861,9 +861,16 @@ def resolve_auto_solver(dofs, amg_ok, iter_ok, wall=None):
         return ("amg", "%s dofs >= %s wall%s"
                 % (_fmt_dofs(dofs), _fmt_dofs(wall), big), None)
     if iter_ok:
-        return ("cg", "%s dofs >= %s wall; pip install pyamg for"
-                " amg%s" % (_fmt_dofs(dofs), _fmt_dofs(wall), big),
-                None)
+        # NO silent cg fallback: above the wall cheb-CG runs for HOURS
+        # (measured 158x slower than direct at 289k dofs) -- burning a
+        # day is worse than stopping with the one-line fix.  cg stays
+        # reachable explicitly (--solver cg).
+        raise SystemExit(
+            "auto: %s dofs is above the %s direct wall and amg needs"
+            " pyamg, which is not installed.\n  pip install pyamg\n"
+            "then rerun (auto -> amg).  To force other routes:"
+            " --solver cg (slow) or --solver direct (may exhaust RAM)."
+            % (_fmt_dofs(dofs), _fmt_dofs(wall)))
     return ("direct", "%s dofs >= %s wall -- attempting anyway"
             % (_fmt_dofs(dofs), _fmt_dofs(wall)),
             "WARNING: %s dofs is above the %s direct memory wall (the"
