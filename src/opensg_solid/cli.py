@@ -5,23 +5,13 @@
     opensg_solid <sg.yaml> --mesh  the run above, AND force a redraw of
                                   <base>_mesh.png (a flag, not an
                                   analysis: combines with H | D)
-    opensg_solid <sg.yaml> --solver F [N]  pick the linear solver of
-                                  the fluctuation solves.  F = direct
-                                  (assembled sparse factorization,
-                                  CPU) or iter (preconditioned CG,
-                                  device-resident: the GPU route, and
-                                  the one past the direct memory wall
-                                  at ~1M dofs).  N picks the backend
-                                  inside the family; `--solver` alone,
-                                  `--solver help` or `--solver_help`
-                                  prints the full ranked menu.  No
-                                  flag = auto (dof-banded, see menu).
-                                  Shorthands: --gpu /
-                                  --solver cg = iter 1; --solver
-                                  amg = iter 2; --solver stream =
-                                  iter 3; --solver pardiso / superlu
-                                  = direct 1 / 2.
-                                  A flag, combines with H | D
+    opensg_solid <sg.yaml> --solver F [N]  the linear solver of the
+                                  fluctuation solves: family direct |
+                                  iter (+ backend number), or a name
+                                  (pardiso superlu cg amg stream).
+                                  Bare --solver prints the menu; no
+                                  flag = auto by dofs.  A flag,
+                                  combines with H | D
 
 No flags, no codes: everything else lives in the yaml header (the
 leading scalar keys above the mesh blocks), and every key has a default
@@ -88,70 +78,19 @@ BANNER = """
 """
 
 SOLVER_MENU = """\
- --solver menu -- the linear solver of the fluctuation solves
- (ranked fastest first among the AVAILABLE backends; every option
- returns the same digits -- direct is exact, iter's error enters the
- stiffness at SECOND order of the CG tolerance, 1e-6 -> ~1e-12)
+ --solver <family> [n] | <name>     no flag = auto by dofs
+                                    (wall: OPENSG_DIRECT_WALL, 1.2e6)
 
-   direct     assembled-matrix sparse factorization (CPU).  One factor
-              serves every load column and both V0/V1 solves: the
-              fastest choice below ~1M dofs.
-     direct 1   pardiso   MKL PARDISO (pypardiso), multithreaded --
-                          the DEFAULT.  Every symmetric solve is
-                          residual-checked and falls back on failure.
-                          Needs x86/MKL; int32 indices (nnz < 2^31)
-     direct 2   superlu   scipy SuperLU, serial partial pivoting --
-                          the most robust factorization on an
-                          ill-conditioned KKT, and what the auto
-                          fallback uses when pypardiso is missing.
-                          20-200x slower; memory wall near 1e6 dofs
-     direct 3   mumps     PETSc MUMPS (portable, int64)     [PLANNED]
-     direct 4   cudss     NVIDIA cuDSS GPU factorization    [PLANNED]
+   auto       direct below the wall, amg above -- same on every machine
+   direct 1   pardiso  MKL, multithreaded (direct default)
+   direct 2   superlu  scipy fallback -- robust, slow
+   iter 1     cg       matrix-free EBE Chebyshev CG
+   iter 2     amg      AMG-preconditioned CG; runs on the GPU when
+                       jax sees one (needs pyamg)
+   iter 3     stream   host-streamed EBE CG for >10M dofs  [WIP]
 
-   iter       matrix-free preconditioned CG, fully device-resident:
-              runs on the GPU when jax sees one (pip install
-              .[cuda12]).  The route past the direct solvers' memory
-              wall (>~1M dofs).  Single-element-type PERIODIC SGs
-              only: mixed hex+tet and aperiodic SGs need direct.
-     iter 1     cheb      EBE block-Jacobi + Chebyshev(4) CG (--gpu /
-                          --solver cg land here; the auto fallback on
-                          a GPU without pyamg).  Never assembles the
-                          matrix: the memory-lightest route, the one
-                          that still runs at >~10M dofs or in tight
-                          GPU memory; weak on high-contrast SGs
-     iter 2     amg       smoothed-aggregation AMG-preconditioned CG
-                          (pyamg).  The hierarchy is built ONCE on
-                          the CPU from the assembled CSR; the
-                          Chebyshev(3)-smoothed V-cycle + the
-                          column-batched CG then run in jax FP64 on
-                          the default device (GPU when jax sees one).
-                          ONE hierarchy serves the V0 columns AND the
-                          refined-plate ladder (no KKT
-                          factorization), so memory ~ the assembled
-                          CSR without fill-in: runs where direct
-                          dies, and shrugs at the high-contrast
-                          conditioning that stalls cheb.  Needs
-                          pyamg (pip install .[amg])
-     iter 3     stream    chunked host-resident EBE CG -- the
-                          >RAM-of-device route (~20M dofs on 93 GB);
-                          slower per iteration than iter 1, the only
-                          route when the element blocks exceed device
-                          memory.  Blocks are computed slab-by-slab
-                          and packed (symmetric half) in host numpy;
-                          shear-refined plate runs are
-                          homogenization-only (analysis H).  Never a
-                          default -- ask for it
-
- shorthands: --gpu = iter 1; --solver amg = iter 2;
-             --solver stream = iter 3;
-             --solver pardiso / superlu = direct 1 / 2
-
- auto (no --solver given): dof-banded, IDENTICAL on every machine --
- direct below the ~1.2M-dof direct memory wall, amg above it (cheb CG
- when pyamg is missing); $OPENSG_DIRECT_WALL moves the band.  A GPU
- changes where the iterative solvers execute, never which one auto
- picks.  auto never picks stream: ask for iter 3 at >~10M dofs.
- Explicit --solver always wins.
+ names: --solver pardiso | superlu | cg | amg | stream
+ every option returns the same law digits
 """
 
 
