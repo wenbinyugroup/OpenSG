@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ======================================================================
+  materials.xml : the OpenSG material LIBRARY (PreVABS-flavored schema).
+
+  Read by opensg_solid.io.materials_xml.load_materials and, through it, by
+  the `opensg msh_to_yaml` mat flags (one per gmsh physical tag K:
+  `mat<K> NAME[:ANGLE]`, double-dash prefixed).  Names are matched
+  CASE-INSENSITIVELY; an `aliases` attribute registers extra names for the
+  same card.  Two material types:
+
+    <material name="X" type="isotropic">   <density>d</density>
+        <elastic><e>E</e><nu>nu</nu></elastic>
+    <material name="X" type="orthotropic"> <density>d</density>
+        <elastic><e1>..</e1><e2>..</e2><e3>..</e3>
+                 <g12>..</g12><g13>..</g13><g23>..</g23>
+                 <nu12>..</nu12><nu13>..</nu13><nu23>..</nu23></elastic>
+
+  A ply ANGLE is NOT stored here: it is per-use, given on the CLI as
+  NAME:ANGLE (deg, about the thickness axis y3).  <layup> entries are
+  informational/reusable stacking descriptors (not yet consumed by a
+  solver route).
+
+  UNITS ARE PER CARD and follow the study each card was lifted from;
+  the SI (Pa, kg/m3) cards and the MPa-mm cards are marked.  Every card
+  was swept from the repo's example yamls (dedupe by values); the source
+  file is named in the comment above it.
+====================================================================== -->
+<materials>
+
+  <!-- aluminum, SI (Pa, kg/m3) : the Bare/homo_convergence SP_solid cores
+       and 6_get_solid_props_from_3D_SG Sample_{1,2}_3Dsolid ("alu") -->
+  <material name="Al" type="isotropic" aliases="alu,aluminum">
+    <density>2700</density>
+    <elastic><e>7.0e10</e><nu>0.3</nu></elastic>
+  </material>
+
+  <!-- aluminum 69 GPa in MPa-mm units, density zeroed as in the study :
+       the CMC/HC sandwich core-wall material, "core" of
+       9_get_plate_refined_rpops_from 3DSG/preovios_try.yaml -->
+  <material name="Al69" type="isotropic" aliases="hc_core,core_al">
+    <density>0.0</density>
+    <elastic><e>69000</e><nu>0.3</nu></elastic>
+  </material>
+
+  <!-- the +-45 facesheet ply of the CMC/HC sandwich studies, MPa-mm,
+       density zeroed as in the study : preovios_try.yaml ply_p45/ply_m45
+       and 3_get_plate_props_from_2D_SG/RHC_SW_2UC_45.yaml -->
+  <material name="HC_ply" type="orthotropic">
+    <density>0.0</density>
+    <elastic><e1>108000</e1><e2>8000</e2><e3>8000</e3>
+             <g12>4000</g12><g13>4000</g13><g23>3000</g23>
+             <nu12>0.32</nu12><nu13>0.32</nu13><nu23>0.30</nu23></elastic>
+  </material>
+
+  <!-- graphite-epoxy UD ply, SI : the 1DSG plate examples
+       (1_get_plate_props_from_1DSG/1dsg.yaml "ge") -->
+  <material name="ge" type="orthotropic">
+    <density>1500</density>
+    <elastic><e1>128e9</e1><e2>11e9</e2><e3>11e9</e3>
+             <g12>4.48e9</g12><g13>4.48e9</g13><g23>1.53e9</g23>
+             <nu12>0.25</nu12><nu13>0.25</nu13><nu23>0.25</nu23></elastic>
+  </material>
+
+  <!-- Herex-type foam core, SI : 1dsg.yaml "herex".  Kept type-1: the
+       study's G (50 MPa) is NOT E/(2(1+nu)), so not an isotropic card. -->
+  <material name="herex" type="orthotropic">
+    <density>130</density>
+    <elastic><e1>103.63e6</e1><e2>103.63e6</e2><e3>103.63e6</e3>
+             <g12>50e6</g12><g13>50e6</g13><g23>50e6</g23>
+             <nu12>0.32</nu12><nu13>0.32</nu13><nu23>0.32</nu23></elastic>
+  </material>
+
+  <!-- epoxy matrix of the UD micromechanics SG, MPa-mm :
+       5_get_solid_props_from_SG/UDcomp_2D.yaml "matrix" -->
+  <material name="ud_matrix" type="isotropic" aliases="epoxy">
+    <density>1200</density>
+    <elastic><e>4760</e><nu>0.37</nu></elastic>
+  </material>
+
+  <!-- carbon fiber of the UD micromechanics SG, MPa-mm :
+       UDcomp_2D.yaml "fiber" -->
+  <material name="ud_fiber" type="orthotropic">
+    <density>1800</density>
+    <elastic><e1>276000</e1><e2>19500</e2><e3>19500</e3>
+             <g12>70000</g12><g13>70000</g13><g23>5735</g23>
+             <nu12>0.28</nu12><nu13>0.28</nu13><nu23>0.70</nu23></elastic>
+  </material>
+
+  <!-- the Yu-2003 suite ply (psi units) : CS_OpeNSG_exampels/static/
+       yu2003* "yu" -->
+  <material name="yu2003" type="orthotropic" aliases="yu">
+    <density>1.0</density>
+    <elastic><e1>25e6</e1><e2>1e6</e2><e3>1e6</e3>
+             <g12>0.5e6</g12><g13>0.5e6</g13><g23>0.2e6</g23>
+             <nu12>0.25</nu12><nu13>0.25</nu13><nu23>0.25</nu23></elastic>
+  </material>
+
+  <!-- the Pagano material, SI : CS_OpeNSG_exampels/static/garg/caseA
+       "pagano" -->
+  <material name="pagano" type="orthotropic">
+    <density>1.0</density>
+    <elastic><e1>25e9</e1><e2>1e9</e2><e3>1e9</e3>
+             <g12>0.5e9</g12><g13>0.5e9</g13><g23>0.2e9</g23>
+             <nu12>0.25</nu12><nu13>0.25</nu13><nu23>0.25</nu23></elastic>
+  </material>
+
+  <!-- Garg case-B AS4/3501-6 graphite-epoxy, SI : garg/caseB "as4" -->
+  <material name="as4" type="orthotropic">
+    <density>1.0</density>
+    <elastic><e1>181e9</e1><e2>10.3e9</e2><e3>10.3e9</e3>
+             <g12>7.17e9</g12><g13>7.17e9</g13><g23>3.5e9</g23>
+             <nu12>0.28</nu12><nu13>0.28</nu13><nu23>0.28</nu23></elastic>
+  </material>
+
+  <!-- Garg case-C facesheet, SI : garg/caseC "face" -->
+  <material name="garg_face" type="orthotropic">
+    <density>1.0</density>
+    <elastic><e1>131e9</e1><e2>10.34e9</e2><e3>10.34e9</e3>
+             <g12>6.205e9</g12><g13>6.205e9</g13><g23>3.0e9</g23>
+             <nu12>0.22</nu12><nu13>0.22</nu13><nu23>0.22</nu23></elastic>
+  </material>
+
+  <!-- Garg case-C core, SI.  Kept type-1: G is not E/(2(1+nu)). -->
+  <material name="garg_core" type="orthotropic">
+    <density>1.0</density>
+    <elastic><e1>577.6e6</e1><e2>577.6e6</e2><e3>577.6e6</e3>
+             <g12>107.9e6</g12><g13>107.9e6</g13><g23>107.9e6</g23>
+             <nu12>0.0025</nu12><nu13>0.0025</nu13><nu23>0.0025</nu23></elastic>
+  </material>
+
+  <!-- the taper-segment benchmarks' iso material, SI :
+       OpenSG_shell/5_taper_segment_aperiodic_boundaries "iso" -->
+  <material name="iso_taper" type="isotropic">
+    <density>1800</density>
+    <elastic><e>70e9</e><nu>0.3</nu></elastic>
+  </material>
+
+  <!-- the taper-segment benchmarks' orthotropic material, SI :
+       5_taper_segment_aperiodic_boundaries "ani" -->
+  <material name="ani_taper" type="orthotropic">
+    <density>1800</density>
+    <elastic><e1>37e9</e1><e2>9e9</e2><e3>9e9</e3>
+             <g12>4e9</g12><g13>4e9</g13><g23>4e9</g23>
+             <nu12>0.3</nu12><nu13>0.3</nu13><nu23>0.3</nu23></elastic>
+  </material>
+
+  <!-- informational stacking descriptors (not yet consumed by a solver
+       route): the CMC/HC facesheet layups -->
+  <layup name="pm45">
+    <ply material="HC_ply" angle="45"/>
+    <ply material="HC_ply" angle="-45"/>
+  </layup>
+  <layup name="pm45_sym">
+    <ply material="HC_ply" angle="45"/>
+    <ply material="HC_ply" angle="-45"/>
+    <ply material="HC_ply" angle="-45"/>
+    <ply material="HC_ply" angle="45"/>
+  </layup>
+
+</materials>

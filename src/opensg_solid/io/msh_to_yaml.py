@@ -17,6 +17,15 @@ material is a modelling decision the mesh cannot supply.  When the caller
 gives none, `materials:` comes out as a marked FILL_IN template: the file is
 deliberately NOT runnable and opensg_solid rejects it by name (see
 check_filled), exactly as the shell twin does for a missing layup.  The
+caller has TWO ways to supply materials: the classic `materials=[...]` list
+(one dict per phase, fully runnable output), or a `materials={tag: mdict}`
+DICT keyed by gmsh physical tag -- the library route `opensg msh_to_yaml
+--mat<K> NAME[:ANGLE]` uses (names resolved in io.materials_xml's
+materials.xml).  A dict may cover only SOME tags: covered sets come out
+filled, uncovered sets keep their FILL_IN placeholders, and the header's
+n_model stays a FILL_IN placeholder unless the caller pins it -- the
+engine's silent default (2, plate) picking the wrong macro model is exactly
+the footgun this refuses to reintroduce.  The
 orientation is not in a .msh either -- gmsh 2.2 carries $Nodes, $Elements
 and physical tags, no per-element frames -- so a constant frame is written
 (the caller's `orientation=`, default e1 out of plane).  One `sets:
@@ -30,14 +39,20 @@ SG drivers read (UDcomp_2D.yaml, square_tube_2Dsolid.yaml), NOT the
 opensg_solid.sg_mesh.load_sg_input.
 
 Only the element types the solid drivers accept are converted -- 3-node
-triangles (gmsh type 2), 4-node quads (type 3), 4-node tets (type 4) and
-8-node hexes (type 5).  The 0-/1-D entities gmsh writes for physical points
-and curves are skipped; anything else is an error.
+triangles (gmsh type 2), 4-node quads (type 3), 4-node tets (type 4),
+8-node hexes (type 5) and 10-node tets (type 11, the quadratic grade
+helper.linear_msh_to_quad emits).  The 0-/1-D entities gmsh writes for
+physical points and curves are skipped; anything else is an error.  The
+yaml header records the grade as an informational `mesh_order:` key
+(linear | quadratic -- the solver itself reads the arity off the cells).
 
 Use:  from opensg_solid.io.msh_to_yaml import convert
       convert("UDcomp_2D.msh", materials=[...], phases=[("matrix", 0),
                                                         ("fiber", 1)])
       convert("SP_solid.msh")                  # mesh-only FILL_IN template
+      convert("SP_solid.msh", n_model=2, refined=1,
+              materials={1: {"name": "-", "density": 2700.0, "E": 7e10,
+                             "G": 2.6923e10, "nu": 0.3}})   # library route
 """
 import os
 
@@ -48,13 +63,17 @@ import numpy as np
 FILL = "FILL_IN"
 
 # gmsh element type -> node count, for the types the solid loaders accept
-_SOLID_TYPES = {2: 3, 3: 4, 4: 4, 5: 8}
+_SOLID_TYPES = {2: 3, 3: 4, 4: 4, 5: 8, 11: 10}
 # gmsh 0-/1-D entities: written for physical points/curves, not solid cells
 _SKIP_TYPES = {15: 1, 1: 2, 8: 3}
 _TYPE_NAME = {6: "6-node prism", 7: "5-node pyramid",
               9: "6-node triangle (2nd order)", 10: "9-node quad (2nd order)",
-              11: "10-node tetrahedron (2nd order)",
-              16: "8-node quad (2nd order)"}
+              16: "8-node quad (2nd order)",
+              29: "20-node tetrahedron (3rd order)"}
+# accepted type -> (the informational `mesh_order:` word, the cell name)
+_ORDER_OF = {2: ("linear", "tri3"), 3: ("linear", "quad4"),
+             4: ("linear", "tet4"), 5: ("linear", "hex8"),
+             11: ("quadratic", "tet10")}
 
 # the default per-element frame of a 2-D cross-section SG: e1 along the beam
 # axis (out of plane, +z), e2 = +x, e3 = +y -- the frame the 2-D solid SG
@@ -96,7 +115,7 @@ def read_msh22(path):
         bad = sorted(t for t in kinds if t not in _SKIP_TYPES)
         raise ValueError(
             "%s carries no element type the solid loaders accept (3-node tri,"
-            " 4-node quad, 4-node tet, 8-node hex); it has %s"
+            " 4-node quad, 4-/10-node tet, 8-node hex); it has %s"
             % (os.path.basename(path),
                ", ".join(_TYPE_NAME.get(t, "gmsh type %d" % t) for t in bad)
                or "only 0-/1-D entities"))
@@ -142,14 +161,27 @@ def _material_block(m):
     return out
 
 
-def _material_template_block(set_names):
-    """The `materials:` yaml lines of the FILL_IN template -- one entry per
-    element set, the NAMES already filled (the reader binds sets to
-    materials by name), every number a placeholder.
+def _material_template_entry(set_name):
+    """The placeholder yaml lines of ONE still-unfilled material.
 
-    In:  set_names list[str] -- the `sets: element:` names, in order
-    Out: list[str] -- the banner comment + the placeholder entries."""
-    o = ["# " + "=" * 70,
+    In:  set_name str -- the `sets: element:` name the entry must carry
+         (the reader binds sets to materials by name)
+    Out: list[str] -- the `- name: ...` FILL_IN entry lines."""
+    return ["- name: %s" % set_name,
+            "  density: %s_DENSITY_KG_M3" % FILL,
+            "  elastic:",
+            "    E: [{0}_E1, {0}_E2, {0}_E3]".format(FILL),
+            "    G: [{0}_G12, {0}_G13, {0}_G23]".format(FILL),
+            "    nu: [{0}_NU12, {0}_NU13, {0}_NU23]".format(FILL)]
+
+
+def _template_banner():
+    """The comment banner above a `materials:` block that still carries
+    FILL_IN placeholders.
+
+    In:  --
+    Out: list[str] -- the comment lines."""
+    return ["# " + "=" * 70,
          "# TEMPLATE -- the mesh blocks BELOW are complete, these MATERIALS"
          " are NOT:",
          "# a gmsh .msh carries geometry and physical tags, no constitutive"
@@ -168,16 +200,12 @@ def _material_template_block(set_names):
          "# fiber rotation about y3 (the thickness axis); OpenSG angle a ="
          " Abaqus",
          "# *Orientation 3, -a.  Omit it for isotropic/unrotated materials.",
-         "# " + "=" * 70,
-         "materials:"]
-    for s in set_names:
-        o += ["- name: %s" % s,
-              "  density: %s_DENSITY_KG_M3" % FILL,
-              "  elastic:",
-              "    E: [{0}_E1, {0}_E2, {0}_E3]".format(FILL),
-              "    G: [{0}_G12, {0}_G13, {0}_G23]".format(FILL),
-              "    nu: [{0}_NU12, {0}_NU13, {0}_NU23]".format(FILL)]
-    return o
+         "# The `opensg msh_to_yaml` mat flags fill entries from the"
+         " material",
+         "# library instead: --mat<TAG> NAME[:ANGLE] per gmsh physical tag"
+         " (see",
+         "# io/materials.xml and io/materials_xml.py).",
+         "# " + "=" * 70]
 
 
 def check_filled(path, max_show=12):
@@ -212,12 +240,15 @@ def check_filled(path, max_show=12):
             "  a material is  name, density, elastic {E:[E1,E2,E3],"
             " G:[G12,G13,G23], nu:[nu12,nu13,nu23]}\n"
             "                 (isotropic: repeat the value three times,"
-            " G = E/(2(1+nu)))"
+            " G = E/(2(1+nu)))\n"
+            "  or re-emit FILLED from the material library:\n"
+            "    opensg msh_to_yaml <mesh>.msh --mat<TAG> NAME[:ANGLE]"
+            " --n_model {1,2,3} --force"
             % (os.path.basename(path), len(hits), FILL, shown, more))
 
 
 def convert(msh_path, out_path=None, materials=None, phases=None,
-            orientation=E1_OUT_OF_PLANE, n_model=None):
+            orientation=E1_OUT_OF_PLANE, n_model=None, refined=None):
     """gmsh `.msh` + the caller's materials -> an OpenSG solid SG yaml.
 
     The mesh supplies the nodes, the cells and the physical-tag split; the
@@ -230,62 +261,110 @@ def convert(msh_path, out_path=None, materials=None, phases=None,
 
     In:  msh_path str -- gmsh legacy ASCII 2.2 mesh
          out_path str | None -- output yaml; None -> <msh stem>.yaml
-         materials list[dict] | None -- [{name, density, E, G, nu,
-             angle?}, ...] (`angle` deg about y3, see _material_block);
-             None writes the FILL_IN `materials:` template instead
+         materials list[dict] | dict | None --
+             list [{name, density, E, G, nu, angle?}, ...] (`angle` deg
+             about y3, see _material_block): the classic fully-specified
+             call, names the sets after the materials;
+             dict {gmsh physical tag: mdict}: the LIBRARY route -- sets
+             keep their $PhysicalNames / mat_<tag> names, each covered
+             tag's entry is emitted filled (the mdict's `name` is
+             overridden by the set name -- the reader binds by name; an
+             optional mdict `note` lands as a comment on the name line),
+             every uncovered tag keeps its FILL_IN placeholder entry;
+             None writes the all-placeholder FILL_IN template
          phases list[(str, int)] | None -- (set name, gmsh physical tag) pairs
              in the same order as `materials`; None -> one phase per distinct
              tag, ascending, named after the material at the same index
-             (with materials) or after $PhysicalNames / "mat_<tag>" (without)
+             (with a materials LIST) or after $PhysicalNames / "mat_<tag>"
          orientation (9,) floats -- the constant [e1(3) e2(3) e3(3)] frame
              written for every element (default: e1 out of plane, +z)
          n_model int | None -- 1 beam, 2 plate, 3 solid: the macro model,
              written into the header when given.  Never guessed from the
              mesh (sc_to_yaml's rule); None leaves the engine default (2)
-             for a runnable yaml, and a FILL_IN placeholder in a template
-    Out: dict {path, n_nodes, n_elements, npe, sets {name: count}, filled
-         bool (False = template)}; the yaml is written to `path`."""
+             ONLY for the classic list call -- a template OR library-dict
+             call writes a FILL_IN placeholder instead, so the engine's
+             silent plate default can never pick the wrong macro model
+             (the n_model-1-on-a-plate-SG footgun)
+         refined int | None -- 0 classical, 1 shear-refined: written into
+             the header when given, else left to the engine default
+    Out: dict {path, n_nodes, n_elements, npe, order str (linear |
+         quadratic), sets {name: count}, missing [str] set names still
+         carrying placeholders, filled bool (False = placeholders
+         remain)}; the yaml is written to `path`."""
     if n_model is not None and int(n_model) not in (1, 2, 3):
         raise ValueError("n_model must be 1 (beam), 2 (plate) or 3 (solid),"
                          " got %r" % (n_model,))
+    if refined is not None and int(refined) not in (0, 1):
+        raise ValueError("refined must be 0 (classical) or 1"
+                         " (shear-refined), got %r" % (refined,))
+    by_tag = materials if isinstance(materials, dict) else None
+    mats = materials if (materials is not None and by_tag is None) else None
     M = read_msh22(msh_path)
     nd, cells, phys = M["nodes"], M["cells"], M["phys"]
+    tags = sorted(set(int(t) for t in phys))
+    if by_tag is not None:
+        stray = sorted(int(k) for k in by_tag if int(k) not in tags)
+        if stray:
+            raise ValueError(
+                "%s has physical tags %s -- no tag matches material flag(s)"
+                " for %s" % (os.path.basename(msh_path), tags, stray))
     if phases is None:
-        tags = sorted(set(int(t) for t in phys))
-        if not materials:
+        if not mats:
             phases = [(M["phys_names"].get(t, "mat_%d" % t), t) for t in tags]
-        elif len(tags) != len(materials):
+        elif len(tags) != len(mats):
             raise ValueError(
                 "%s has %d physical tags %s but %d materials were given --"
                 " pass phases=[(set_name, tag), ...] explicitly"
-                % (os.path.basename(msh_path), len(tags), tags,
-                   len(materials)))
+                % (os.path.basename(msh_path), len(tags), tags, len(mats)))
         else:
-            phases = [(m["name"], t) for m, t in zip(materials, tags)]
+            phases = [(m["name"], t) for m, t in zip(mats, tags)]
+    missing = ([] if mats else
+               [name for name, tag in phases
+                if (by_tag or {}).get(int(tag)) is None])
     ori = ", ".join("%s" % float(v) for v in orientation)
+    order, cell_name = _ORDER_OF[M["etype"]]
 
     out = ["msg: solid      # the ENGINE this SG belongs to (opensg_solid);"
            " `opensg <yaml>` dispatches on it"]
     if n_model is not None:
         out.append("n_model: %d      # 1 = beam, 2 = plate, 3 = solid -- the"
                    " macro model this SG homogenizes to" % int(n_model))
-    elif not materials:
-        # a template defers the macro model to the same fill-in step as the
-        # materials: the mesh cannot say which model it serves, and the
-        # engine's silent default (2, plate) is wrong for a 3-D SG
+    elif mats is None:
+        # a template (and the library route, which may be partial) defers
+        # the macro model to the same fill-in step as the materials: the
+        # mesh cannot say which model it serves, and the engine's silent
+        # default (2, plate) is wrong for a 3-D SG
         out.append("n_model: %s_N_MODEL      # REPLACE with 1 = beam, 2 ="
                    " plate or 3 = solid -- the macro model this SG"
                    " homogenizes to (the mesh cannot say)" % FILL)
+    if refined is not None:
+        out.append("refined: %d      # 0 = classical, 1 = shear-refined"
+                   % int(refined))
+    out.append("mesh_order: %s      # %s cells (informational -- the solver"
+               " reads the arity off the cells)" % (order, cell_name))
     # CONSTITUTIVE FIRST: `materials:` goes directly under the header, ahead
     # of the mesh lines, so the one block a human edits is at the top of the
     # file (a yaml mapping carries no order -- readability only, the same
     # decision the shell twin documents)
-    if materials:
+    if mats:
         out.append("materials:")
-        for m in materials:
+        for m in mats:
             out += _material_block(m)
     else:
-        out += _material_template_block([name for name, _ in phases])
+        if missing:
+            out += _template_banner()
+        out.append("materials:")
+        for name, tag in phases:
+            m = (by_tag or {}).get(int(tag))
+            if m is None:
+                out += _material_template_entry(name)
+                continue
+            mm = dict(m)
+            mm["name"] = name
+            blk = _material_block(mm)
+            if m.get("note"):
+                blk[0] += "    # %s" % m["note"]
+            out += blk
     out.append("nodes:")
     out += ["- [%.12f %.12f %.12f]" % (x, y, z) for x, y, z in nd]
     out.append("elements:")
@@ -306,4 +385,6 @@ def convert(msh_path, out_path=None, materials=None, phases=None,
     with open(path, "w") as f:
         f.write("\n".join(out) + "\n")
     return {"path": path, "n_nodes": len(nd), "n_elements": len(cells),
-            "npe": M["npe"], "sets": counts, "filled": bool(materials)}
+            "npe": M["npe"], "order": order, "sets": counts,
+            "missing": missing,
+            "filled": bool(mats) or (by_tag is not None and not missing)}
