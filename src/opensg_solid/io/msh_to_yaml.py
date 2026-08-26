@@ -43,8 +43,9 @@ triangles (gmsh type 2), 4-node quads (type 3), 4-node tets (type 4),
 8-node hexes (type 5) and 10-node tets (type 11, the quadratic grade
 helper.linear_msh_to_quad emits).  The 0-/1-D entities gmsh writes for
 physical points and curves are skipped; anything else is an error.  The
-yaml header records the grade as an informational `mesh_order:` key
-(linear | quadratic -- the solver itself reads the arity off the cells).
+mesh grade (linear | quadratic) is CONSOLE-ONLY information -- the
+solver reads the arity off the cells, so the yaml carries no order key;
+`refined:` is always written (default 0 = classical).
 
 Use:  from opensg_solid.io.msh_to_yaml import convert
       convert("UDcomp_2D.msh", materials=[...], phases=[("matrix", 0),
@@ -338,15 +339,32 @@ def convert(msh_path, out_path=None, materials=None, phases=None,
         out.append("n_model: %s_N_MODEL      # REPLACE with 1 = beam, 2 ="
                    " plate or 3 = solid -- the macro model this SG"
                    " homogenizes to (the mesh cannot say)" % FILL)
-    if refined is not None:
-        out.append("refined: %d      # 0 = classical, 1 = shear-refined"
-                   % int(refined))
-    out.append("mesh_order: %s      # %s cells (informational -- the solver"
-               " reads the arity off the cells)" % (order, cell_name))
+    # `refined:` is ALWAYS written (default 0 = classical) so the file
+    # states the model it runs as; the mesh grade is NOT a yaml key --
+    # the solver reads the arity off the cells (console-only info)
+    out.append("refined: %d      # 0 = classical, 1 = shear-refined"
+               % int(refined if refined is not None else 0))
     # CONSTITUTIVE FIRST: `materials:` goes directly under the header, ahead
     # of the mesh lines, so the one block a human edits is at the top of the
     # file (a yaml mapping carries no order -- readability only, the same
     # decision the shell twin documents)
+    # a library-covered tag takes the MATERIAL's name for both the
+    # material block and its element set (the reader binds material to
+    # set by name): --mat1 Al emits `name: Al` + set Al, not the mesh's
+    # Mat0.  Collisions (two tags, one material) uniquify with _<tag>.
+    if by_tag:
+        seen, renamed = set(), []
+        for name, tag in phases:
+            m = by_tag.get(int(tag))
+            if m is not None and m.get("name"):
+                nm = str(m["name"])
+                if nm in seen:
+                    nm = "%s_%d" % (nm, int(tag))
+                seen.add(nm)
+                renamed.append((nm, tag))
+            else:
+                renamed.append((name, tag))
+        phases = renamed
     if mats:
         out.append("materials:")
         for m in mats:
@@ -363,7 +381,7 @@ def convert(msh_path, out_path=None, materials=None, phases=None,
             mm = dict(m)
             mm["name"] = name
             blk = _material_block(mm)
-            if m.get("note"):
+            if m.get("note") and str(m["note"]) != str(name):
                 blk[0] += "    # %s" % m["note"]
             out += blk
     out.append("nodes:")
