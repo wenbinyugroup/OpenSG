@@ -31,6 +31,10 @@ the LAST SG coordinate; the plate law rows are
 #   periodic_cells_en   (E, N) master connectivity;  dof_map_np (V*3,)
 # working (SSDM paths, n_model 2/3)
 #   solver              "direct" (csr + pardiso, default) | "cg" (SSDM)
+#                       | "amg" (iter 2, sg_amg) | "stream" (iter 3)
+#                       | "auto" (dof-banded resolve_auto_solver:
+#                       direct below / amg above $OPENSG_DIRECT_WALL,
+#                       default 1.2M dofs; identical on every machine)
 #   shear_refined, plot RM G ladder switch (plate only); mesh-PNG switch
 #   fe_hi, phi_hi, dphi_hi, W_hi   degree-2p+2 quadrature (l-blocks)
 #   lad                 plate_shear_ladder dict -> r["G_msg"]/["ABDG"]/
@@ -81,7 +85,7 @@ from fe_jax.setup import (mesh_to_jax,
 
 from opensg_solid.sg_assembly import (
     _sparse_direct_solve, apply_block_precond, apply_chebyshev_precond,
-    assemble_rigid_body_ops, assemble_system_matrices,
+    assemble_pinned_csr, assemble_rigid_body_ops, assemble_system_matrices,
     calculate_RHS_and_Ke_batch_periodic, compress_periodic_cells_jax,
     compute_block_inv_diag, compute_homogenized_constants,
     ebe_jacobian_product_periodic, estimate_max_eigenvalue,
@@ -164,26 +168,8 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
         u_0_g[unique_dofs], n_model, n_sg)
-    E_elem, n_ed, _ = J_euu.shape
-    N_nodes = n_ed // 3
-    dof_map = ((np.asarray(periodic_cells, dtype=np.int64) * 3)
-               .reshape(E_elem, N_nodes, 1)
-               + np.arange(3)).reshape(E_elem, n_ed).astype(np.int32)
-    rows = np.repeat(dof_map, n_ed, axis=1).ravel()
-    cols = np.tile(dof_map, (1, n_ed)).ravel()
-    data = np.asarray(J_euu).ravel()
-    if bdofs is None:
-        keep = rows >= 3                # pinned rows 0:3 -> unit diagonal
-        pin = np.arange(3, dtype=np.int32)
-    else:                               # pinned rows = boundary DOFs
-        pinmask = np.zeros(n_unique, bool)
-        pinmask[np.asarray(bdofs, np.int64)] = True
-        keep = ~pinmask[rows]
-        pin = np.where(pinmask)[0].astype(np.int32)
-    rows = np.concatenate([rows[keep], pin])
-    cols = np.concatenate([cols[keep], pin])
-    data = np.concatenate([data[keep], np.ones(len(pin))])
-    A_csr = csr_matrix((data, (rows, cols)), shape=(n_unique, n_unique))
+    A_csr, pin = assemble_pinned_csr(J_euu, periodic_cells, n_unique,
+                                     bdofs=bdofs)
     RHS = -np.asarray(Dhe)              # rows 0:3 already zeroed
     if bdofs is not None:
         RHS[pin] = 0.0                  # w = 0 on the boundary nodes
@@ -346,7 +332,7 @@ def _plate_face_loads_3d(pts, cells, yf, ftol):
 
 def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
                        reduced_cells, n_unique, n_sg, omega,
-                       f_faces=None, node_y2=None):
+                       f_faces=None, node_y2=None, amg_ctx=None):
     """The RM transverse-shear block G (2x2) of a plate SG via the
     first-order warping ladder -- rm_plate_1D.msg_rm_plate's Eq. 30-61
     flow on the general SG assembly.
@@ -390,6 +376,10 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
          (n_unique,) first-order load columns and V2Lt/V2Lb
          (n_unique, 5) quintets for the (q,1 q,2 q,11 q,12 q,22)
          drivers.  sg_dehom consumes them for the qt6/qb6 recovery.
+         amg_ctx OPTIONAL -- the sg_amg hierarchy handle of an iter-2
+         run: every solve_constrained below then runs as AMG-CG on the
+         pinned system in the SAME <w> = 0 gauge (no KKT
+         factorization); None keeps the direct KKT route.
     Out: dict A6 (6, 6), G_msg (2, 2, None unless X SPD), X, ev_min,
          Ustar_rel, V0/V11/V12/V11bar/V12bar (n_unique, 6)
          [+ V1Lt/V2Lt/V1Lb/V2Lb when f_faces is given]."""
@@ -407,13 +397,20 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
     # balances the blocks as in msg_rm_plate)
     scl = float(np.max(np.abs(D_hh.diagonal())))
     Hpsi = w_dof[:, None] * kernel
-    from scipy.sparse import bmat as _bmat
-    KKT = _bmat([[D_hh, scl * csr_matrix(Hpsi)],
-                 [scl * csr_matrix(Hpsi.T), None]], format="csr")
+    if amg_ctx is not None:
+        # iter 2: the SAME device hierarchy that solved V0 -- identical
+        # <w> = 0 gauge without ever forming the KKT (see sg_amg)
+        from opensg_solid.sg_amg import make_constrained_solver
+        solve_constrained = make_constrained_solver(
+            amg_ctx, D_hh, np.asarray(w_dof), scl)
+    else:
+        from scipy.sparse import bmat as _bmat
+        KKT = _bmat([[D_hh, scl * csr_matrix(Hpsi)],
+                     [scl * csr_matrix(Hpsi.T), None]], format="csr")
 
-    def solve_constrained(rhs):
-        aug = np.vstack([-rhs, np.zeros((3, rhs.shape[1]))])
-        return _sparse_direct_solve(KKT, aug, sym=True)[:n_unique]
+        def solve_constrained(rhs):
+            aug = np.vstack([-rhs, np.zeros((3, rhs.shape[1]))])
+            return _sparse_direct_solve(KKT, aug, sym=True)[:n_unique]
 
     V0 = solve_constrained(D_he)
     A6 = D_ee + V0.T @ D_he
@@ -822,6 +819,59 @@ def write_sc_K(path, C, solve_time=None, model="", constants=True, name="",
             f.write("\n Time taken: %.2f sec\n" % solve_time)
 
 
+def _fmt_dofs(n):
+    """In:  n int/float dof count
+    Out: str compact count -- '61k', '289k', '2.08M'."""
+    n = float(n)
+    if n >= 1e6:
+        return "%.3gM" % (n / 1e6)
+    if n >= 1e3:
+        return "%dk" % round(n / 1e3)
+    return "%d" % int(n)
+
+
+def resolve_auto_solver(dofs, amg_ok, iter_ok, wall=None):
+    """The --solver auto policy: DOF-BANDED ONLY, identical on every
+    machine -- a GPU changes where the iterative solvers EXECUTE,
+    never which one auto picks (the old GPU->cg branch lost to
+    CPU-direct on small cases even on Colab-class boxes).
+
+    Bands: dofs < wall -> direct ($OPENSG_DIRECT_WALL, default 1.2e6
+    dofs; measured on the 93 GB box: 1.07M dofs factorized at 37 GB,
+    2.08M died at 69.7 GB); dofs >= wall -> amg when pyamg is
+    importable and the SG is single-element-type periodic plate/solid,
+    else cheb CG when the SG allows it, else direct with a LOUD memory
+    warning.  auto NEVER picks stream (iter 3 is manual-only; the
+    printed reason names it in the >10M band).  Explicit --solver
+    always bypasses this.
+
+    In:  dofs int periodic-reduced solve size; amg_ok bool pyamg
+         importable; iter_ok bool single-element-type periodic
+         plate/solid SG; wall float or None -> $OPENSG_DIRECT_WALL
+         (default 1.2e6)
+    Out: (solver str, reason str, warn str | None)."""
+    if wall is None:
+        wall = float(os.environ.get("OPENSG_DIRECT_WALL", 1.2e6))
+    big = ("; iter 3 stream is the manual alternative at this size"
+           if dofs >= 1e7 else "")
+    if dofs < wall:
+        return ("direct", "%s dofs < %s wall"
+                % (_fmt_dofs(dofs), _fmt_dofs(wall)), None)
+    if amg_ok and iter_ok:
+        return ("amg", "%s dofs >= %s wall%s"
+                % (_fmt_dofs(dofs), _fmt_dofs(wall), big), None)
+    if iter_ok:
+        return ("cg", "%s dofs >= %s wall; pip install pyamg for"
+                " amg%s" % (_fmt_dofs(dofs), _fmt_dofs(wall), big),
+                None)
+    return ("direct", "%s dofs >= %s wall -- attempting anyway"
+            % (_fmt_dofs(dofs), _fmt_dofs(wall)),
+            "WARNING: %s dofs is above the %s direct memory wall (the"
+            " factorization may exhaust RAM); no iter route covers"
+            " this SG (mixed/aperiodic)"
+            % (_fmt_dofs(dofs), _fmt_dofs(wall)))
+
+
 def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     material_param=None,                # (n_mat, 9) override
                     angles: Optional[Sequence[float]] = None,   # deg/material
@@ -829,7 +879,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     refined: Optional[int] = None,      # 0 classical, 1 shear-refined
                     workdir: Optional[str] = None,      # where .yaml/.msh go
                     elem_rotation=None,                 # (E, 9) per-element DCs
-                    solver: str = "direct",             # "direct" | "cg"
+                    solver: str = "direct",     # direct|cg|amg|stream
                     shear_refined: bool = False,        # legacy alias of model=1
                     plot: bool = True,                  # <base>_mesh.png if absent
                     boundary: Optional[str] = None,     # 'aperiodic'|'periodic'
@@ -865,11 +915,16 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     n_model=1 routes through the Beam_solid KKT engine (n_sg >= 2);
     elem_rotation is consumed by every model (beam, plate and solid).
     solver: "direct" (default; one sparse factorization for all columns),
-    "cg" (the verbatim SSDM Chebyshev-CG pipeline) or "stream" (iter 3:
-    the same CG with the element blocks packed HOST-side and streamed
-    slab-by-slab -- the route past device memory, see sg_stream; single
-    element type, periodic, homogenization-only for the refined plate)
-    -- all produce the same digits, see _homo_direct.
+    "cg" (the verbatim SSDM Chebyshev-CG pipeline), "amg" (iter 2: the
+    assembled CSR preconditioned by a pyamg smoothed-aggregation
+    hierarchy built once on CPU, V-cycle + CG in jax on the default
+    device -- GPU when jax sees one; the SAME hierarchy also replaces
+    the shear-refined ladder's KKT factorization, see sg_amg; single
+    element type, periodic) or "stream" (iter 3: the same CG with the
+    element blocks packed HOST-side and streamed slab-by-slab -- the
+    route past device memory, see sg_stream; single element type,
+    periodic, homogenization-only for the refined plate) -- all
+    produce the same digits, see _homo_direct.
     The plate model=1 route runs the RM first-order warping ladder
     (plate_shear_ladder) -> r["G_msg"] (2x2), r["ABDG"] (8x8
     [[A6, 0], [0, G]]), r["A6_ladder"]; derivation status per SG
@@ -973,27 +1028,18 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
 
     nn = sorted({len(c) for c in sc["cells"]})
     mixed = len(nn) != 1
-    if solver == "auto":
-        # pick the fastest LEGAL family for this SG and machine: on a
-        # GPU the matrix-free CG runs device-resident and direct would
-        # waste the card; everywhere else (CPU, mixed SGs, beams,
-        # aperiodic -- the routes CG does not cover) direct/PARDISO is
-        # the right default.  Explicit --solver always wins upstream.
-        has_gpu = any(d.platform == "gpu" for d in jax.devices())
-        solver = ("cg" if (has_gpu and not mixed and n_model != 1
-                           and boundary != "aperiodic")
-                  else "direct")
-        print(" solver    : auto -> %s%s" % (
-            solver, " (GPU detected)" if solver == "cg" else
-            " (no GPU%s)" % ("" if not mixed else "; mixed SG")))
+    # solver == "auto" resolves LATER (resolve_auto_solver), once the
+    # periodic-reduced dof count exists -- the policy is dof-banded.
+    # Every guard below passes "auto" through untouched: auto never
+    # picks an option a guard would reject.
     if mixed and n_model == 1:
         raise ValueError("mixed element types: the beam (n_model 1) "
                          "KKT route is single-batch; split the mesh or "
                          "use one element type: %s nodes/elem" % nn)
-    if mixed and solver in ("cg", "stream"):
+    if mixed and solver in ("cg", "stream", "amg"):
         raise ValueError("mixed element types need solver='direct' "
-                         "(the EBE/Chebyshev CG operators are "
-                         "single-batch): %s nodes/elem" % nn)
+                         "(the EBE/Chebyshev CG operators and the amg "
+                         "assembly are single-batch): %s nodes/elem" % nn)
     points = jnp.array(np.asarray(sc["nodes"], float)[:, 0:n_sg])
     cell_domain_ids = jnp.array(np.asarray(sc["mat_id"], int) - 1)
     V = points.shape[0]
@@ -1029,7 +1075,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                                               boundary)
         bdofs = None
     else:
-        if n_model == 1 or solver in ("cg", "stream"):
+        if n_model == 1 or solver in ("cg", "stream", "amg"):
             raise ValueError("boundary='aperiodic' supports the plate/solid "
                              "models with solver='direct'")
         # boundary solution mapped to the boundary nodes: zero fluctuation
@@ -1045,15 +1091,21 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         onb = ((np.abs(pts - box0) < tol) | (np.abs(pts - box1) < tol)).any(1)
         bdofs = (3*np.where(onb)[0][:, None] + np.arange(3)).ravel()
 
-    if n_model == 1 and solver == "stream":
-        raise ValueError("--solver stream (iter 3) covers the periodic "
-                         "plate/solid models; the beam KKT route has "
-                         "direct and cg")
+    if n_model == 1 and solver in ("stream", "amg"):
+        raise ValueError("--solver %s covers the periodic plate/solid "
+                         "models; the beam KKT route has direct and cg"
+                         % solver)
     if solver == "stream" and shear_refined and recovery:
         raise ValueError("--solver stream (iter 3) is homogenization-only"
                          " for the shear-refined plate in this delivery:"
                          " run analysis H (recovery=False) -- the V2 and"
                          " load-ladder recovery columns are not streamed")
+    if solver == "auto" and (n_model == 1 or mixed):
+        # beams (KKT) and mixed SGs have no iter route: direct is the
+        # only sensible auto choice at any size
+        solver = "direct"
+        print(" solver    : auto -> direct (%s)"
+              % ("beam KKT route" if n_model == 1 else "mixed SG"))
     if n_model == 1:
         r = _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
                            dphi_dxi_qnp, W_q, dof_map_np,
@@ -1102,7 +1154,25 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     unique_dofs = jnp.unique(dof_map_np)
     n_unique = len(unique_dofs)
 
+    if solver == "auto":
+        # the dof-banded policy, deferred to HERE where the true
+        # periodic-reduced solve size is known (resolve_auto_solver);
+        # IDENTICAL on every machine -- a GPU changes where the
+        # iterative solvers execute, never which one auto picks
+        try:
+            import pyamg as _pyamg                  # noqa: F401
+            _amg_ok = True
+        except ImportError:
+            _amg_ok = False
+        solver, _why, _warn = resolve_auto_solver(
+            int(n_unique), _amg_ok,
+            iter_ok=(not mixed and boundary != "aperiodic"))
+        if _warn:
+            print(" " + _warn)
+        print(" solver    : auto -> %s (%s)" % (solver, _why))
+
     u_0_g_full = jnp.zeros(shape=(V * 3))
+    _amg_ctx = None       # iter 2 hierarchy handle (ladder reuses it)
     if mixed:
         C_eff, V0_matrix, omega = homo_direct_batched(
             bat, u_0_g_full, unique_dofs, n_unique, points, n_model,
@@ -1112,6 +1182,17 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
             periodic_cells_en, unique_dofs, n_unique, n_model, n_sg,
             bdofs=bdofs)
+    elif solver == "amg":
+        # iter 2: assembled-CSR smoothed-aggregation AMG-preconditioned
+        # CG (sg_amg) -- hierarchy built ONCE on CPU (pyamg), V-cycle +
+        # CG on the jax default device (GPU when jax sees one);
+        # _amg_ctx carries the hierarchy to the refined-plate ladder
+        # (no KKT factorization)
+        from opensg_solid.sg_amg import amg_homo
+        C_eff, V0_matrix, omega, _amg_ctx = amg_homo(
+            x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+            periodic_cells_en, unique_dofs, n_unique, n_model, n_sg,
+            points, cells)
     elif solver == "stream":
         # iter 3: chunked host-resident EBE CG -- element blocks
         # streamed slab-by-slab into packed host numpy (sg_stream)
@@ -1233,7 +1314,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                                          C_ess, periodic_cells_en,
                                          n_unique, n_sg, float(omega),
                                          f_faces=f_faces,
-                                         node_y2=node_y2)
+                                         node_y2=node_y2,
+                                         amg_ctx=_amg_ctx)
         else:
             hi = [fe_tables(n_sg, b["nn"], hi=True) for b in bat]
             lad = plate_shear_ladder(
@@ -1361,7 +1443,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             lad_q = plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi,
                                        C_ess, periodic_cells_en,
                                        n_unique, n_sg, float(omega),
-                                       f_faces=fv, node_y2=node_y2)
+                                       f_faces=fv, node_y2=node_y2,
+                                       amg_ctx=_amg_ctx)
             for k in ("V1Lt", "V2Lt", "V1Lb", "V2Lb"):
                 r[k] = lad_q[k]
             print("q_reaction: tau -- load columns re-reacted along the"

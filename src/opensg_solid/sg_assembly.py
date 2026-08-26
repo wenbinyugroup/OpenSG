@@ -919,6 +919,50 @@ def sparse_projected_cg(A_sp, C, B, ndof_per_node, tol=1e-8, cheb_degree=4,
     return np.asarray(solve_all(B_d))
 
 
+def assemble_pinned_csr(J_euu, periodic_cells, n_unique, bdofs=None,
+                        sym=False):
+    """Global CSR of the pinned fluctuation system from the per-element
+    tangent blocks -- the ONE assembly stage _homo_direct factorizes and
+    sg_amg builds its hierarchy on (shared so the two stay in lockstep).
+    Pinned rows (the first reduced node's 3 dofs, or `bdofs` in
+    aperiodic mode) become unit diagonal with zero RHS upstream.
+    sym=False keeps the entries in pinned COLUMNS -- the historical
+    direct matrix (harmless there: the pinned solution is exactly
+    zero); sym=True drops them too, giving the truly symmetric SPD
+    operator CG/AMG requires.  Both matrices have the same solution.
+
+    In:  J_euu (E, N*3, N*3) element tangents; periodic_cells (E, N)
+         master connectivity; n_unique int solve size; bdofs (n_b,) int
+         global DOFs pinned to zero or None (first-node pin); sym bool
+    Out: A_csr (n_unique, n_unique) csr; pin (n_pin,) int32 pinned
+         dof ids."""
+    E_elem, n_ed, _ = J_euu.shape
+    N_nodes = n_ed // 3
+    dof_map = ((np.asarray(periodic_cells, dtype=np.int64) * 3)
+               .reshape(E_elem, N_nodes, 1)
+               + np.arange(3)).reshape(E_elem, n_ed).astype(np.int32)
+    rows = np.repeat(dof_map, n_ed, axis=1).ravel()
+    cols = np.tile(dof_map, (1, n_ed)).ravel()
+    data = np.asarray(J_euu).ravel()
+    if bdofs is None:
+        keep = rows >= 3                # pinned rows 0:3 -> unit diagonal
+        if sym:
+            keep &= cols >= 3
+        pin = np.arange(3, dtype=np.int32)
+    else:                               # pinned rows = boundary DOFs
+        pinmask = np.zeros(n_unique, bool)
+        pinmask[np.asarray(bdofs, np.int64)] = True
+        keep = ~pinmask[rows]
+        if sym:
+            keep &= ~pinmask[cols]
+        pin = np.where(pinmask)[0].astype(np.int32)
+    rows = np.concatenate([rows[keep], pin])
+    cols = np.concatenate([cols[keep], pin])
+    data = np.concatenate([data[keep], np.ones(len(pin))])
+    return (csr_matrix((data, (rows, cols)),
+                       shape=(n_unique, n_unique)), pin)
+
+
 _direct_spsolve = None
 # None = auto (pypardiso/MKL when importable, else scipy SuperLU);
 # "superlu" = force scipy SuperLU everywhere -- the cli's

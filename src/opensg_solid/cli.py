@@ -7,19 +7,20 @@
                                   analysis: combines with H | D)
     opensg_solid <sg.yaml> --solver F [N]  pick the linear solver of
                                   the fluctuation solves.  F = direct
-                                  (assembled sparse factorization, CPU;
-                                  the DEFAULT family) or iter (matrix-
-                                  free preconditioned CG, device-
-                                  resident: the GPU route, and the one
-                                  past the direct memory wall at ~1M
-                                  dofs).  N picks the backend inside
-                                  the family; `--solver` alone,
+                                  (assembled sparse factorization,
+                                  CPU) or iter (preconditioned CG,
+                                  device-resident: the GPU route, and
+                                  the one past the direct memory wall
+                                  at ~1M dofs).  N picks the backend
+                                  inside the family; `--solver` alone,
                                   `--solver help` or `--solver_help`
-                                  prints the full ranked menu.
+                                  prints the full ranked menu.  No
+                                  flag = auto (dof-banded, see menu).
                                   Shorthands: --gpu /
                                   --solver cg = iter 1; --solver
-                                  stream = iter 3; --solver
-                                  pardiso / superlu = direct 1 / 2.
+                                  amg = iter 2; --solver stream =
+                                  iter 3; --solver pardiso / superlu
+                                  = direct 1 / 2.
                                   A flag, combines with H | D
 
 No flags, no codes: everything else lives in the yaml header (the
@@ -112,18 +113,25 @@ SOLVER_MENU = """\
               .[cuda12]).  The route past the direct solvers' memory
               wall (>~1M dofs).  Single-element-type PERIODIC SGs
               only: mixed hex+tet and aperiodic SGs need direct.
-     iter 1     cheb      EBE block-Jacobi + Chebyshev(4) CG -- the
-                          iter DEFAULT until amg lands (--gpu /
-                          --solver cg land here).  Never assembles
-                          the matrix: the memory-lightest route, and
-                          the one that still runs at >~10M dofs or in
-                          tight GPU memory
-     iter 2     amg       AMG-preconditioned CG (AmgX / PETSc GAMG
-                          via jetsci): the fastest class above ~1M
-                          dofs -- becomes the iter DEFAULT once
-                          wired (it needs the assembled CSR on the
-                          device to build its coarse hierarchy, so
-                          cheb keeps the extreme-dof niche) [PLANNED]
+     iter 1     cheb      EBE block-Jacobi + Chebyshev(4) CG (--gpu /
+                          --solver cg land here; the auto fallback on
+                          a GPU without pyamg).  Never assembles the
+                          matrix: the memory-lightest route, the one
+                          that still runs at >~10M dofs or in tight
+                          GPU memory; weak on high-contrast SGs
+     iter 2     amg       smoothed-aggregation AMG-preconditioned CG
+                          (pyamg).  The hierarchy is built ONCE on
+                          the CPU from the assembled CSR; the
+                          Chebyshev(3)-smoothed V-cycle + the
+                          column-batched CG then run in jax FP64 on
+                          the default device (GPU when jax sees one).
+                          ONE hierarchy serves the V0 columns AND the
+                          refined-plate ladder (no KKT
+                          factorization), so memory ~ the assembled
+                          CSR without fill-in: runs where direct
+                          dies, and shrugs at the high-contrast
+                          conditioning that stalls cheb.  Needs
+                          pyamg (pip install .[amg])
      iter 3     stream    chunked host-resident EBE CG -- the
                           >RAM-of-device route (~20M dofs on 93 GB);
                           slower per iteration than iter 1, the only
@@ -134,8 +142,16 @@ SOLVER_MENU = """\
                           homogenization-only (analysis H).  Never a
                           default -- ask for it
 
- shorthands: --gpu = iter 1; --solver stream = iter 3;
+ shorthands: --gpu = iter 1; --solver amg = iter 2;
+             --solver stream = iter 3;
              --solver pardiso / superlu = direct 1 / 2
+
+ auto (no --solver given): dof-banded, IDENTICAL on every machine --
+ direct below the ~1.2M-dof direct memory wall, amg above it (cheb CG
+ when pyamg is missing); $OPENSG_DIRECT_WALL moves the band.  A GPU
+ changes where the iterative solvers execute, never which one auto
+ picks.  auto never picks stream: ask for iter 3 at >~10M dofs.
+ Explicit --solver always wins.
 """
 
 
@@ -197,14 +213,16 @@ def main(argv=None):
             solver, force_superlu = "direct", True
         elif s == "iter1":
             solver = "cg"
+        elif s == "iter2":
+            solver = "amg"
         elif s == "iter3":
             solver = "stream"
-        elif s in ("direct3", "direct4", "iter2"):
+        elif s in ("direct3", "direct4"):
             raise SystemExit("--solver %s is on the menu but not wired"
                              " yet -- available today: direct 1"
                              " (pardiso, the default), direct 2"
-                             " (superlu), iter 1 (cheb), iter 3"
-                             " (stream)\n\n%s"
+                             " (superlu), iter 1 (cheb), iter 2 (amg),"
+                             " iter 3 (stream)\n\n%s"
                              % (solver_req, SOLVER_MENU))
         else:
             print(SOLVER_MENU)
@@ -301,6 +319,11 @@ def main(argv=None):
         if _backend == "cpu":
             print(" note      : jax sees no GPU -- the CG solver runs on"
                   " CPU; pip install .[cuda12] for the CUDA build")
+    elif solver == "amg":
+        import jax as _jax
+        print(" solver    : iter 2 (AMG-preconditioned CG: pyamg"
+              " hierarchy on CPU, V-cycle + CG in jax, backend: %s)"
+              % _jax.default_backend())
     elif solver == "stream":
         print(" solver    : iter 3 (stream: chunked host-resident EBE"
               " CG -- element blocks packed in host RAM)")
