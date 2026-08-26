@@ -776,6 +776,16 @@ def write_sc_K(path, C, solve_time=None, model="", constants=True, name="",
          ('The 6X6 Mass Matrix') after the compliance
     Out: the .out file at path; returns None."""
     C = np.asarray(C, float)
+    if not np.isfinite(C).all():
+        raise SystemExit(
+            "the computed %sstiffness contains NON-FINITE entries (nan/inf:"
+            " %d of %d) -- refusing to write %s.\n"
+            "Usual causes: the WRONG n_model for this SG (the classic: a"
+            " plate-periodic SG run\nas n_model 1 beam -- check the yaml"
+            " header, 1 = beam, 2 = plate, 3 = solid), a\ndisconnected or"
+            " singular mesh, or an upstream solver failure."
+            % ((name + " ") if name else "",
+               int((~np.isfinite(C)).sum()), C.size, path))
     S = np.linalg.inv(C)
     n = C.shape[0]
     infix = (name + " ") if name else ""
@@ -825,7 +835,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     boundary: Optional[str] = None,     # 'aperiodic'|'periodic'
                     density=None,                       # (n_mat,) beam mass rho
                     omega: Optional[float] = None,      # user SG measure (3-D solid)
-                    q_reaction: Optional[str] = None    # 'uniform' | 'tau'
+                    q_reaction: Optional[str] = None,   # 'uniform' | 'tau'
+                    recovery: bool = True               # dehom columns too?
                     ) -> Dict[str, Any]:
     """Homogenize ONE structure gene (1-D/2-D/3-D .sc) to the macro law.
 
@@ -895,7 +906,14 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
           HC_pm45 honeycomb it damps the face-sheet bay bending ~20 %
           (compare/four_way/bay_load_check.png).  Costs one extra ladder
           factorization; A6/G/ABDG are unchanged (the load columns feed
-          recovery only)."""
+          recovery only).
+    recovery: True (the API default) also solves everything the Eq.
+          63-66 recovery consumes -- the V2 second-order chains, the
+          V1L/V2L pressure load columns and the q-reaction choice.
+          False = HOMOGENIZATION-ONLY: V0 + the first-order ladder,
+          which already yield the exact A6/G/ABDG, and none of the
+          recovery-only columns (~60 extra RHS solves skipped).  The
+          cli passes recovery=(analysis == 'D')."""
     from .sg_mesh import read_yaml_header
     _hdr = read_yaml_header(sc_path) if isinstance(sc_path, str) else {}
     if omega is None and _hdr.get("omega") is not None:
@@ -1125,7 +1143,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         # exactly the tiled-face integral.
         f_faces = None
         node_y2 = None
-        if not mixed:
+        if not mixed and recovery:
             pts2 = np.asarray(points)[:, :n_sg]
             red_of = np.full(pts2.shape[0], -1, dtype=np.int64)
             red_of[np.asarray(cells, dtype=np.int64).ravel()] = \
@@ -1200,6 +1218,11 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         # docstring (the flag arrives from the .ff via the cli, never
         # from the yaml).  A6/G above are already final: the load columns
         # feed the recovery only, so this re-solves just that block.
+        if not recovery and q_reaction is None:
+            # homogenization-only: no load columns exist, so the
+            # reaction choice (a LOADING-side, dehom-time concern)
+            # is moot -- resolve it silently when D runs
+            q_reaction = "uniform"
         if q_reaction is None:
             # AUTO default: the uniform (<w> = 0 KKT) reaction is exact
             # for cells HOMOGENEOUS in-plane (and is what the 1-D/2-D
