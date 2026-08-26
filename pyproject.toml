@@ -21,6 +21,8 @@ dependencies = [
     "numba",
     "numpy",
     "psutil",
+    "pyamg",
+    "pyyaml",
     "scipy",
 ]
 

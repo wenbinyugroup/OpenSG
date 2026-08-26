@@ -862,14 +862,16 @@ def resolve_auto_solver(dofs, amg_ok, iter_ok, wall=None):
                 % (_fmt_dofs(dofs), _fmt_dofs(wall), big), None)
     if iter_ok:
         # NO silent cg fallback: above the wall cheb-CG runs for HOURS
-        # (measured 158x slower than direct at 289k dofs) -- burning a
-        # day is worse than stopping with the one-line fix.  cg stays
-        # reachable explicitly (--solver cg).
+        # (measured 158x slower than direct at 289k dofs).  pyamg is a
+        # CORE dependency (pyproject + environment.yml), so reaching
+        # this guard means the env predates it or was hand-built --
+        # stop with the fix.  cg stays reachable via --solver cg.
         raise SystemExit(
-            "auto: %s dofs is above the %s direct wall and amg needs"
-            " pyamg, which is not installed.\n  pip install pyamg\n"
-            "then rerun (auto -> amg).  To force other routes:"
-            " --solver cg (slow) or --solver direct (may exhaust RAM)."
+            "auto: %s dofs is above the %s direct wall and pyamg is"
+            " missing -- this env predates the requirement (it is in"
+            " pyproject/environment.yml now).\n  pip install pyamg\n"
+            "or rebuild the env.  Other routes: --solver cg (slow),"
+            " --solver direct (may exhaust RAM)."
             % (_fmt_dofs(dofs), _fmt_dofs(wall)))
     return ("direct", "%s dofs >= %s wall -- attempting anyway"
             % (_fmt_dofs(dofs), _fmt_dofs(wall)),
