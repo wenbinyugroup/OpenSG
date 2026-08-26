@@ -34,6 +34,7 @@ sg_read_abaqus_rpt_for_elemental_stress_output   abaqus_to_sm /
 All are plain functions -- no CLI, no main(); every input is an
 argument and every output path is printed.
 """
+from .make_linear_msh_to_quad import linear_msh_to_quad  # noqa: F401
 from .plate_inp import plate_inp                      # noqa: F401
 from .plate_mesh import plate_mesh                    # noqa: F401
 from .sg_read_abaqus_rpt_for_elemental_stress_output import (  # noqa: F401
