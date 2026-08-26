@@ -349,6 +349,51 @@ def load_sg_input(path, out_base=None):
                 "materials": z["materials"].item(),
                 "scale": float(z["scale"])}
 
+    bkeys = block_keys(path)
+    if "sections" in bkeys and "cells" not in bkeys \
+            and "elementOrientations" not in bkeys:
+        # the LAYUP spelling of the solid dialect: the 1-D through-thickness
+        # plate SG (per-ply `sections`, NO element frames -- sg_dialect's
+        # third spelling).  Its `sets` are PLIES, several per material, so
+        # the mesh-dialect reader below cannot pair them one-for-one;
+        # rm_plate_1D owns the parse and laminate_to_sg is the validated
+        # laminate -> SG conversion (pre-rotated per-ply type-2 C blocks).
+        from opensg_solid.rm_plate_1D.segment_plate import read_plate_sg_yaml
+        lam = read_plate_sg_yaml(path)
+        return laminate_to_sg(lam["thick"], lam["angles"], lam["mat_names"],
+                              lam["material_db"],
+                              n_per_layer=lam["n_per_layer"],
+                              elem_order=lam["elem_order"],
+                              fraction=lam["fraction"])
+
+    if "cells" not in bkeys:
+        # the MESH-dialect spelling of the ONE solid dialect (`elements` /
+        # `sets` / `elementOrientations` / list-form `materials` -- what
+        # io.msh_to_yaml and the opensg_io pipelines emit; sg_dialect calls
+        # the two spellings one dialect): io.sg_input owns that reader.
+        # Cached in the same npz sidecar, so the parse happens once.
+        from opensg_solid.io.sg_input import read_opensg_yaml
+        sg = read_opensg_yaml(path)
+        nodes = np.asarray(sg["nodes"], float)
+        cells = [list(c) for c in sg["cells"]]
+        mat_id = np.asarray(sg["mat_id"], np.int64)
+        sc = {"dim": int(sg["dim"]), "nodes": nodes, "cells": cells,
+              "mat_id": mat_id, "materials": sg["materials"],
+              "scale": float(sg.get("scale", 1.0))}
+        try:                                      # best-effort sidecar cache
+            cells_arr = np.asarray(cells, np.int64)
+        except (ValueError, TypeError):
+            cells_arr = np.array([np.array(c) for c in cells], dtype=object)
+        try:
+            np.savez_compressed(
+                npz, dim=sc["dim"], nodes=nodes, cells=cells_arr,
+                mat_id=mat_id,
+                materials=np.array(sg["materials"], dtype=object),
+                scale=sc["scale"])
+        except Exception:
+            pass
+        return sc
+
     try:
         from yaml import CBaseLoader as _YL      # libyaml, untyped (all strings)
     except ImportError:
@@ -395,9 +440,11 @@ def laminate_to_sg(thick, angles, mat_names, material_db,
 
     Materials are emitted as PRE-ROTATED type-2 ply C blocks built with
     rm_plate_1D.msg_materials.rotated_stiffness_6x6 -- the rm_plate_1D
-    stack stays the source of truth for the ply stiffness, and its
-    rotation convention (rotation_6x6(t) == sg_materials.rotate_C_matrix(-t))
-    cannot confound a parity comparison.
+    stack stays the source of truth for the ply stiffness.  Since the
+    2026-08-25 sign unification the two rotations are IDENTICAL
+    (rotation_6x6(t) == sg_materials.rotate_C_matrix(t)), so the
+    pre-rotation is no longer load-bearing for parity -- an `angle:`
+    block route gives the same table (test_rotation_parity).
 
     Node ordering per element is gmsh/basix line style: the two END
     nodes first, then the interior nodes left-to-right (what the

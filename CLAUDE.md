@@ -15,12 +15,14 @@ core without restructuring it.
   `msg_materials.py`, `msg_transverse_shear.py`, `segment_plate.py`,
   `rm_homo.py`, `rm_dehom.py`, `cli_rm_plate.py`;
   `helper/` — format conversions shared by BOTH stacks: `sc_to_yaml.py`
-  (SwiftComp .sc → yaml + gmsh .msh; run as
-  `python -m rm_plate.helper.sc_to_yaml file.sc`), `abq2ff.py` (Abaqus
+  (SwiftComp .sc → yaml + gmsh .msh; the CLI is
+  `opensg sc_to_yaml <file.sc> [...]` — globs expand, up-to-date
+  sidecars skip unless `--force`; the canonical module is
+  `opensg_solid/io/sc_to_yaml.py`), `abq2ff.py` (Abaqus
   .dat → .ff), `abaqus_inp.py`/`abaqus_3dfea.py`/`make_abaqus_dyn.py`
   (yaml → .inp decks);
   `tests/` — THE PRE-UPDATE GATE. Run before ANY homo/dehom change:
-  `python -m pytest src/rm_plate/tests -q` (15 tests).
+  `python -m pytest src/opensg_solid/rm_plate_1D/tests -q` (15 tests).
 - `src/opensg_solid/` — the GENERAL structure-gene engine: ONE shared
   code for beam/plate/3-D-elastic macro models (`n_model` 1/2/3) from a
   1-D/2-D/3-D SG, split file-per-concern (Keith-style):
@@ -45,6 +47,19 @@ core without restructuring it.
   SGs -- 1-D anchors digit-tight (iso nu=0 -> 5/6 at 8e-16, laminate
   parity <= 2e-11), 2-D/3-D gated by laminate-as-strip equivalence
   (h^2); in-plane-heterogeneous SGs lack an external reference yet.
+  The refined run also stashes the ladder triple (`r["V0_ladder"]`,
+  `r["V11"]/["V12"]`, `r["V11bar"]/["V12bar"]` -- the <w>=0 gauge, NOT
+  interchangeable with the pinned-node `r["V0"]`) that drives the
+  Eq. 63 V2 RECOVERY: `dehom_fields(r, eps, dE1=, dE2=, Q=)` adds
+  Gamma_h(V11bar dE1 + V12bar dE2) + Gamma_l1(V0lad dE1) +
+  Gamma_l2(V0lad dE2) and Q-rescales the sigma_a3 profiles; the `.ff`
+  optional keys `deps_dx1/deps_dx2/Q` feed it through the CLI (see
+  read_ff_state).  Gates: homogeneous-plate sigma13 parabola
+  1.5(Q/h)(1-(2z/h)^2) on a 1-D AND a 2-D SG (nu=0, FE O(h^2) tol),
+  zero-driver byte-identity, exact Q-consistency
+  (examples/OpenSG_shell/Sandwich/Sandwich_SC_files/v2_gates.py).
+  Second-order Eq. 64-66 (V2x chains, tilt/detilt row split, pressure
+  load columns) remains 1-D-only in rm_plate_1D.
   `laminate_to_sg` (sg_mesh) is the 1-D unification route -- layup spec
   -> sc dict, ply C's from rm_plate_1D (kept until full parity).
   Timings: `BENCHMARKS.md` at the repo root (RHC ~8-13 s per model).
@@ -58,9 +73,12 @@ core without restructuring it.
   3/4 plate homo/dehom from the 2-D honeycomb RHC SG;
   7/8 beam (n_model 1, Timoshenko/KKT) homo/dehom.
   `_blocked_3D_solid_SG/` — the former 5/6 (solid, n_model 3), RETIRED
-  from the active list: no runnable 3-D SG (`SW_2UC_45.sc` has 9 nonzero
-  connectivity slots/element, not tet4/hex8/tet10). The engine path
-  itself is complete; see that folder's README to revive them.
+  from the active list. (The old diagnosis "9 nonzero slots ≠ any known
+  element" was wrong: those records are tet10 whose LAST midside column
+  was zeroed at write time — `read_sc` now degrades them to their 4
+  corner nodes (tet4) and compacts the orphaned midside nodes.) The
+  engine path itself is complete; see that folder's README to revive
+  them.
   `CS_OpeNSG_exampels/static`, `dynamic_ex5` — the validated Pagano
   static suite and the Nayak transient benchmark (S8R vs C3D20).
 - `examples/msg_shell/` — the shell-cross-section → Timoshenko-beam route:
@@ -101,9 +119,25 @@ core without restructuring it.
   stress.  Documented deviation -- do not "fix" without the owner; the
   pipe.sc VABS .SM benchmark is not in the repo or OneDrive Claude_code
   to gate a change against.
-- quad4/hex8 SG cells are gmsh/.sc-ordered on disk and permuted to the
-  basix tensor order at load (`sg_homo._to_basix_order`, strip-gated);
-  tri/tet/interval orders coincide.
+- MIXED SGs (e.g. quad4+tri3 from `opensg inp_to_yaml`) run through
+  per-element-type BATCHED assembly (fe_jax ElementBatch doctrine;
+  shell_sg3d precedent), all of it in `sg_mixed.py` -- the general
+  batching layer (fe_tables / build_batches / attach_periodic_maps /
+  homo_direct_batched / ladder_blocks) kept OUT of sg_homo, which
+  stays core-MSG-math only and calls in for both the single and the
+  mixed path.  plate/solid + solver='direct' only (the beam KKT route
+  and the CG/EBE operators stay single-batch).  Mixed runs store the
+  r[...] mesh arrays as per-batch LISTS and return FLAT (P, 6)/(P, 3)
+  Gauss clouds from dehom_fields.
+- SG cells are GMSH-ordered on disk and permuted to the basix order at
+  load (`sg_homo._to_basix_order`): quad4, hex8 AND tet10 (gmsh midside
+  edges (12,23,13,14,34,24) → basix (34,24,23,14,13,12), permutation
+  [0,1,2,3,8,9,5,7,6,4]); tri3/tet4 and the interval degrees coincide.
+  The raw `.sc` orders that DIFFER from gmsh are normalized by
+  `sc_to_yaml.read_sc` at conversion: the 5-node interval
+  ([end,end,25%,75%,50%] → swap last two) and the tet10 midsides (slots
+  6-11, last two swapped). Fed unpermuted nothing raises — det J flips
+  sign inside the element and the ABD is silently wrong.
 - Output conventions: `<base>_plate_ABD.out` (6×6 [N11 N22 N12 M11 M22
   M12]) / `<base>_beam_Timo.out` (6×6 [eps11 gam12 gam13 kap1 kap2
   kap3]) / `<base>_solid_C.out` (6×6),

@@ -592,7 +592,13 @@ def test_fold_angles_matches_the_solver_material_table():
 
 def test_write_sc_does_not_silently_drop_a_ply_angle(tmp_path):
     """The regression this guards: an `angle:` that never reaches the file.
-    The emitted material must differ from the unrotated one."""
+
+    Default (angle_mode="layers"): the SCManual 8.2 spelling -- nlayer on
+    the size line, a `layer_id mate_id angle` table between the elements
+    and the materials, the material block kept type-1 -- and read_sc must
+    hand the angle back so the solver-side C is IDENTICAL to what the
+    yaml's `angle:` builds.  angle_mode="fold" (the vendor +-45 decks'
+    pre-rotated type-2 spelling) must give the same C."""
     from opensg_solid.io.sc_to_yaml import read_sc
     from opensg_solid.io.sg_input import write_sc
     from opensg_solid.sg_materials import build_material_C
@@ -600,8 +606,12 @@ def test_write_sc_does_not_silently_drop_a_ply_angle(tmp_path):
     sg = tube_sg(angle=30.0, frames=False)
     p = str(tmp_path / "ang.sc")
     r = write_sc(sg, p, n_model=2, drop_density=True)
-    assert r["folded_angles"] == [1]
-    got = np.asarray(build_material_C(read_sc(p)), float)[0]
+    assert r["n_layers"] == 1 and r["folded_angles"] == []
+    assert r["layers"] == [(1, 1, 30.0)]
+    back = read_sc(p)
+    assert back["materials"][1]["type"] == 1          # constants stay clean
+    assert abs(back["materials"][1]["angle"] - 30.0) < 1e-12
+    got = np.asarray(build_material_C(back), float)[0]
     want = np.asarray(build_material_C(
         {"materials": {1: sg["materials"][1]}}), float)[0]
     assert np.abs(got - want).max() / np.abs(want).max() < 1e-14
@@ -609,6 +619,25 @@ def test_write_sc_does_not_silently_drop_a_ply_angle(tmp_path):
     bare = np.asarray(build_material_C(
         {"materials": {1: {"type": 1, "engineering": list(ENG)}}}), float)[0]
     assert np.abs(got - bare).max() / np.abs(bare).max() > 0.01
+
+    # angle_mode="fold": nlayer = 0, type-2 pre-rotated, SAME physics
+    p2 = str(tmp_path / "angf.sc")
+    r2 = write_sc(sg, p2, n_model=2, drop_density=True, angle_mode="fold")
+    assert r2["folded_angles"] == [1] and r2["n_layers"] == 0
+    back2 = read_sc(p2)
+    assert back2["materials"][1]["type"] == 2
+    got2 = np.asarray(build_material_C(back2), float)[0]
+    assert np.abs(got2 - want).max() / np.abs(want).max() < 1e-12
+
+    # an angle-free yaml stays nlayer = 0 under the default -- the deck is
+    # byte-identical to what this writer always emitted
+    sg0 = tube_sg(angle=None, frames=False)
+    p3 = str(tmp_path / "noang.sc")
+    r3 = write_sc(sg0, p3, n_model=2, drop_density=True)
+    p4 = str(tmp_path / "noangf.sc")
+    write_sc(sg0, p4, n_model=2, drop_density=True, angle_mode="fold")
+    assert r3["n_layers"] == 0
+    assert open(p3).read() == open(p4).read()
 
 
 # ================================================ the VABS `.sg`, vs PreVABS

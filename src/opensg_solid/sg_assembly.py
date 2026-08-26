@@ -200,7 +200,38 @@ def calculate_RHS_and_Ke_batch_periodic(
 
     batch_processor = jax.vmap(element_process_all_cases_and_Ke,
                                in_axes=(0, 0, 0))
-    R_end_cases, J_uu_batch = batch_processor(u_end, x_end, C_ess)
+    # jacfwd's per-element AD intermediates scale ~ Q * (N*3)^2 doubles;
+    # one whole-mesh vmap transiently materializes E times that -- 201 GB
+    # for 458k tet10 (Q = 61, 30x30), invisible for tet4.  CHUNK the
+    # element axis so the transient stays ~4 GB; the kernel and digits
+    # are identical, results concatenate on the host.
+    E_tot = int(x_end.shape[0])
+    _chunk = max(1, int(4e9 / (int(W_q.shape[0]) * (N * U) ** 2 * 8)))
+    if E_tot <= _chunk:
+        R_end_cases, J_uu_batch = batch_processor(u_end, x_end, C_ess)
+    else:
+        # jit-safe chunking: pad the element axis to whole slabs (the
+        # pad REPEATS the last element -- valid geometry, rows discarded
+        # below) and lax.map the same vmapped kernel slab by slab
+        _n_ch = -(-E_tot // _chunk)
+        _pad_n = _n_ch * _chunk - E_tot
+
+        def _pad(a):
+            if not _pad_n:
+                return a
+            return jnp.concatenate(
+                [a, jnp.repeat(a[-1:], _pad_n, axis=0)], axis=0)
+
+        _u, _x, _C = _pad(u_end), _pad(x_end), _pad(C_ess)
+        R_sl, J_sl = jax.lax.map(
+            lambda t: batch_processor(*t),
+            (_u.reshape((_n_ch, _chunk) + _u.shape[1:]),
+             _x.reshape((_n_ch, _chunk) + _x.shape[1:]),
+             _C.reshape((_n_ch, _chunk) + _C.shape[1:])))
+        R_end_cases = R_sl.reshape(
+            (_n_ch * _chunk,) + R_sl.shape[2:])[:E_tot]
+        J_uu_batch = J_sl.reshape(
+            (_n_ch * _chunk,) + J_sl.shape[2:])[:E_tot]
 
     R_cases_first = jnp.transpose(R_end_cases, (1, 0, 2, 3))
 
@@ -884,6 +915,11 @@ def sparse_projected_cg(A_sp, C, B, ndof_per_node, tol=1e-8, cheb_degree=4,
 
 
 _direct_spsolve = None
+# None = auto (pypardiso/MKL when importable, else scipy SuperLU);
+# "superlu" = force scipy SuperLU everywhere -- the cli's
+# `--solver direct 2` (serial partial pivoting: the most robust
+# factorization on an ill-conditioned KKT, and the slowest)
+DIRECT_BACKEND = None
 
 
 def _sparse_direct_solve(A_csr, B, sym=False):
@@ -897,7 +933,7 @@ def _sparse_direct_solve(A_csr, B, sym=False):
     the untested-mtype path and falls back to the general solver."""
     global _direct_spsolve
     B_arr = np.asarray(B)
-    if sym:
+    if sym and DIRECT_BACKEND != "superlu":
         try:
             import scipy.sparse as _sp
             from pypardiso import PyPardisoSolver
@@ -915,10 +951,18 @@ def _sparse_direct_solve(A_csr, B, sym=False):
         except Exception:
             pass                                # any failure -> general path
     if _direct_spsolve is None:
-        try:
-            from pypardiso import spsolve as _direct
-        except ImportError:
+        if DIRECT_BACKEND == "superlu":
             from scipy.sparse.linalg import spsolve as _direct
+        else:
+            try:
+                from pypardiso import spsolve as _direct
+            except ImportError:
+                from scipy.sparse.linalg import spsolve as _direct
+                # the silent 20-200x slowdown nobody should discover by
+                # timing: say it ONCE per process
+                print("NOTE: pypardiso (MKL PARDISO) not importable --"
+                      " direct solves fall back to scipy SuperLU"
+                      " (20-200x slower).  pip install pypardiso")
         _direct_spsolve = _direct
     return np.asarray(_direct_spsolve(A_csr, B_arr))
 

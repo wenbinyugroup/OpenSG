@@ -28,8 +28,11 @@ that study baked in:
   material  from the SG yaml (the .msh carries only material TAGS):
             <msh stem minus _plate>.yaml by default, or `yaml_path`.
             type 0 -> *Elastic; type 1 -> ENGINEERING CONSTANTS with an
-            *Orientation `3, -angle` card (OpenSG `angle: a` == Abaqus
-            `3, -a`, the flat_pm45-gated map);
+            *Orientation `3, angle` card (OpenSG `angle: a` == Abaqus
+            `3, a` under the unified VABS-sign convention of
+            2026-08-25; decks written before that carry `3, -a`, the
+            map that matched the engine's pre-unification mirror sign
+            -- each deck matches the engine that wrote it);
   elements  tet4 -> C3D4, hex8 -> C3D8I (incompatible modes: the
             established choice for linear-hex bending); order=2 (tet4
             meshes only) -> C3D10 quadratic tets: conforming midside
@@ -213,9 +216,9 @@ def plate_inp(msh_path, yaml_path=None, out=None, q=1.0, a=None,
                 # ENGINEERING CONSTANTS is anisotropic to Abaqus, and on
                 # solid elements it REFUSES the material without a local
                 # orientation -- so EVERY orthotropic section gets one,
-                # angle 0 included (OpenSG `angle: a` == Abaqus `3, -a`)
+                # angle 0 included (OpenSG `angle: a` == Abaqus `3, a`)
                 f.write("*Orientation, name=ORI%d\n1., 0., 0., 0., 1.,"
-                        " 0.\n3, %g\n" % (mid, -ang))
+                        " 0.\n3, %g\n" % (mid, ang))
                 f.write("*Solid Section, elset=MAT%d, material=M%d,"
                         " orientation=ORI%d\n,\n" % (mid, mid, mid))
             else:

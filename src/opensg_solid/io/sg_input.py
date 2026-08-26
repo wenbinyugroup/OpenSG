@@ -188,13 +188,26 @@ write_sc refuses to guess: `orientation=` must be stated as
              the block either, so nothing here could even catch it.
     "ignore" drop the frames.  Only correct when they are all identity.
 
-A material `angle:` has no slot either, for the same reason -- the `.sc`
-layer table that would carry it exists only when nlayer /= 0.  Dropping it
-would silently change the physics, so write_sc always FOLDS a nonzero
-`angle:` into the material it belongs to, re-spelling that block as a
-pre-rotated type-2 (21-constant) one.  Lossless in C, reader-visible, and
-the only thing an nlayer = 0 file can say; the cost is that the block
-comes back from read_sc spelled `type: 2` rather than `type: 1` + `angle`.
+A material `angle:` DOES have a native slot: the SCManual 8.2 layer
+table.  With nlayer /= 0 the element records' second field is read as a
+layer_id and nlayer lines of `layer_id mate_id angle` sit between the
+element block (after any slave pairs) and the material blocks -- the
+manual's own spelling of "this material at this layup angle", with the
+material block keeping its clean type-1 constants.  write_sc emits that
+by default (angle_mode="layers", ids 1:1 with the materials so the
+element records do not change), writing the yaml angle VERBATIM -- the
+same convention slot as the VABS `.sg` layer table this repo reproduces
+field for field against the PreVABS vendor decks (both manuals define
+it as the ply angle about the layer normal y3).  angle_mode="fold" is
+the alternative the +-45 vendor decks themselves use (nlayer = 0, the
+angle folded into a pre-rotated type-2 block by fold_angles): identical
+physics, the angle no longer visible in the file.  read_sc reads BOTH
+back -- a layer table comes back as per-layer materials spelled
+`type: 1` + `angle`, a folded deck as `type: 2`.  A yaml with no angles
+emits nlayer = 0 either way, byte-identical to this writer's previous
+output.  Under orientation="bake" the angle is folded regardless: a
+baked frame and a ply angle land in ONE type-2 block (the layer table
+cannot carry a full frame -- its one number is a y3 rotation only).
 
 `.sg` needs none of this: theta1 is per element by construction and the
 `angle:` lands in the layer table as theta3.
@@ -477,8 +490,9 @@ def _mat_id_from_sets(sets, n_elem, materials, mat_names):
     name, and by POSITION otherwise -- the contract io.msh_to_yaml
     writes (one set per material, same order).
 
-    In:  sets list of {name, labels (1-based)}; n_elem int;
-         materials list of canonical blocks; mat_names list[str | None]
+    In:  sets list of {name, labels (1-based) | the scalar "all"}; n_elem
+         int; materials list of canonical blocks; mat_names
+         list[str | None]
     Out: (n_elem,) int, 1-based."""
     if len(sets) != len(materials):
         raise ValueError(
@@ -490,7 +504,13 @@ def _mat_id_from_sets(sets, n_elem, materials, mat_names):
     mat_id = np.zeros(int(n_elem), int)
     for k, s in enumerate(sets):
         mid = (mat_names.index(names[k]) + 1) if by_name else (k + 1)
-        lab = np.asarray([int(v) for v in s.get("labels", [])], int)
+        raw_lab = s.get("labels", [])
+        if isinstance(raw_lab, str) and raw_lab.strip().lower() == "all":
+            # `labels: all` -- the whole-SG shorthand the example
+            # generators write for a single-material mesh
+            mat_id[:] = mid
+            continue
+        lab = np.asarray([int(v) for v in raw_lab], int)
         if lab.size and (lab.min() < 1 or lab.max() > n_elem):
             raise ValueError(
                 "element set %r references label %d outside 1..%d"
@@ -637,6 +657,24 @@ def yaml_frames_to_beam(ori):
     Out: (E, 3, 3) float, row i = e_{i+1} in (x1, x2, x3)."""
     o = np.asarray(ori, float).reshape(-1, 3, 3)
     return o[:, :, [2, 0, 1]]
+
+
+def frames_are_noop(ori, atol=1.0e-9):
+    """True when every per-element frame is the NO-OP triad: the identity
+    in BEAM component order, i.e. the constant default io.msh_to_yaml
+    writes -- E1_OUT_OF_PLANE = (0,0,1, 1,0,0, 0,1,0) in yaml order.
+    Rotating a stiffness by the identity is that stiffness, so dropping
+    such frames is exact; write_sc uses this to accept orientation=None
+    in exactly this case and no other.
+
+    NOTE a raw-identity yaml row (1,0,0, 0,1,0, 0,0,1) is NOT a no-op:
+    yaml components are (y2, y3, axial), so its beam-order form is a
+    cyclic axis permutation -- for that SG the choice must be stated.
+
+    In:  ori (E, 9) | (E, 3, 3) float, yaml component order; atol float
+    Out: bool."""
+    R = yaml_frames_to_beam(ori)
+    return bool(np.all(np.abs(R - np.eye(3)) <= atol))
 
 
 def vabs_angles_to_frame(theta1, theta3):
@@ -987,12 +1025,12 @@ def _rotate_C_angle(C, t):
     c, s = np.cos(th), np.sin(th)
     cs = c * s
     R_Sig = np.array([
-        [c ** 2, s ** 2, 0, 0, 0, 2 * cs],
-        [s ** 2, c ** 2, 0, 0, 0, -2 * cs],
+        [c ** 2, s ** 2, 0, 0, 0, -2 * cs],
+        [s ** 2, c ** 2, 0, 0, 0, 2 * cs],
         [0, 0, 1, 0, 0, 0],
-        [0, 0, 0, c, -s, 0],
-        [0, 0, 0, s, c, 0],
-        [-cs, cs, 0, 0, 0, c ** 2 - s ** 2]])
+        [0, 0, 0, c, s, 0],
+        [0, 0, 0, -s, c, 0],
+        [cs, -cs, 0, 0, 0, c ** 2 - s ** 2]])
     return R_Sig @ np.asarray(C, float) @ R_Sig.T
 
 
@@ -1160,7 +1198,7 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
              temp_flag=0, curvature=None, omega=None,
              temperature=0.0, orientation=None, max_baked=64,
              frame_atol=1.0e-9, precision=14, drop_density=False,
-             comments=False):
+             angle_mode="layers", comments=False):
     """Write an SG as a SwiftComp `.sc`.
 
     The layout is the one the vendor decks in this repo use (named in the
@@ -1200,9 +1238,13 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
         temperature: float, the T of the single material property set.
             Only 0.0 is validated -- every vendor deck writes `0 0`.
         orientation: "bake" | "ignore" -- REQUIRED when the SG carries
-            per-element frames, see the module docstring.  "points" (the
-            trans_flag=1 a/b/c block) is named and REFUSED: no deck here
-            is trans_flag=1, so its component ordering is unvalidated.
+            per-element frames, see the module docstring -- UNLESS every
+            frame is the no-op identity (beam order, frames_are_noop):
+            that carries no information, so None drops them
+            automatically and the report says orientation="identity".
+            "points" (the trans_flag=1 a/b/c block) is named and
+            REFUSED: no deck here is trans_flag=1, so its component
+            ordering is unvalidated.
         max_baked: int, the guard on how many materials "bake" may create.
         frame_atol: float, the rounding that decides two frames are one.
         precision: int, decimals of the %e number format (15 significant
@@ -1212,6 +1254,18 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
             third-party decks write `0 0`).  True writes that evidenced
             `0 0` line instead of raising, losing only the density, which
             an elastic run does not use.
+        angle_mode: "layers" | "fold" -- what carries a material `angle:`.
+            "layers" (default) is the NATIVE SCManual 8.2 spelling: the
+            size line's nlayer /= 0, a `layer_id mate_id angle` table
+            between the elements and the materials, the element records'
+            second field read as layer_id (ids are written 1:1 with the
+            materials, so the records are the same numbers either way),
+            and the material blocks keep their clean type-1 constants.
+            "fold" is the pre-rotated type-2 spelling the +-45 vendor
+            decks use (fold_angles).  Identical physics; a yaml with no
+            angles emits nlayer = 0 under both.  orientation="bake"
+            folds regardless -- a baked frame and a ply angle land in
+            ONE type-2 block, so those decks stay nlayer = 0.
         comments: bool -- REFUSED when True, see the module docstring.
     Out:
         dict {path, dim, n_nodes, n_elems, n_mats, n_model, refined,
@@ -1224,6 +1278,10 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
     """
     if comments:
         raise NotImplementedError(_NO_COMMENTS % ("SwiftComp `.sc`", "#"))
+    if angle_mode not in ("layers", "fold"):
+        raise ValueError("angle_mode is 'layers' (the SCManual 8.2 layer"
+                         " table) or 'fold' (pre-rotated type-2 blocks),"
+                         " got %r" % (angle_mode,))
     sg = read_opensg_yaml(sg) if not isinstance(sg, dict) else sg
     dim = int(sg["dim"])
     if dim not in (1, 2, 3):
@@ -1256,16 +1314,24 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
     materials, mat_id = dict(sg["materials"]), np.asarray(sg["mat_id"], int)
     trans = 0                        # trans_flag: every deck in this tree
     if sg.get("orientation") is not None:
-        if orientation not in _ORIENTATION_MODES:
+        if orientation is None and frames_are_noop(sg["orientation"],
+                                                   frame_atol):
+            # nothing to state: every frame is the no-op identity (beam
+            # order -- io.msh_to_yaml's constant default), so dropping
+            # them is exact.  "identity" in the report tells an automatic
+            # drop apart from an explicit 'ignore'.
+            orientation = "identity"
+        elif orientation not in _ORIENTATION_MODES:
             raise ValueError(
-                "this SG carries per-element `elementOrientations`, which a "
-                "trans_flag=0 `.sc` has no slot for.  State what to do with "
-                "them: orientation='bake' (fold each frame into its own "
-                "pre-rotated type-2 material -- exact, and read_sc reads it "
-                "back) or 'ignore' (drop them; correct only when they are "
-                "all the identity).  'points' (the trans_flag=1 a/b/c "
-                "block) is a recognised name but is REFUSED as "
-                "unvalidated.  Got orientation=%r." % (orientation,))
+                "this SG carries per-element `elementOrientations` that are "
+                "NOT all the no-op identity, and a trans_flag=0 `.sc` has "
+                "no slot for them.  State what to do: orientation='bake' "
+                "(fold each frame into its own pre-rotated type-2 material "
+                "-- exact, and read_sc reads it back) or 'ignore' (drop "
+                "them; correct only when they are all the identity).  "
+                "'points' (the trans_flag=1 a/b/c block) is a recognised "
+                "name but is REFUSED as unvalidated.  Got orientation=%r "
+                "(CLI: --orientation bake|ignore)." % (orientation,))
         if orientation == "points":
             raise NotImplementedError(
                 "orientation='points' -- the native SwiftComp trans_flag=1 "
@@ -1286,7 +1352,11 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
                 "element.")
         if orientation == "bake":
             materials, mat_id = _bake_frames(sg, max_baked, frame_atol)
-    materials, folded = fold_angles(materials)
+            # _bake_frames already folded each block's `angle:` in with its
+            # frame; whatever reaches the layer scan below carries none, so
+            # the deck comes out nlayer = 0 exactly as before.
+    materials, folded = (materials, []) if angle_mode == "layers" \
+        else fold_angles(materials)
     materials, dropped = _guard_sc_aux(materials, temperature, drop_density)
     if omega is not None:
         omega, omega_source = float(omega), "argument"
@@ -1300,6 +1370,30 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
         omega = sg_omega(sg["nodes"], dim, n_model, sg["cells"])
         omega_source = "measured"
     materials, mat_id = _renumber(materials, mat_id)
+
+    # the SCManual 8.2 layer table: `layer_id mate_id angle`, one layer per
+    # material with the ids 1:1, so the element records' second field --
+    # which the manual re-reads as layer_id whenever nlayer /= 0 -- is the
+    # same number either way.  The angle is the yaml `angle:` VERBATIM: the
+    # same convention slot as the validated VABS `.sg` layer table, whose
+    # theta3 this repo reproduces field for field against the PreVABS
+    # vendor decks (both manuals define it as the ply angle about the
+    # layer normal y3).  A deck with no angles anywhere stays nlayer = 0,
+    # byte-identical to what this writer always emitted.
+    layers = []
+    if angle_mode == "layers":
+        stripped = {}
+        for mid in sorted(materials):
+            blk = materials[mid]
+            ang = float(blk.get("angle", 0.0) or 0.0)
+            if ang != 0.0:
+                blk = {k: v for k, v in blk.items() if k != "angle"}
+            layers.append((mid, mid, ang))
+            stripped[mid] = blk
+        if any(a != 0.0 for _, _, a in layers):
+            materials = stripped
+        else:
+            layers = []
 
     nodes = np.asarray(sg["nodes"], float)
     fe, fb = _fe(int(precision)), _fb(int(precision))
@@ -1315,8 +1409,9 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
             f.write(" ".join(fb % v for v in k) + "\n")
         f.write("%d %d %d %d\n\n" % (int(analysis), int(elem_flag), trans,
                                      int(temp_flag)))
-        f.write("%d %d %d %d 0 0\n\n"
-                % (dim, len(nodes), len(sg["cells"]), len(materials)))
+        f.write("%d %d %d %d 0 %d\n\n"
+                % (dim, len(nodes), len(sg["cells"]), len(materials),
+                   len(layers)))
 
         for i, x in enumerate(nodes):
             f.write(("%d" + fe * dim + "\n") % ((i + 1,) + tuple(x[:dim])))
@@ -1328,6 +1423,13 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
                                     " ".join(str(v) for v in row)))
         f.write("\n")
 
+        # SCManual 8.2 block order with nslave = 0: the layer table sits
+        # between the element block and the material blocks
+        if layers:
+            for lid, mid, ang in layers:
+                f.write(("%d %d " + fb + "\n") % (lid, mid, ang))
+            f.write("\n")
+
         for mid in sorted(materials):
             _write_material_sc(f, mid, materials[mid], temperature, fe)
         f.write((fb + "\n") % float(omega))
@@ -1337,6 +1439,8 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
             "n_model": n_model, "refined": refined, "omega": float(omega),
             "omega_source": omega_source, "trans_flag": trans,
             "orientation": orientation, "folded_angles": folded,
+            "n_layers": len(layers),
+            "layers": [(l, m, a) for l, m, a in layers if a != 0.0],
             "dropped_density": dropped}
 
 

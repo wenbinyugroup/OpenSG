@@ -442,6 +442,45 @@ def main(argv=None):
         return windio_st(argv[1:])
     if argv and argv[0] == "pynumad":
         return pynumad(argv[1:])
+    # `--solver_help` answers with the solid engine's ranked menu plus
+    # the one shell fact that matters: these routes always run direct
+    if any(str(a).strip().lower() in ("--solver_help", "--solver-help")
+           for a in argv):
+        from opensg_solid.cli import SOLVER_MENU
+        print("note: msg-shell routes always run the direct solver (the"
+              " drilling Lagrange saddle point); the menu below is the"
+              " solid engine's")
+        print(SOLVER_MENU)
+        return 2
+    # --gpu / --solver are the solid engine's linear-solver switches:
+    # every msg-shell route factorizes a drilling-Lagrange saddle point,
+    # which CG cannot take -- say so and run the direct solver instead of
+    # failing the arity check
+    if any(str(a).strip().lower().startswith("--solver")
+           or str(a).strip().lower() in ("--gpu", "gpu") for a in argv):
+        print("note: --gpu/--solver have no effect on the msg-shell"
+              " routes (the drilling Lagrange saddle point needs the"
+              " direct PARDISO/SuperLU factorization) -- direct solver"
+              " used")
+        _kept, _i = [], 0
+        while _i < len(argv):
+            al = str(argv[_i]).strip().lower()
+            if al == "--solver":
+                _i += 2                    # the flag and its value token
+                if _i < len(argv) and str(argv[_i]).strip().isdigit():
+                    _i += 1                # `--solver direct 2` number
+                continue
+            if al.startswith("--solver="):
+                _i += 1
+                if _i < len(argv) and str(argv[_i]).strip().isdigit():
+                    _i += 1
+                continue
+            if al in ("--gpu", "gpu"):
+                _i += 1
+                continue
+            _kept.append(argv[_i])
+            _i += 1
+        argv = _kept
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):
         print(__doc__)
         return 2

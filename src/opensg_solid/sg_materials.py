@@ -10,11 +10,17 @@ DEDUPE vs rm_plate_1D.msg_materials (diffed, not force-merged):
 - build_stiffness_6x6 is the SAME compliance inverse as
   build_single_C_matrix (verified identical); it is numpy -- this engine
   vmaps/jits the builder, so the traceable jnp version stays here.
-- rotation_6x6(t) == rotate_C_matrix(-t): the OpenSG R_sig convention
-  (rm_plate_1D, and Beam_solid's own rotate_C_matrix) is the OPPOSITE
-  angle sign of the SSDM R_Sig below.  The 2-D engine keeps the SSDM
-  sign its plate/beam validations were produced with -- do NOT swap one
-  for the other.
+- rotation_6x6(t) == rotate_C_matrix(t): ONE package convention, the
+  VABS/OpenSG R_sig lineage (rm_plate_1D) -- `angle: a` is the fiber
+  angle +a, right-handed about y3, the same sense as the VABS .sg and
+  SwiftComp .sc layer tables.  Until 2026-08-25 this engine carried the
+  SSDM R_Sig, which is rotation_6x6(-t): the same yaml `angle:` built
+  MIRROR laminates on the two paths ([45/0/-30/90] general-vs-
+  rm_plate_1D A6 rel diff 1.4e-1, machine-zero after unification; see
+  tests/msg_k_reference/test_rotation_parity.py).  The Abaqus deck map
+  moved in lockstep (helper/plate_inp.py now writes `3, a`, was
+  `3, -a`), so a deck regenerated from a yaml still matches this
+  engine's recovery of the same yaml.
 
 Voigt order everywhere: (xx, yy, zz, yz, xz, xy), SwiftComp/laminate.
 
@@ -32,7 +38,8 @@ Voigt order everywhere: (xx, yy, zz, yz, xz, xy), SwiftComp/laminate.
 #   elem_rotation       (E, 9) flattened DCs or None (parser yields none)
 # working
 #   S, C, C_mat         (6, 6) compliance / stiffness, SwiftComp order
-#   R_Sig               (6, 6) SSDM Voigt stress rotation (the validated sign)
+#   R_Sig               (6, 6) Voigt stress rotation, == rm_plate_1D
+#                       rotation_6x6 (the VABS sign, fiber at +t)
 #   K                   (6, 6) Voigt transform built from R_flat
 #   ids                 (E,) 0-based per-element material ids (= mat_seq)
 # outputs
@@ -70,12 +77,12 @@ def rotate_C_matrix(C, t):
         c, s = jnp.cos(th), jnp.sin(th)
         cs = c * s
         R_Sig = jnp.array([
-            [c ** 2, s ** 2, 0, 0, 0, 2 * cs],
-            [s ** 2, c ** 2, 0, 0, 0, -2 * cs],
+            [c ** 2, s ** 2, 0, 0, 0, -2 * cs],
+            [s ** 2, c ** 2, 0, 0, 0, 2 * cs],
             [0, 0, 1, 0, 0, 0],
-            [0, 0, 0, c, -s, 0],
-            [0, 0, 0, s, c, 0],
-            [-cs, cs, 0, 0, 0, c ** 2 - s ** 2]])
+            [0, 0, 0, c, s, 0],
+            [0, 0, 0, -s, c, 0],
+            [cs, -cs, 0, 0, 0, c ** 2 - s ** 2]])
         return R_Sig @ C_mat @ R_Sig.T
 
     def skip_rotation(operand):
@@ -105,19 +112,19 @@ def _single_C_np(params):
 
 
 def _rotate_C_np(C, t):
-    """NumPy twin of rotate_C_matrix -- the same SSDM R_Sig sign."""
+    """NumPy twin of rotate_C_matrix -- the same (VABS) R_Sig sign."""
     if float(t) == 0.0:
         return np.asarray(C, float)
     th = np.deg2rad(float(t))
     c, s = np.cos(th), np.sin(th)
     cs = c * s
     R_Sig = np.array([
-        [c ** 2, s ** 2, 0, 0, 0, 2 * cs],
-        [s ** 2, c ** 2, 0, 0, 0, -2 * cs],
+        [c ** 2, s ** 2, 0, 0, 0, -2 * cs],
+        [s ** 2, c ** 2, 0, 0, 0, 2 * cs],
         [0, 0, 1, 0, 0, 0],
-        [0, 0, 0, c, -s, 0],
-        [0, 0, 0, s, c, 0],
-        [-cs, cs, 0, 0, 0, c ** 2 - s ** 2]])
+        [0, 0, 0, c, s, 0],
+        [0, 0, 0, -s, c, 0],
+        [cs, -cs, 0, 0, 0, c ** 2 - s ** 2]])
     return R_Sig @ np.asarray(C, float) @ R_Sig.T
 
 

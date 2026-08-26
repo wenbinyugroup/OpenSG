@@ -775,12 +775,15 @@ def material_frame_fields(Gam, Sig, r):
 
     The block `angle: a` bakes the ply stiffness INTO the SG frame
     (sg_materials), so the recovery output is SG-global; the material
-    frame is recovered by rotating back by the fiber angle
-    theta = -a about the SG THICKNESS axis (the last SG coordinate).
-    The sign is the flat_pm45 convention (OpenSG `angle: a` == Abaqus
-    `*Orientation ..., 3, -a`) and is GATED against the pm45 3-D
-    material-frame dump: theta = -a lands ply RMS 2.6-6.6 % (the model
-    error), theta = +a blows up to 46-264 %.
+    frame is recovered by rotating into the fiber frame,
+    theta = +a about the SG THICKNESS axis (the last SG coordinate).
+    The sign tracks the unified VABS-sign convention of 2026-08-25
+    (OpenSG `angle: a` == Abaqus `*Orientation ..., 3, a`); the pm45
+    3-D material-frame gate (ply RMS 2.6-6.6 %, the model error, vs
+    46-264 % with the wrong sign) was run under the pre-unification
+    mirror PAIR (engine -a, deck `3, -a`) -- both sides flip together,
+    so the gate parity holds for a deck regenerated from the same
+    yaml.
 
     Strain columns are engineering (gamma = 2 eps); the shear pair
     (yz, xz) rotates as a vector so only the (xx, yy, xy) row needs the
@@ -809,10 +812,10 @@ def material_frame_fields(Gam, Sig, r):
     Gs, Ss = np.asarray(Gam, float), np.asarray(Sig, float)
     if Ss.ndim == 2:                      # mixed: flat, per-batch order
         th = np.concatenate([
-            np.repeat(-a_e[idx], ph.shape[0])
+            np.repeat(a_e[idx], ph.shape[0])
             for idx, ph in zip(r["batch_idx"], r["phi_qn"])])
     else:                                 # single batch: element order
-        th = np.repeat(-a_e, Ss.shape[1]).reshape(Ss.shape[:2])
+        th = np.repeat(a_e, Ss.shape[1]).reshape(Ss.shape[:2])
     c = np.cos(np.radians(th))
     s = np.sin(np.radians(th))
 

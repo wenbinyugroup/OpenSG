@@ -118,14 +118,19 @@ def generate_msh_from_sc(input_filepath, output_filepath):
                 # Get the raw list of nodes before filtering anything
                 raw_connectivity = parts[2:]
                 
-                # Check the .sc convention: If the 5th node (index 4) is '0', it's a Tetra
-                # We use len() >= 5 to prevent index errors on shorter lines
+                # Check the .sc convention: slot 5 (index 4) is '0' for BOTH
+                # tet4 and tet10; slot 6 (index 5) is the first midside of a
+                # tet10 and '0' for a tet4
                 is_tetra_deg2 = raw_connectivity[5] != '0'
-                
+
                 if is_tetra_deg2:
-                    connectivity = raw_connectivity[:4] + raw_connectivity[6:12]
+                    # .sc midsides live in slots 6-11 (indices 5:11) on edges
+                    # (12, 23, 13, 14, 24, 34); gmsh type 11 wants
+                    # (12, 23, 13, 14, 34, 24) -> swap the last two
+                    mids = raw_connectivity[5:11]
+                    connectivity = raw_connectivity[:4] + mids[:4] + [mids[5], mids[4]]
                     elem_type = 11
-                    cell_types_found.add("10-Node Tetrahedron")  
+                    cell_types_found.add("10-Node Tetrahedron")
                     
                 else:
                     elem_type = 4

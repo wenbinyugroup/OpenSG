@@ -864,9 +864,12 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     argument the legacy defaults apply (plate; refined as above).
     n_model=1 routes through the Beam_solid KKT engine (n_sg >= 2);
     elem_rotation is consumed by every model (beam, plate and solid).
-    solver: "direct" (default; one sparse factorization for all columns)
-    or "cg" (the verbatim SSDM Chebyshev-CG pipeline) -- both produce
-    the same digits, see _homo_direct.
+    solver: "direct" (default; one sparse factorization for all columns),
+    "cg" (the verbatim SSDM Chebyshev-CG pipeline) or "stream" (iter 3:
+    the same CG with the element blocks packed HOST-side and streamed
+    slab-by-slab -- the route past device memory, see sg_stream; single
+    element type, periodic, homogenization-only for the refined plate)
+    -- all produce the same digits, see _homo_direct.
     The plate model=1 route runs the RM first-order warping ladder
     (plate_shear_ladder) -> r["G_msg"] (2x2), r["ABDG"] (8x8
     [[A6, 0], [0, G]]), r["A6_ladder"]; derivation status per SG
@@ -974,7 +977,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         raise ValueError("mixed element types: the beam (n_model 1) "
                          "KKT route is single-batch; split the mesh or "
                          "use one element type: %s nodes/elem" % nn)
-    if mixed and solver == "cg":
+    if mixed and solver in ("cg", "stream"):
         raise ValueError("mixed element types need solver='direct' "
                          "(the EBE/Chebyshev CG operators are "
                          "single-batch): %s nodes/elem" % nn)
@@ -1013,7 +1016,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                                               boundary)
         bdofs = None
     else:
-        if n_model == 1 or solver == "cg":
+        if n_model == 1 or solver in ("cg", "stream"):
             raise ValueError("boundary='aperiodic' supports the plate/solid "
                              "models with solver='direct'")
         # boundary solution mapped to the boundary nodes: zero fluctuation
@@ -1029,6 +1032,15 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         onb = ((np.abs(pts - box0) < tol) | (np.abs(pts - box1) < tol)).any(1)
         bdofs = (3*np.where(onb)[0][:, None] + np.arange(3)).ravel()
 
+    if n_model == 1 and solver == "stream":
+        raise ValueError("--solver stream (iter 3) covers the periodic "
+                         "plate/solid models; the beam KKT route has "
+                         "direct and cg")
+    if solver == "stream" and shear_refined and recovery:
+        raise ValueError("--solver stream (iter 3) is homogenization-only"
+                         " for the shear-refined plate in this delivery:"
+                         " run analysis H (recovery=False) -- the V2 and"
+                         " load-ladder recovery columns are not streamed")
     if n_model == 1:
         r = _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
                            dphi_dxi_qnp, W_q, dof_map_np,
@@ -1087,6 +1099,13 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
             periodic_cells_en, unique_dofs, n_unique, n_model, n_sg,
             bdofs=bdofs)
+    elif solver == "stream":
+        # iter 3: chunked host-resident EBE CG -- element blocks
+        # streamed slab-by-slab into packed host numpy (sg_stream)
+        from opensg_solid.sg_stream import stream_homo
+        C_eff, V0_matrix, omega = stream_homo(
+            x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+            periodic_cells_en, n_unique, n_model, n_sg)
     else:
         C_eff, V0_matrix, omega = full_homogenization_pipeline(
             x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
@@ -1182,10 +1201,26 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                           sgn * wgt / float(omega))
         if not mixed:
             phi_hi, dphi_hi, W_hi = fe_tables(n_sg, nn[0], hi=True)
-            lad = plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
-                                     periodic_cells_en, n_unique, n_sg,
-                                     float(omega), f_faces=f_faces,
-                                     node_y2=node_y2)
+            if solver == "stream":
+                from opensg_solid.sg_stream import stream_plate_shear_ladder
+                lad = stream_plate_shear_ladder(
+                    x_end, dphi_hi, phi_hi, W_hi, C_ess,
+                    periodic_cells_en, n_unique, n_sg, float(omega))
+                if lad is None:
+                    # iter 3 deferred the G ladder (packed hh blocks
+                    # exceed RAM): the classical law stands, the .out
+                    # stays the 6x6 -- the dummy keys route the writer
+                    # to the classical branch below
+                    lad = {"G_msg": None, "X": None, "A6": None,
+                           "Ustar_rel": float("nan"), "V0": None,
+                           "V11": None, "V12": None, "V11bar": None,
+                           "V12bar": None}
+            else:
+                lad = plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi,
+                                         C_ess, periodic_cells_en,
+                                         n_unique, n_sg, float(omega),
+                                         f_faces=f_faces,
+                                         node_y2=node_y2)
         else:
             hi = [fe_tables(n_sg, b["nn"], hi=True) for b in bat]
             lad = plate_shear_ladder(

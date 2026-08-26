@@ -9,6 +9,19 @@ The .sc anatomy this reads (SwiftComp MSG-native input):
     dim  n_nodes  n_elems  n_mats  ...   <- the META line (>= 5 integers)
     <n_nodes>  id  x [y [z]]
     <n_elems>  id  mat_id  conn... (zero-padded; the zeros are NOT nodes)
+
+    Element slot conventions (MEASURED over the 20 Sandwich_SC_files decks,
+    54 + 72,318 + 14,069 elements -- see the read_sc comments):
+      1-D 5-node   [end, end, 25%, 75%, 50%]  -> reordered at read to the
+                   gmsh/basix [end, end, 25%, 50%, 75%]
+      2-D tri3     slots 1-3, CCW, kept as-is
+      3-D tet10    corners in slots 1-4, slot 5 = 0, midsides in slots
+                   6-11 on edges (12,23,13,14,24,34) -> midsides reordered
+                   at read to the GMSH tet10 edge order (12,23,13,14,34,24);
+                   the gmsh->basix hop happens in sg_homo._to_basix_order
+      3-D 9-slot   a tet10 whose last midside COLUMN was zeroed at write
+                   time (BCC/SW_2UC_45/90.sc): degraded to the 4 corner
+                   nodes (straight tet4), orphan midside nodes compacted
     per material:
         mat_id  mat_type  n
         <aux line: temperature  density>
@@ -107,6 +120,8 @@ def read_sc(path):
             meta_idx = i
             dim, n_nodes, n_elems, n_mats = (int(parts[0]), int(parts[1]),
                                              int(parts[2]), int(parts[3]))
+            n_slave = int(parts[4])
+            n_layer = int(parts[5]) if len(parts) >= 6 else 0
             break
     if meta_idx == -1:
         raise ValueError("no META line (>=5 integers) in %s" % path)
@@ -119,27 +134,73 @@ def read_sc(path):
             nodes[i, d] = float(p[1 + d])
 
     cells, mat_id = [], []
+    n_degraded = 0
     e0 = meta_idx + 1 + n_nodes
     for ln in lines[e0: e0 + n_elems]:
         p = ln.split()
         mat_id.append(int(p[1]))
-        conn = [int(n) - 1 for n in p[2:] if n != "0"]
+        conn = [int(n) - 1 for n in p[2:] if int(n) != 0]
         if dim == 3 and len(conn) == 10:
-            # the tet10 slot convention of fe_jax/sc_to_msh: 4 corners,
-            # slot 5 = 0, then the 6 midsides in slots 7-12
+            # the .sc tet10 slot convention (measured on BCC/CoreUC.sc +
+            # Plate_coarse.sc, 14,069/14,069 elements): 4 corners, slot 5
+            # = 0, the 6 midsides in slots 6-11 on edges (12, 23, 13, 14,
+            # 24, 34).  gmsh type 11 wants (12, 23, 13, 14, 34, 24), so
+            # the last two midsides swap -> yaml/.msh carry GMSH order.
             raw = p[2:]
-            conn = [int(n) - 1 for n in (raw[:4] + raw[6:12])]
+            conn = [int(n) - 1 for n in (raw[:4] + raw[5:11])]
+            conn = conn[:8] + [conn[9], conn[8]]
+        elif dim == 3 and len(conn) == 9:
+            # e.g. SW_2UC_45.sc: a tet10 whose 6th midside COLUMN (slot
+            # 11, edge 34) was zeroed at write time -- the stored slots
+            # cannot make a complete quadratic tet, so keep the 4 corner
+            # nodes (slots 1-4, verified right-handed) as a straight
+            # tet4; the orphaned midside nodes are compacted out below.
+            conn = conn[:4]
+            n_degraded += 1
         elif dim == 3 and len(conn) not in (4, 8):
-            # e.g. SW_2UC_45.sc: every record has 9 nonzero slots -- not a
-            # tet4/hex8/tet10 under any known SwiftComp slicing.  Refuse
-            # loudly instead of emitting phantom node 0 / -1 entries.
+            # an element that is not tet4/hex8/tet10 under the measured
+            # slot convention: refuse loudly instead of emitting phantom
+            # node 0 / -1 entries.
             raise ValueError(
                 "%s: 3-D element %s has %d nonzero connectivity slots -- "
-                "not tet4/hex8/tet10; confirm this file's SwiftComp slot "
-                "convention before converting" % (path, p[0], len(conn)))
+                "not tet4/hex8/tet10 (nor a 9-slot truncated tet10); "
+                "confirm this file's SwiftComp slot convention before "
+                "converting" % (path, p[0], len(conn)))
+        elif dim == 1 and len(conn) == 5:
+            # the .sc 5-node interval order is [end, end, 25%, 75%, 50%]
+            # (measured 54/54 elements over all six 1-D Sandwich decks);
+            # gmsh type 27 AND the engine's equispaced basix interval-P4
+            # both want [end, end, 25%, 50%, 75%] -- swap the last two.
+            # Fed unswapped nothing raises: det J flips sign inside the
+            # element and the ABD comes out silently wrong.
+            conn = [conn[0], conn[1], conn[2], conn[4], conn[3]]
         cells.append(conn)
 
-    materials, k = {}, e0 + n_elems
+    if n_degraded:
+        # the truncated-tet10 corners reference only part of the node
+        # table; the unreferenced midside nodes would enter the periodic
+        # boundary map as zero-stiffness DOFs, so compact them out
+        used = sorted({n for c in cells for n in c})
+        remap = {o: i for i, o in enumerate(used)}
+        nodes = nodes[used]
+        cells = [[remap[n] for n in c] for c in cells]
+        print("read_sc: %s: %d truncated-tet10 elements (midside column "
+              "zeroed at write time) degraded to their 4 corner nodes; "
+              "%d orphaned midside nodes compacted out"
+              % (os.path.basename(path), n_degraded, n_nodes - len(used)))
+
+    # SCManual 8.2 block order after the elements: [nslave slave/master
+    # pairs] then [nlayer `layer_id mate_id angle` lines] then the
+    # material blocks.  With nlayer /= 0 the elements' second field just
+    # read is a LAYER id, resolved to per-layer materials below.
+    k = e0 + n_elems + n_slave
+    layers = {}
+    for _ in range(n_layer):
+        p = lines[k].split()
+        layers[int(p[0])] = (int(p[1]), float(p[2]))
+        k += 1
+
+    materials = {}
     for _ in range(n_mats):
         head = lines[k].split()
         mid, mtype = int(head[0]), int(head[1])
@@ -169,6 +230,20 @@ def read_sc(path):
             k = j
         materials[mid] = m
     scale = float(lines[k].split()[0]) if k < len(lines) else 1.0
+
+    if n_layer:
+        # per-layer materials: the layer's material card with the layup
+        # angle re-attached as `angle:` -- the exact inverse of
+        # sg_input.write_sc's angle_mode="layers" (which writes the ids
+        # 1:1, so a round trip reproduces the original numbering)
+        lay = {}
+        for lid in sorted(layers):
+            mid, ang = layers[lid]
+            blk = dict(materials[mid])
+            if ang != 0.0:
+                blk["angle"] = ang
+            lay[lid] = blk
+        materials = lay
 
     return {"dim": dim, "nodes": nodes, "cells": cells,
             "mat_id": np.array(mat_id, int), "materials": materials,
@@ -246,6 +321,23 @@ def header_omega(sc, n_model):
     if same or not ok:
         return None, None
     if int(n_model) == 3 and dim == 3:
+        # a trailing value that matches a REDUCED measure -- the product
+        # of a proper subset of the coordinate spans -- is an in-plane
+        # normalization (Plate_coarse.sc: 400 = 20x20 of a 20x20x50 SG),
+        # not the unit-cell volume; emitting it would rescale C_eff by
+        # meas/omega (50x there) through sg_homo, so drop it instead.
+        nd = np.asarray(sc["nodes"], float)
+        span = nd.max(axis=0) - nd.min(axis=0)
+        for sub in ((0,), (1,), (2,), (0, 1), (0, 2), (1, 2)):
+            red = float(np.prod(span[list(sub)]))
+            if abs(scale - red) <= _OMEGA_RTOL * max(abs(red), abs(scale)):
+                return None, (
+                    "the .sc trailing value %.6g equals the reduced "
+                    "span measure %s = %.6g, not the unit-cell volume "
+                    "%.6g -- dropped (an in-plane normalization, not an "
+                    "SG measure)" % (scale,
+                                     "*".join("span[%d]" % i for i in sub),
+                                     red, meas))
         return scale, None
     return None, ("the .sc trailing value %.6g differs from the measured SG "
                   "measure %.6g -- dropped (omega: is read only by the 3-D "

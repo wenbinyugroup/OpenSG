@@ -5,6 +5,22 @@
     opensg_solid <sg.yaml> --mesh  the run above, AND force a redraw of
                                   <base>_mesh.png (a flag, not an
                                   analysis: combines with H | D)
+    opensg_solid <sg.yaml> --solver F [N]  pick the linear solver of
+                                  the fluctuation solves.  F = direct
+                                  (assembled sparse factorization, CPU;
+                                  the DEFAULT family) or iter (matrix-
+                                  free preconditioned CG, device-
+                                  resident: the GPU route, and the one
+                                  past the direct memory wall at ~1M
+                                  dofs).  N picks the backend inside
+                                  the family; `--solver` alone,
+                                  `--solver help` or `--solver_help`
+                                  prints the full ranked menu.
+                                  Shorthands: --gpu /
+                                  --solver cg = iter 1; --solver
+                                  stream = iter 3; --solver
+                                  pardiso / superlu = direct 1 / 2.
+                                  A flag, combines with H | D
 
 No flags, no codes: everything else lives in the yaml header (the
 leading scalar keys above the mesh blocks), and every key has a default
@@ -44,9 +60,10 @@ recovers a whole FIELD from a `.ff` station table found next to the
 yaml (or named by `ff:` in the header) -- see the 1-D dehom example.
 
 D output frame: --material (the DEFAULT) rotates every element's
-stress/strain into its own PLY axes (theta = -angle about the thickness
-axis, the flat_pm45-gated Abaqus equivalence -- what an Abaqus odb shows
-UNTRANSFORMED when the section carries *Orientation); --global keeps
+stress/strain into its own PLY axes (theta = +angle about the thickness
+axis, the unified VABS-sign Abaqus equivalence `3, angle` -- what an
+Abaqus odb shows UNTRANSFORMED when the section carries
+*Orientation); --global keeps
 the SG axes, the frame the recovery computes in and the one every .SM
 written before this flag existed carries.  The .SM/.EM header names the
 frame; .U is never rotated.  Block-angle yamls only -- per-element
@@ -69,6 +86,58 @@ BANNER = """
  ============================================================================
 """
 
+SOLVER_MENU = """\
+ --solver menu -- the linear solver of the fluctuation solves
+ (ranked fastest first among the AVAILABLE backends; every option
+ returns the same digits -- direct is exact, iter's error enters the
+ stiffness at SECOND order of the CG tolerance, 1e-6 -> ~1e-12)
+
+   direct     assembled-matrix sparse factorization (CPU).  One factor
+              serves every load column and both V0/V1 solves: the
+              fastest choice below ~1M dofs.
+     direct 1   pardiso   MKL PARDISO (pypardiso), multithreaded --
+                          the DEFAULT.  Every symmetric solve is
+                          residual-checked and falls back on failure.
+                          Needs x86/MKL; int32 indices (nnz < 2^31)
+     direct 2   superlu   scipy SuperLU, serial partial pivoting --
+                          the most robust factorization on an
+                          ill-conditioned KKT, and what the auto
+                          fallback uses when pypardiso is missing.
+                          20-200x slower; memory wall near 1e6 dofs
+     direct 3   mumps     PETSc MUMPS (portable, int64)     [PLANNED]
+     direct 4   cudss     NVIDIA cuDSS GPU factorization    [PLANNED]
+
+   iter       matrix-free preconditioned CG, fully device-resident:
+              runs on the GPU when jax sees one (pip install
+              .[cuda12]).  The route past the direct solvers' memory
+              wall (>~1M dofs).  Single-element-type PERIODIC SGs
+              only: mixed hex+tet and aperiodic SGs need direct.
+     iter 1     cheb      EBE block-Jacobi + Chebyshev(4) CG -- the
+                          iter DEFAULT until amg lands (--gpu /
+                          --solver cg land here).  Never assembles
+                          the matrix: the memory-lightest route, and
+                          the one that still runs at >~10M dofs or in
+                          tight GPU memory
+     iter 2     amg       AMG-preconditioned CG (AmgX / PETSc GAMG
+                          via jetsci): the fastest class above ~1M
+                          dofs -- becomes the iter DEFAULT once
+                          wired (it needs the assembled CSR on the
+                          device to build its coarse hierarchy, so
+                          cheb keeps the extreme-dof niche) [PLANNED]
+     iter 3     stream    chunked host-resident EBE CG -- the
+                          >RAM-of-device route (~20M dofs on 93 GB);
+                          slower per iteration than iter 1, the only
+                          route when the element blocks exceed device
+                          memory.  Blocks are computed slab-by-slab
+                          and packed (symmetric half) in host numpy;
+                          shear-refined plate runs are
+                          homogenization-only (analysis H).  Never a
+                          default -- ask for it
+
+ shorthands: --gpu = iter 1; --solver stream = iter 3;
+             --solver pardiso / superlu = direct 1 / 2
+"""
+
 
 def main(argv=None):
     """Run the analysis the yaml (and an optional H|D argument) request.
@@ -83,6 +152,63 @@ def main(argv=None):
                     for a in argv)
     argv = [a for a in argv
             if str(a).strip().lower() not in ("--mesh", "-m", "mesh")]
+    # --solver F [N] picks the linear-solver FAMILY of the fluctuation
+    # solves (direct = assembled sparse factorization, CPU; iter =
+    # matrix-free preconditioned CG, device-resident -- the GPU route)
+    # and optionally the backend NUMBER inside it (`--solver direct 2`,
+    # `--solver direct2`).  Bare `--solver` / `--solver help` prints the
+    # menu.  --gpu / --solver cg = iter 1; pardiso / superlu = direct 1/2.
+    solver_req, _kept, _i = None, [], 0
+    while _i < len(argv):
+        al = str(argv[_i]).strip().lower()
+        if al in ("--solver_help", "--solver-help"):
+            solver_req = "help"            # no value token to consume
+        elif al.startswith("--solver"):
+            if "=" in al:
+                v = al.split("=", 1)[1]
+            else:
+                _i += 1
+                v = (str(argv[_i]).strip().lower()
+                     if _i < len(argv) else "")
+            if (v in ("direct", "iter") and _i + 1 < len(argv)
+                    and str(argv[_i + 1]).strip().isdigit()):
+                _i += 1
+                v += str(argv[_i]).strip()
+            solver_req = v
+        elif al in ("--gpu", "gpu"):
+            solver_req = "iter1"
+        else:
+            _kept.append(argv[_i])
+        _i += 1
+    argv = _kept
+    solver, force_superlu = None, False
+    if solver_req is not None:
+        _alias = {"direct": "direct1", "pardiso": "direct1",
+                  "superlu": "direct2", "iter": "iter1", "cg": "iter1",
+                  "cheb": "iter1", "amg": "iter2", "mumps": "direct3",
+                  "cudss": "direct4", "stream": "iter3"}
+        s = _alias.get(solver_req, solver_req)
+        if s in ("", "help", "list", "?"):
+            print(SOLVER_MENU)
+            return 2
+        if s == "direct1":
+            solver = "direct"
+        elif s == "direct2":
+            solver, force_superlu = "direct", True
+        elif s == "iter1":
+            solver = "cg"
+        elif s == "iter3":
+            solver = "stream"
+        elif s in ("direct3", "direct4", "iter2"):
+            raise SystemExit("--solver %s is on the menu but not wired"
+                             " yet -- available today: direct 1"
+                             " (pardiso, the default), direct 2"
+                             " (superlu), iter 1 (cheb), iter 3"
+                             " (stream)\n\n%s"
+                             % (solver_req, SOLVER_MENU))
+        else:
+            print(SOLVER_MENU)
+            raise SystemExit("unknown --solver %r" % solver_req)
     # D output frame: --material (ply axes, the DEFAULT) | --global (SG
     # axes, the frame every pre-flag .SM was written in).  A flag, not an
     # analysis -- strip it the same way; the last one given wins.
@@ -94,6 +220,7 @@ def main(argv=None):
             if str(a).strip().lower() not in ("--material", "--global")]
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):
         print(__doc__)
+        print(SOLVER_MENU)
         return 2
     path = argv[0]
     if not os.path.exists(path):
@@ -131,12 +258,59 @@ def main(argv=None):
     print(" input     : %s" % os.path.abspath(path))
     print(" msg       : %s" % resolve_msg(path))     # the engine that owns it
     print(" SG dim    : %dD" % node_span_dim(path))   # the space the SG occupies
+    try:
+        # mesh size up front (parse is npz-sidecar cached, so this costs
+        # nothing the run would not pay later); guarded -- a print must
+        # never kill an analysis on an exotic dialect
+        from .sg_mesh import load_sg_input as _lsi
+        _d = _lsi(path)
+        _nc = _d.get("cells")
+        # a list may be per-element ROWS (one connectivity list each, the
+        # msh/sets dialect) or ragged BLOCKS of (Ei, npe_i) arrays (mixed
+        # shell); rows count as themselves, blocks sum their cells
+        if isinstance(_nc, (list, tuple)) and len(_nc):
+            _c0 = _nc[0]
+            _rows = (getattr(_c0, "ndim", None) == 1
+                     or (isinstance(_c0, (list, tuple)) and len(_c0)
+                         and not hasattr(_c0[0], "__len__")))
+            _ne = len(_nc) if _rows else sum(len(c) for c in _nc)
+            _npe = len(_c0) if _rows else None
+        else:
+            _ne = len(_nc)
+            _npe = (int(_nc.shape[1])
+                    if getattr(_nc, "ndim", 1) == 2 else None)
+        # a 3-D cell arity names the element (the name alone carries the
+        # order; other arities untagged)
+        _otag = ({4: " (tet4)", 10: " (tet10)"}.get(_npe, "")
+                 if node_span_dim(path) == 3 else "")
+        print(" mesh      : %d nodes / %d elements%s"
+              % (len(_d["nodes"]), _ne, _otag))
+    except Exception:
+        pass
     print(" analysis  : %s" % ("homogenization" if analysis == "H"
                                else "dehomogenization"))
     print(" macro model: %s, %s%s"
           % (_MDL.get(int(hdr.get("n_model", 2)), "?"),
              "shear-refined" if int(hdr.get("refined", 0)) else "classical",
              ", aperiodic" if int(hdr.get("aperiodic", 0)) else ""))
+    if solver == "cg":
+        import jax as _jax
+        _backend = _jax.default_backend()
+        print(" solver    : iter 1 (EBE Chebyshev-CG, jax backend: %s)"
+              % _backend)
+        if _backend == "cpu":
+            print(" note      : jax sees no GPU -- the CG solver runs on"
+                  " CPU; pip install .[cuda12] for the CUDA build")
+    elif solver == "stream":
+        print(" solver    : iter 3 (stream: chunked host-resident EBE"
+              " CG -- element blocks packed in host RAM)")
+    elif force_superlu:
+        from . import sg_assembly as _sga
+        _sga.DIRECT_BACKEND = "superlu"
+        print(" solver    : direct 2 (scipy SuperLU, forced)")
+    elif solver == "direct":
+        print(" solver    : direct 1 (pypardiso when importable, else"
+              " SuperLU)")
     print("")
 
     # the terminal route is classical by default for EVERY macro model;
@@ -160,7 +334,9 @@ def main(argv=None):
               " (sigma_i3/sigma_33 overshoot) -- drop the d2eps lines"
               " (tau subsumes them) or use uniform")
     r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)),
-                      q_reaction=q_react)
+                      q_reaction=q_react,
+                      solver=solver or "direct",
+                      recovery=(analysis == "D"))
     print(r["law_title"] + ":")
     print(r["law"])
     if analysis == "H":
@@ -253,7 +429,7 @@ def main(argv=None):
         if frame == "material":
             from .sg_dehom import material_frame_fields
             Gam, Sig = material_frame_fields(Gam, Sig, r)
-            frame_note = ("material (ply axes, theta = -angle about the"
+            frame_note = ("material (ply axes, theta = +angle about the"
                           " thickness axis; U stays SG-global)")
             print("output frame: MATERIAL (ply) -- pass --global for the"
                   " SG axes")

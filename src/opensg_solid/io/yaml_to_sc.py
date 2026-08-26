@@ -20,13 +20,19 @@ subcommand promises:
     1 shear-refined -> submodel 1) from the header, the SG dimension from
     the node columns that actually vary.
 
-A material `angle:` is FOLDED into a pre-rotated type-2 (21-constant)
-block by sg_input.fold_angles -- the emitted `.sc` carries the same
-physical stiffness the OpenSG engine assembles, with no dependence on
-either code's layup-angle sign convention.  Per-element frames
+A material `angle:` is carried NATIVELY in the SCManual 8.2 layer table
+(nlayer /= 0, rows `layer_id mate_id angle`, the element records'
+second field read as layer_id -- sg_input.write_sc angle_mode="layers",
+its docstring has the evidence chain): the material blocks keep their
+clean engineering constants and the layup angle stays visible in the
+file.  Under orientation="bake" (real per-element frames) the angle is
+folded with the frame into pre-rotated type-2 blocks instead, which is
+also what the vendor +-45 decks themselves carry.  Per-element frames
 (`elementOrientations`) need an explicit `orientation=` choice ("bake" |
-"ignore"); the sg_input error text explains the options when it is
-missing.
+"ignore") -- unless they are all the no-op identity (io.msh_to_yaml's
+constant default), which write_sc drops automatically because there is
+nothing to state; the sg_input error text explains the options when a
+real choice is missing.
 
 In:  the canonical SG yaml (nodes/cells/mat_id/materials) or the 2-D
      solid mesh dialect (elements/sets/elementOrientations)
@@ -61,10 +67,22 @@ def convert(yaml_path, out_path=None, **kw):
           % (r["dim"], r["n_nodes"], r["n_elems"], r["n_mats"],
              r["n_model"], "shear-refined" if r["refined"] else "classical",
              r["omega"], r["omega_source"], r["path"]))
+    if r["orientation"] == "identity":
+        print("yaml_to_sc: per-element frames are all the no-op identity"
+              " -- dropped (nothing to fold)")
+    if r.get("n_layers"):
+        print("yaml_to_sc: material `angle:` carried NATIVELY in the"
+              " SCManual 8.2 layer table -- nlayer %d, rows `layer_id"
+              " mate_id angle`: %s; the material blocks keep their"
+              " engineering constants"
+              % (r["n_layers"],
+                 ", ".join("%d -> mat %d @ %g deg" % l
+                           for l in r["layers"])))
     if r["folded_angles"]:
         print("yaml_to_sc: material `angle:` folded into pre-rotated"
-              " type-2 blocks for ids %s (an nlayer=0 .sc has no angle"
-              " slot; the stiffness is identical)" % r["folded_angles"])
+              " type-2 blocks for ids %s (the spelling the vendor +-45"
+              " decks use; the stiffness is identical)"
+              % r["folded_angles"])
     print("yaml_to_sc: run as  SwiftComp %s %dD H"
           % (os.path.basename(r["path"]), 2 if r["n_model"] == 2 else 3))
     return r
