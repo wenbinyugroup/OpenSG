@@ -98,30 +98,58 @@ def _petsc_type_names():
         return mt, "cg", "gamg"
 
 
+def _usable_mat_type(PETSc, mat_type):
+    """The requested Mat type if THIS petsc build provides it, else aij.
+
+    jax seeing a GPU says nothing about PETSc: the conda-forge petsc is
+    built without CUDA, so aijcusparse raises 'Unknown Mat type' (code
+    86) at create/convert.  Probe once on a 1x1 mat -- a GPU gamg run
+    needs a CUDA-enabled PETSc (examples/colab/petsc_gpu_setup.md).
+
+    In:  PETSc namespace; mat_type str
+    Out: str -- mat_type or "aij" (one loud line when it falls back)."""
+    if mat_type == "aij":
+        return mat_type
+    m = PETSc.Mat().create(PETSc.COMM_SELF)
+    try:
+        m.setSizes((1, 1))
+        m.setType(mat_type)
+        return mat_type
+    except PETSc.Error:
+        print(" NOTE: this petsc has no %s (built without CUDA) -- gamg"
+              " runs on the CPU; see examples/colab/petsc_gpu_setup.md"
+              % mat_type)
+        return "aij"
+    finally:
+        m.destroy()
+
+
 def _mat_from_csr(PETSc, A, mat_type):
     """PETSc Mat from a scipy sparse matrix.  The jetsci buildKSP COO
     recipe (create / setSizes / setType / setPreallocationCOO /
     setValuesCOO -- one sequence for aij and aijcusparse) when this
     petsc4py build carries the COO api; older builds (<= 3.21) take
     the CSR route (createAIJ, then convert to the requested type).
+    Index arrays are cast to PETSc.IntType -- PetscInt is fixed when
+    petsc is BUILT (int64 only with --with-64-bit-indices), so this is
+    the widest the ABI accepts, not a doctrine int32.
 
     In:  PETSc namespace; A scipy sparse (n, n); mat_type str
     Out: mat PETSc.Mat, assembled."""
+    IT = PETSc.IntType
     mat = PETSc.Mat().create(PETSc.COMM_SELF)
     if hasattr(mat, "setPreallocationCOO"):
         C = A.tocoo()
         mat.setSizes(C.shape)
         mat.setType(mat_type)
-        mat.setPreallocationCOO(C.row.astype(np.int32),
-                                C.col.astype(np.int32))
+        mat.setPreallocationCOO(C.row.astype(IT), C.col.astype(IT))
         mat.setValuesCOO(np.ascontiguousarray(C.data, dtype=np.float64))
         return mat
     mat.destroy()
     C = A.tocsr()
     C.sort_indices()
     mat = PETSc.Mat().createAIJ(
-        size=C.shape, csr=(C.indptr.astype(np.int32),
-                           C.indices.astype(np.int32),
+        size=C.shape, csr=(C.indptr.astype(IT), C.indices.astype(IT),
                            np.ascontiguousarray(C.data, np.float64)),
         comm=PETSc.COMM_SELF)
     if mat_type != "aij":
@@ -242,6 +270,7 @@ def gamg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
         u_0_g[unique_dofs], n_model, n_sg, n_unique, sym=True)
     B = _near_nullspace(points, cells, periodic_cells, n_unique, pin)
     mat_t, ksp_t, pc_t = _petsc_type_names()
+    mat_t = _usable_mat_type(PETSc, mat_t)
     mat = _mat_from_csr(PETSc, A_csr, mat_t)
     _attach_near_nullspace(PETSc, mat, B)
     ksp = _build_ksp(PETSc, mat, ksp_t, pc_t, rtol, _MAXITER)
@@ -294,6 +323,7 @@ def make_constrained_solver(ctx, D_hh, w_dof, scl):
     comp = np.arange(n) % 3
     sw = float(w_dof[0::3].sum())
     mat_t, ksp_t, pc_t = _petsc_type_names()
+    mat_t = _usable_mat_type(PETSc, mat_t)
     mat = _mat_from_csr(PETSc, A_lad, mat_t)
     _attach_near_nullspace(PETSc, mat, ctx["B"])
     ksp = _build_ksp(PETSc, mat, ksp_t, pc_t, ctx["rtol"], _MAXITER)
