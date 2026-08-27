@@ -32,6 +32,7 @@ the LAST SG coordinate; the plate law rows are
 # working (SSDM paths, n_model 2/3)
 #   solver              "direct" (csr + pardiso, default) | "cg" (SSDM)
 #                       | "amg" (iter 2, sg_amg) | "stream" (iter 3)
+#                       | "gamg" (iter 4, sg_gamg -- explicit only)
 #                       | "auto" (dof-banded resolve_auto_solver:
 #                       direct below / amg above $OPENSG_DIRECT_WALL,
 #                       default 1.2M dofs; identical on every machine)
@@ -401,9 +402,14 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
     scl = float(np.max(np.abs(D_hh.diagonal())))
     Hpsi = w_dof[:, None] * kernel
     if amg_ctx is not None:
-        # iter 2: the SAME device hierarchy that solved V0 -- identical
-        # <w> = 0 gauge without ever forming the KKT (see sg_amg)
-        from opensg_solid.sg_amg import make_constrained_solver
+        # iter 2/4: identical <w> = 0 gauge without ever forming the
+        # KKT -- iter 2 reuses the SAME device hierarchy that solved
+        # V0 (sg_amg), iter 4 sets up a second PETSc KSP on D_hh
+        # itself (sg_gamg); the ctx names its backend
+        if amg_ctx.get("backend") == "gamg":
+            from opensg_solid.sg_gamg import make_constrained_solver
+        else:
+            from opensg_solid.sg_amg import make_constrained_solver
         solve_constrained = make_constrained_solver(
             amg_ctx, D_hh, np.asarray(w_dof), scl)
     else:
@@ -893,7 +899,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                     refined: Optional[int] = None,      # 0 classical, 1 shear-refined
                     workdir: Optional[str] = None,      # where .yaml/.msh go
                     elem_rotation=None,                 # (E, 9) per-element DCs
-                    solver: str = "direct",     # direct|cg|amg|stream
+                    solver: str = "direct",     # direct|cg|amg|gamg|stream
                     shear_refined: bool = False,        # legacy alias of model=1
                     plot: bool = True,                  # <base>_mesh.png if absent
                     boundary: Optional[str] = None,     # 'aperiodic'|'periodic'
@@ -934,7 +940,11 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     hierarchy built once on CPU, V-cycle + CG in jax on the default
     device -- GPU when jax sees one; the SAME hierarchy also replaces
     the shear-refined ladder's KKT factorization, see sg_amg; single
-    element type, periodic) or "stream" (iter 3: the same CG with the
+    element type, periodic), "gamg" (iter 4: the same pinned CSR on a
+    PETSc KSP -- CG + PC GAMG via the vendored jetsci layer, rigid-body
+    vectors attached ONLY as preconditioner coarse-space hints, see
+    sg_gamg; explicit-only, needs petsc4py; single element type,
+    periodic) or "stream" (iter 3: the same CG with the
     element blocks packed HOST-side and streamed slab-by-slab -- the
     route past device memory, see sg_stream; single element type,
     periodic, homogenization-only for the refined plate) -- all
@@ -1050,7 +1060,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         raise ValueError("mixed element types: the beam (n_model 1) "
                          "KKT route is single-batch; split the mesh or "
                          "use one element type: %s nodes/elem" % nn)
-    if mixed and solver in ("cg", "stream", "amg"):
+    if mixed and solver in ("cg", "stream", "amg", "gamg"):
         raise ValueError("mixed element types need solver='direct' "
                          "(the EBE/Chebyshev CG operators and the amg "
                          "assembly are single-batch): %s nodes/elem" % nn)
@@ -1089,7 +1099,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                                               boundary)
         bdofs = None
     else:
-        if n_model == 1 or solver in ("cg", "stream", "amg"):
+        if n_model == 1 or solver in ("cg", "stream", "amg", "gamg"):
             raise ValueError("boundary='aperiodic' supports the plate/solid "
                              "models with solver='direct'")
         # boundary solution mapped to the boundary nodes: zero fluctuation
@@ -1105,7 +1115,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         onb = ((np.abs(pts - box0) < tol) | (np.abs(pts - box1) < tol)).any(1)
         bdofs = (3*np.where(onb)[0][:, None] + np.arange(3)).ravel()
 
-    if n_model == 1 and solver in ("stream", "amg"):
+    if n_model == 1 and solver in ("stream", "amg", "gamg"):
         raise ValueError("--solver %s covers the periodic plate/solid "
                          "models; the beam KKT route has direct and cg"
                          % solver)
@@ -1194,7 +1204,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     _slab = float(os.environ.get("OPENSG_SLAB_BYTES", 4e9))
     if solver == "direct":
         _mem = 8.0 * _nnz * 50 + _slab
-    elif solver == "amg":
+    elif solver in ("amg", "gamg"):
         _mem = 1.6 * 16.0 * _nnz + _slab + 80.0 * n_unique
     else:                                  # cg / stream: Ke stack + vectors
         _mem = 8.0 * _E * (3 * _N) ** 2 + 160.0 * n_unique
@@ -1220,6 +1230,20 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         # (no KKT factorization)
         from opensg_solid.sg_amg import amg_homo
         C_eff, V0_matrix, omega, _amg_ctx = amg_homo(
+            x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+            periodic_cells_en, unique_dofs, n_unique, n_model, n_sg,
+            points, cells)
+    elif solver == "gamg":
+        # iter 4: the SAME pinned CSR handed to a PETSc KSP -- CG with
+        # PC GAMG (smoothed aggregation) via the vendored jetsci layer
+        # (sg_gamg); rigid-body vectors ride along ONLY as GAMG
+        # coarse-space hints (MatSetNearNullSpace), the solved system
+        # is the pinned SPD CSR unchanged.  _amg_ctx routes the
+        # refined-plate ladder to sg_gamg.make_constrained_solver
+        # (second KSP on D_hh, same <w> = 0 gauge, no KKT).
+        # Explicit-only: auto never picks it.
+        from opensg_solid.sg_gamg import gamg_homo
+        C_eff, V0_matrix, omega, _amg_ctx = gamg_homo(
             x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
             periodic_cells_en, unique_dofs, n_unique, n_model, n_sg,
             points, cells)

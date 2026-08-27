@@ -24,6 +24,7 @@ class PETScPCType(Enum):
     NONE = auto()
     JACOBI = auto()
     ILU = auto()
+    GAMG = auto()
 
 
 _MATRIX_NAMES = {
@@ -44,6 +45,7 @@ _PC_NAMES = {
     PETScPCType.NONE: "none",
     PETScPCType.JACOBI: "jacobi",
     PETScPCType.ILU: "ilu",
+    PETScPCType.GAMG: "gamg",
 }
 
 

@@ -8,7 +8,7 @@
     opensg_solid <sg.yaml> --solver F [N]  the linear solver of the
                                   fluctuation solves: family direct |
                                   iter (+ backend number), or a name
-                                  (pardiso superlu cg amg stream).
+                                  (pardiso superlu cg amg stream gamg).
                                   Bare --solver prints the menu; no
                                   flag = auto by dofs.  A flag,
                                   combines with H | D
@@ -92,8 +92,11 @@ SOLVER_MENU = """\
    iter 2     amg      AMG-preconditioned CG; runs on the GPU when
                        jax sees one (needs pyamg)
    iter 3     stream   host-streamed EBE CG for >10M dofs  [WIP]
+   iter 4     gamg     PETSc GAMG-preconditioned CG via jetsci
+                       (needs petsc4py; explicit-only, auto never
+                       picks it)
 
- names: --solver pardiso | superlu | cg | amg | stream
+ names: --solver pardiso | superlu | cg | amg | stream | gamg
  every option returns the same law digits
 """
 
@@ -145,7 +148,8 @@ def main(argv=None):
         _alias = {"direct": "direct1", "pardiso": "direct1",
                   "superlu": "direct2", "iter": "iter1", "cg": "iter1",
                   "cheb": "iter1", "amg": "iter2", "mumps": "direct3",
-                  "cudss": "direct4", "stream": "iter3"}
+                  "cudss": "direct4", "stream": "iter3",
+                  "gamg": "iter4"}
         s = _alias.get(solver_req, solver_req)
         if s in ("", "help", "list", "?"):
             print(SOLVER_MENU)
@@ -160,12 +164,14 @@ def main(argv=None):
             solver = "amg"
         elif s == "iter3":
             solver = "stream"
+        elif s == "iter4":
+            solver = "gamg"
         elif s in ("direct3", "direct4"):
             raise SystemExit("--solver %s is on the menu but not wired"
                              " yet -- available today: direct 1"
                              " (pardiso, the default), direct 2"
                              " (superlu), iter 1 (cheb), iter 2 (amg),"
-                             " iter 3 (stream)\n\n%s"
+                             " iter 3 (stream), iter 4 (gamg)\n\n%s"
                              % (solver_req, SOLVER_MENU))
         else:
             print(SOLVER_MENU)
