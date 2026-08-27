@@ -3,8 +3,9 @@ AMG-preconditioned CG for the fluctuation solves of the SSDM
 plate/solid routes (sg_homo dispatch solver="amg").
 
 Split build/apply: pyamg constructs the hierarchy ONCE on the CPU from
-the assembled pinned CSR (sg_assembly.assemble_pinned_csr, sym=True --
-the exact system _homo_direct factorizes), then every level's operators
+the assembled pinned CSR (sg_assembly.assemble_rhs_and_pinned_csr,
+sym=True -- the exact system _homo_direct factorizes, slab-streamed by
+default), then every level's operators
 move to jax arrays on the DEFAULT DEVICE (GPU when jax sees one, CPU
 otherwise) and the symmetric Chebyshev(3)-smoothed V-cycle + the outer
 CG (vmapped over the RHS columns) run entirely in jax, FP64.  ONE hierarchy serves every column: the V0
@@ -53,8 +54,7 @@ import jax
 import jax.numpy as jnp
 from scipy.sparse import diags
 
-from opensg_solid.sg_assembly import (assemble_pinned_csr,
-                                      calculate_RHS_and_Ke_batch_periodic,
+from opensg_solid.sg_assembly import (assemble_rhs_and_pinned_csr,
                                       compute_homogenized_constants)
 
 # env-overridable stopping pair -- a tolerance certificate is one rerun
@@ -328,12 +328,11 @@ def amg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
          ctx dict {levels, coarse, pin, rtol} -- the device hierarchy
          the refined-plate ladder reuses (make_constrained_solver)."""
     t0 = time.perf_counter()
-    Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
+    # slab-streamed assembly by default (OPENSG_ASSEMBLY=device for the
+    # historical all-device program) -- live memory stays slab-bounded
+    Dhe, A_csr, pin = assemble_rhs_and_pinned_csr(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
-        u_0_g[unique_dofs], n_model, n_sg)
-    A_csr, pin = assemble_pinned_csr(J_euu, periodic_cells, n_unique,
-                                     sym=True)
-    del J_euu
+        u_0_g[unique_dofs], n_model, n_sg, n_unique, sym=True)
     B = _near_nullspace(points, cells, periodic_cells, n_unique, pin)
     levels, coarse = build_hierarchy(A_csr, B)
     fine = {k: levels[0][k] for k in ("d", "c", "r")}

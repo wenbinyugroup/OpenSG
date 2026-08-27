@@ -44,6 +44,8 @@ core, resolved by opensg_solid/__init__ via $FE_JAX_CORE.
 #   Psi, Dc             (N_primal, 4) rigid-body kernel + constraint matrix
 #   C_ett, C_assembled  build_lagrange_constraint_matrix element/global rows
 #   aug_row/col/data    COO streams of the augmented KKT matrix
+#   rows/cols/data, R_np/J_np, dof   streamed-assembly host COO buffers
+#                       and the per-slab results / global dof map
 #   A_augmented         csr (N_primal+4, N_primal+4); R_aug the padded RHS
 #   x_unique            (n_masters, d) unique-master coordinates
 # outputs
@@ -961,6 +963,201 @@ def assemble_pinned_csr(J_euu, periodic_cells, n_unique, bdofs=None,
     data = np.concatenate([data[keep], np.ones(len(pin))])
     return (csr_matrix((data, (rows, cols)),
                        shape=(n_unique, n_unique)), pin)
+
+
+@partial(jax.jit, static_argnames=['n_model', 'n_sg'])
+def _slab_rhs_and_Ke(u_end, x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+                     n_model, n_sg):
+    """One element SLAB of calculate_RHS_and_Ke_batch_periodic: the
+    per-element case residuals and tangents, NO global scatter (the
+    streamed assembler owns that on host).  The element math mirrors
+    element_process_all_cases_and_Ke verbatim -- keep in lockstep.
+
+    In:  u_end (B, N, 3) slab nodal fluctuation; x_end (B, N, d) slab
+         node coords; dphi_dxi_qnp (Q, N, p) / phi_qn (Q, N) / W_q (Q,)
+         quadrature tables; C_ess (B, 6, 6) slab stiffness;
+         n_model/n_sg static ints as calculate_RHS_and_Ke_batch_periodic
+    Out: R_end_cases (B, H, N, 3) case residuals, H = 4 beam / 6 else;
+         J_uu (B, N*3, N*3) element tangents (jacfwd)."""
+    if n_model == 1:
+        mask_ones_1d = jnp.zeros((6, 4)).at[0, 0].set(1.0)
+        mask_y2 = jnp.zeros((6, 4)).at[0, 3].set(-1.0).at[4, 1].set(1.0)
+        mask_y3_1d = jnp.zeros((6, 4)).at[0, 2].set(1.0).at[5, 1].set(-1.0)
+    elif n_model == 2:
+        mask_ones_2d = (jnp.zeros((6, 6)).at[0, 0].set(1.0)
+                        .at[1, 1].set(1.0).at[5, 2].set(1.0))
+        mask_y3_2d = (jnp.zeros((6, 6)).at[0, 3].set(1.0)
+                      .at[1, 4].set(1.0).at[5, 5].set(1.0))
+
+    N = x_end.shape[1]
+    U = 3
+
+    def element_process_all_cases_and_Ke(u_nd, x_nd, C_ss):
+        x_q = jnp.dot(phi_qn, x_nd)
+        if n_model == 3:
+            Ge = jnp.eye(6)
+            run_cases = jax.vmap(_element_residual_single_case,
+                                 in_axes=(None, None, None, None, None,
+                                          None, 1))
+        elif n_model == 2:
+            y3_q = x_q[:, n_sg - 1]
+            Ge = (mask_ones_2d[None, :, :]
+                  + mask_y3_2d[None, :, :] * y3_q[:, None, None])
+            run_cases = jax.vmap(_element_residual_single_case,
+                                 in_axes=(None, None, None, None, None,
+                                          None, 2))
+        elif n_model == 1:
+            y3_q = x_q[:, n_sg - 1]
+            y2_q = (jnp.zeros_like(x_q[:, 0]) if n_sg == 1
+                    else x_q[:, n_sg - 2])
+            Ge = (mask_ones_1d[None, :, :]
+                  + mask_y2[None, :, :] * y2_q[:, None, None]
+                  + mask_y3_1d[None, :, :] * y3_q[:, None, None])
+            run_cases = jax.vmap(_element_residual_single_case,
+                                 in_axes=(None, None, None, None, None,
+                                          None, 2))
+
+        R_nodes_cases = run_cases(u_nd, x_nd, dphi_dxi_qnp, phi_qn, W_q,
+                                  C_ss, Ge)
+
+        def single_case_for_jac(u_flat):
+            u_nd_t = u_flat.reshape(N, U)
+            dummy_eps = jnp.zeros(6)
+            R_single = _element_residual_single_case(
+                u_nd_t, x_nd, dphi_dxi_qnp, phi_qn, W_q, C_ss, dummy_eps)
+            return R_single.ravel()
+
+        K_elem = jax.jacfwd(single_case_for_jac)(u_nd.ravel())
+        return R_nodes_cases, K_elem
+
+    return jax.vmap(element_process_all_cases_and_Ke,
+                    in_axes=(0, 0, 0))(u_end, x_end, C_ess)
+
+
+def _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+                          periodic_cells, u_g_flat, n_model, n_sg,
+                          n_unique, bdofs=None, sym=False):
+    """Slab-streamed fusion of calculate_RHS_and_Ke_batch_periodic +
+    assemble_pinned_csr: a Python loop over element slabs runs the
+    jitted slab kernel, pulls each slab's Ke/RHS to host, scatters into
+    preallocated host COO buffers, and frees the device slab -- live
+    memory is slab-bounded (OPENSG_SLAB_BYTES) instead of the full
+    (E, N*3, N*3) Ke stack + AD transients of one fused program.
+    Every slab is padded to the compiled chunk shape by REPEATING the
+    last element (one jit trace); the padded rows are sliced off before
+    ANY host scatter, so nothing double-counts.  int32 COO indices are
+    valid while n_unique < 2^31.
+
+    In/Out: as assemble_rhs_and_pinned_csr."""
+    E_tot = int(x_end.shape[0])
+    N = int(x_end.shape[1])
+    n_ed = N * 3
+    Q = int(W_q.shape[0])
+    # same slab budget/shape as the device path's lax.map chunking
+    budget = float(os.environ.get("OPENSG_SLAB_BYTES", 4e9))
+    chunk = max(1, min(E_tot, int(budget / (Q * n_ed ** 2 * 8))))
+
+    pc = np.asarray(periodic_cells, dtype=np.int64)
+    u_host = np.asarray(u_g_flat, dtype=np.float64).reshape(-1, 3)
+    x_host = np.asarray(x_end)
+    C_host = np.asarray(C_ess)
+
+    if bdofs is None:
+        pin = np.arange(3, dtype=np.int32)
+        pinmask = None
+    else:
+        pinmask = np.zeros(n_unique, dtype=bool)
+        pinmask[np.asarray(bdofs, np.int64)] = True
+        pin = np.where(pinmask)[0].astype(np.int32)
+    n_pin = int(pin.shape[0])
+
+    cap = E_tot * n_ed * n_ed + n_pin
+    rows = np.empty(cap, np.int32)
+    cols = np.empty(cap, np.int32)
+    data = np.empty(cap, np.float64)
+    w = 0
+    rhs = None
+
+    for e0 in range(0, E_tot, chunk):
+        n_true = min(chunk, E_tot - e0)
+        sl = slice(e0, e0 + n_true)
+        x_sl, C_sl, pc_sl = x_host[sl], C_host[sl], pc[sl]
+        u_sl = u_host[pc_sl]
+        if n_true < chunk:
+            pad = chunk - n_true
+            x_sl = np.concatenate([x_sl, np.repeat(x_sl[-1:], pad, 0)], 0)
+            C_sl = np.concatenate([C_sl, np.repeat(C_sl[-1:], pad, 0)], 0)
+            u_sl = np.concatenate([u_sl, np.repeat(u_sl[-1:], pad, 0)], 0)
+        R_dev, J_dev = _slab_rhs_and_Ke(u_sl, x_sl, dphi_dxi_qnp, phi_qn,
+                                        W_q, C_sl, n_model, n_sg)
+        R_np = np.asarray(R_dev)[:n_true]       # padded rows DISCARDED
+        J_np = np.asarray(J_dev)[:n_true]
+        del R_dev, J_dev            # device slab freed before the next
+
+        dof = ((pc_sl * 3).reshape(n_true, N, 1)
+               + np.arange(3)).reshape(n_true, n_ed).astype(np.int32)
+        r = np.repeat(dof, n_ed, axis=1).ravel()
+        c = np.tile(dof, (1, n_ed)).ravel()
+        if bdofs is None:
+            keep = r >= 3           # pinned rows 0:3 -> unit diagonal
+            if sym:
+                keep &= c >= 3
+        else:
+            keep = ~pinmask[r]
+            if sym:
+                keep &= ~pinmask[c]
+        nk = int(keep.sum())
+        rows[w:w + nk] = r[keep]
+        cols[w:w + nk] = c[keep]
+        data[w:w + nk] = J_np.reshape(-1)[keep]
+        w += nk
+
+        if rhs is None:
+            rhs = np.zeros((n_unique, R_np.shape[1]))
+        dflat = dof.ravel().astype(np.int64)
+        for h in range(rhs.shape[1]):
+            rhs[:, h] += np.bincount(dflat, weights=R_np[:, h].ravel(),
+                                     minlength=n_unique)
+
+    rows[w:w + n_pin] = pin
+    cols[w:w + n_pin] = pin
+    data[w:w + n_pin] = 1.0
+    w += n_pin
+    A_csr = csr_matrix((data[:w], (rows[:w], cols[:w])),
+                       shape=(n_unique, n_unique))
+    rhs[0:3, :] = 0.0               # as the device kernel: rows 0:3 zeroed
+    return rhs, A_csr, pin
+
+
+def assemble_rhs_and_pinned_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+                                periodic_cells, u_g_flat, n_model, n_sg,
+                                n_unique, bdofs=None, sym=False):
+    """Case RHS + pinned global CSR of the fluctuation system -- the ONE
+    assembly entry the assembled routes share (_homo_direct and
+    sg_amg.amg_homo).  Default = slab-STREAMED (_streamed_rhs_and_csr):
+    device/live memory stays slab-bounded, enabling meshes whose full
+    Ke stack + AD transients would not fit.  OPENSG_ASSEMBLY=device
+    restores the historical all-device program (identical digits up to
+    scatter-order float noise ~1e-15).
+
+    In:  x_end (E, N, d); dphi_dxi_qnp/phi_qn/W_q quadrature tables;
+         C_ess (E, 6, 6); periodic_cells (E, N) master connectivity;
+         u_g_flat (n_unique,) unraveled dof seed; n_model 1 beam /
+         2 plate / 3 solid; n_sg SG dimension; n_unique int solve size;
+         bdofs (n_b,) aperiodic pinned DOFs or None (first-node pin);
+         sym bool as assemble_pinned_csr
+    Out: rhs_matrix (n_unique, H) np case RHS (rows 0:3 zeroed);
+         A_csr (n_unique, n_unique) pinned csr; pin (n_pin,) int32."""
+    if os.environ.get("OPENSG_ASSEMBLY", "stream") == "device":
+        Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
+            x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
+            u_g_flat, n_model, n_sg)
+        A_csr, pin = assemble_pinned_csr(J_euu, periodic_cells, n_unique,
+                                         bdofs=bdofs, sym=sym)
+        return np.asarray(Dhe), A_csr, pin
+    return _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+                                 periodic_cells, u_g_flat, n_model, n_sg,
+                                 n_unique, bdofs=bdofs, sym=sym)
 
 
 _direct_spsolve = None

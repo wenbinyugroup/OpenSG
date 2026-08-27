@@ -85,7 +85,8 @@ from fe_jax.setup import (mesh_to_jax,
 
 from opensg_solid.sg_assembly import (
     _sparse_direct_solve, apply_block_precond, apply_chebyshev_precond,
-    assemble_pinned_csr, assemble_rigid_body_ops, assemble_system_matrices,
+    assemble_rhs_and_pinned_csr, assemble_rigid_body_ops,
+    assemble_system_matrices,
     calculate_RHS_and_Ke_batch_periodic, compress_periodic_cells_jax,
     compute_block_inv_diag, compute_homogenized_constants,
     ebe_jacobian_product_periodic, estimate_max_eigenvalue,
@@ -165,11 +166,11 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
          dimension; bdofs (n_b,) int global DOFs or None (periodic)
     Out: C_eff (H, H) effective stiffness; V0_matrix (n_unique, H)
          fluctuation columns; omega float SG measure."""
-    Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
+    # slab-streamed assembly by default (OPENSG_ASSEMBLY=device for the
+    # historical all-device program) -- live memory stays slab-bounded
+    Dhe, A_csr, pin = assemble_rhs_and_pinned_csr(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
-        u_0_g[unique_dofs], n_model, n_sg)
-    A_csr, pin = assemble_pinned_csr(J_euu, periodic_cells, n_unique,
-                                     bdofs=bdofs)
+        u_0_g[unique_dofs], n_model, n_sg, n_unique, bdofs=bdofs)
     RHS = -np.asarray(Dhe)              # rows 0:3 already zeroed
     if bdofs is not None:
         RHS[pin] = 0.0                  # w = 0 on the boundary nodes
