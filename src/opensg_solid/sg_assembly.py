@@ -754,9 +754,9 @@ def compress_periodic_cells_jax(V, cells, dof_map, x_end,
     unique_masters = jnp.unique(master_nodes)
     num_unique = int(unique_masters.shape[0])
 
-    full_to_reduced = jnp.full(V, -1, dtype=jnp.int32)
+    full_to_reduced = jnp.full(V, -1, dtype=jnp.int64)
     full_to_reduced = full_to_reduced.at[unique_masters].set(
-        jnp.arange(num_unique, dtype=jnp.int32))
+        jnp.arange(num_unique, dtype=jnp.int64))
 
     reduced_periodic_cells = full_to_reduced[master_nodes[cells]]
     x_unique = global_points[unique_masters]
@@ -937,13 +937,13 @@ def assemble_pinned_csr(J_euu, periodic_cells, n_unique, bdofs=None,
     In:  J_euu (E, N*3, N*3) element tangents; periodic_cells (E, N)
          master connectivity; n_unique int solve size; bdofs (n_b,) int
          global DOFs pinned to zero or None (first-node pin); sym bool
-    Out: A_csr (n_unique, n_unique) csr; pin (n_pin,) int32 pinned
+    Out: A_csr (n_unique, n_unique) csr; pin (n_pin,) int64 pinned
          dof ids."""
     E_elem, n_ed, _ = J_euu.shape
     N_nodes = n_ed // 3
     dof_map = ((np.asarray(periodic_cells, dtype=np.int64) * 3)
                .reshape(E_elem, N_nodes, 1)
-               + np.arange(3)).reshape(E_elem, n_ed).astype(np.int32)
+               + np.arange(3)).reshape(E_elem, n_ed).astype(np.int64)
     rows = np.repeat(dof_map, n_ed, axis=1).ravel()
     cols = np.tile(dof_map, (1, n_ed)).ravel()
     data = np.asarray(J_euu).ravel()
@@ -951,14 +951,14 @@ def assemble_pinned_csr(J_euu, periodic_cells, n_unique, bdofs=None,
         keep = rows >= 3                # pinned rows 0:3 -> unit diagonal
         if sym:
             keep &= cols >= 3
-        pin = np.arange(3, dtype=np.int32)
+        pin = np.arange(3, dtype=np.int64)
     else:                               # pinned rows = boundary DOFs
         pinmask = np.zeros(n_unique, bool)
         pinmask[np.asarray(bdofs, np.int64)] = True
         keep = ~pinmask[rows]
         if sym:
             keep &= ~pinmask[cols]
-        pin = np.where(pinmask)[0].astype(np.int32)
+        pin = np.where(pinmask)[0].astype(np.int64)
     rows = np.concatenate([rows[keep], pin])
     cols = np.concatenate([cols[keep], pin])
     data = np.concatenate([data[keep], np.ones(len(pin))])
@@ -1046,8 +1046,8 @@ def _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     (E, N*3, N*3) Ke stack + AD transients of one fused program.
     Every slab is padded to the compiled chunk shape by REPEATING the
     last element (one jit trace); the padded rows are sliced off before
-    ANY host scatter, so nothing double-counts.  int32 COO indices are
-    valid while n_unique < 2^31.
+    ANY host scatter, so nothing double-counts.  int64 COO indices
+    throughout (strict-int64 doctrine): no dof/nnz ceiling.
 
     In/Out: as assemble_rhs_and_pinned_csr."""
     E_tot = int(x_end.shape[0])
@@ -1064,17 +1064,17 @@ def _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     C_host = np.asarray(C_ess)
 
     if bdofs is None:
-        pin = np.arange(3, dtype=np.int32)
+        pin = np.arange(3, dtype=np.int64)
         pinmask = None
     else:
         pinmask = np.zeros(n_unique, dtype=bool)
         pinmask[np.asarray(bdofs, np.int64)] = True
-        pin = np.where(pinmask)[0].astype(np.int32)
+        pin = np.where(pinmask)[0].astype(np.int64)
     n_pin = int(pin.shape[0])
 
     cap = E_tot * n_ed * n_ed + n_pin
-    rows = np.empty(cap, np.int32)
-    cols = np.empty(cap, np.int32)
+    rows = np.empty(cap, np.int64)
+    cols = np.empty(cap, np.int64)
     data = np.empty(cap, np.float64)
     w = 0
     rhs = None
@@ -1096,7 +1096,7 @@ def _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
         del R_dev, J_dev            # device slab freed before the next
 
         dof = ((pc_sl * 3).reshape(n_true, N, 1)
-               + np.arange(3)).reshape(n_true, n_ed).astype(np.int32)
+               + np.arange(3)).reshape(n_true, n_ed).astype(np.int64)
         r = np.repeat(dof, n_ed, axis=1).ravel()
         c = np.tile(dof, (1, n_ed)).ravel()
         if bdofs is None:
@@ -1148,7 +1148,7 @@ def assemble_rhs_and_pinned_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
          bdofs (n_b,) aperiodic pinned DOFs or None (first-node pin);
          sym bool as assemble_pinned_csr
     Out: rhs_matrix (n_unique, H) np case RHS (rows 0:3 zeroed);
-         A_csr (n_unique, n_unique) pinned csr; pin (n_pin,) int32."""
+         A_csr (n_unique, n_unique) pinned csr; pin (n_pin,) int64."""
     if os.environ.get("OPENSG_ASSEMBLY", "stream") == "device":
         Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
             x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,

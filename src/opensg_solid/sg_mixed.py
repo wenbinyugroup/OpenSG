@@ -174,7 +174,7 @@ def homo_direct_batched(batches, u_0_g, unique_dofs, n_unique, points,
         N_b = n_ed // 3
         dof_map = ((np.asarray(b["periodic_cells"], dtype=np.int64) * 3)
                    .reshape(E_b, N_b, 1)
-                   + np.arange(3)).reshape(E_b, n_ed).astype(np.int32)
+                   + np.arange(3)).reshape(E_b, n_ed).astype(np.int64)
         rows_l.append(np.repeat(dof_map, n_ed, axis=1).ravel())
         cols_l.append(np.tile(dof_map, (1, n_ed)).ravel())
         data_l.append(np.asarray(J_euu).ravel())
@@ -189,12 +189,12 @@ def homo_direct_batched(batches, u_0_g, unique_dofs, n_unique, points,
     data = np.concatenate(data_l)
     if bdofs is None:
         keep = rows >= 3                # pinned rows 0:3 -> unit diagonal
-        pin = np.arange(3, dtype=np.int32)
+        pin = np.arange(3, dtype=np.int64)
     else:
         pinmask = np.zeros(n_unique, bool)
         pinmask[np.asarray(bdofs, np.int64)] = True
         keep = ~pinmask[rows]
-        pin = np.where(pinmask)[0].astype(np.int32)
+        pin = np.where(pinmask)[0].astype(np.int64)
     rows = np.concatenate([rows[keep], pin])
     cols = np.concatenate([cols[keep], pin])
     data = np.concatenate([data[keep], np.ones(len(pin))])
@@ -296,10 +296,10 @@ def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
         # canonical csr order.
         key = rows * np.int64(n_unique) + cols
         uniq, inv = np.unique(key, return_inverse=True)
-        u_indices = (uniq % n_unique).astype(np.int32)
-        u_rows = (uniq // n_unique).astype(np.int32)
+        u_indices = (uniq % n_unique).astype(np.int64)
+        u_rows = (uniq // n_unique).astype(np.int64)
         u_indptr = np.searchsorted(u_rows, np.arange(n_unique + 1),
-                                   side="left").astype(np.int32)
+                                   side="left").astype(np.int64)
 
         def nn(Be):
             data = np.bincount(inv, weights=Be.ravel() / omega,

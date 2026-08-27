@@ -121,10 +121,10 @@ def _csr_triplets(A):
          (rows sorted -- the matvec segment_sum runs sorted)."""
     A = A.tocsr()
     A.sort_indices()
-    r = np.repeat(np.arange(A.shape[0], dtype=np.int32),
+    r = np.repeat(np.arange(A.shape[0], dtype=np.int64),
                   np.diff(A.indptr))
     return {"d": jnp.asarray(A.data),
-            "c": jnp.asarray(A.indices.astype(np.int32)),
+            "c": jnp.asarray(A.indices.astype(np.int64)),
             "r": jnp.asarray(r)}
 
 
@@ -165,9 +165,9 @@ def build_hierarchy(A_csr, B):
         P = lv.P.tocsr()
         P.sort_indices()
         ld["Pd"] = jnp.asarray(P.data)
-        ld["Pc"] = jnp.asarray(P.indices.astype(np.int32))
+        ld["Pc"] = jnp.asarray(P.indices.astype(np.int64))
         ld["Pr"] = jnp.asarray(np.repeat(
-            np.arange(P.shape[0], dtype=np.int32), np.diff(P.indptr)))
+            np.arange(P.shape[0], dtype=np.int64), np.diff(P.indptr)))
         levels.append(ld)
     Ainv = np.linalg.inv(ml.levels[-1].A.toarray())
     coarse = {"Ainv": jnp.asarray(0.5 * (Ainv + Ainv.T))}
@@ -270,7 +270,7 @@ def _pcg_one(levels, coarse, fine, b, rtol, maxiter):
 
     x, r, _, _, _, k = jax.lax.while_loop(
         cond, body, (jnp.zeros_like(b), b, z0, z0, b @ z0,
-                     jnp.zeros((), jnp.int32)))
+                     jnp.zeros((), jnp.int64)))
     return x, k, jnp.linalg.norm(r) / jnp.where(normb > 0, normb, 1.0)
 
 
