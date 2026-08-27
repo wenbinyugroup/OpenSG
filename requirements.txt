@@ -16,3 +16,7 @@ scipy
 flax
 # Intel MKL Pardiso solver (the direct default)
 pypardiso
+# PETSc GAMG solver (--solver iter 4).  pip BUILDS PETSc from source
+# (~30-40 min); prefer `conda install -c conda-forge petsc4py` (the
+# environment.yml route) where conda exists
+petsc4py
