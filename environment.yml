@@ -7,6 +7,12 @@ dependencies:
   - scipy
   - mpi4py
   - meshio
+  # CPU petsc: --solver iter 4 (gamg) runs everywhere, GPU-less included.
+  # GPU gamg (aijcusparse): replace this ONE line with the PINNED pair
+  #   - petsc=3.23.7=cuda12_real_*
+  #   - petsc4py=3.23.7
+  # (the pin keeps python 3.13 -- unpinned cuda petsc4py has no py313
+  # build and drags the whole env down to python 3.10)
   - petsc4py
   - pyyaml
   - fenics-dolfinx=0.8.0
