@@ -69,6 +69,10 @@ import glob
 import os
 import sys
 
+# XLA's C++ warnings (rematerialization etc.) are compiler internals the
+# run cannot act on; must be set before jax first loads
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
 BANNER = """
  ============================================================================
  OpenSG -- a multiscale structural analysis tool based on the Mechanics of
@@ -212,7 +216,9 @@ def main(argv=None):
     import time as _time
     _t0 = _time.perf_counter()
     _MDL = {1: "beam", 2: "plate", 3: "3-D solid"}
-    print(" input     : %s" % os.path.abspath(path))
+    _ap = os.path.abspath(path).replace("\\", "/").split("/")
+    print(" input     : %s" % (".../" + "/".join(_ap[-2:])
+                               if len(_ap) > 2 else "/".join(_ap)))
     print(" msg       : %s" % resolve_msg(path))     # the engine that owns it
     print(" SG dim    : %dD" % node_span_dim(path))   # the space the SG occupies
     try:
@@ -250,29 +256,11 @@ def main(argv=None):
           % (_MDL.get(int(hdr.get("n_model", 2)), "?"),
              "shear-refined" if int(hdr.get("refined", 0)) else "classical",
              ", aperiodic" if int(hdr.get("aperiodic", 0)) else ""))
-    if solver == "cg":
-        import jax as _jax
-        _backend = _jax.default_backend()
-        print(" solver    : iter 1 (EBE Chebyshev-CG, jax backend: %s)"
-              % _backend)
-        if _backend == "cpu":
-            print(" note      : jax sees no GPU -- the CG solver runs on"
-                  " CPU; pip install .[cuda12] for the CUDA build")
-    elif solver == "amg":
-        import jax as _jax
-        print(" solver    : iter 2 (AMG-preconditioned CG: pyamg"
-              " hierarchy on CPU, V-cycle + CG in jax, backend: %s)"
-              % _jax.default_backend())
-    elif solver == "stream":
-        print(" solver    : iter 3 (stream: chunked host-resident EBE"
-              " CG -- element blocks packed in host RAM)")
-    elif force_superlu:
+    if force_superlu:
         from . import sg_assembly as _sga
         _sga.DIRECT_BACKEND = "superlu"
-        print(" solver    : direct 2 (scipy SuperLU, forced)")
-    elif solver == "direct":
-        print(" solver    : direct 1 (pypardiso when importable, else"
-              " SuperLU)")
+    if solver is not None:
+        print(" solver    : %s" % ("superlu" if force_superlu else solver))
     print("")
 
     # the terminal route is classical by default for EVERY macro model;

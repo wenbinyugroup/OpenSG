@@ -146,6 +146,10 @@ this dispatcher prints nothing of its own.
 import os
 import sys
 
+# XLA's C++ warnings (rematerialization etc.) are compiler internals the
+# run cannot act on; must be set before jax first loads
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
 
 def main(argv=None):
     """Resolve the engine the yaml names and hand it the untouched argv.

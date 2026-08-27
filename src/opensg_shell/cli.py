@@ -113,6 +113,10 @@ additionally writes <base>_dehom.txt/.vtk.
 import os
 import sys
 
+# XLA's C++ warnings (rematerialization etc.) are compiler internals the
+# run cannot act on; must be set before jax first loads
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
 from opensg_solid.cli import BANNER, read_ff_state   # ONE banner and ONE .ff
                                                      # reader for both CLIs
 
@@ -537,7 +541,9 @@ def main(argv=None):
     junction, junction_bl, junction_ang = read_tier(hdr)
 
     _t0 = _time.perf_counter()
-    print(" input     : %s" % os.path.abspath(path))
+    _ap = os.path.abspath(path).replace("\\", "/").split("/")
+    print(" input     : %s" % (".../" + "/".join(_ap[-2:])
+                               if len(_ap) > 2 else "/".join(_ap)))
     print(" msg       : %s" % resolve_msg(path))     # the engine that owns it
     print(" SG dim    : %dD" % node_span_dim(path))   # the space the SG occupies
     print(" analysis  : %s" % ("homogenization" if analysis == "H"

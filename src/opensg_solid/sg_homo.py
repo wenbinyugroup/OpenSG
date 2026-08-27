@@ -1113,8 +1113,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         # beams (KKT) and mixed SGs have no iter route: direct is the
         # only sensible auto choice at any size
         solver = "direct"
-        print(" solver    : auto -> direct (%s)"
-              % ("beam KKT route" if n_model == 1 else "mixed SG"))
+        print(" solver    : direct")
     if n_model == 1:
         r = _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
                            dphi_dxi_qnp, W_q, dof_map_np,
@@ -1178,7 +1177,8 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             iter_ok=(not mixed and boundary != "aperiodic"))
         if _warn:
             print(" " + _warn)
-        print(" solver    : auto -> %s (%s)" % (solver, _why))
+        del _why
+        print(" solver    : %s" % solver)
 
     u_0_g_full = jnp.zeros(shape=(V * 3))
     _amg_ctx = None       # iter 2 hierarchy handle (ladder reuses it)
