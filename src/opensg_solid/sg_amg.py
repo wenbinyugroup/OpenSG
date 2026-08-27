@@ -43,6 +43,7 @@ conditioning wall with near-mesh-independent iteration counts.
 #   X, iters, worst     per-column solutions, CG counts, worst relres
 # ----------------------------------------------------------------------------
 """
+import os
 import time
 from functools import partial
 
@@ -56,8 +57,10 @@ from opensg_solid.sg_assembly import (assemble_pinned_csr,
                                       calculate_RHS_and_Ke_batch_periodic,
                                       compute_homogenized_constants)
 
-_RTOL = 1e-8       # CG relative residual (stiffness error enters 2nd order)
-_MAXITER = 500
+# env-overridable stopping pair -- a tolerance certificate is one rerun
+# with OPENSG_AMG_RTOL tightened 100x: the law must hold its digits
+_RTOL = float(os.environ.get("OPENSG_AMG_RTOL", 1e-8))
+_MAXITER = int(os.environ.get("OPENSG_AMG_MAXITER", 500))
 _CHEB_DEG = 3      # Chebyshev smoothing degree each side of the V-cycle
 _CHEB_LO = 1/30.   # smoothing interval [rho/30, 1.1 rho] (pyamg default)
 _CHEB_HI = 1.1
