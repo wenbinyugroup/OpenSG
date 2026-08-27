@@ -246,8 +246,9 @@ def main(argv=None):
         # order; other arities untagged)
         _otag = ({4: " (tet4)", 10: " (tet10)"}.get(_npe, "")
                  if node_span_dim(path) == 3 else "")
-        print(" mesh      : %d nodes / %d elements%s"
-              % (len(_d["nodes"]), _ne, _otag))
+        del _ne
+        print(" mesh      : %d nodes / %d dofs%s"
+              % (len(_d["nodes"]), 3 * len(_d["nodes"]), _otag))
     except Exception:
         pass
     print(" analysis  : %s" % ("homogenization" if analysis == "H"

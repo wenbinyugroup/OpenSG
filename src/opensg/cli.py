@@ -598,9 +598,9 @@ def msh_to_yaml(argv):
             if src != msh:
                 chain.append(os.path.basename(src))
             chain.append(os.path.basename(r["path"]))
-            print("%s   (%s; %d nodes / %d elements)"
+            print("%s   (%s; %d nodes / %d dofs)"
                   % (" -> ".join(chain), r["cell"],
-                     r["n_nodes"], r["n_elements"]))
+                     r["n_nodes"], 3 * r["n_nodes"]))
             if by_tag is None:
                 print("  MATERIALS / LAYUP NOT ADDED%s: FILL_IN template --"
                       " fill it or re-emit with --mat<TAG> NAME[:ANGLE]"
