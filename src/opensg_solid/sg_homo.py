@@ -1116,9 +1116,9 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                          " load-ladder recovery columns are not streamed")
     if solver == "auto" and (n_model == 1 or mixed):
         # beams (KKT) and mixed SGs have no iter route: direct is the
-        # only sensible auto choice at any size
+        # only sensible auto choice at any size (undisclosed -- the
+        # solver line prints only for an explicit --solver)
         solver = "direct"
-        print(" solver    : direct")
     if n_model == 1:
         r = _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
                            dphi_dxi_qnp, W_q, dof_map_np,
@@ -1166,13 +1166,13 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
 
     unique_dofs = jnp.unique(dof_map_np)
     n_unique = len(unique_dofs)
-    sg_progress.start(int(n_unique))
 
     if solver == "auto":
         # the dof-banded policy, deferred to HERE where the true
         # periodic-reduced solve size is known (resolve_auto_solver);
         # IDENTICAL on every machine -- a GPU changes where the
-        # iterative solvers execute, never which one auto picks
+        # iterative solvers execute, never which one auto picks.
+        # The choice is UNDISCLOSED (prints only for explicit --solver)
         try:
             import pyamg as _pyamg                  # noqa: F401
             _amg_ok = True
@@ -1184,7 +1184,22 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         if _warn:
             print(" " + _warn)
         del _why
-        print(" solver    : %s" % solver)
+
+    # one-line upfront peak-memory expectation, device-agnostic
+    # arithmetic only: COO->CSR dedup ratio ~2.5 (measured 165.6M nnz
+    # at 458k tet10), pyamg hierarchy ~1.6x fine CSR, pardiso fill
+    # ~50x nnz (measured 69.7 GB at that same case)
+    _E, _N = int(x_end.shape[0]), int(x_end.shape[1])
+    _nnz = _E * (3 * _N) ** 2 / 2.5
+    _slab = float(os.environ.get("OPENSG_SLAB_BYTES", 4e9))
+    if solver == "direct":
+        _mem = 8.0 * _nnz * 50 + _slab
+    elif solver == "amg":
+        _mem = 1.6 * 16.0 * _nnz + _slab + 80.0 * n_unique
+    else:                                  # cg / stream: Ke stack + vectors
+        _mem = 8.0 * _E * (3 * _N) ** 2 + 160.0 * n_unique
+    print(" memory    : ~%.0f GB expected" % max(1.0, _mem / 1e9))
+    sg_progress.start(int(n_unique))
 
     u_0_g_full = jnp.zeros(shape=(V * 3))
     _amg_ctx = None       # iter 2 hierarchy handle (ladder reuses it)
