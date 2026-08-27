@@ -56,6 +56,7 @@ from scipy.sparse import diags
 
 from opensg_solid.sg_assembly import (assemble_rhs_and_pinned_csr,
                                       compute_homogenized_constants)
+from opensg_solid import sg_progress
 
 # env-overridable stopping pair -- a tolerance certificate is one rerun
 # with OPENSG_AMG_RTOL tightened 100x: the law must hold its digits
@@ -344,6 +345,7 @@ def amg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     RHS = -np.asarray(Dhe)
     RHS[np.asarray(pin, np.int64)] = 0.0
     V0, iters, _ = solve_columns(levels, coarse, fine, RHS, rtol)
+    sg_progress.tick("solve")
     V0_matrix = jnp.asarray(V0)
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
     D_bar, omega = compute_homogenized_constants(

@@ -94,6 +94,7 @@ from opensg_solid.sg_assembly import (
 from opensg_solid.sg_materials import (build_material_C,
                                        get_heterogeneous_C_matrix)
 from opensg_solid.sg_mesh import _cell_basis, load_sg_input, plot_sg_mesh
+from opensg_solid import sg_progress
 
 
 @partial(jax.jit, static_argnames=['n_unique', 'n_model', 'n_sg'])
@@ -175,6 +176,7 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     if bdofs is not None:
         RHS[pin] = 0.0                  # w = 0 on the boundary nodes
     V0_matrix = jnp.asarray(_sparse_direct_solve(A_csr, RHS, sym=True))
+    sg_progress.tick("solve")
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
     D_bar, omega = compute_homogenized_constants(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, n_model, n_sg)
@@ -489,6 +491,7 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
 
         out["V1Lt"], out["V2Lt"] = V1Lt, v2l(V1Lt)
         out["V1Lb"], out["V2Lb"] = V1Lb, v2l(V1Lb)
+    sg_progress.tick("ladder")
     return out
 
 
@@ -784,6 +787,7 @@ def write_sc_K(path, C, solve_time=None, model="", constants=True, name="",
             " singular mesh, or an upstream solver failure."
             % ((name + " ") if name else "",
                int((~np.isfinite(C)).sum()), C.size, path))
+    sg_progress.tick("done")
     S = np.linalg.inv(C)
     n = C.shape[0]
     infix = (name + " ") if name else ""
@@ -1162,6 +1166,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
 
     unique_dofs = jnp.unique(dof_map_np)
     n_unique = len(unique_dofs)
+    sg_progress.start(int(n_unique))
 
     if solver == "auto":
         # the dof-banded policy, deferred to HERE where the true

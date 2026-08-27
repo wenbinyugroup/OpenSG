@@ -63,6 +63,7 @@ import jax.experimental.sparse as jsparse
 import jax.numpy as jnp
 from scipy.sparse import csr_matrix
 
+from opensg_solid import sg_progress
 from fe_jax.setup import (transform_global_unraveled_to_element_node,
                           transform_element_node_to_global_unraveled_sum)
 
@@ -1154,10 +1155,13 @@ def assemble_rhs_and_pinned_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
             u_g_flat, n_model, n_sg)
         A_csr, pin = assemble_pinned_csr(J_euu, periodic_cells, n_unique,
                                          bdofs=bdofs, sym=sym)
+        sg_progress.tick("assembly")
         return np.asarray(Dhe), A_csr, pin
-    return _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
-                                 periodic_cells, u_g_flat, n_model, n_sg,
-                                 n_unique, bdofs=bdofs, sym=sym)
+    out = _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+                                periodic_cells, u_g_flat, n_model, n_sg,
+                                n_unique, bdofs=bdofs, sym=sym)
+    sg_progress.tick("assembly")
+    return out
 
 
 _direct_spsolve = None
