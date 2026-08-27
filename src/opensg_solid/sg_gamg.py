@@ -55,7 +55,6 @@ from scipy.sparse import diags
 
 from opensg_solid.sg_assembly import (assemble_rhs_and_pinned_csr,
                                       compute_homogenized_constants)
-from opensg_solid import sg_progress
 
 # same stopping pair as sg_amg (a tolerance certificate is one rerun
 # with OPENSG_AMG_RTOL tightened 100x: the law must hold its digits)
@@ -249,7 +248,9 @@ def gamg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     RHS = -np.asarray(Dhe)
     RHS[np.asarray(pin, np.int64)] = 0.0
     V0, iters, _ = solve_columns(PETSc, ksp, mat, A_csr, RHS, rtol)
-    sg_progress.tick("solve")
+    # bar note: gamg runs bar-less (the solve bar lives in sg_amg's
+    # chunked CG; a KSP monitor callback could feed sg_progress.solve
+    # -- follow-up)
     del iters                # terse console: results only
     ksp.destroy()
     mat.destroy()

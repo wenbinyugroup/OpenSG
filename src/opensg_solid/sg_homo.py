@@ -177,7 +177,6 @@ def _homo_direct(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     if bdofs is not None:
         RHS[pin] = 0.0                  # w = 0 on the boundary nodes
     V0_matrix = jnp.asarray(_sparse_direct_solve(A_csr, RHS, sym=True))
-    sg_progress.tick("solve")
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
     D_bar, omega = compute_homogenized_constants(
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, n_model, n_sg)
@@ -497,7 +496,6 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
 
         out["V1Lt"], out["V2Lt"] = V1Lt, v2l(V1Lt)
         out["V1Lb"], out["V2Lb"] = V1Lb, v2l(V1Lb)
-    sg_progress.tick("ladder")
     return out
 
 
@@ -793,7 +791,7 @@ def write_sc_K(path, C, solve_time=None, model="", constants=True, name="",
             " singular mesh, or an upstream solver failure."
             % ((name + " ") if name else "",
                int((~np.isfinite(C)).sum()), C.size, path))
-    sg_progress.tick("done")
+    sg_progress.finish()         # end a pending solve-bar line
     S = np.linalg.inv(C)
     n = C.shape[0]
     infix = (name + " ") if name else ""

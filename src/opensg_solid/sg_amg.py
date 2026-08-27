@@ -39,6 +39,11 @@ conditioning wall with near-mesh-independent iteration counts.
 #                       ladder -- the hierarchy only preconditions)
 #   ctx                 {"levels", "coarse", "pin", "rtol"} -- the
 #                       handle plate_shear_ladder reuses
+#   state, tolb, normb  chunked-CG carry of solve_columns (per-column
+#                       x r z p rz k; stopping norms) -- advanced
+#                       _PROG_BLOCK iterations per host residual read
+#                       when the sg_progress bar is armed, straight to
+#                       convergence when dark
 # outputs
 #   C_eff, V0_matrix, omega                  as _homo_direct
 #   X, iters, worst     per-column solutions, CG counts, worst relres
@@ -46,7 +51,6 @@ conditioning wall with near-mesh-independent iteration counts.
 """
 import os
 import time
-from functools import partial
 
 import numpy as np
 
@@ -238,27 +242,41 @@ def _vcycle(levels, coarse, r0):
     return x
 
 
-def _pcg_one(levels, coarse, fine, b, rtol, maxiter):
-    """Preconditioned CG on ONE column, fully on the jax default
-    device.  `fine` is the TRUE operator of the outer iteration (the
-    ladder passes its own hi-quadrature matrix; the hierarchy only
-    preconditions, so the answer is exact for whichever system `fine`
-    is).
+def _pcg_carry(levels, coarse, b, rtol):
+    """CG start state of ONE column -- the EXACT initialization the
+    single-shot loop used (zero x, r = b, z = p = V-cycle(b)).
 
-    In:  levels/coarse from build_hierarchy; fine {d, c, r}; b (n,);
-         rtol float; maxiter int
-    Out: x (n,); k int iterations; relres float."""
-    n = b.shape[0]
+    In:  levels/coarse from build_hierarchy; b (n,); rtol float
+    Out: s (x, r, z, p, rz, k) carry; tolb float absolute stopping
+         norm; normb float ||b||."""
     normb = jnp.linalg.norm(b)
     tolb = rtol * jnp.where(normb > 0, normb, 1.0)
     z0 = _vcycle(levels, coarse, b)
+    return ((jnp.zeros_like(b), b, z0, z0, b @ z0,
+             jnp.zeros((), jnp.int64)), tolb, normb)
 
-    def cond(s):
-        _, r, _, _, _, k = s
-        return (jnp.linalg.norm(r) > tolb) & (k < maxiter)
 
-    def body(s):
-        x, r, z, p, rz, k = s
+def _pcg_advance(levels, coarse, fine, s, tolb, kcap, normb):
+    """Preconditioned CG on ONE column from the carry s until ITS
+    residual passes tolb or k reaches kcap -- the SAME body and stop
+    predicate as the historical single-shot loop (kcap = maxiter IS
+    it), and a resumed call continues the identical iterate sequence,
+    so however kcap steps the digits cannot move.  `fine` is the TRUE
+    operator of the outer iteration (the ladder passes its own
+    hi-quadrature matrix; the hierarchy only preconditions, so the
+    answer is exact for whichever system `fine` is).
+
+    In:  levels/coarse from build_hierarchy; fine {d, c, r}; s/tolb/
+         normb from _pcg_carry (or a previous advance); kcap int cap
+    Out: s advanced; k int iterations so far; relres float."""
+    n = s[1].shape[0]
+
+    def cond(st):
+        _, r, _, _, _, k = st
+        return (jnp.linalg.norm(r) > tolb) & (k < kcap)
+
+    def body(st):
+        x, r, z, p, rz, k = st
         Ap = _spmv(fine, p, n)
         alpha = rz / (p @ Ap)
         x = x + alpha * p
@@ -268,48 +286,88 @@ def _pcg_one(levels, coarse, fine, b, rtol, maxiter):
         p = z + (rz2 / rz) * p
         return (x, r, z, p, rz2, k + 1)
 
-    x, r, _, _, _, k = jax.lax.while_loop(
-        cond, body, (jnp.zeros_like(b), b, z0, z0, b @ z0,
-                     jnp.zeros((), jnp.int64)))
-    return x, k, jnp.linalg.norm(r) / jnp.where(normb > 0, normb, 1.0)
+    s = jax.lax.while_loop(cond, body, s)
+    _, r, _, _, _, k = s
+    return s, k, jnp.linalg.norm(r) / jnp.where(normb > 0, normb, 1.0)
 
 
-@partial(jax.jit, static_argnames=("maxiter",))
-def _pcg_block(levels, coarse, fine, Bcols, rtol, maxiter):
-    """vmapped _pcg_one over a block of RHS columns: the matvecs batch
-    (bandwidth-amortized on CPU, parallel on GPU) and the block runs
-    LOCK-STEP -- every column iterates until the slowest converges, so
-    the reported count is the block maximum.
+_AX = ((1, 1, 1, 1, 0, 0), 0, 0)   # vmap axes of (carry, tolb, normb)
 
-    In:  levels/coarse/fine as _pcg_one; Bcols (n, m); rtol; maxiter
-         static int
-    Out: X (n, m); k (m,) iterations; relres (m,)."""
+
+@jax.jit
+def _pcg_begin(levels, coarse, Bcols, rtol):
+    """jit trace 1 of 2: vmapped _pcg_carry over a block of RHS
+    columns.
+
+    In:  levels/coarse from build_hierarchy; Bcols (n, m); rtol
+    Out: state carry pytree (columns on axis 1, scalars on axis 0);
+         tolb (m,); normb (m,)."""
+    return jax.vmap(lambda b: _pcg_carry(levels, coarse, b, rtol),
+                    in_axes=1, out_axes=_AX)(Bcols)
+
+
+@jax.jit
+def _pcg_chunk(levels, coarse, fine, state, tolb, normb, kcap):
+    """jit trace 2 of 2: vmapped _pcg_advance -- the block runs
+    LOCK-STEP (a converged column freezes; the active columns share k)
+    to the shared cap kcap.  kcap is DYNAMIC, so ONE trace serves
+    every chunk and the dark full-maxiter call alike.
+
+    In:  levels/coarse/fine as _pcg_advance; state/tolb/normb from
+         _pcg_begin or the previous chunk; kcap int
+    Out: state advanced; k (m,) per-column iterations; relres (m,)."""
     return jax.vmap(
-        lambda b: _pcg_one(levels, coarse, fine, b, rtol, maxiter),
-        in_axes=1, out_axes=(1, 0, 0))(Bcols)
+        lambda s, tb, nb: _pcg_advance(levels, coarse, fine, s, tb,
+                                       kcap, nb),
+        in_axes=_AX, out_axes=_AX)(state, tolb, normb)
+
+
+_PROG_BLOCK = 25   # CG iterations per host residual read (bar armed)
 
 
 def solve_columns(levels, coarse, fine, RHS, rtol=_RTOL,
                   maxiter=_MAXITER):
     """Solve fine x = b for every RHS column, in vmapped blocks sized
-    by the _COL_BYTES matvec-transient budget (the jitted _pcg_block
-    compiles once per pattern-and-width and is reused).
+    by the _COL_BYTES matvec-transient budget (the two jitted stages
+    compile once per pattern-and-width and are reused).  Dark (the
+    default): ONE _pcg_chunk call per block runs straight to
+    convergence/maxiter -- the historical single-call sync pattern.
+    With the sg_progress bar armed, the SAME trace advances
+    _PROG_BLOCK iterations per call and the host reads the worst
+    relative residual once per chunk: the bar moves by the genuine
+    convergence fraction p = log10(res0/res_worst)/log10(1/rtol)
+    (relative residuals, so res0 = 1), scaled across the RHS blocks;
+    every solve sweeps the one line 0 -> 100.
 
-    In:  levels/coarse/fine as _pcg_one; RHS (n, m) host float64;
+    In:  levels/coarse/fine as _pcg_advance; RHS (n, m) host float64;
          rtol; maxiter
-    Out: X (n, m) np; iters list[int] per column (block maxima); worst
-         float worst relative residual."""
+    Out: X (n, m) np; iters list[int] per column; worst float worst
+         relative residual."""
     n, m = RHS.shape
     bs = max(1, min(m, int(_COL_BYTES / (8 * fine["d"].shape[0] + 1))))
     X = np.zeros_like(RHS)
     iters, worst = [], 0.0
+    bar = sg_progress.active()
+    nblk = (m + bs - 1) // bs
     for j0 in range(0, m, bs):
-        Xb, kb, rb = _pcg_block(levels, coarse, fine,
-                                jnp.asarray(RHS[:, j0:j0 + bs]),
-                                rtol, maxiter)
-        X[:, j0:j0 + bs] = np.asarray(Xb)
+        state, tolb, normb = _pcg_begin(
+            levels, coarse, jnp.asarray(RHS[:, j0:j0 + bs]), rtol)
+        kcap = 0
+        while True:
+            kcap = min(kcap + _PROG_BLOCK, maxiter) if bar else maxiter
+            state, kb, rb = _pcg_chunk(levels, coarse, fine, state,
+                                       tolb, normb, kcap)
+            rw = float(np.max(np.asarray(rb)))   # the one host read
+            if bar:
+                p = np.log10(max(rw, 1e-300)) / np.log10(rtol)
+                sg_progress.solve(
+                    (j0 // bs + min(1.0, max(0.0, p))) / nblk)
+            if kcap >= maxiter or int(np.max(np.asarray(kb))) < kcap:
+                break        # every column converged (none hit kcap)
+        X[:, j0:j0 + bs] = np.asarray(state[0])
         iters += [int(k) for k in np.asarray(kb)]
-        worst = max(worst, float(np.max(np.asarray(rb))))
+        worst = max(worst, rw)
+    sg_progress.solve(1.0)
     if worst > rtol:
         print(" amg WARNING: CG stopped at maxiter=%d, worst relres"
               " %.2e (asked %.0e)" % (maxiter, worst, rtol))
@@ -349,7 +407,6 @@ def amg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     RHS = -np.asarray(Dhe)
     RHS[np.asarray(pin, np.int64)] = 0.0
     V0, iters, _ = solve_columns(levels, coarse, fine, RHS, rtol)
-    sg_progress.tick("solve")
     V0_matrix = jnp.asarray(V0)
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
     D_bar, omega = compute_homogenized_constants(
