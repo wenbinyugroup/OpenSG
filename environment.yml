@@ -7,18 +7,22 @@ dependencies:
   - scipy
   - mpi4py
   - meshio
-  # CPU petsc: --solver iter 4 (gamg) runs everywhere, GPU-less included.
-  # GPU gamg (aijcusparse): replace this ONE line with the PINNED pair
-  #   - petsc=3.23.7=cuda12_real_*
-  #   - petsc4py=3.23.7
-  # (the pin keeps python 3.13 -- unpinned cuda petsc4py has no py313
-  # build and drags the whole env down to python 3.10)
-  - petsc4py
+  # petsc = --solver iter 4 (gamg), CUDA-12 by default like the jax
+  # stack below (a CUDA petsc still runs on CPU-only machines; it just
+  # cannot offer the aijcusparse Mat type, and sg_gamg probes for that
+  # and falls back to aij).  The VERSION PIN is load-bearing: unpinned,
+  # conda resolves a petsc4py with no python-3.13 build and drags the
+  # whole env down to python 3.10.  Lean CPU-only alternative:
+  #   - petsc4py
+  - petsc=3.23.7=cuda12_real_*
+  - petsc4py=3.23.7
   - pyyaml
-  - fenics-dolfinx=0.8.0
+  # basix supplies the reference bases/quadrature fe_jax evaluates
+  # (fe_jax.basis_quadrature).  The DOLFINx stack (fenics-dolfinx, -ufl,
+  # -ffcx) is NOT imported anywhere in src and is deliberately absent:
+  # dolfinx 0.8.0 hard-pins petsc <3.22, which blocks the CUDA petsc
+  # above.
   - fenics-basix=0.8.0
-  - fenics-ufl=2024.1.0
-  - fenics-ffcx=0.8.0
   - mpich
   - matplotlib
   - pyvista
