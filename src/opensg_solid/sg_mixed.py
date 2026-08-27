@@ -46,6 +46,8 @@ single-batch by construction).
 #   ladder_blocks()         the assembled global ladder objects
 # ----------------------------------------------------------------------------
 """
+import os
+
 import numpy as np
 from scipy.sparse import csr_matrix
 
@@ -219,6 +221,31 @@ def homo_direct_batched(batches, u_0_g, unique_dofs, n_unique, points,
     return C_eff, V0_matrix, omega
 
 
+def _ladder_slabs(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
+                  budget):
+    """Yield ladder-kernel work units: each batch's per-element arrays
+    (x, C, cells) sliced to a device-transient budget, its quadrature
+    tables passed whole.  Slab size ~ budget / (8 * n_ed^2 * (Q + 16)):
+    the empirical live-set of the fused kernel (block outputs +
+    transients), so a fixed OPENSG_SLAB_BYTES caps device memory at any
+    mesh size.  Equal slabs + one remainder -> two jit compilations.
+
+    In:  the ladder_blocks per-batch arguments (arrays or per-batch
+         lists); budget float bytes
+    Out: yields (x_s, dp_b, ph_b, W_b, C_s, rc_s) slab tuples."""
+    for x_b, dp_b, ph_b, W_b, C_b, rc_b in zip(
+            as_batches(x_end), as_batches(dphi_hi), as_batches(phi_hi),
+            as_batches(W_hi), as_batches(C_ess),
+            as_batches(reduced_cells)):
+        E = len(rc_b)
+        n_ed = 3 * np.asarray(rc_b).shape[1]
+        per = 8.0 * n_ed * n_ed * (len(np.asarray(W_b)) + 16)
+        S = min(E, max(4096, int(budget // per)))
+        for a in range(0, E, S):
+            yield (x_b[a:a + S], dp_b, ph_b, W_b, C_b[a:a + S],
+                   rc_b[a:a + S])
+
+
 def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
                   n_unique, n_sg, omega):
     """The ASSEMBLED global objects of the RM shear ladder, batched:
@@ -240,10 +267,14 @@ def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
     D_ee = np.zeros((6, 6))
     w_node = np.zeros(n_unique // 3)
     _acc = lambda A, B: B if A is None else A + B          # noqa: E731
-    for x_b, dp_b, ph_b, W_b, C_b, rc_b in zip(
-            as_batches(x_end), as_batches(dphi_hi), as_batches(phi_hi),
-            as_batches(W_hi), as_batches(C_ess),
-            as_batches(reduced_cells)):
+    # element SLABS inside each batch: the whole-batch jit holds the
+    # full per-element block stack live (49 GiB at 2.19M tet4), so the
+    # kernel is called on budget-sized slices and each slab lands in
+    # the SAME host accumulators -- more batches, identical math
+    _budget = float(os.environ.get("OPENSG_SLAB_BYTES", 4e9))
+    for x_b, dp_b, ph_b, W_b, C_b, rc_b in _ladder_slabs(
+            x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
+            _budget):
         out = plate_ladder_element_blocks(x_b, dp_b, ph_b, W_b,
                                           jnp.asarray(C_b), n_sg)
         (hh_b, he_b, ee_b, hl1_b, hl2_b, l11_b, l12_b, l22_b,
