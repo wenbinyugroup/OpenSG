@@ -143,9 +143,13 @@ def build_hierarchy(A_csr, B):
     pyamg = _require_pyamg()
     from pyamg.util.linalg import approximate_spectral_radius
     # energy-minimized prolongation: 92 -> 34 CG iterations on the G1
-    # spike-plate anchor vs jacobi-smoothed P, at ~3x the (small) setup
+    # spike-plate anchor vs jacobi-smoothed P, at ~3x the (small) setup.
+    # OPENSG_AMG_SMOOTH=jacobi trades iterations for a ~3x cheaper CPU
+    # setup -- the winning trade when iterations run on a GPU and the
+    # serial setup dominates wall clock (big-dof Colab runs)
     ml = pyamg.smoothed_aggregation_solver(
-        A_csr, B=B, max_coarse=_MAX_COARSE, smooth="energy", keep=False)
+        A_csr, B=B, max_coarse=_MAX_COARSE,
+        smooth=os.environ.get("OPENSG_AMG_SMOOTH", "energy"), keep=False)
     levels = []
     for lv in ml.levels[:-1]:
         A = lv.A.tocsr()
