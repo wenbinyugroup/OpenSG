@@ -293,6 +293,7 @@ def main(argv=None):
     if analysis == "H":
         print("Homogenization stored in %s.out" % base)
         print("Time taken: %.2f sec" % float(r["solve_time"]))
+        _print_gpu_peak()
 
     if analysis == "D":
         import numpy as np
@@ -401,7 +402,25 @@ def main(argv=None):
                      frame=frame_note)
         print("Local field files are computed and stored.")
         print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
+        _print_gpu_peak()
     return 0
+
+
+def _print_gpu_peak():
+    """One line of TRUE device usage after a GPU run -- the nvidia-smi /
+    Colab gauge shows the XLA preallocation pool (75% of the card), not
+    what the run needed.  Silent on CPU and on any backend that does not
+    expose memory_stats."""
+    try:
+        import jax as _jax
+        dev = _jax.local_devices()[0]
+        if dev.platform != "gpu":
+            return
+        peak = dev.memory_stats().get("peak_bytes_in_use")
+        if peak:
+            print("GPU peak: %.1f GB" % (peak / 1e9))
+    except Exception:
+        pass
 
 
 def read_ff_state(path):
