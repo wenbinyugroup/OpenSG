@@ -166,6 +166,14 @@ def main(argv=None):
             solver = "stream"
         elif s == "iter4":
             solver = "gamg"
+            # PETSc allocates its Mat/hierarchy on the SAME card, and
+            # XLA's default pool grabs 75% of it up front (60 GB of an
+            # A100-80), so the COO upload dies with cudaErrorMemory-
+            # Allocation.  Let jax grow on demand instead -- read at
+            # backend init, which is still ahead of us here, and inert
+            # on a CPU-only machine.
+            os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE",
+                                  "false")
         elif s in ("direct3", "direct4"):
             raise SystemExit("--solver %s is on the menu but not wired"
                              " yet -- available today: direct 1"
