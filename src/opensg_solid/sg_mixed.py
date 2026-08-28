@@ -67,9 +67,13 @@ from opensg_solid.sg_assembly import (_sparse_direct_solve,
 from opensg_solid.sg_mesh import _cell_basis
 from opensg_solid import sg_progress
 
-# enum member names differ across fe_jax vintages (default vs Default)
-_QT = getattr(QuadratureType, "default", None) or getattr(
-    QuadratureType, "Default")
+# enum member names differ across fe_jax vintages (default vs Default).
+# `is None`, NOT `or`: on basix >= 0.11 QuadratureType.default has enum
+# VALUE 0, so it is falsy and `or` would fall through to the missing
+# spelling and raise.
+_QT = getattr(QuadratureType, "default", None)
+if _QT is None:
+    _QT = getattr(QuadratureType, "Default")
 
 
 def as_batches(v):

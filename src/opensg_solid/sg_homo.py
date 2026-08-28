@@ -100,6 +100,12 @@ from opensg_solid import sg_progress
 
 
 _CHEB_TOL = 1e-6         # the historical cg tolerance of this route
+# per-ATTEMPT iteration cap of the verified solve loop below.  jax's own
+# 10*n default would grind for hours on a stagnating (indefinite-M)
+# solve before the residual check could catch it; a bounded attempt
+# followed by an interval-widening restart converges faster than any
+# single unbounded run that has the wrong interval.
+_CHEB_MAXITER = 10000
 
 
 @partial(jax.jit, static_argnames=['n_unique', 'n_model', 'n_sg'])
@@ -122,8 +128,7 @@ def _cheb_setup(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
         ebe_jacobian_product_periodic, J_euu, periodic_cells, n_unique)
     M_op = jax.tree_util.Partial(
         apply_block_precond, inv_blocks, n_unique)
-    eig_max = estimate_max_eigenvalue(A_op, M_op, -Dhe.T[0],
-                                      num_iters=15)
+    eig_max = estimate_max_eigenvalue(A_op, M_op, -Dhe.T[0])
     return Dhe, J_euu, inv_blocks, eig_max
 
 
@@ -174,10 +179,38 @@ def full_homogenization_pipeline(
     sg_progress.stage(sg_progress.solve_window(), "solve", eta=True)
     # all V0 columns solve SIMULTANEOUSLY (vmap: batched matvecs on
     # CPU, parallel on GPU; lax.map was sequential) -- the rows of the
-    # (H, n) argument ARE the columns, the historical layout
-    V0_matrix = chunked_cg_columns(
-        cheb_ebe_ops, (J_euu, periodic_cells, inv_blocks, eig_max),
-        -Dhe.T, n_unique, _CHEB_TOL).T
+    # (H, n) argument ARE the columns, the historical layout.
+    # SOLVE + VERIFY: jax's cg cannot signal failure, and an
+    # under-estimated eig_max makes the degree-4 Chebyshev
+    # preconditioner INDEFINITE (any eigenvalue of M^-1 A above
+    # 1.04 x eig_max) -- CG then stagnates on a still-SPD system and
+    # the maxiter iterate would flow into C_eff silently.  So the TRUE
+    # relative residual of every column is checked after the solve; on
+    # failure the interval widens 4x and the solve RESTARTS (a fresh
+    # CG is digit-safe: the converged answer does not depend on M).
+    B = -Dhe.T
+    bnorm = jnp.maximum(jnp.linalg.norm(B, axis=1), 1e-300)
+    A_op = jax.tree_util.Partial(
+        ebe_jacobian_product_periodic, J_euu, periodic_cells, n_unique)
+    worst = float("nan")
+    for _attempt in range(3):
+        V0T = chunked_cg_columns(
+            cheb_ebe_ops, (J_euu, periodic_cells, inv_blocks, eig_max),
+            B, n_unique, _CHEB_TOL, maxiter=_CHEB_MAXITER)
+        res = jax.vmap(lambda x, b: jnp.linalg.norm(A_op(x) - b))(V0T, B)
+        worst = float(jnp.max(res / bnorm))
+        if np.isfinite(worst) and worst <= 10.0 * _CHEB_TOL:
+            break
+        eig_max = eig_max * 4.0
+        print(" cg WARNING: worst relres %.2e (tol %.0e) -- Chebyshev"
+              " interval widened to eig_max %.4g, re-solving"
+              % (worst, _CHEB_TOL, float(eig_max)))
+    else:
+        raise RuntimeError(
+            "iter1 cg did not converge (worst relres %.2e, tol %.0e)"
+            " after 3 Chebyshev intervals -- run --solver direct or"
+            " --solver amg for this SG" % (worst, _CHEB_TOL))
+    V0_matrix = V0T.T
     C_eff, omega = _cheb_reduce(V0_matrix, Dhe, x_end, dphi_dxi_qnp,
                                 phi_qn, W_q, C_ess, n_model, n_sg)
     return C_eff, V0_matrix, omega
@@ -443,6 +476,10 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
         # itself (sg_gamg); the ctx names its backend
         if amg_ctx.get("backend") == "gamg":
             from opensg_solid.sg_gamg import make_constrained_solver
+        elif amg_ctx.get("backend") == "cg":
+            # iter 1: sparse_projected_cg on D_hh itself, same
+            # <w> = 0 gauge, device-resident -- no KKT factorization
+            from opensg_solid.sg_assembly import make_constrained_solver
         else:
             from opensg_solid.sg_amg import make_constrained_solver
         # gamg sets a SECOND KSP up here (an opaque call): park the bar
@@ -1336,6 +1373,14 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         C_eff, V0_matrix, omega = full_homogenization_pipeline(
             x_end, u_0_g_full, dphi_dxi_qnp, phi_qn, W_q, C_ess,
             periodic_cells_en, unique_dofs, n_unique, n_model, n_sg)
+        # iter 1: hand the refined-plate ladder a device-resident
+        # constrained solver (sg_assembly.make_constrained_solver).
+        # Without this ctx the "GPU route" silently fell back to a
+        # direct KKT factorization for every ladder solve -- serial
+        # SuperLU where pypardiso is absent (Colab), effectively
+        # broken at tet10 scale.  rtol is TIGHT because the ladder
+        # law is first order in the V1/V2 residual.
+        _amg_ctx = {"backend": "cg", "rtol": 1e-10, "maxiter": 20000}
 
     if omega_user is not None and n_model == 3:
         # the user measure WINS over the measured one; C_eff is exactly

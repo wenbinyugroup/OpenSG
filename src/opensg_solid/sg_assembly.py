@@ -326,30 +326,46 @@ def compute_block_inv_diag(J_uu, periodic_cells, n_unique):
     return jnp.linalg.inv(global_blocks_safe)
 
 
-def estimate_max_eigenvalue(A_op, M_op, b_col, num_iters=15):
+def estimate_max_eigenvalue(A_op, M_op, b_col, num_iters=50):
     """Power-method estimate of the largest eigenvalue of M^-1 A
     (upper Chebyshev bound).
+
+    An UNDER-estimate here is the one dangerous direction: eigenvalues
+    of M^-1 A above the returned bound make the Chebyshev polynomial
+    preconditioner INDEFINITE (1 - P(lambda) < 0 as soon as lambda >
+    1.04 x bound at degree 4), and CG then stagnates on a still-SPD
+    system -- the rho0.3 tet4 study mesh sat at est/true = 0.58 with
+    the historical 15 iterations.  Hence: 50 iterations, the RUNNING
+    MAX of the Rayleigh quotient (its convergence is not monotone
+    through transients), and a 1.10 inflation.  An over-estimate only
+    mildly flattens the polynomial; the callers additionally verify
+    the final CG residual and re-solve on a widened interval, so this
+    estimate is a fast path, not a correctness contract.
 
     In:
         A_op: callable, v -> A v.
         M_op: callable, v -> M^-1 v (preconditioner apply).
-        b_col: (n,) shape/dtype template for the start vector.
+        b_col: (n,) start vector (a real RHS column: generic direction;
+            the historical all-ones start is nearly DEGENERATE for a
+            projected operator -- ones spans the translations the
+            projector removes -- and poor on irregular meshes).  A zero
+            b_col falls back to ones.
         num_iters: int, power iterations.
     Out:
-        scalar eigenvalue estimate, inflated by 1.05 for safety.
+        scalar eigenvalue estimate, inflated by 1.10 for safety.
     """
-    v = jnp.ones_like(b_col)
-    v = v / jnp.linalg.norm(v)
+    v = b_col + 1e-300 * jnp.ones_like(b_col)    # ones only when b = 0
+    v = v / (jnp.linalg.norm(v) + 1e-300)
 
     def power_step(i, state):
-        v_current, current_lam = state
+        v_current, lam_max = state
         w = M_op(A_op(v_current))
         lam_new = jnp.vdot(v_current, w)
         v_new = w / (jnp.linalg.norm(w) + 1e-12)
-        return (v_new, lam_new)
+        return (v_new, jnp.maximum(lam_max, lam_new))
 
     _, lambda_max = jax.lax.fori_loop(0, num_iters, power_step, (v, 0.0))
-    return lambda_max * 1.05
+    return lambda_max * 1.10
 
 
 def apply_chebyshev_precond(inv_blocks, n_unique_u, eig_max, eig_min, A_op,
@@ -1037,28 +1053,101 @@ def sparse_projected_cg(A_sp, C, B, ndof_per_node, tol=1e-8, cheb_degree=4,
         return proj(block_prec(proj(x))) + (x - proj(x))
 
     eig_max = estimate_max_eigenvalue(A_op, M_blk, proj(B_d[:, 0]))
-    eig_min = eig_max / 25.0
-    d_c = (eig_max + eig_min) / 2.0
-    c_c = (eig_max - eig_min) / 2.0
-    theta = d_c + c_c * jnp.cos(
-        jnp.pi * (2 * jnp.arange(1, cheb_degree + 1) - 1) / (2 * cheb_degree))
 
-    def cheb(x):
-        def step(z, th):
-            return z + M_blk(x - A_op(z)) / th, None
-        z, _ = jax.lax.scan(step, jnp.zeros_like(x), theta)
-        return z
+    def _solve(eig):
+        eig_min = eig / 25.0
+        d_c = (eig + eig_min) / 2.0
+        c_c = (eig - eig_min) / 2.0
+        theta = d_c + c_c * jnp.cos(
+            jnp.pi * (2 * jnp.arange(1, cheb_degree + 1) - 1)
+            / (2 * cheb_degree))
 
-    @jax.jit
-    def solve_all(Bcols):
-        def one(bc):
-            bp = proj(bc)
-            x, _ = jax.scipy.sparse.linalg.cg(A_op, bp, M=cheb, tol=tol,
-                                              maxiter=maxiter)
-            return proj(x)
-        return jax.vmap(one)(Bcols.T).T          # vmap over the load cases
+        def cheb(x):
+            def step(z, th):
+                return z + M_blk(x - A_op(z)) / th, None
+            z, _ = jax.lax.scan(step, jnp.zeros_like(x), theta)
+            return z
 
-    return np.asarray(solve_all(B_d))
+        @jax.jit
+        def solve_all(Bcols):
+            def one(bc):
+                bp = proj(bc)
+                x, _ = jax.scipy.sparse.linalg.cg(A_op, bp, M=cheb,
+                                                  tol=tol,
+                                                  maxiter=maxiter)
+                return proj(x)
+            return jax.vmap(one)(Bcols.T).T      # vmap over the load cases
+
+        return solve_all(B_d)
+
+    # SOLVE + VERIFY: jax's cg cannot signal failure, and an
+    # under-estimated eig_max makes the Chebyshev preconditioner
+    # INDEFINITE (CG stagnates on a still-SPD system).  Check the true
+    # projected residual of every column; on failure widen the interval
+    # 4x and re-solve (a fresh CG is digit-safe -- the converged answer
+    # does not depend on M).
+    Bp = jax.vmap(proj)(B_d.T).T
+    bn = jnp.maximum(jnp.linalg.norm(Bp, axis=0), 1e-300)
+    worst = float("nan")
+    for _attempt in range(3):
+        X = _solve(eig_max)
+        R = jax.vmap(lambda x, b: jnp.linalg.norm(A_op(x) - b))(X.T, Bp.T)
+        worst = float(jnp.max(R / bn))
+        if np.isfinite(worst) and worst <= 10.0 * tol:
+            break
+        eig_max = eig_max * 4.0
+        print(" cg WARNING: projected-CG worst relres %.2e (tol %.0e)"
+              " -- Chebyshev interval widened to eig_max %.4g,"
+              " re-solving" % (worst, tol, float(eig_max)))
+    else:
+        raise RuntimeError(
+            "projected CG did not converge (worst relres %.2e, tol"
+            " %.0e) after 3 Chebyshev intervals -- run --solver direct"
+            % (worst, tol))
+    return np.asarray(X)
+
+
+def make_constrained_solver(ctx, D_hh, w_dof, scl):
+    """iter 1 (cg) replacement for plate_shear_ladder's KKT
+    factorization -- sparse_projected_cg on the assembled ladder
+    stiffness with the <w> = 0 kernel rows as the projection (C rows =
+    the w_dof-weighted translation per displacement component, exactly
+    sg_homo's Hpsi^T), so the returned columns land the SAME weighted
+    <w> = 0 gauge as the KKT solution: constraint + stationarity on the
+    constraint subspace determine x uniquely, only the multiplier
+    differs.  scl cancels (as sg_amg documents) and is accepted for
+    factory-signature parity.  Signs match the KKT branch: the KKT
+    solves for -rhs, so -rhs is what the projected CG gets.
+
+    The ladder law is FIRST order in the V1/V2 residual (unlike the
+    stationary V0 law), hence the tight default rtol 1e-10.  Columns
+    solve in blocks of 12 to bound the vmapped CG state on GPU (the V2
+    stage carries 36 columns).
+
+    In:  ctx dict {backend: 'cg', rtol, maxiter} from the iter-1
+         dispatch; D_hh (n, n) csr ladder stiffness; w_dof (n,) <w>
+         node weights repeated per component; scl float (unused)
+    Out: solve_constrained(rhs (n, m)) -> (n, m) np -- the drop-in."""
+    n = D_hh.shape[0]
+    w = np.asarray(w_dof, float)
+    C_rows = np.zeros((3, n))
+    for j in range(3):
+        C_rows[j, j::3] = w[j::3]
+    rtol = float(ctx.get("rtol", 1e-10))
+    maxiter = int(ctx.get("maxiter", 20000))
+
+    def solve_constrained(rhs):
+        b = -np.asarray(rhs, float)
+        if b.ndim == 1:
+            b = b[:, None]
+        X = np.empty_like(b)
+        for j0 in range(0, b.shape[1], 12):
+            X[:, j0:j0 + 12] = sparse_projected_cg(
+                D_hh, C_rows, b[:, j0:j0 + 12], 3, tol=rtol,
+                maxiter=maxiter)
+        return X
+
+    return solve_constrained
 
 
 def assemble_pinned_csr(J_euu, periodic_cells, n_unique, bdofs=None,
