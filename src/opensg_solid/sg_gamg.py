@@ -217,12 +217,11 @@ def _build_ksp(PETSc, mat, ksp_name, pc_name, rtol, maxiter):
 
 
 def _mat_and_ksp(PETSc, A_csr, B, mat_t, ksp_t, pc_t, rtol):
-    """Upload the matrix and set the hierarchy up, FALLING BACK to the
-    CPU mat type when the GPU cannot carry it: cuSPARSE reports
-    INSUFFICIENT_RESOURCES / OUT_OF_MEMORY on the GAMG setup of a very
-    large system (its workspace is not slab-able the way our assembly
-    is), and a completed CPU run beats a dead GPU one.  The law is the
-    same either way -- only where the arithmetic happens changes.
+    """Upload the matrix and set the hierarchy up.  A GPU setup that
+    exhausts device resources ABORTS with the reason -- GAMG's coarse
+    operators are sparse matrix products whose cuSPARSE workspace does
+    not fit at this size.  No silent CPU retry: that decision (and the
+    hours it would cost) belongs to whoever started the run.
 
     PC GAMG's setup is ONE opaque call with no callback, so the bar
     carries the INDETERMINATE marker across it (never a faked
@@ -233,24 +232,24 @@ def _mat_and_ksp(PETSc, A_csr, B, mat_t, ksp_t, pc_t, rtol):
     Out: (mat, ksp) both live, hierarchy set up."""
     sg_progress.busy()
     try:
-        for t in ([mat_t, "aij"] if mat_t != "aij" else ["aij"]):
-            mat = _mat_from_csr(PETSc, A_csr, t)
-            _attach_near_nullspace(PETSc, mat, B)
-            try:
-                return mat, _build_ksp(PETSc, mat, ksp_t, pc_t, rtol,
-                                       _MAXITER)
-            except PETSc.Error:
-                if t == "aij":
-                    raise
-                sg_progress.idle()     # the NOTE gets its own line
-                print(" NOTE: the GPU could not set up the GAMG"
-                      " hierarchy at this size -- retrying on the CPU"
-                      " (aij)")
-                mat.destroy()
-                sg_progress.busy()
+        mat = _mat_from_csr(PETSc, A_csr, mat_t)
+        _attach_near_nullspace(PETSc, mat, B)
+        try:
+            return mat, _build_ksp(PETSc, mat, ksp_t, pc_t, rtol,
+                                   _MAXITER)
+        except PETSc.Error as e:
+            if mat_t == "aij":
+                raise
+            _why = [ln.strip() for ln in str(e).splitlines()
+                    if "error" in ln.lower() and ":" in ln]
+            raise SystemExit(
+                "\n gamg: the GPU ran out of resources building the"
+                " hierarchy for %d dofs / %d nonzeros\n %s"
+                % (A_csr.shape[0], A_csr.nnz,
+                   _why[-1] if _why else "cuSPARSE: insufficient"
+                   " resources")) from None
     finally:
         sg_progress.idle()
-    raise RuntimeError("unreachable")
 
 
 def _progress_monitor(m, rtol):
