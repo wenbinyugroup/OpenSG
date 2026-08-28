@@ -225,8 +225,9 @@ def main(argv=None):
     _ap = os.path.abspath(path).replace("\\", "/").split("/")
     print(" input     : %s" % (".../" + "/".join(_ap[-2:])
                                if len(_ap) > 2 else "/".join(_ap)))
-    print(" msg       : %s" % resolve_msg(path))     # the engine that owns it
-    print(" SG dim    : %dD" % node_span_dim(path))   # the space the SG occupies
+    # engine, SG space and element type on ONE line; the mesh line below
+    # then carries the dofs alone
+    _eng, _dim, _otag = resolve_msg(path), node_span_dim(path), ""
     try:
         # mesh size up front (parse is npz-sidecar cached, so this costs
         # nothing the run would not pay later); guarded -- a print must
@@ -250,16 +251,17 @@ def main(argv=None):
                     if getattr(_nc, "ndim", 1) == 2 else None)
         # a 3-D cell arity names the element (the name alone carries the
         # order; other arities untagged)
-        _otag = ({4: " (tet4)", 10: " (tet10)"}.get(_npe, "")
-                 if node_span_dim(path) == 3 else "")
+        _otag = ({4: "- tet4", 10: "- tet10"}.get(_npe, "")
+                 if _dim == 3 else "")
         del _ne
-        print(" dofs      : %d dofs%s"
-              % (3 * len(_d["nodes"]), _otag))
+        _dofs = 3 * len(_d["nodes"])
     except Exception:
-        pass
-    print(" analysis  : %s" % ("homogenization" if analysis == "H"
-                               else "dehomogenization"))
-    print(" macro model: %s, %s%s"
+        _dofs = None
+    print(" msg: %s (%dD SG%s)" % (_eng, _dim, _otag))
+    if _dofs is not None:
+        print(" dofs      : %d dofs" % _dofs)
+    print(" analysis  : %s" % ("homo" if analysis == "H" else "dehom"))
+    print(" macro     : %s, %s%s"
           % (_MDL.get(int(hdr.get("n_model", 2)), "?"),
              "shear-refined" if int(hdr.get("refined", 0)) else "classical",
              ", aperiodic" if int(hdr.get("aperiodic", 0)) else ""))
