@@ -14,8 +14,8 @@ single material, periodic SG, `msg: solid`, `n_model: 2`, `refined: 1`.
 
 | file | what |
 |---|---|
-| `conv_tables.txt` | the convergence tables (values + % change vs the finest tet10), the solver-certificate note, and the tet4 locking table |
-| `convergence_plots/conv_rho0.05.png` | A11 / D11 / G11 vs element count, normalized to the converged tet10 value, ρ = 0.05 |
+| `conv_tables.txt` | the convergence tables (values + % change vs the finest tet10), the solver-certificate note, the assumed-order error table, and the tet4 locking table |
+| `convergence_plots/conv_rho0.05.png` | A11 / D11 / G11 vs element count, normalized to the converged tet10 value, ρ = 0.05. Upper panel = tet4 scale; lower panel re-plots the tet10 pair alone, because on the tet4 scale (up to 1.77) the tet10 points sit on y = 1 and show nothing |
 | `convergence_plots/conv_rho0.3.png` | the same for ρ = 0.3 |
 | `convergence_plots/locking_tet4_vs_tet10.png` | combined tet4-vs-tet10 deviation from the converged law, log–log |
 | `make_conv_study.py` | regenerates every table and plot above from the `.out` files |
@@ -75,6 +75,12 @@ elements, 2.5× the dofs) moves **every** diagonal term of the law by at most
 |---|---:|---:|---:|---:|---:|---:|
 | tet10 172,546 vs tet10 458,133 | +0.0138 % | +0.0076 % | +0.0161 % | +0.0079 % | **+0.0093 %** | **+0.0095 %** |
 
+These are two-point differences, not measured errors — see the ρ = 0.05
+discussion below for what that distinction costs. Here it costs nothing: even
+under the most pessimistic assumed order (*p* = 1) the implied error of the
+458,133-element tet10 is ≤ 0.042 % on every term (G11 0.024 %), so the verdict
+holds whatever the true order turns out to be.
+
 **The converged choice for G at ρ = 0.3 is `SP_solid_rho0.3_n5.09714_quad`** —
 tet10, 458,133 elements, 695,137 nodes, 2,085,411 dofs. This is the law the
 Case-1 Abaqus tiling should use. (`n2.54857_quad` already reproduces G to
@@ -96,11 +102,13 @@ agree to 7 significant figures); every membrane–bending and in-plane–shear
 coupling is at or below 1e-6 of the corresponding diagonal, i.e. numerically
 zero.
 
-### ρ = 0.05 — CONVERGED to ≈0.2 % on G, ≈0.05 % on A and D
+### ρ = 0.05 — CONVERGED to ≈0.3–0.7 % on G, ≈0.06–0.24 % on A and D
 
 | | A11 | A66 | D11 | D66 | G11 | G22 |
 |---|---:|---:|---:|---:|---:|---:|
-| tet10 59,939 vs tet10 118,124 | +0.0360 % | +0.0539 % | +0.0498 % | +0.0598 % | **+0.1744 %** | **+0.1738 %** |
+| tet10 59,939 vs tet10 118,124 (difference) | +0.0360 % | +0.0539 % | +0.0498 % | +0.0598 % | **+0.1744 %** | **+0.1738 %** |
+| implied error of the finer, p = 2 | 0.063 % | 0.094 % | 0.087 % | 0.105 % | **0.305 %** | **0.304 %** |
+| implied error of the finer, p = 1 | 0.142 % | 0.212 % | 0.196 % | 0.236 % | **0.687 %** | **0.685 %** |
 
 Converged reference `SP_solid_rho0.05_n0.849524_quad` (tet10, 118,124
 elements, 230,477 nodes, 691,431 dofs):
@@ -114,12 +122,30 @@ A12 = 3.3315644E+08      D12 = 2.4611401E+07
 
 This verdict is weaker than the ρ = 0.3 one and should be read as such: the
 tet10 pair spans only 1.97× in element count (against 2.65× at ρ = 0.3), and G
-is the slowest term to settle — it is still moving at the 0.17 % level where
-at ρ = 0.3 it had already settled to 0.009 %. That is the expected behaviour:
-at ρ = 0.05 the core ligaments are far more slender, so the transverse-shear
-mode is the last to resolve. **If G at ρ = 0.05 is ever needed to better than
-0.1 %, run `n2.12381_quad` (435,366 tet10) and re-check.** For the present
-purpose 0.17 % is comfortably below any other error in the chain.
+is still moving at the 0.17 % level where at ρ = 0.3 it had already settled to
+0.009 %. **If G at ρ = 0.05 is ever needed to better than 0.1 %, run
+`n2.12381_quad` (435,366 tet10) and re-check.** For the present purpose even
+the pessimistic 0.69 % is below any other error in the chain.
+
+Two things this number is *not*, and they matter if G at ρ = 0.05 is ever
+quoted quantitatively:
+
+* **0.1744 % is a difference between two meshes, not the error of the finer
+  one.** With only two tet10 points per density there is no third point, so
+  the observed order of convergence cannot be measured and no genuine
+  Richardson extrapolation exists. Assuming an order *p*, the error of the
+  finer mesh is `diff / (r_h^p − 1)` with `r_h = (N_fine/N_coarse)^(1/3) =
+  1.2537` — which is 0.305 % at *p* = 2 and 0.687 % at *p* = 1, i.e. 2–4× the
+  raw difference. **Quote 0.3–0.7 % for G at ρ = 0.05, not 0.17 %.** At
+  ρ = 0.3 (`r_h = 1.3847`) the same construction gives ≤ 0.042 % on every term
+  even at *p* = 1, so that verdict is safe under any assumed order. The full
+  table is in `conv_tables.txt`.
+* **G is not slower in *rate* than A11/D11 — it is larger in *magnitude*.** No
+  rate is measurable on the tet10 legs at all. On the tet4 legs, which do have
+  3–4 points, the observed order over the finest interval is ≈2.0 for G at
+  both densities, against 1.57 (A11) and 1.74 (D11) at ρ = 0.05 — G is if
+  anything the *steeper* one. What makes G the last term to become usable at
+  ρ = 0.05 is that it starts at +77 % where A11 starts at +15 %.
 
 ### tet4 locking — the headline result
 
@@ -159,19 +185,29 @@ at ρ = 0.3.
 
 ## Solver-certificate note
 
-Three reruns of the ρ = 0.3, 172,546-element tet10 mesh with different linear
-solvers:
+**Two** independent reruns of the ρ = 0.3, 172,546-element tet10 mesh with a
+different linear solver, plus one archived copy of the reference run:
 
-| rerun | max abs rel. diff, **diagonal** | max abs rel. diff, off-diagonal |
-|---|---:|---:|
-| `_amg` (default tol) | 0.000e+00 % | 6.725e-02 % |
-| `_amgtight` (tightened tol) | 0.000e+00 % | 5.488e-04 % |
-| `_directref` | 0.000e+00 % | 0.000e+00 % |
+| rerun | max abs rel. diff, **diagonal** | max abs rel. diff, off-diagonal (full 8×8) | worst-moving entry |
+|---|---:|---:|---|
+| `_amg` (default tol) | 0.000e+00 % | 6.725e-02 % | `K[3,5]` = −8.30187E+01, 1.3e−08 of A11 |
+| `_amgtight` (tightened tol) | 0.000e+00 % | 5.488e-04 % | `K[0,5]` = 1.91339E+02, 3.0e−08 of A11 |
+| `_directref` | 0.000e+00 % | 0.000e+00 % | — *(see caveat)* |
 
-Every diagonal term is identical to all 8 printed digits under all three
-solvers. Only the off-diagonal couplings move, and only in their 4th–5th
-significant figure. See the caveat below for why that is the expected
-structure and not a defect.
+⚠ **`_directref` is not an independent solve.** It is byte-for-byte the same
+file as `SP_solid_rho0.3_n2.54857_quad.out` — same md5
+(`1b3df55b2572440d9a2d3621719b7dcd`), same `Time taken: 360.5 sec` line, which
+two separate solves could not produce. It is an archived copy of the reference
+run, so its `0.000e+00` row is a self-comparison and carries no information.
+The certificate rests on `_amg` and `_amgtight` only.
+
+Every diagonal term is identical to all 8 printed digits under both real
+reruns, and so are the two physically significant couplings **A12 and D12**
+(max abs rel. diff exactly 0). What moves is only the numerically-zero
+couplings — entries 7–8 orders of magnitude below the diagonal, zero by
+symmetry for this orthotropic core, i.e. pure solver noise. Those hold **≈3.2
+significant digits at the default tolerance and ≈5.3 when it is tightened**.
+See the caveat below for why that is the expected structure and not a defect.
 
 ## Caveat — the CG tolerance affects diagonal and off-diagonal terms differently
 
@@ -185,11 +221,23 @@ cancels and what survives is O(ε²); an off-diagonal entry pairs *two different
 columns whose residuals are not orthogonal to one another, leaving the O(ε)
 term intact.
 
-Practically, at the default `rtol = 1e-8` the diagonal terms are converged far
-below the digits printed here, while the small coupling terms hold roughly 5
-significant digits. The solver-certificate table above is a direct measurement
-of exactly this: diagonals identical to 8 digits, off-diagonals wandering in
-the 5th.
+Practically, the diagonal terms are converged far below the digits printed
+here, while the numerically-zero coupling terms hold **≈3.2 significant digits
+at the default tolerance**, rising to **≈5.3 when it is tightened**. The
+solver-certificate table above is a direct measurement of exactly this:
+diagonals (and A12, D12) identical to all 8 printed digits, the zero couplings
+wandering in the 4th significant figure at default tolerance and the 6th when
+tightened.
+
+That measurement also *tests* the first-order claim rather than merely
+asserting it. Tightening moved the worst coupling from 6.725e-02 % to
+5.488e-04 %, a factor of **122.5**. If the tolerance was tightened by 100×
+(1e-8 → 1e-10) the implied exponent is `log(122.5)/log(100) = 1.04` — first
+order, as claimed. Caveat on that inference: **none of the `.out` files record
+the solver or the tolerance actually used**, so the 100× ratio is assumed from
+the run recipe, not read from an artifact. If the tightening was 10× the
+implied exponent would be 2.09 instead. Worth writing the KSP type and `rtol`
+into the `.out` header so this stops being an inference.
 
 **This does not affect the convergence verdict**, which rests entirely on
 diagonal terms. It does mean that if a coupling term is ever needed
@@ -254,4 +302,16 @@ mirror and from `~/claude_tmp/conv_results` respectively, where they had been
 left by earlier runs, and copied into this folder so the study is
 self-contained. Each was checked against a second independent copy and agrees
 digit-for-digit. Every other `.out` was already here; all of them were
-verified identical to the Drive mirror before use.
+verified identical to the Drive mirror before use. Re-verified independently:
+all three md5s still match their source copies.
+
+**The `.out` files are self-contained; the meshes are not.**
+`SP_solid_rho0.05_n0.424762_quad.msh` (9.2 MB) — which supplies the element,
+node and dof counts for one of the only *two* ρ = 0.05 tet10 points — lives in
+`~/claude_tmp/mshdirect`, not in this folder, and `make_conv_study.py` reaches
+it through `EXTRA_MSH`. If that scratch directory is cleaned the script now
+aborts with a `FATAL:` message rather than silently dropping the row (it used
+to `continue`, which would have quietly reduced ρ = 0.05 to a single tet10
+point — and no convergence evidence — while leaving every caveat in this file
+unchanged). The `.msh` files are too large to commit; only the `.out` files,
+scripts, tables and plots are in git.

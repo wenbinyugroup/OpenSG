@@ -12,6 +12,7 @@ Solver-certificate reruns (_amg, _amgtight, _directref, _gamg) are the SAME
 mesh re-solved with a different KSP/PC; they are excluded from the
 convergence ladder and reported separately as a solver-agreement note.
 """
+import hashlib
 import os
 import shutil
 
@@ -45,7 +46,13 @@ for src, dst in IMPORT:
         shutil.copy2(src, dst)
         print("imported ->", os.path.basename(dst))
 
-# extra .msh locations (the rho0.05 tet10 coarse mesh was built in a scratch dir)
+# EXTERNAL DEPENDENCY -- read this before deleting anything in ~/claude_tmp.
+# SP_solid_rho0.05_n0.424762_quad.msh (9.2 MB) was built in a scratch dir and
+# was never copied into the study folder, so the element/node/dof counts of one
+# of the only TWO rho=0.05 tet10 points come from outside this folder.  The
+# study is therefore NOT self-contained for regeneration (the .out files are;
+# the meshes are not).  If this path disappears the run aborts (see below)
+# rather than silently dropping the point.
 EXTRA_MSH = [os.path.expanduser("~/claude_tmp/mshdirect")]
 
 TYPE_NAME = {4: "tet4", 11: "tet10"}
@@ -134,8 +141,14 @@ for d in (B, R3):
                 base = base[: -len(c)]
         mp = find_msh(base)
         if mp is None:
-            print("!! no .msh for", stem, "-- skipped")
-            continue
+            # Hard failure on purpose.  Silently dropping a point would
+            # shrink the ladder without changing any printed caveat --
+            # e.g. losing n0.424762_quad would leave rho=0.05 with a single
+            # tet10 point and no convergence evidence at all.
+            raise SystemExit(
+                "FATAL: no .msh for %s.  Searched %s.  The ladder would "
+                "silently lose a mesh point -- refusing to write tables."
+                % (stem, [B, R3] + list(EXTRA_MSH)))
         nnode, et = msh_counts(mp)
         vol = {k: v for k, v in et.items() if k in (4, 11)}
         etype = TYPE_NAME[max(vol, key=vol.get)]
@@ -206,39 +219,140 @@ W("=" * 146)
 W("SOLVER-CERTIFICATE RERUNS (same mesh, different KSP/PC -- NOT extra mesh "
   "points)")
 W("=" * 146)
+def _md5(p):
+    h = hashlib.md5()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 if certs:
+    indep, notes = [], []
     for c in sorted(certs, key=lambda r: r["stem"]):
         base_rec = [r for r in recs if r["base"] == c["base"]]
         if not base_rec:
             continue
         b = base_rec[0]
         dd = max(abs(c["L"][i, i] / b["L"][i, i] - 1.0) for i in range(8))
-        off = []
-        for i in range(6):
-            for j in range(6):
+        # full 8x8, so the transverse-shear block is not excluded
+        off, worst = [], (0.0, None)
+        for i in range(8):
+            for j in range(8):
                 if i != j and abs(b["L"][i, j]) > 0:
-                    off.append(abs(c["L"][i, j] / b["L"][i, j] - 1.0))
+                    d = abs(c["L"][i, j] / b["L"][i, j] - 1.0)
+                    off.append(d)
+                    if d > worst[0]:
+                        worst = (d, (i, j))
+        copy = _md5(c["path"]) == _md5(b["path"])
         W("%-46s vs %-34s  max|d| diagonal = %9.3e %%   max|d| "
-          "off-diagonal = %9.3e %%"
-          % (c["stem"], b["stem"], 100 * dd, 100 * max(off)))
+          "off-diagonal = %9.3e %%%s"
+          % (c["stem"], b["stem"], 100 * dd, 100 * max(off),
+             "   << byte-identical file" if copy else ""))
+        if copy:
+            notes.append(c["stem"])
+        else:
+            indep.append((c, b, worst))
     W("")
-    W("Every diagonal/energy term agrees to all 8 printed digits across all "
-      "three solvers.")
-    W("The off-diagonal couplings -- which are 6 to 9 orders of magnitude "
-      "smaller than the")
-    W("diagonal and are numerically zero for this orthotropic core -- move in "
-      "the 4th-5th")
-    W("significant figure (worst case 0.067% on the very smallest entries "
-      "under default-tol")
-    W("AMG, falling to 5.5e-4% when the tolerance is tightened).  That split "
-      "is the")
-    W("second-order-vs-first-order tolerance behaviour explained in README.md; "
-      "it does not")
-    W("touch the diagonal terms this study reports.  '_directref' reproduces "
-      "the reference")
-    W("run bit-for-bit.")
+    W("Every diagonal/energy term -- A11 A22 A66 D11 D22 D66 G11 G22, i.e. "
+      "every term this")
+    W("study reports -- is identical to all 8 printed digits under every "
+      "solver (max|d| = 0).")
+    W("So are the two physically significant couplings A12 and D12 "
+      "(max|d| = 0 exactly).")
+    W("")
+    for c, b, (d, (i, j)) in indep:
+        W("%-46s worst-moving entry = K[%d,%d] = %12.5E, which is %.1e of "
+          "A11;" % (c["stem"], i, j, b["L"][i, j],
+                    abs(b["L"][i, j]) / b["L"][0, 0]))
+        W("%-46s that entry holds %.1f significant digits."
+          % ("", -np.log10(d)))
+    W("")
+    W("Only the numerically-zero couplings move -- entries 7 to 8 orders of "
+      "magnitude below")
+    W("the diagonal, which are zero by symmetry for this orthotropic core and "
+      "are pure solver")
+    W("noise.  That is the second-order-vs-first-order tolerance behaviour "
+      "explained in")
+    W("README.md; it does not touch any term this study reports.")
+    if notes:
+        W("")
+        W("CAVEAT -- NOT AN INDEPENDENT SOLVE: %s is byte-for-byte the same "
+          "file as its" % ", ".join(notes))
+        W("base run (same md5, same 'Time taken' line), i.e. an archived copy "
+          "of the reference")
+        W("run rather than a re-solve.  Its 0.000e+00 row is a self-comparison "
+          "and carries no")
+        W("information.  There are %d independent solver reruns here, not %d."
+          % (len(indep), len(indep) + len(notes)))
 else:
     W("(none found)")
+
+# --------------------------------------------- what the tet10 pair supports --
+W("")
+W("=" * 146)
+W("WHAT THE tet10 PAIR CAN AND CANNOT SUPPORT")
+W("=" * 146)
+W("")
+W("Each density has exactly TWO tet10 points, so the observed order of "
+  "convergence is NOT")
+W("measurable and no genuine (3-point) Richardson extrapolation is possible.  "
+  "The d% columns")
+W("above are the DIFFERENCE between the two tet10 meshes, not the error of "
+  "the finer one.")
+W("Assuming an order p, that error is  diff / (r_h^p - 1)  with r_h = "
+  "(N_fine/N_coarse)^(1/3):")
+W("")
+for rho in ("0.05", "0.3"):
+    t10 = sorted([r for r in recs if r["rho"] == rho and r["etype"] == "tet10"],
+                 key=lambda r: r["nelem"])
+    if len(t10) < 2:
+        continue
+    c, f = t10[-2], t10[-1]
+    rh = (f["nelem"] / c["nelem"]) ** (1.0 / 3.0)
+    W("rho = %-5s  coarse %s el -> fine %s el,  N ratio = %.3f,  h ratio = "
+      "%.4f" % (rho, format(c["nelem"], ","), format(f["nelem"], ","),
+                f["nelem"] / c["nelem"], rh))
+    W("   %-6s %14s %14s %14s %14s"
+      % ("term", "2-pt diff", "err @ p=1", "err @ p=2", "err @ p=3"))
+    for nm, i, j in IDX:
+        d = 100.0 * (c["L"][i, j] / f["L"][i, j] - 1.0)
+        W("   %-6s %13.4f%% %13.4f%% %13.4f%% %13.4f%%"
+          % (nm, d, d / (rh - 1), d / (rh ** 2 - 1), d / (rh ** 3 - 1)))
+    W("")
+W("Read the p=1 column as the pessimistic bound and p=2 as the expected one.")
+W("At rho = 0.3 every term is <= 0.042% even at p = 1 -- the verdict is safe "
+  "under any")
+W("assumed order.  At rho = 0.05 the G error of the finest tet10 is ~0.31% "
+  "at p = 2 and")
+W("~0.69% at p = 1, i.e. 2 to 4 times the 0.174% two-point difference; quote "
+  "0.3-0.7%, not")
+W("0.17%, if G at rho = 0.05 is used quantitatively.")
+W("")
+W("The tet4 legs DO have enough points for an observed order (4 at rho = "
+  "0.05, 3 at rho = 0.3).")
+W("Measured over the finest interval, deviation from the converged tet10 law "
+  "falls at:")
+for rho in ("0.05", "0.3"):
+    ref = ref_of[rho]
+    t4 = sorted([r for r in recs if r["rho"] == rho and r["etype"] == "tet4"],
+                key=lambda r: r["nelem"])
+    if len(t4) < 2:
+        continue
+    seg = []
+    for nm, i, j in IDX:
+        e0 = abs(100 * (t4[-2]["L"][i, j] / ref["L"][i, j] - 1))
+        e1 = abs(100 * (t4[-1]["L"][i, j] / ref["L"][i, j] - 1))
+        p = np.log(e0 / e1) / np.log((t4[-1]["nelem"] / t4[-2]["nelem"])
+                                     ** (1 / 3.0))
+        seg.append("%s p=%.2f" % (nm, p))
+    W("   rho = %-5s  %s" % (rho, "   ".join(seg)))
+W("")
+W("So G is NOT slower in RATE than A11/D11 -- at both densities its tet4 "
+  "order is ~2, the")
+W("same as the others.  G is simply far larger in MAGNITUDE at rho = 0.05 "
+  "(77% vs 15% on the")
+W("coarsest mesh), which is what makes it the last term to become usable.")
 
 # -------------------------------------------------------------- locking ----
 W("")
@@ -273,7 +387,12 @@ TERMS = [("A11", 0, 0, "#1f77b4"), ("D11", 3, 3, "#d62728"),
 
 for rho in ("0.05", "0.3"):
     ref = ref_of[rho]
-    fig, ax = plt.subplots(figsize=(7.2, 4.4))
+    # Two panels.  On the tet4 scale (up to 1.77) the tet10 points sit on top
+    # of y = 1 and convey nothing -- yet the tet10 pair IS the convergence
+    # evidence, so it gets its own zoomed panel underneath.
+    fig, (ax, axz) = plt.subplots(
+        2, 1, figsize=(7.2, 6.0), sharex=True,
+        gridspec_kw=dict(height_ratios=[2.3, 1.0], hspace=0.10))
     for name, i, j, col in TERMS:
         for etype, ls, mk in (("tet4", "-", "o"), ("tet10", "--", "s")):
             pts = sorted([r for r in recs
@@ -285,14 +404,25 @@ for rho in ("0.05", "0.3"):
             y = [p["L"][i, j] / ref["L"][i, j] for p in pts]
             ax.plot(x, y, ls, marker=mk, color=col, ms=5, lw=1.6,
                     label="%s, %s" % (name, etype))
-    ax.axhline(1.0, color="0.55", lw=0.8, zorder=0)
-    ax.set_xscale("log")
-    ax.set_xlabel("number of elements")
-    ax.set_ylabel("stiffness normalised by converged tet10 value")
-    ax.grid(True, which="both", alpha=0.25)
+            if etype == "tet10":
+                axz.plot(x, y, ls, marker=mk, color=col, ms=5, lw=1.6)
+    span = max(abs(p["L"][i, j] / ref["L"][i, j] - 1.0)
+               for p in recs
+               if p["rho"] == rho and p["etype"] == "tet10"
+               for _, i, j, _ in TERMS)
+    axz.set_ylim(1.0 - 0.30 * span, 1.0 + 1.45 * span)
+    for a in (ax, axz):
+        a.axhline(1.0, color="0.55", lw=0.8, zorder=0)
+        a.set_xscale("log")
+        a.grid(True, which="both", alpha=0.25)
+    axz.set_xlabel("number of elements")
+    ax.set_ylabel("stiffness normalised by\nconverged tet10 value")
+    axz.set_ylabel("tet10 only,\n%.2f%% full scale" % (100 * 1.75 * span))
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0),
               frameon=False, fontsize=9)
-    fig.tight_layout()
+    axz.annotate("2 tet10 points -> a difference, not a convergence rate",
+                 xy=(0.015, 0.06), xycoords="axes fraction", fontsize=8,
+                 color="0.35")
     fig.savefig(os.path.join(PLOTS, "conv_rho%s.png" % rho), dpi=150,
                 bbox_inches="tight")
     plt.close(fig)
