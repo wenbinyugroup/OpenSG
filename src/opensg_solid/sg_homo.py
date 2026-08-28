@@ -160,9 +160,18 @@ def full_homogenization_pipeline(
          3 solid; n_sg SG dimension
     Out: C_eff (H, H) effective stiffness; V0_matrix (n_unique, H)
          fluctuation columns; omega float SG measure."""
-    Dhe, J_euu, inv_blocks, eig_max = _cheb_setup(
-        x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
-        unique_dofs, n_unique, n_model, n_sg)
+    # this route FUSES assembly and preconditioner setup into one
+    # opaque jit, so the bar carries the indeterminate marker across
+    # it (never a faked percentage) -- sg_progress
+    sg_progress.stage(sg_progress.W_SETUP, "setup")
+    sg_progress.busy()
+    try:
+        Dhe, J_euu, inv_blocks, eig_max = _cheb_setup(
+            x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+            periodic_cells, unique_dofs, n_unique, n_model, n_sg)
+    finally:
+        sg_progress.idle()
+    sg_progress.stage(sg_progress.solve_window(), "solve", eta=True)
     # all V0 columns solve SIMULTANEOUSLY (vmap: batched matvecs on
     # CPU, parallel on GPU; lax.map was sequential) -- the rows of the
     # (H, n) argument ARE the columns, the historical layout
@@ -436,6 +445,10 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
             from opensg_solid.sg_gamg import make_constrained_solver
         else:
             from opensg_solid.sg_amg import make_constrained_solver
+        # gamg sets a SECOND KSP up here (an opaque call): park the bar
+        # at the ladder window's low end, labelled for what it is
+        sg_progress.stage((sg_progress.W_LADDER[0],
+                           sg_progress.W_LADDER[0]), "setup")
         solve_constrained = make_constrained_solver(
             amg_ctx, D_hh, np.asarray(w_dof), scl)
     else:
@@ -447,23 +460,28 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
             aug = np.vstack([-rhs, np.zeros((3, rhs.shape[1]))])
             return _sparse_direct_solve(KKT, aug, sym=True)[:n_unique]
 
-        if sg_progress.active():
-            # a factorization exposes no mid-solve residual, so the
-            # direct ladder drives the bar by COMPLETED-SOLVE COUNT of
-            # the KNOWN sequence below -- V0, V1, [V2], [V1L, and one
-            # per face of v2l] (never a faked percentage; sg_progress
-            # docstring).  amg/gamg skip this: their solve_columns
-            # already sweeps the line per solve, residual-driven.
-            _n_lad = (2 + (node_y2 is not None)
-                      + 3 * (f_faces is not None))
-            _k_lad = [0]
-            _raw_lad = solve_constrained
+    if sg_progress.active():
+        # the ladder's solve phase of the whole-run bar: the KNOWN
+        # solve sequence below -- V0, V1, [V2], [V1L, and one per face
+        # of v2l] -- takes one EQUAL sub-window each (sg_progress
+        # weights).  amg/gamg sweep their sub-window by RESIDUAL from
+        # inside solve_columns; a factorization exposes no mid-solve
+        # residual, so its sub-window steps at completion -- COMPLETED-
+        # SOLVE COUNT, never a faked percentage.
+        _n_lad = (2 + (node_y2 is not None)
+                  + 3 * (f_faces is not None))
+        _k_lad = [0]
+        _raw_lad = solve_constrained
+        _w_lad = sg_progress.W_LADDER
 
-            def solve_constrained(rhs):
-                X = _raw_lad(rhs)
-                _k_lad[0] += 1
-                sg_progress.solve(_k_lad[0] / _n_lad)
-                return X
+        def solve_constrained(rhs):
+            k, span = _k_lad[0], (_w_lad[1] - _w_lad[0]) / _n_lad
+            sg_progress.stage((_w_lad[0] + span * k,
+                               _w_lad[0] + span * (k + 1)), "solve")
+            X = _raw_lad(rhs)
+            _k_lad[0] = min(k + 1, _n_lad - 1)
+            sg_progress.solve(1.0)
+            return X
 
     V0 = solve_constrained(D_he)
     A6 = D_ee + V0.T @ D_he
@@ -1201,9 +1219,11 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     # beam KKT, plate/solid (direct/cg/amg/gamg/stream), mixed and
     # aperiodic.  start() only sets a flag; each route's own hook draws
     # (sg_progress names which route draws what, and which is bar-less).
+    # ladder=: the run's shear ladder subdivides the solve half of the
+    # bar (V0, then the ladder assembly and its solves) -- sg_progress
     unique_dofs = jnp.unique(dof_map_np)
     n_unique = len(unique_dofs)
-    sg_progress.start(int(n_unique))
+    sg_progress.start(int(n_unique), ladder=bool(shear_refined))
 
     if n_model == 1:
         r = _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,

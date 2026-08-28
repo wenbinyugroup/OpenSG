@@ -397,7 +397,15 @@ def amg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
         x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
         u_0_g[unique_dofs], n_model, n_sg, n_unique, sym=True)
     B = _near_nullspace(points, cells, periodic_cells, n_unique, pin)
-    levels, coarse = build_hierarchy(A_csr, B)
+    # the setup phase of the whole-run bar: pyamg's aggregation is ONE
+    # opaque call with no callback, so the line carries the
+    # indeterminate marker (never a faked percentage) -- sg_progress
+    sg_progress.stage(sg_progress.W_SETUP, "setup")
+    sg_progress.busy()
+    try:
+        levels, coarse = build_hierarchy(A_csr, B)
+    finally:
+        sg_progress.idle()
     fine = {k: levels[0][k] for k in ("d", "c", "r")}
     nnz = A_csr.nnz
     del A_csr
@@ -406,6 +414,9 @@ def amg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     del nnz, t0
     RHS = -np.asarray(Dhe)
     RHS[np.asarray(pin, np.int64)] = 0.0
+    # the solve phase: residual-driven, so an ETA rides it whenever the
+    # window runs to 100% (no ladder ahead) -- sg_progress
+    sg_progress.stage(sg_progress.solve_window(), "solve", eta=True)
     V0, iters, _ = solve_columns(levels, coarse, fine, RHS, rtol)
     V0_matrix = jnp.asarray(V0)
     D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)

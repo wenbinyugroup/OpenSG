@@ -1218,7 +1218,19 @@ def _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     w = 0
     rhs = None
 
-    for e0 in range(0, E_tot, chunk):
+    # the assembly phase of the whole-run bar (sg_progress weights):
+    # slab k of n is a host counter the loop already has, so it costs
+    # nothing.  The FIRST slab carries the jit compile of the slab
+    # kernel and reports nothing until it returns -- the indeterminate
+    # marker covers exactly that opaque head, and the first tick stops
+    # it (sg_progress.solve).
+    bar = sg_progress.active()
+    n_slab = (E_tot + chunk - 1) // chunk
+    if bar:
+        sg_progress.stage(sg_progress.W_ASSEMBLY, "assembly")
+        sg_progress.busy()
+
+    for k_slab, e0 in enumerate(range(0, E_tot, chunk)):
         n_true = min(chunk, E_tot - e0)
         sl = slice(e0, e0 + n_true)
         x_sl, C_sl, pc_sl = x_host[sl], C_host[sl], pc[sl]
@@ -1258,6 +1270,8 @@ def _streamed_rhs_and_csr(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
         for h in range(rhs.shape[1]):
             rhs[:, h] += np.bincount(dflat, weights=R_np[:, h].ravel(),
                                      minlength=n_unique)
+        if bar:
+            sg_progress.solve((k_slab + 1) / n_slab)
 
     rows[w:w + n_pin] = pin
     cols[w:w + n_pin] = pin

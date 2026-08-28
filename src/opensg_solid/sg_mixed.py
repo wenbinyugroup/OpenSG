@@ -65,6 +65,7 @@ from opensg_solid.sg_assembly import (_sparse_direct_solve,
                                       compute_homogenized_constants,
                                       plate_ladder_element_blocks)
 from opensg_solid.sg_mesh import _cell_basis
+from opensg_solid import sg_progress
 
 # enum member names differ across fe_jax vintages (default vs Default)
 _QT = getattr(QuadratureType, "default", None) or getattr(
@@ -230,20 +231,30 @@ def _ladder_slabs(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
     transients), so a fixed OPENSG_SLAB_BYTES caps device memory at any
     mesh size.  Equal slabs + one remainder -> two jit compilations.
 
+    The slab RANGES are planned first -- index arithmetic only, nothing
+    sliced and nothing on the device -- so the first unit already knows
+    how many follow: that count is the whole-run bar's ladder-assembly
+    fraction (k of n, a free host counter; sg_progress).
+
     In:  the ladder_blocks per-batch arguments (arrays or per-batch
          lists); budget float bytes
-    Out: yields (x_s, dp_b, ph_b, W_b, C_s, rc_s) slab tuples."""
-    for x_b, dp_b, ph_b, W_b, C_b, rc_b in zip(
-            as_batches(x_end), as_batches(dphi_hi), as_batches(phi_hi),
-            as_batches(W_hi), as_batches(C_ess),
-            as_batches(reduced_cells)):
+    Out: yields (k, n, x_s, dp_b, ph_b, W_b, C_s, rc_s) -- work unit k
+         of n, then the slab tuple."""
+    bx, bdp, bph = (as_batches(x_end), as_batches(dphi_hi),
+                    as_batches(phi_hi))
+    bW, bC, brc = (as_batches(W_hi), as_batches(C_ess),
+                   as_batches(reduced_cells))
+    plan = []
+    for b, (W_b, rc_b) in enumerate(zip(bW, brc)):
         E = len(rc_b)
         n_ed = 3 * np.asarray(rc_b).shape[1]
         per = 8.0 * n_ed * n_ed * (len(np.asarray(W_b)) + 16)
         S = min(E, max(4096, int(budget // per)))
-        for a in range(0, E, S):
-            yield (x_b[a:a + S], dp_b, ph_b, W_b, C_b[a:a + S],
-                   rc_b[a:a + S])
+        plan += [(b, a, min(a + S, E)) for a in range(0, E, S)]
+    n_unit = len(plan)
+    for k, (b, a, z) in enumerate(plan):
+        yield (k + 1, n_unit, bx[b][a:z], bdp[b], bph[b], bW[b],
+               bC[b][a:z], brc[b][a:z])
 
 
 def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
@@ -272,7 +283,13 @@ def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
     # kernel is called on budget-sized slices and each slab lands in
     # the SAME host accumulators -- more batches, identical math
     _budget = float(os.environ.get("OPENSG_SLAB_BYTES", 4e9))
-    for x_b, dp_b, ph_b, W_b, C_b, rc_b in _ladder_slabs(
+    # the ladder-assembly phase of the whole-run bar: slab k of n, the
+    # counter the plan already carries (free) -- sg_progress
+    _bar = sg_progress.active()
+    if _bar:
+        sg_progress.stage(sg_progress.W_LADDER_ASM, "assembly")
+        sg_progress.busy()
+    for _k, _n, x_b, dp_b, ph_b, W_b, C_b, rc_b in _ladder_slabs(
             x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
             _budget):
         out = plate_ladder_element_blocks(x_b, dp_b, ph_b, W_b,
@@ -322,6 +339,8 @@ def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
         D_ee += ee_b.sum(axis=0) / omega
         np.add.at(w_node, np.asarray(rc_b, dtype=np.int64).ravel(),
                   wN_b.ravel())
+        if _bar:
+            sg_progress.solve(_k / _n)
     return {"D_hh": D_hh, "D_hl1": D_hl1, "D_hl2": D_hl2,
             "D_l11": D_l11, "D_l12": D_l12, "D_l22": D_l22,
             "D_he": D_he, "D_l1e": D_l1e, "D_l2e": D_l2e, "D_ee": D_ee,

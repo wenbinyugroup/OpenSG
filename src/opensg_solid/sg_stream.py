@@ -612,11 +612,21 @@ def stream_homo(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
          periodic_cells (E, N); n_unique int; n_model 2|3; n_sg int;
          tol/maxiter CG controls
     Out: (C_eff (H, H), V0_matrix (n_unique, H) np, omega float)."""
-    op, Dhe = make_classical_ops(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
-                                 periodic_cells, n_unique, n_model, n_sg)
+    # the streamed pack has no host counter to read, so the bar carries
+    # the indeterminate marker across it, then the _pcg loop's own
+    # residual drives the solve phase -- sg_progress
+    sg_progress.stage(sg_progress.W_ASSEMBLY, "assembly")
+    sg_progress.busy()
+    try:
+        op, Dhe = make_classical_ops(x_end, dphi_dxi_qnp, phi_qn, W_q,
+                                     C_ess, periodic_cells, n_unique,
+                                     n_model, n_sg)
+    finally:
+        sg_progress.idle()
     T = np.zeros((n_unique, 3))
     T[0::3, 0] = T[1::3, 1] = T[2::3, 2] = 1.0
     solve = make_projected_solver(op, T)
+    sg_progress.stage(sg_progress.solve_window(), "solve", eta=True)
     V0, _it, _rel, _ok = solve(-Dhe, tol, maxiter, label2="V0 classical")
     D1 = V0.T @ Dhe
     D_bar, omega = _stream_D_bar_omega(
