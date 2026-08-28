@@ -149,6 +149,11 @@ import sys
 # XLA's C++ warnings (rematerialization etc.) are compiler internals the
 # run cannot act on; must be set before jax first loads
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+# `python -m opensg` reaches opensg_solid only inside main(), so repeat
+# the no-preallocation rule here -- this module is the earliest point
+# of the unified command (the rule itself is documented in
+# opensg_solid/__init__.py)
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 
 def main(argv=None):
