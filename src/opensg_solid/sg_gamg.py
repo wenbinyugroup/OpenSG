@@ -189,9 +189,20 @@ def _build_ksp(PETSc, mat, ksp_name, pc_name, rtol, maxiter):
     Unpreconditioned norm (the jetsci convention), so rtol gates the
     same relative residual sg_amg reports.
 
+    GAMG's aggressive coarsening SQUARES the graph (a sparse A*A whose
+    result carries 10-30x the nonzeros of A); on a GPU mat that product
+    runs through cuSPARSE and dies at scale --
+    CUSPARSE_STATUS_INSUFFICIENT_RESOURCES at 9.4M dofs / ~760M nnz.
+    It is off here: one extra level, no A*A.  Both option spellings are
+    set because PETSc renamed it (square_graph -> aggressive_coarsening
+    at 3.20); an unknown option is inert.
+
     In:  PETSc namespace; mat PETSc.Mat; ksp_name/pc_name str;
          rtol float; maxiter int
     Out: ksp PETSc.KSP, set up."""
+    opts = PETSc.Options()
+    opts["pc_gamg_aggressive_coarsening"] = 0
+    opts["pc_gamg_square_graph"] = 0
     ksp = PETSc.KSP().create(PETSc.COMM_SELF)
     ksp.setOperators(mat)
     ksp.setType(ksp_name)
@@ -200,8 +211,46 @@ def _build_ksp(PETSc, mat, ksp_name, pc_name, rtol, maxiter):
     pc = ksp.getPC()
     pc.setType(pc_name)
     pc.setGAMGType(PETSc.PC.GAMGType.AGG)      # smoothed aggregation
+    pc.setFromOptions()
     ksp.setUp()
     return ksp
+
+
+def _mat_and_ksp(PETSc, A_csr, B, mat_t, ksp_t, pc_t, rtol):
+    """Upload the matrix and set the hierarchy up, FALLING BACK to the
+    CPU mat type when the GPU cannot carry it: cuSPARSE reports
+    INSUFFICIENT_RESOURCES / OUT_OF_MEMORY on the GAMG setup of a very
+    large system (its workspace is not slab-able the way our assembly
+    is), and a completed CPU run beats a dead GPU one.  The law is the
+    same either way -- only where the arithmetic happens changes.
+
+    PC GAMG's setup is ONE opaque call with no callback, so the bar
+    carries the INDETERMINATE marker across it (never a faked
+    percentage) -- sg_progress; the caller has opened the phase.
+
+    In:  PETSc namespace; A_csr pinned SPD csr; B rigid-mode hints;
+         mat_t/ksp_t/pc_t str type names; rtol float
+    Out: (mat, ksp) both live, hierarchy set up."""
+    sg_progress.busy()
+    try:
+        for t in ([mat_t, "aij"] if mat_t != "aij" else ["aij"]):
+            mat = _mat_from_csr(PETSc, A_csr, t)
+            _attach_near_nullspace(PETSc, mat, B)
+            try:
+                return mat, _build_ksp(PETSc, mat, ksp_t, pc_t, rtol,
+                                       _MAXITER)
+            except PETSc.Error:
+                if t == "aij":
+                    raise
+                sg_progress.idle()     # the NOTE gets its own line
+                print(" NOTE: the GPU could not set up the GAMG"
+                      " hierarchy at this size -- retrying on the CPU"
+                      " (aij)")
+                mat.destroy()
+                sg_progress.busy()
+    finally:
+        sg_progress.idle()
+    raise RuntimeError("unreachable")
 
 
 def _progress_monitor(m, rtol):
@@ -316,11 +365,13 @@ def gamg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     B = _near_nullspace(points, cells, periodic_cells, n_unique, pin)
     mat_t, ksp_t, pc_t = _petsc_type_names()
     mat_t = _usable_mat_type(PETSc, mat_t)
-    mat = _mat_from_csr(PETSc, A_csr, mat_t)
-    _attach_near_nullspace(PETSc, mat, B)
-    ksp = _build_ksp(PETSc, mat, ksp_t, pc_t, rtol, _MAXITER)
+    sg_progress.stage(sg_progress.W_SETUP, "setup")     # opaque phase
+    mat, ksp = _mat_and_ksp(PETSc, A_csr, B, mat_t, ksp_t, pc_t, rtol)
     RHS = -np.asarray(Dhe)
     RHS[np.asarray(pin, np.int64)] = 0.0
+    # the solve phase: residual-driven (the KSP monitor), so an ETA
+    # rides it whenever the window runs to 100% -- sg_progress
+    sg_progress.stage(sg_progress.solve_window(), "solve", eta=True)
     V0, iters, _ = solve_columns(PETSc, ksp, mat, A_csr, RHS, rtol)
     del iters                # terse console: results only
     ksp.destroy()
@@ -366,9 +417,8 @@ def make_constrained_solver(ctx, D_hh, w_dof, scl):
     sw = float(w_dof[0::3].sum())
     mat_t, ksp_t, pc_t = _petsc_type_names()
     mat_t = _usable_mat_type(PETSc, mat_t)
-    mat = _mat_from_csr(PETSc, A_lad, mat_t)
-    _attach_near_nullspace(PETSc, mat, ctx["B"])
-    ksp = _build_ksp(PETSc, mat, ksp_t, pc_t, ctx["rtol"], _MAXITER)
+    mat, ksp = _mat_and_ksp(PETSc, A_lad, ctx["B"], mat_t, ksp_t, pc_t,
+                            ctx["rtol"])
 
     def solve_constrained(rhs):
         b = -np.asarray(rhs, float)
