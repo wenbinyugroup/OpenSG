@@ -66,6 +66,8 @@ from scipy.sparse import csr_matrix
 from fe_jax.setup import (transform_global_unraveled_to_element_node,
                           transform_element_node_to_global_unraveled_sum)
 
+from opensg_solid import sg_progress
+
 
 # ------------------------------------------------- element kernels (VERBATIM)
 @jax.jit
@@ -833,6 +835,144 @@ def plate_ladder_element_blocks(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
                 bil_s(Bl1), bil_s(Bl2), wN)
 
     return jax.vmap(one, in_axes=(0, 0))(x_end, C_ess)
+
+
+# ------------------------------- iter 1: the chunkable cheb EBE CG (bar)
+# jax.scipy.sparse.linalg.cg is a CLOSED while_loop: it exposes no
+# resumable state, and re-entering it with x0 = the previous iterate is
+# RESTARTED CG (the search direction is reset, conjugacy is lost) -- a
+# different iterate sequence, so it can never be a digit-safe chunking.
+# The carry below is that function's own initialization, body and
+# stopping predicate, term for term, lifted so a run can be advanced in
+# blocks: kcap = maxiter IS the single-shot loop, and a resumed call
+# continues the identical sequence, so however the bar chops it the
+# digits cannot move.
+_CG_PREC = jax.lax.Precision.HIGHEST     # jax's own _vdot precision
+_PROG_BLOCK = 25   # CG iterations per host residual read (bar armed)
+
+
+def _vdotH(x, y):
+    """In:  x, y (n,) REAL
+    Out: <x, y> at HIGHEST precision -- jax.scipy.sparse.linalg's
+         _vdot_real_part for real vectors."""
+    return jnp.vdot(x, y, precision=_CG_PREC)
+
+
+def _cg_carry(A_op, M_op, b, tol):
+    """In:  A_op/M_op callables (matvec, preconditioner apply); b (n,)
+         rhs; tol float relative tolerance
+    Out: s (x, r, gamma, p, k) CG carry; atol2 float squared stopping
+         norm; bs float <b, b> -- jax's cg initialization exactly
+         (x0 = 0, r0 = b - A x0, p0 = z0 = M r0, gamma0 = <r0, z0>,
+         atol2 = max(tol^2 <b, b>, 0) with jax's atol = 0 default)."""
+    x0 = jnp.zeros_like(b)
+    r0 = b - A_op(x0)
+    z0 = M_op(r0)
+    bs = _vdotH(b, b)
+    return ((x0, r0, _vdotH(r0, z0), z0, jnp.zeros((), jnp.int64)),
+            jnp.maximum(jnp.square(tol) * bs, 0.0), bs)
+
+
+def _cg_advance(A_op, M_op, s, atol2, kcap):
+    """In:  A_op/M_op callables; s/atol2 from _cg_carry or a previous
+         advance; kcap int iteration cap
+    Out: s advanced; k int iterations so far; rs float <r, r> -- jax's
+         cg body and predicate, run until <r, r> <= atol2 or k = kcap."""
+    def cond(v):
+        _, r, _, _, k = v
+        return (_vdotH(r, r) > atol2) & (k < kcap)
+
+    def body(v):
+        x, r, gamma, p, k = v
+        Ap = A_op(p)
+        alpha = gamma / _vdotH(p, Ap)
+        x_ = x + alpha * p
+        r_ = r - alpha * Ap
+        z_ = M_op(r_)
+        gamma_ = _vdotH(r_, z_)
+        return (x_, r_, gamma_, z_ + (gamma_ / gamma) * p, k + 1)
+
+    s = jax.lax.while_loop(cond, body, s)
+    return s, s[4], _vdotH(s[1], s[1])
+
+
+def cheb_ebe_ops(J_euu, periodic_cells, inv_blocks, eig_max, n_unique):
+    """In:  J_euu (E, N*3, N*3) element tangents; periodic_cells (E, N);
+         inv_blocks (nodes, 3, 3); eig_max scalar; n_unique static int
+    Out: (A_op, M_op) -- EXACTLY the operator pair
+         full_homogenization_pipeline builds: the matrix-free EBE
+         product, and block-Jacobi inside a degree-4 Chebyshev
+         polynomial on [eig_max/25, eig_max]."""
+    A_op = jax.tree_util.Partial(ebe_jacobian_product_periodic, J_euu,
+                                 periodic_cells, n_unique)
+    M_op = jax.tree_util.Partial(apply_chebyshev_precond, inv_blocks,
+                                 n_unique, eig_max, eig_max / 25.0,
+                                 A_op, 4)
+    return A_op, M_op
+
+
+@partial(jax.jit, static_argnames=['make_ops', 'n_unique'])
+def _cg_begin(make_ops, ops, Bcols, tol, n_unique):
+    """jit trace 1 of 2: vmapped _cg_carry over the RHS columns.
+    make_ops is STATIC (a module-level factory) so the operator
+    closures keep n_unique as a python int, exactly as they do inside
+    the historical monolithic jit.
+
+    In:  make_ops callable (arrays..., n_unique) -> (A_op, M_op); ops
+         tuple of its array arguments; Bcols (m, n) rows = columns;
+         tol float; n_unique static int
+    Out: state carry pytree (batched on axis 0); atol2 (m,); bs (m,)."""
+    A_op, M_op = make_ops(*ops, n_unique)
+    return jax.vmap(lambda b: _cg_carry(A_op, M_op, b, tol))(Bcols)
+
+
+@partial(jax.jit, static_argnames=['make_ops', 'n_unique'])
+def _cg_chunk(make_ops, ops, state, atol2, kcap, n_unique):
+    """jit trace 2 of 2: vmapped _cg_advance -- the columns run
+    LOCK-STEP (jax's own while_loop batching freezes a converged
+    column).  kcap is DYNAMIC, so ONE trace serves every chunk and the
+    dark full-maxiter call alike.
+
+    In:  make_ops/ops/n_unique as _cg_begin; state/atol2 from _cg_begin
+         or the previous chunk; kcap int
+    Out: state advanced; k (m,) iterations; rs (m,) <r, r>."""
+    A_op, M_op = make_ops(*ops, n_unique)
+    return jax.vmap(lambda s, a: _cg_advance(A_op, M_op, s, a, kcap))(
+        state, atol2)
+
+
+def chunked_cg_columns(make_ops, ops, Bcols, n_unique, tol, maxiter=None):
+    """Solve A x = b for every column of Bcols (rows of Bcols ARE the
+    columns, the historical vmap layout), all vmapped and lock-step.
+    Dark (the default): ONE _cg_chunk call with kcap = maxiter -- the
+    historical single-shot loop, same body, same predicate.  With the
+    sg_progress bar armed the SAME trace advances _PROG_BLOCK
+    iterations per call and the host reads the worst residual once per
+    block, moving the line by the genuine convergence fraction
+    p = log10(res)/log10(tol) (res the worst RELATIVE residual, so
+    res0 = 1).  The bar cannot move a digit: it only chooses kcap.
+
+    In:  make_ops/ops/n_unique as _cg_begin; Bcols (m, n); tol float;
+         maxiter int or None -> jax's own 10*n default
+    Out: X (m, n) jnp -- rows are the solved columns."""
+    if maxiter is None:
+        maxiter = 10 * int(Bcols.shape[1])          # jax's cg default
+    state, atol2, bs = _cg_begin(make_ops, ops, Bcols, tol, n_unique)
+    bar = sg_progress.active()
+    ltol = np.log10(tol)
+    kcap = 0
+    while True:
+        kcap = min(kcap + _PROG_BLOCK, maxiter) if bar else maxiter
+        state, kb, rs = _cg_chunk(make_ops, ops, state, atol2, kcap,
+                                  n_unique)
+        if bar:                                    # the one host read
+            nb = np.maximum(np.asarray(bs), 1e-300)   # a zero column
+            rel = float(np.sqrt(np.max(np.asarray(rs) / nb)))
+            sg_progress.solve(np.log10(max(rel, 1e-300)) / ltol)
+        if kcap >= maxiter or int(np.max(np.asarray(kb))) < kcap:
+            break            # every column converged (none hit kcap)
+    sg_progress.solve(1.0)
+    return state[0]
 
 
 def sparse_projected_cg(A_sp, C, B, ndof_per_node, tol=1e-8, cheb_degree=4,

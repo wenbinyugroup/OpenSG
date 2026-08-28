@@ -95,6 +95,7 @@ import jax.numpy as jnp
 from opensg_solid.sg_assembly import (calculate_RHS_and_Ke_batch_periodic,
                                       compute_homogenized_constants,
                                       plate_ladder_element_blocks)
+from opensg_solid import sg_progress
 
 _HOST_KERNEL_BUDGET = 4e9    # the assembly kernel's per-slab transient cap
 _MV_BUDGET = 2.5e8           # unpacked-block transient per PACKED matvec
@@ -406,6 +407,10 @@ def _pcg(A_op, M_op, B, tol, maxiter, label=""):
     iters = np.zeros(H, int)
     done = np.linalg.norm(R, axis=0) <= tol * bnorm
     best, k_best, k = np.inf, 0, 0
+    # the sg_progress bar rides `worst` below -- this loop is ALREADY
+    # host-resident and reads every column residual each iteration, so
+    # the bar costs one log10 per iteration and nothing when dark
+    bar, ltol = sg_progress.active(), np.log10(tol)
     while k < maxiter and not done.all():
         k += 1
         AP = A_op(P)
@@ -421,6 +426,8 @@ def _pcg(A_op, M_op, B, tol, maxiter, label=""):
         if done.all():
             break
         worst = float((rn / bnorm)[~done].max())
+        if bar:
+            sg_progress.solve(np.log10(max(worst, 1e-300)) / ltol)
         if worst < 0.9 * best:
             best, k_best = worst, k
         elif k - k_best > 400:
@@ -436,6 +443,7 @@ def _pcg(A_op, M_op, B, tol, maxiter, label=""):
         rz = np.where(done, rz, rz_new)
         P = Z + beta * P
     iters[~done] = k
+    sg_progress.solve(1.0)
     rel = np.linalg.norm(R, axis=0) / bnorm
     print(" iter3 %s: %d cols, iters %s, final rel r %s%s  (%.1f s)"
           % (label, H, "/".join(str(i) for i in iters),

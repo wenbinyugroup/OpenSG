@@ -85,10 +85,11 @@ from fe_jax.setup import (mesh_to_jax,
                           mesh_to_periodic_sparse_assembly_map)
 
 from opensg_solid.sg_assembly import (
-    _sparse_direct_solve, apply_block_precond, apply_chebyshev_precond,
+    _sparse_direct_solve, apply_block_precond,
     assemble_rhs_and_pinned_csr, assemble_rigid_body_ops,
     assemble_system_matrices,
-    calculate_RHS_and_Ke_batch_periodic, compress_periodic_cells_jax,
+    calculate_RHS_and_Ke_batch_periodic, cheb_ebe_ops,
+    chunked_cg_columns, compress_periodic_cells_jax,
     compute_block_inv_diag, compute_homogenized_constants,
     ebe_jacobian_product_periodic, estimate_max_eigenvalue,
     plate_ladder_element_blocks, solve_fluctuation_field)
@@ -98,16 +99,58 @@ from opensg_solid.sg_mesh import _cell_basis, load_sg_input, plot_sg_mesh
 from opensg_solid import sg_progress
 
 
+_CHEB_TOL = 1e-6         # the historical cg tolerance of this route
+
+
 @partial(jax.jit, static_argnames=['n_unique', 'n_model', 'n_sg'])
+def _cheb_setup(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
+                periodic_cells, unique_dofs, n_unique, n_model, n_sg):
+    """Everything the cheb EBE CG needs before its first iteration.
+    The eigen estimate is HOISTED out of the per-column solve: it never
+    reads the column values, so one estimate serves all columns
+    bitwise-identically.
+
+    In:  as full_homogenization_pipeline
+    Out: Dhe (n_unique, H) rhs; J_euu (E, N*3, N*3) element tangents;
+         inv_blocks (nodes, 3, 3) block-Jacobi inverses; eig_max
+         scalar."""
+    Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
+        x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
+        u_0_g[unique_dofs], n_model, n_sg)
+    inv_blocks = compute_block_inv_diag(J_euu, periodic_cells, n_unique)
+    A_op = jax.tree_util.Partial(
+        ebe_jacobian_product_periodic, J_euu, periodic_cells, n_unique)
+    M_op = jax.tree_util.Partial(
+        apply_block_precond, inv_blocks, n_unique)
+    eig_max = estimate_max_eigenvalue(A_op, M_op, -Dhe.T[0],
+                                      num_iters=15)
+    return Dhe, J_euu, inv_blocks, eig_max
+
+
+@partial(jax.jit, static_argnames=['n_model', 'n_sg'])
+def _cheb_reduce(V0_matrix, Dhe, x_end, dphi_dxi_qnp, phi_qn, W_q,
+                 C_ess, n_model, n_sg):
+    """In:  V0_matrix (n_unique, H) solved columns; Dhe (n_unique, H);
+         the quadrature tables and C_ess; n_model/n_sg static
+    Out: C_eff (H, H); omega float SG measure."""
+    D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
+    D_bar, omega = compute_homogenized_constants(
+        x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, n_model, n_sg)
+    return (D_bar + D1) / omega, omega
+
+
 def full_homogenization_pipeline(
     x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     periodic_cells, unique_dofs, n_unique, n_model, n_sg
 ):
     """SSDM Chebyshev-preconditioned CG homogenization: solve the periodic
     fluctuation columns and reduce to the effective macro law (selectable
-    as solver="cg").  The eigen estimate is HOISTED out of the per-column
-    solve: it never reads the column values, so one estimate serves all
-    columns bitwise-identically.
+    as solver="cg").  Three stages instead of one jit -- setup, the
+    column solve, the reduction -- because the solve must be able to
+    return to the host between blocks for the sg_progress bar.  The
+    solve is sg_assembly.chunked_cg_columns, whose carry IS
+    jax.scipy.sparse.linalg.cg's; dark it makes ONE full-maxiter call,
+    the same single-shot loop this route always ran.
 
     In:  x_end (E, N, d) element node coords; u_0_g (V*3,) zero seed;
          dphi_dxi_qnp/phi_qn/W_q quadrature basis derivatives, values,
@@ -117,33 +160,17 @@ def full_homogenization_pipeline(
          3 solid; n_sg SG dimension
     Out: C_eff (H, H) effective stiffness; V0_matrix (n_unique, H)
          fluctuation columns; omega float SG measure."""
-    Dhe, J_euu = calculate_RHS_and_Ke_batch_periodic(
-        x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
-        u_0_g[unique_dofs], n_model, n_sg)
-    inv_blocks = compute_block_inv_diag(J_euu, periodic_cells, n_unique)
-
-    A_op = jax.tree_util.Partial(
-        ebe_jacobian_product_periodic, J_euu, periodic_cells, n_unique)
-    M_op = jax.tree_util.Partial(
-        apply_block_precond, inv_blocks, n_unique)
-    estimated_eig_max = estimate_max_eigenvalue(A_op, M_op, -Dhe.T[0],
-                                                num_iters=15)
-    estimated_eig_min = estimated_eig_max / 25.0
-    cheb_M = jax.tree_util.Partial(
-        apply_chebyshev_precond, inv_blocks, n_unique,
-        estimated_eig_max, estimated_eig_min, A_op, 4)
-
-    def solve_inner(b_col):
-        res, _ = jax.scipy.sparse.linalg.cg(A_op, b_col, M=cheb_M, tol=1e-6)
-        return res
-
-    # vmap over the macro load cases: all V0 columns solve SIMULTANEOUSLY
-    # (batched matvecs on CPU, parallel on GPU; lax.map was sequential)
-    V0_matrix = jax.vmap(solve_inner)(-Dhe.T).T
-    D1 = jnp.einsum('ni,nj->ij', V0_matrix, Dhe)
-    D_bar, omega = compute_homogenized_constants(
-        x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess, n_model, n_sg)
-    C_eff = (D_bar + D1) / omega
+    Dhe, J_euu, inv_blocks, eig_max = _cheb_setup(
+        x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess, periodic_cells,
+        unique_dofs, n_unique, n_model, n_sg)
+    # all V0 columns solve SIMULTANEOUSLY (vmap: batched matvecs on
+    # CPU, parallel on GPU; lax.map was sequential) -- the rows of the
+    # (H, n) argument ARE the columns, the historical layout
+    V0_matrix = chunked_cg_columns(
+        cheb_ebe_ops, (J_euu, periodic_cells, inv_blocks, eig_max),
+        -Dhe.T, n_unique, _CHEB_TOL).T
+    C_eff, omega = _cheb_reduce(V0_matrix, Dhe, x_end, dphi_dxi_qnp,
+                                phi_qn, W_q, C_ess, n_model, n_sg)
     return C_eff, V0_matrix, omega
 
 
@@ -420,6 +447,24 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
             aug = np.vstack([-rhs, np.zeros((3, rhs.shape[1]))])
             return _sparse_direct_solve(KKT, aug, sym=True)[:n_unique]
 
+        if sg_progress.active():
+            # a factorization exposes no mid-solve residual, so the
+            # direct ladder drives the bar by COMPLETED-SOLVE COUNT of
+            # the KNOWN sequence below -- V0, V1, [V2], [V1L, and one
+            # per face of v2l] (never a faked percentage; sg_progress
+            # docstring).  amg/gamg skip this: their solve_columns
+            # already sweeps the line per solve, residual-driven.
+            _n_lad = (2 + (node_y2 is not None)
+                      + 3 * (f_faces is not None))
+            _k_lad = [0]
+            _raw_lad = solve_constrained
+
+            def solve_constrained(rhs):
+                X = _raw_lad(rhs)
+                _k_lad[0] += 1
+                sg_progress.solve(_k_lad[0] / _n_lad)
+                return X
+
     V0 = solve_constrained(D_he)
     A6 = D_ee + V0.T @ D_he
 
@@ -695,6 +740,11 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
         D1_V0 = jnp.einsum("ni,nj->ij", V0, -jnp.asarray(RHS_V0))
     else:
         V0, D1_V0, A_augmented = solve_fluctuation_field(Dhh, RHS_V0, Dc, 1)
+        # count-driven bar: the beam KKT is TWO sequential factorized
+        # solves of the same augmented matrix (V0 here, V1s below), so
+        # k of 2 is honest movement; a factorization has no interior
+        # progress to report (sg_progress docstring)
+        sg_progress.solve(0.5)
     C_eb = (Dee + D1_V0) / omega
 
     bb, DhlV0, DhlTV0Dle, V0DllV0 = prepare_v1_rhs(
@@ -708,6 +758,7 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
                                 np.zeros((4, bb.shape[1]))], axis=0)
         V_aug = _sparse_direct_solve(A_augmented, R_aug, sym=True)
         V1s_raw = jnp.array(V_aug[:N_primal, :])
+        sg_progress.solve(1.0)
     C_timo, _B_tim, _C_tim, V1s = finalize_v1_and_compute_deff(
         V1s_raw, V0, C_eb, V0DllV0, DhlV0, DhlTV0Dle, Psi, Dc)
 
@@ -837,6 +888,22 @@ def _fmt_dofs(n):
     if n >= 1e3:
         return "%dk" % round(n / 1e3)
     return "%d" % int(n)
+
+
+def _print_solver(solver):
+    """The banner's solver line: the RESOLVED backend, ALWAYS, never
+    the word "auto" -- what actually ran is what the banner names.
+    "direct" resolves further to the assembly's own backend, so a
+    forced SuperLU run says superlu.
+
+    In:  solver str -- the resolved family
+    Out: none (one banner line)."""
+    name = solver
+    if solver == "direct":
+        from . import sg_assembly as _sga
+        name = "superlu" if getattr(_sga, "DIRECT_BACKEND",
+                                    None) == "superlu" else "direct"
+    print(" solver    : %s" % name)
 
 
 def resolve_auto_solver(dofs, amg_ok, iter_ok, wall=None):
@@ -1124,9 +1191,20 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                          " load-ladder recovery columns are not streamed")
     if solver == "auto" and (n_model == 1 or mixed):
         # beams (KKT) and mixed SGs have no iter route: direct is the
-        # only sensible auto choice at any size (undisclosed -- the
-        # solver line prints only for an explicit --solver)
+        # only sensible auto choice at any size
         solver = "direct"
+    if n_model == 1 or mixed:
+        _print_solver(solver)          # these routes return before the
+        #                                general banner point below
+    # the periodic-reduced solve size, hoisted ABOVE the dispatch so
+    # ONE arming call covers EVERY homogenization entry point below --
+    # beam KKT, plate/solid (direct/cg/amg/gamg/stream), mixed and
+    # aperiodic.  start() only sets a flag; each route's own hook draws
+    # (sg_progress names which route draws what, and which is bar-less).
+    unique_dofs = jnp.unique(dof_map_np)
+    n_unique = len(unique_dofs)
+    sg_progress.start(int(n_unique))
+
     if n_model == 1:
         r = _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn,
                            dphi_dxi_qnp, W_q, dof_map_np,
@@ -1172,15 +1250,11 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         for b in bat:
             b["C_ess"] = C_all[jnp.asarray(b["idx"])]
 
-    unique_dofs = jnp.unique(dof_map_np)
-    n_unique = len(unique_dofs)
-
     if solver == "auto":
         # the dof-banded policy, deferred to HERE where the true
         # periodic-reduced solve size is known (resolve_auto_solver);
         # IDENTICAL on every machine -- a GPU changes where the
-        # iterative solvers execute, never which one auto picks.
-        # The choice is UNDISCLOSED (prints only for explicit --solver)
+        # iterative solvers execute, never which one auto picks
         try:
             import pyamg as _pyamg                  # noqa: F401
             _amg_ok = True
@@ -1193,21 +1267,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             print(" " + _warn)
         del _why
 
-    # one-line upfront peak-memory expectation, device-agnostic
-    # arithmetic only: COO->CSR dedup ratio ~2.5 (measured 165.6M nnz
-    # at 458k tet10), pyamg hierarchy ~1.6x fine CSR, pardiso fill
-    # ~50x nnz (measured 69.7 GB at that same case)
-    _E, _N = int(x_end.shape[0]), int(x_end.shape[1])
-    _nnz = _E * (3 * _N) ** 2 / 2.5
-    _slab = float(os.environ.get("OPENSG_SLAB_BYTES", 4e9))
-    if solver == "direct":
-        _mem = 8.0 * _nnz * 50 + _slab
-    elif solver in ("amg", "gamg"):
-        _mem = 1.6 * 16.0 * _nnz + _slab + 80.0 * n_unique
-    else:                                  # cg / stream: Ke stack + vectors
-        _mem = 8.0 * _E * (3 * _N) ** 2 + 160.0 * n_unique
-    print(" memory    : ~%.0f GB expected" % max(1.0, _mem / 1e9))
-    sg_progress.start(int(n_unique))
+    _print_solver(solver)
 
     u_0_g_full = jnp.zeros(shape=(V * 3))
     _amg_ctx = None       # iter 2 hierarchy handle (ladder reuses it)

@@ -37,6 +37,8 @@ assemble_rhs_and_pinned_csr, unchanged.
 #   B                   (n_unique, m) rigid-mode candidates (sg_amg.
 #                       _near_nullspace), QR-orthonormalized for PETSc
 #   mat, ksp            PETSc Mat (COO recipe) + KSP CG / PC GAMG
+#                       (a read-only sg_progress monitor rides the KSP
+#                       for the duration of a solve, armed bar only)
 #   X, iters, worst     per-column solutions, iteration counts, worst
 #                       relres (checked host-side against the scipy A)
 #   ctx                 {"backend": "gamg", "pin", "rtol", "B"} -- the
@@ -55,6 +57,7 @@ from scipy.sparse import diags
 
 from opensg_solid.sg_assembly import (assemble_rhs_and_pinned_csr,
                                       compute_homogenized_constants)
+from opensg_solid import sg_progress
 
 # same stopping pair as sg_amg (a tolerance certificate is one rerun
 # with OPENSG_AMG_RTOL tightened 100x: the law must hold its digits)
@@ -201,11 +204,43 @@ def _build_ksp(PETSc, mat, ksp_name, pc_name, rtol, maxiter):
     return ksp
 
 
+def _progress_monitor(m, rtol):
+    """The sg_progress hook of a KSP: a monitor callback mapping each
+    iteration's residual to the SAME log fraction sg_amg reports.  The
+    KSP norm type is UNPRECONDITIONED (_build_ksp), so normalizing by
+    the rnorm the monitor sees at its=0 (= ||b||, the initial guess is
+    zero on both solve paths) makes rnorm/r0 exactly amg's relative
+    residual.  Columns solve SEQUENTIALLY here (KSPMatSolve loops
+    KSPSolve internally), so each its=0 opens the next column and the
+    fraction is scaled (j + p) / m across them -- one sweep per solve,
+    as chunked amg does across its RHS blocks.
+
+    In:  m int RHS columns of this solve; rtol float
+    Out: cb(ksp, its, rnorm) -- a PETSc KSP monitor callback."""
+    st = {"r0": 0.0, "j": -1}
+
+    def cb(_ksp, its, rnorm):
+        if its == 0:
+            st["r0"], st["j"] = float(rnorm), st["j"] + 1
+            return
+        if st["r0"] <= 0.0:
+            return
+        p = (np.log10(max(float(rnorm) / st["r0"], 1e-300))
+             / np.log10(rtol))
+        sg_progress.solve((st["j"] + min(1.0, max(0.0, p))) / m)
+
+    return cb
+
+
 def solve_columns(PETSc, ksp, mat, A_csr, RHS, rtol=_RTOL):
     """Solve A x = b for every RHS column on ONE set-up KSP:
     KSPMatSolve when the build carries it, else a per-column loop on
     the same KSP.  The relative residual is re-checked host-side
     against the scipy CSR (authoritative regardless of the path).
+    The sg_progress bar rides a KSP MONITOR (_progress_monitor),
+    attached for the duration of THIS call and only when the bar is
+    armed -- a per-iteration callback is cheap but not free, and a
+    monitor is read-only, so the iterates cannot move.
 
     In:  PETSc namespace; ksp set-up KSP; mat its Mat; A_csr scipy csr
          (the SAME operator, residual check); RHS (n, m) host float64;
@@ -215,6 +250,9 @@ def solve_columns(PETSc, ksp, mat, A_csr, RHS, rtol=_RTOL):
     n, m = RHS.shape
     X = np.zeros_like(RHS)
     iters = []
+    bar = sg_progress.active()
+    if bar:
+        ksp.setMonitor(_progress_monitor(m, rtol))
     try:
         Bm = PETSc.Mat().createDense((n, m), array=np.asfortranarray(RHS),
                                      comm=PETSc.COMM_SELF)
@@ -225,6 +263,9 @@ def solve_columns(PETSc, ksp, mat, A_csr, RHS, rtol=_RTOL):
         iters = [int(ksp.getIterationNumber())]
         Bm.destroy(); Xm.destroy()
     except (AttributeError, PETSc.Error):
+        if bar:                   # a fresh sweep: matSolve may have run
+            ksp.cancelMonitor()   # partway before falling back here
+            ksp.setMonitor(_progress_monitor(m, rtol))
         x_vec, b_vec = mat.createVecs()
         for j in range(m):
             b_vec.array[:] = RHS[:, j]
@@ -233,6 +274,10 @@ def solve_columns(PETSc, ksp, mat, A_csr, RHS, rtol=_RTOL):
             X[:, j] = x_vec.array
             iters.append(int(ksp.getIterationNumber()))
         x_vec.destroy(); b_vec.destroy()
+    finally:
+        if bar:
+            ksp.cancelMonitor()   # the next solve installs its own
+            sg_progress.solve(1.0)
     nb = np.linalg.norm(RHS, axis=0)
     nb[nb == 0.0] = 1.0
     worst = float(np.max(np.linalg.norm(RHS - A_csr @ X, axis=0) / nb))
@@ -277,9 +322,6 @@ def gamg_homo(x_end, u_0_g, dphi_dxi_qnp, phi_qn, W_q, C_ess,
     RHS = -np.asarray(Dhe)
     RHS[np.asarray(pin, np.int64)] = 0.0
     V0, iters, _ = solve_columns(PETSc, ksp, mat, A_csr, RHS, rtol)
-    # bar note: gamg runs bar-less (the solve bar lives in sg_amg's
-    # chunked CG; a KSP monitor callback could feed sg_progress.solve
-    # -- follow-up)
     del iters                # terse console: results only
     ksp.destroy()
     mat.destroy()

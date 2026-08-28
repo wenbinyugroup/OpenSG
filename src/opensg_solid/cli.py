@@ -257,9 +257,9 @@ def main(argv=None):
         _dofs = 3 * len(_d["nodes"])
     except Exception:
         _dofs = None
-    print(" msg: %s (%dD SG%s)" % (_eng, _dim, _otag))
+    print(" msg       : %s (%dD SG%s)" % (_eng, _dim, _otag))
     if _dofs is not None:
-        print(" dofs      : %d dofs" % _dofs)
+        print(" dofs      : %d" % _dofs)
     print(" analysis  : %s" % ("homo" if analysis == "H" else "dehom"))
     print(" macro     : %s, %s%s"
           % (_MDL.get(int(hdr.get("n_model", 2)), "?"),
@@ -268,8 +268,8 @@ def main(argv=None):
     if force_superlu:
         from . import sg_assembly as _sga
         _sga.DIRECT_BACKEND = "superlu"
-    if solver is not None:
-        print(" solver    : %s" % ("superlu" if force_superlu else solver))
+    # the solver line is printed by sg_homo once the family is RESOLVED
+    # (an explicit --solver and an auto pick print identically)
     print("")
 
     # the terminal route is classical by default for EVERY macro model;
