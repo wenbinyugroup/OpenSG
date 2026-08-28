@@ -36,6 +36,17 @@ _FE_CORE = os.environ.get("FE_JAX_CORE")
 if _FE_CORE and _FE_CORE not in sys.path:
     sys.path.insert(0, _FE_CORE)
 
+# NEVER preallocate the GPU, for ANY solver.  XLA's default pool takes
+# 75% of the card at backend init: it starves the other allocator on
+# the same device (PETSc's gamg hierarchy died at 9.4M dofs), it makes
+# nvidia-smi report the pool instead of the run, and it buys these
+# workloads nothing -- our arrays are large and few, so grow-on-demand
+# costs no measurable time.  Set HERE because this module is imported
+# before jax by every entry point (the three CLIs and the example
+# scripts alike), and read at backend init, which is later still.
+# Inert on a CPU-only machine.  Export it yourself to override.
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+
 import jax
 
 jax.config.update("jax_enable_x64", True)
