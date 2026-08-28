@@ -201,8 +201,10 @@ def _build_ksp(PETSc, mat, ksp_name, pc_name, rtol, maxiter):
          rtol float; maxiter int
     Out: ksp PETSc.KSP, set up."""
     opts = PETSc.Options()
-    opts["pc_gamg_aggressive_coarsening"] = 0
-    opts["pc_gamg_square_graph"] = 0
+    if PETSc.Sys.getVersion() >= (3, 20, 0):
+        opts["pc_gamg_aggressive_coarsening"] = 0
+    else:                                   # the pre-3.20 spelling
+        opts["pc_gamg_square_graph"] = 0
     ksp = PETSc.KSP().create(PETSc.COMM_SELF)
     ksp.setOperators(mat)
     ksp.setType(ksp_name)
