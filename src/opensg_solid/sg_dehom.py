@@ -52,7 +52,7 @@ displacement); plate_dehom_2d is a two-output view of it.
 # ----------------------------------------------------------------------------
 """
 from functools import partial
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
 
@@ -236,17 +236,28 @@ def _v266_batch(periodic_cells_en, V0lad, V11bar, V12bar, V11barD,
                 x_end, C_ess, dphi_dxi_qnp, phi_qn,
                 dE1, dE2, d11, d12, d22, n_sg):
     """The SECOND-ORDER Eq. 64-66 refined recovery -- the two-chain
-    row-split of rm_plate_1D._warp_terms / msgrm_strain_at_depth on the
+    kernel of rm_plate_1D._warp_terms / msgrm_strain_at_depth on the
     general SG assembly:
 
-      D-chain (detilted, in-plane stress rows):
+      chain A (in-plane stress rows):
         w   = V11bar dE1 + V12bar dE2 + V21 d11 + V22 d12 + V23 d22
-        g1  = V0 dE1 + V11barD d11 + V12barD d12
-        g2  = V0 dE2 + V11barD d12 + V12barD d22
-      T-chain (tilted, rows 33/23/13):
+        g1  = V0 dE1 + V11barA d11 + V12barA d12
+        g2  = V0 dE2 + V11barA d12 + V12barA d22
+      chain B (rows 33/23/13):
         w_t = ... V21t/V22t/V23t ...;  g_at with the RAW V1bar columns
 
-      dGam/dSig rows (11, 22, 12) from the D-chain, rows 2:5
+    THE TWO CHAINS ARE NOW FED IDENTICAL COLUMNS (2026-09-01, the TPMS
+    correction).  Chain A used to take DETILTED columns -- an implicit
+    stand-in for the R -> eps conversion, applied to the in-plane rows
+    only.  Yu Eq. 50 now does that conversion explicitly, ON THE
+    DRIVERS, before this kernel is reached, so detilting here as well
+    would apply it twice.  The caller passes the raw V1bar/V2t bank
+    into both slots, which makes the row split below a no-op and leaves
+    this kernel's arithmetic untouched; the structure is kept only so
+    it still reads against Yu's text.  Do NOT reintroduce a detilted
+    bank in the A slots.
+
+      dGam/dSig rows (11, 22, 12) from chain A, rows 2:5
       (33, 23, 13 -- the same slice in this kernel's SwiftComp order)
       from the T-chain, exactly msg_rm_plate lines 624-630.
 
@@ -279,7 +290,9 @@ def _v266_batch(periodic_cells_en, V0lad, V11bar, V12bar, V11barD,
     run = jax.vmap(_elem_chain, in_axes=(0, 0, 0, 0, 0, None, None))
     GamD, SigD = run(whD, g1D, g2D, x_end, C_ess, dphi_dxi_qnp, phi_qn)
     GamT, SigT = run(whT, g1T, g2T, x_end, C_ess, dphi_dxi_qnp, phi_qn)
-    # ROW SPLIT: rows 2:5 (33, 23, 13) from the TILTED chain
+    # ROW SPLIT: rows 2:5 (33, 23, 13) from chain B.  A NO-OP whenever
+    # one bank is passed into both slots -- what the corrected
+    # composition does; see this function's docstring.
     dGam = GamD.at[:, :, 2:5].set(GamT[:, :, 2:5])
     dSig = SigD.at[:, :, 2:5].set(SigT[:, :, 2:5])
     return dGam, dSig
@@ -564,7 +577,8 @@ def dehom_fields(r: Dict[str, Any],
                  qb6: Sequence[float] = None,
                  dE11: Sequence[float] = None,
                  dE12: Sequence[float] = None,
-                 dE22: Sequence[float] = None):
+                 dE22: Sequence[float] = None,
+                 dEhi: Dict[str, Sequence[float]] = None):
     """One recovery pass: the Gauss strain/stress AND the fluctuation
     displacement (nothing recomputed -- plate_dehom_2d is a view of the
     same pass).
@@ -592,9 +606,10 @@ def dehom_fields(r: Dict[str, Any],
          dE11/dE12/dE22 (6,) OPTIONAL second in-plane derivatives of
          the plate measures (E,11 E,12 E,22) -- when any is given the
          SECOND-ORDER Eq. 64-66 recovery replaces the first-order term:
-         the two V2 chains with the tilt/detilt ROW SPLIT (in-plane
-         stress rows detilted, 33/23/13 tilted).  Needs V21..V23t from
-         a refined 2-D plate homogenization.
+         the two V2 chains, fed the SAME raw V1bar/V2t bank since the
+         2026-09-01 TPMS correction (Yu Eq. 50 converts R -> eps on the
+         drivers instead, so the old in-plane detilt would double it).
+         Needs V21..V23t from a refined 2-D plate homogenization.
     Out: (Gamma_eqs, Sigma_eqs, U_eqd) -- (E, Q, 6), (E, Q, 6),
          (E, Q, 3) np.  U is the FLUCTUATION-ONLY displacement at the
          Gauss points (no macro contribution exists for a unit-state SG
@@ -638,6 +653,92 @@ def dehom_fields(r: Dict[str, Any],
         d11 = jnp.zeros(6) if dE11 is None else jnp.asarray(dE11, float)
         d12 = jnp.zeros(6) if dE12 is None else jnp.asarray(dE12, float)
         d22 = jnp.zeros(6) if dE22 is None else jnp.asarray(dE22, float)
+        # ---- Yu Eq. 50 in DRIVER space (2026-09-01) -----------------
+        # The macro state handed in is the REISSNER measure R; Gamma_eps
+        # consumes the CLASSICAL measure eps.  Eq. 50 converts them,
+        #     eps = R - D_a gamma,a
+        # and Eq. 54 -- the equilibrium relation Yu uses to eliminate the
+        # strain-measure derivatives -- supplies gamma,a:
+        #     G gamma + F_c = D1^T A R,1 + D2^T A R,2 + m
+        #  => gamma,a = G^-1 (D1^T A R,1a + D2^T A R,2a)      (m = 0)
+        # R,1a and R,2a ARE the second-derivative drivers, so nothing new
+        # is needed: no transverse-shear measure, no Q column.  The same
+        # correction on the FIRST-derivative drivers would need third
+        # derivatives and is one order higher, so it is dropped.
+        #
+        # This REPLACES the detilt, which existed only as an implicit
+        # stand-in for the same conversion (rm_plate_1D._detilt_inplane
+        # docstring).  Doing both double-counts; doing neither is worse
+        # still.  Measured on the Pagano [0/90/0] s=4 gate against the
+        # statically determinate moment (Q1 = 0, so every stage above V0
+        # must add ZERO moment): the second-order stage injected 12.31 %
+        # of the applied M11 with the detilt, and 0.01 % with this.
+        from opensg_solid.sg_homo import (      # call-time: no cycle
+            _D1_SG, _D2_SG)
+        _A6 = r.get("A6_ladder")
+        _G = r.get("G_msg")
+        if _A6 is not None and _G is not None:
+            A6 = jnp.asarray(_A6, float)[:6, :6]
+            Gi = jnp.linalg.inv(jnp.asarray(_G, float))
+            D1, D2 = jnp.asarray(_D1_SG), jnp.asarray(_D2_SG)
+            g1 = Gi @ (D1.T @ A6 @ d11 + D2.T @ A6 @ d12)
+            g2 = Gi @ (D1.T @ A6 @ d12 + D2.T @ A6 @ d22)
+            epsilon_bar = (jnp.asarray(epsilon_bar, float)
+                           - (D1 @ g1 + D2 @ g2))
+            # ---- the SAME conversion on the DERIVATIVE drivers ------
+            # Eqs. 63/64/66 are written in the classical measure
+            # throughout -- V1 = V11 eps,1 + V12 eps,2 and
+            # V2 = V21 eps,11 + V22 eps,12 + V23 eps,22 -- so leaving
+            # d1/d2 and d11/d12/d22 as the Reissner R,a / R,ab is a
+            # measure mismatch, not a higher-order remainder.  It was
+            # dropped on the grounds of being "one order higher", but on
+            # this SG the fourth derivative measures ~0.93 of the second
+            # (converged to 1.9% between subdiv 3 and 5), so that
+            # argument does not hold here.
+            #   c,b    = G^-1 (D1^T A R,1b   + D2^T A R,2b)
+            #   c,b..  = G^-1 (D1^T A R,1b.. + D2^T A R,2b..)
+            #   eps,X  = R,X - (D1 c,1X + D2 c,2X)
+            # Mixed partials commute, so a family is looked up by its
+            # SORTED multi-index.  c is built from R throughout (Eq. 54
+            # is a relation on R), so the raw drivers feed it -- only
+            # the drivers handed onward are converted, and the order
+            # below matters: epsilon_bar above already consumed the
+            # unconverted d11/d12/d22, which is correct.
+            if dEhi:
+                def _hi(ix):
+                    return jnp.asarray(dEhi["".join(sorted(ix))], float)
+
+                def _cd(b, rest):
+                    """c,b differentiated by the multi-index `rest`."""
+                    return Gi @ (D1.T @ A6 @ _hi("1" + b + rest)
+                                 + D2.T @ A6 @ _hi("2" + b + rest))
+
+                _h3 = all(k in dEhi for k in ("111", "112", "122",
+                                              "222"))
+                _h4 = all(k in dEhi for k in ("1111", "1112", "1122",
+                                              "1222", "2222"))
+                if _h3:                       # eps,a  (drives V1)
+                    d1 = d1 - (D1 @ _cd("1", "1") + D2 @ _cd("2", "1"))
+                    d2 = d2 - (D1 @ _cd("1", "2") + D2 @ _cd("2", "2"))
+                if _h4:                       # eps,ab (drives V2)
+                    d11 = d11 - (D1 @ _cd("1", "11")
+                                 + D2 @ _cd("2", "11"))
+                    d12 = d12 - (D1 @ _cd("1", "12")
+                                 + D2 @ _cd("2", "12"))
+                    d22 = d22 - (D1 @ _cd("1", "22")
+                                 + D2 @ _cd("2", "22"))
+                print(" Eq. 50 on the derivative drivers: first-order"
+                      " %s, second-order %s"
+                      % ("converted" if _h3 else "SKIPPED (need d3eps)",
+                         "converted" if _h4 else "SKIPPED (need d4eps)"))
+        else:
+            print(" WARNING: Eq. 50 conversion SKIPPED (no A6_ladder/"
+                  "G_msg) -- NOT the corrected composition.  The"
+                  " second-order in-plane rows fall back to the"
+                  " detilt's implicit conversion, which the 2026-09-01"
+                  " TPMS correction replaced; rerun from a refined"
+                  " (refined: 1) single-batch plate homogenization to"
+                  " get the Eq. 50 route.")
     qpairs = [(q6, v1, v2) for q6, v1, v2
               in ((qt6, "V1Lt", "V2Lt"), (qb6, "V1Lb", "V2Lb"))
               if q6 is not None]
@@ -666,12 +767,17 @@ def dehom_fields(r: Dict[str, Any],
                                 r["n_model"], r["n_sg"])
         Gam, Sig = np.asarray(Gam), np.asarray(Sig)
         if second:
+            # Eq. 50 is now applied to the DRIVERS above, so the
+            # detilted columns must NOT be used as well -- the RAW
+            # V1bar/V2 bank feeds every row (the tilt/detilt row split
+            # collapses).  Passing the raw columns in both slots keeps
+            # the kernel unchanged.
             dGam, dSig = _v266_batch(
                 cells_b, jnp.asarray(r["V0_ladder"]),
                 jnp.asarray(r["V11bar"]), jnp.asarray(r["V12bar"]),
-                jnp.asarray(r["V11barD"]), jnp.asarray(r["V12barD"]),
-                jnp.asarray(r["V21"]), jnp.asarray(r["V22"]),
-                jnp.asarray(r["V23"]), jnp.asarray(r["V21t"]),
+                jnp.asarray(r["V11bar"]), jnp.asarray(r["V12bar"]),
+                jnp.asarray(r["V21t"]), jnp.asarray(r["V22t"]),
+                jnp.asarray(r["V23t"]), jnp.asarray(r["V21t"]),
                 jnp.asarray(r["V22t"]), jnp.asarray(r["V23t"]),
                 x_b, C_b, dp_b, ph_b, d1, d2, d11, d12, d22,
                 r["n_sg"])
@@ -738,6 +844,118 @@ def dehom_fields(r: Dict[str, Any],
     return (np.concatenate([g.reshape(-1, 6) for g in Gam_b]),
             np.concatenate([s.reshape(-1, 6) for s in Sig_b]),
             np.concatenate([u.reshape(-1, 3) for u in U_b]))
+
+
+def load_column_F(r: Dict[str, Any],
+                  q_top: float = 0.0,
+                  q_bot: float = 0.0,
+                  dq_top: Sequence[float] = (0.0, 0.0),
+                  dq_bot: Sequence[float] = (0.0, 0.0)):
+    """The load-related constitutive term F, straight from Yu's Eq. 47.
+
+    Yu, Hodges & Volovoi, Comput. Struct. 81 (2003) 439-454.  The
+    Reissner-like energy is 2 Pi_R = R^T A R + gamma^T G gamma + 2 R^T F
+    (Eq. 61), so the plate law carries one term more than a pure
+    stiffness:
+
+        {N; M} = [ABD] {eps; kappa} + F
+
+    with, from Eq. 47,
+
+        F = V0^T L - 1/2 (D1^T V1L,1 + V11^T L,1
+                          + D2^T V1L,2 + V12^T L,2)
+        P = V1L^T L                     (quadratic in the load; Yu drops
+                                         it from Eq. 61 because it does
+                                         not affect the 2-D equations)
+
+    and L itself, from the line after Eq. 28,
+
+        L = S+^T s - S-^T b - <S^T phi>
+
+    the consistent nodal load of the top traction s, the bottom traction
+    b and the body force phi.  That vector is assembled during
+    homogenization and exported as r["L_faces"], one column per face.
+
+    HOW THE STATION ENTERS.  L and V1L are LINEAR in the applied load, so
+    for a pressure field q(x1, x2) on a face
+
+        L(x) = q(x) L_u        V1L(x) = q(x) V1L_u
+        L,a  = q,a  L_u        V1L,a  = q,a  V1L_u
+
+    and Eq. 47 separates into SG-level blocks times station-level scalars:
+
+        F = q F_unit - 1/2 ( q,1 G1_unit + q,2 G2_unit )
+
+        F_unit  = V0^T L_u                          (6, 2)
+        G1_unit = D1^T V1L_u + V11^T L_u            (6, 2)
+        G2_unit = D2^T V1L_u + V12^T L_u            (6, 2)
+
+    per face, summed over faces, PER UNIT WIDTH of the plate (L_u is
+    assembled already divided by the SG measure omega, the same
+    normalization as the ABD; until 2026-09-08 this function multiplied
+    by omega once more and was omega times too large on every SG with
+    omega != 1).  The three blocks are formed once in the
+    homogenization (D1, D2 are the Eq. 43-44 right-hand sides of the
+    V11/V12 solves) and the station supplies only q, q,1 and q,2 -- so a
+    sinusoidal load costs nothing more than a uniform one.  For a uniform
+    pressure q,a = 0 and the whole bracket drops: F = q F_unit.
+
+    WHY THIS REPLACES AN INTEGRATION.  F was previously obtained by
+    running a full dehomogenization at ZERO macro strain -- so the
+    recovered field is the load column alone -- and then integrating
+    sigma and sigma*z over the cell.  That costs a recovery solve and
+    only ever yields F for the one load it was run with.  Eq. 47 gives
+    the same number as a matrix product.  Verified on the Schwarz-P
+    rho = 0.3 cell at q = 7946.1 Pa, uniform:
+
+        integrated   F_N = (-567.876, -567.876)  F_M = (-90.908, -90.908)
+        Eq. 47       F_N = (-567.876, -567.876)  F_M = (-90.923, -90.923)
+        ratio             1.000000                    1.00016
+
+    Yu's own validation (Sec. 6.1) is a SINUSOIDAL split load
+    s3 = b3 = (p0/2) sin(pi x1/L), where q,1 is live and the G1 block
+    matters; that is why it is carried here and not dropped.
+
+    In:  r -- a plate_homo_2d dict carrying "F_unit" (present whenever
+             the run was shear-refined with recovery); q_top, q_bot
+             float [Pa] the pressures on the two faces at this station
+             (positive pushes into the face, the deck convention);
+             dq_top, dq_bot -- (q,1, q,2) [Pa/m] of each face's pressure
+             at this station, default (0, 0) = uniform
+    Out: {"F" (6,) [F_N11 F_N22 F_N12 F_M11 F_M22 F_M12] in N/m and N,
+          "F_N" (3,), "F_M" (3,), "P" float}
+
+    Raises KeyError when r has no "F_unit" -- rerun the homogenization
+    with recovery enabled."""
+    for k in ("F_unit", "G1_unit", "G2_unit", "L_faces"):
+        if k not in r:
+            raise KeyError("this homogenization carries no %s; rerun"
+                           " plate_homo_2d with recovery=True so the"
+                           " load columns are assembled" % k)
+    # NO omega factor here (fixed 2026-09-08).  L_faces is assembled per
+    # unit face pressure ALREADY divided by omega (see
+    # compute_fluctuations_gpu: "f_faces ... already /omega"), so V0^T L
+    # is the resultant PER UNIT WIDTH -- the same normalization as the
+    # ABD (C_eff = (D_bar + D1)/omega).  Multiplying by omega made F
+    # omega times too large on every SG whose measure is not 1: on the
+    # HC honeycomb (omega = 7.5256 mm) F_N was 7.5x the integrated
+    # zero-strain resultant, and under a x100 geometric scaling F grew
+    # x1e4 instead of x100.  The TPMS unit cube (omega = 1) hid it.
+    # Gate: Final_pipeline_metric/scripts/gate_load_column_omega.py.
+    Fu = np.asarray(r["F_unit"], float)
+    G1 = np.asarray(r["G1_unit"], float)
+    G2 = np.asarray(r["G2_unit"], float)
+    q = np.array([q_top, q_bot], float)
+    q1 = np.array([dq_top[0], dq_bot[0]], float)
+    q2 = np.array([dq_top[1], dq_bot[1]], float)
+    F = Fu @ q - 0.5 * (G1 @ q1 + G2 @ q2)
+    # P = V1L^T L, quadratic in the load, reported for completeness
+    # (same per-unit-width normalization)
+    L = np.asarray(r["L_faces"], float)
+    V1L = (q_top * np.asarray(r["V1Lt"], float)
+           + q_bot * np.asarray(r["V1Lb"], float))
+    P = float(V1L @ (L @ q))
+    return {"F": F, "F_N": F[:3], "F_M": F[3:], "P": P}
 
 
 def plate_dehom_2d(r: Dict[str, Any],
@@ -872,9 +1090,9 @@ def _vtk_corner_cell(n_sg, N):
     Out: (vtk_type, [corner indices]) | None when unmapped."""
     if n_sg == 1 and N >= 2:
         return 3, [0, 1]                          # VTK_LINE
-    if n_sg == 2 and N == 3:
+    if n_sg == 2 and N in (3, 6):
         return 5, [0, 1, 2]                       # VTK_TRIANGLE
-    if n_sg == 2 and N == 4:
+    if n_sg == 2 and N in (4, 9):
         return 9, [0, 1, 3, 2]                    # VTK_QUAD (de-basix)
     if n_sg == 3 and N in (4, 10):
         return 10, [0, 1, 2, 3]                   # VTK_TETRA
@@ -1028,10 +1246,17 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
         # the frame tag makes the files self-describing: material-frame
         # and SG-global .SM are byte-identical in layout otherwise
         note += "; frame: %s" % frame
-    _write_field(prefix + ".SM", "S", "Pa", stresses, xyz, note,
+    # frame IN THE FILENAME for stress/strain: the DEFAULT (material
+    # frame) keeps the bare .SM/.EM names; a --global run writes
+    # _global.SM/_global.EM so a global-frame file can never be
+    # mistaken for the usual material-frame output.  .U keeps its name
+    # in both modes -- displacement is never rotated (always SG-global).
+    ftag = ("_global" if frame and "global" in str(frame).lower()
+            else "")
+    _write_field(prefix + ftag + ".SM", "S", "Pa", stresses, xyz, note,
                  "%s %s dehom stress (units follow the SG input system)"
                  % (prefix, model))
-    _write_field(prefix + ".EM", "E", "-", strains, xyz, note,
+    _write_field(prefix + ftag + ".EM", "E", "-", strains, xyz, note,
                  "%s %s dehom strain" % (prefix, model))
     wrote_u = ""
     if U_eqd is not None:
@@ -1041,5 +1266,39 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
                      "recovery; beam = w0 + w1s warping)"
                      % (prefix, model))
         wrote_u = " / .U"
+
+    # ---- per-ELEMENT export: the Gauss mean at the element centroid.
+    # This is the elemental quantity that pairs with a CENTROIDAL 3-D
+    # FEA stress (one value per element, piecewise constant) -- pairing
+    # Gauss points across two codes is not meaningful, element means
+    # are.  Same _write_field layout, so downstream readers are shared.
+    def _batches(F, w):
+        out = []
+        for b in (F if isinstance(F, (list, tuple)) else [F]):
+            a = np.asarray(b)
+            out.append(a.reshape(a.shape[0], -1, w))
+        return out
+
+    row = 0
+    Sc, Uc, Xc = [], [], []
+    ub = (_batches(U_eqd, 3) if U_eqd is not None else None)
+    for bi, Sb in enumerate(_batches(Sigma_eqs, 6)):
+        Eb, Qb = Sb.shape[:2]
+        Sc.append(Sb.mean(axis=1))
+        Xc.append(xyz[row:row + Eb * Qb].reshape(Eb, Qb, 3).mean(axis=1))
+        if ub is not None:
+            Uc.append(ub[bi].mean(axis=1))
+        row += Eb * Qb
+    note_e = (note + "; ELEMENTAL: unweighted mean of the element's Q"
+              " Gauss values at the centroid (Q = quadrature count, 24"
+              " for tet10 at degree 6 -- NOT 4)")
+    _write_field(prefix + "_elemental" + ftag + ".SM", "S", "Pa",
+                 np.vstack(Sc), np.vstack(Xc), note_e,
+                 "%s %s dehom stress, per-element mean" % (prefix, model))
+    if ub is not None:
+        _write_field(prefix + "_elemental.U", "U", "m", np.vstack(Uc),
+                     np.vstack(Xc), note_e,
+                     "%s %s dehom displacement, per-element mean"
+                     % (prefix, model))
     print("export_gauss: %d points -> %s.txt / .vtk / .SM / .EM%s"
           % (num_pts, prefix, wrote_u))

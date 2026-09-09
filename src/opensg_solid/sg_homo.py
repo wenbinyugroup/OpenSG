@@ -180,36 +180,42 @@ def full_homogenization_pipeline(
     # all V0 columns solve SIMULTANEOUSLY (vmap: batched matvecs on
     # CPU, parallel on GPU; lax.map was sequential) -- the rows of the
     # (H, n) argument ARE the columns, the historical layout.
-    # SOLVE + VERIFY: jax's cg cannot signal failure, and an
-    # under-estimated eig_max makes the degree-4 Chebyshev
+    # SOLVE + VERIFY: jax's cg cannot signal failure, so the TRUE
+    # relative residual of every column is checked, and a failed solve
+    # RESTARTS (a fresh CG is digit-safe: the converged answer does
+    # not depend on M) with the remedy matched to the failure
+    # signature.  A LARGE residual (stagnation/NaN) means an
+    # under-estimated eig_max made the degree-4 Chebyshev
     # preconditioner INDEFINITE (any eigenvalue of M^-1 A above
-    # 1.04 x eig_max) -- CG then stagnates on a still-SPD system and
-    # the maxiter iterate would flow into C_eff silently.  So the TRUE
-    # relative residual of every column is checked after the solve; on
-    # failure the interval widens 4x and the solve RESTARTS (a fresh
-    # CG is digit-safe: the converged answer does not depend on M).
+    # 1.04 x eig_max) -> widen the interval 4x.  A residual that is
+    # small but above tol means the interval is fine and CG simply ran
+    # out of iterations -> 4x the cap (widening would only slow it).
     B = -Dhe.T
     bnorm = jnp.maximum(jnp.linalg.norm(B, axis=1), 1e-300)
     A_op = jax.tree_util.Partial(
         ebe_jacobian_product_periodic, J_euu, periodic_cells, n_unique)
-    worst = float("nan")
-    for _attempt in range(3):
+    worst, kcap = float("nan"), _CHEB_MAXITER
+    for _attempt in range(4):
         V0T = chunked_cg_columns(
             cheb_ebe_ops, (J_euu, periodic_cells, inv_blocks, eig_max),
-            B, n_unique, _CHEB_TOL, maxiter=_CHEB_MAXITER)
+            B, n_unique, _CHEB_TOL, maxiter=kcap)
         res = jax.vmap(lambda x, b: jnp.linalg.norm(A_op(x) - b))(V0T, B)
         worst = float(jnp.max(res / bnorm))
         if np.isfinite(worst) and worst <= 10.0 * _CHEB_TOL:
             break
-        eig_max = eig_max * 4.0
-        print(" cg WARNING: worst relres %.2e (tol %.0e) -- Chebyshev"
-              " interval widened to eig_max %.4g, re-solving"
-              % (worst, _CHEB_TOL, float(eig_max)))
+        if not np.isfinite(worst) or worst > 1e-2:
+            eig_max = eig_max * 4.0
+            what = "interval widened to eig_max %.4g" % float(eig_max)
+        else:
+            kcap = kcap * 4
+            what = "maxiter raised to %d" % kcap
+        print(" cg WARNING: worst relres %.2e (tol %.0e) -- %s,"
+              " re-solving" % (worst, _CHEB_TOL, what))
     else:
         raise RuntimeError(
             "iter1 cg did not converge (worst relres %.2e, tol %.0e)"
-            " after 3 Chebyshev intervals -- run --solver direct or"
-            " --solver amg for this SG" % (worst, _CHEB_TOL))
+            " after 4 attempts -- run --solver direct or --solver amg"
+            " for this SG" % (worst, _CHEB_TOL))
     V0_matrix = V0T.T
     C_eff, omega = _cheb_reduce(V0_matrix, Dhe, x_end, dphi_dxi_qnp,
                                 phi_qn, W_q, C_ess, n_model, n_sg)
@@ -262,6 +268,25 @@ _D1_SG = np.zeros((6, 2)); _D1_SG[3, 0] = 1.0; _D1_SG[5, 1] = 1.0
 _D2_SG = np.zeros((6, 2)); _D2_SG[4, 1] = 1.0; _D2_SG[5, 0] = 1.0
 
 
+def print_ustar(Ustar_rel):
+    """The U* residual on screen -- ONE wording, every RM backend.
+
+    U* is Yu's OWN accuracy criterion for a Reissner-like model: the
+    theory is exact only as the residual is driven to zero, so an RM
+    run prints it next to its law instead of only returning it.  It
+    was silent until 2026-08-31 (the rho=0.3 TPMS lattice was then
+    found sitting at 0.155), and silent on the STREAMED backend until
+    2026-09-03 -- exactly the biggest SGs, where the question matters
+    most.  Both ladders call this, so the line cannot drift apart.
+
+    In:  Ustar_rel float -- the relative U* least-squares residual
+    Out: None (prints one line)."""
+    print(" U* residual: %.4f  (Reissner-like reduction; the model is"
+          " exact only as this -> 0)%s"
+          % (Ustar_rel, "" if Ustar_rel < 0.02 else
+             "  <- LARGE: an RM plate model is marginal for this SG"))
+
+
 def _rm_ls_reduction(A6, H11, H12, H22, S1, S2):
     """Yu Eqs. (57)-(61): the U* least squares -> X (2x2 shear
     compliance), G = X^-1.  144 raveled equations (78 unique entries,
@@ -283,6 +308,16 @@ def _rm_ls_reduction(A6, H11, H12, H22, S1, S2):
     H_tt = np.block([[H11, H12], [H12.T, H22]])
     AD1 = A6 @ _D1_SG
     AD2 = A6 @ _D2_SG
+    # WEIGHTING IS PART OF THE FORMULATION, NOT A UNIT BUG.  The 144
+    # raveled equations are weighted EQUALLY (Frobenius), and it is
+    # tempting to call that dimensionally inconsistent -- the entries do
+    # mix membrane N/m, coupling N and bending N m.  It was tried on
+    # 2026-08-31: congruence-scaling by the plate compliance,
+    # W = diag(A6, A6)^(-1/2), makes the objective dimensionless and
+    # moves the isotropic nu=0.3 shear-correction factor from the
+    # converged anchor k = 0.880537 to 0.865385 (1.7 % off,
+    # test_g_iso_nu03_converged). The equal weighting is what Yu's Eqs.
+    # (57)-(61) minimize -- do not "fix" it.
 
     def blocks(X, c1, c2):
         Bs = H11 + AD1 @ X @ AD1.T + c1.T @ S1 + S1.T @ c1
@@ -315,23 +350,211 @@ def _rm_ls_reduction(A6, H11, H12, H22, S1, S2):
     return G, X, ev_min, Ustar_rel, c1, c2
 
 
-def _detilt_cols_2d(cols, y2_n, wA_n):
+def _detilt_cols_2d(cols, y2_n, wy_n, wA_n=None):
     """The 2-D analog of rm_plate_1D._detilt_inplane: project the TILT
     (thickness-linear content) out of the IN-PLANE components of a
-    warping-column block; w3 keeps its tilt.  The 1-D trapezoid line
-    integrals become MATERIAL-AREA-weighted nodal sums (the same lumped
-    areas the <w> = 0 constraint uses), which reduces to the 1-D form
-    on a uniform through-thickness line.
+    warping-column block; w3 keeps its tilt.
+
+    This is the L2(dV) projection onto the single mode y3, so both
+    moments must be TRUE integrals:
+
+        m1 = int(y3 W dV) = sum_a wy_a W_a       z2 = int(y3^2 dV)
+
+    with wy_a = int(y3 N_a dV), which makes m1 EXACT for any W in the
+    FE space.  The lumped product w_a y_a it replaces is not that
+    integral, and for a P2 tetrahedron int(N_a dV) is NEGATIVE at the
+    four corner nodes, so the lumped form is a badly biased measure --
+    it broke the docstring's own contract ("reduces to the 1-D form on
+    a uniform through-thickness line") for every element order p >= 2:
+    against the validated rm_plate_1D reference on an identical 1-D
+    mesh it cost 13.8% on sigma11 at p=2, 5.9% at p=3, 3.4% at p=4,
+    while sigma33 stayed bit-identical (the T-chain never sees these
+    columns).  Fixed 2026-08-31.
 
     In:  cols (n_unique, 6); y2_n (n_nodes,) reduced-node thickness
-         coordinate; wA_n (n_nodes,) lumped nodal material areas
+         coordinate; wy_n (n_nodes,) exact int(y3 N_a dV) weights;
+         wA_n optional lumped weights -- accepted only so an old
+         positional call fails loudly rather than silently rescaling
     Out: (n_unique, 6) detilted copy."""
+    if wA_n is not None:
+        raise TypeError("_detilt_cols_2d now takes the EXACT first-moment"
+                        " weights int(y3 N_a dV) as its third argument;"
+                        " the lumped w_a y_a form was removed 2026-08-31")
     W = np.asarray(cols).reshape(-1, 3, 6).copy()
-    z2 = float((wA_n * y2_n * y2_n).sum())
+    z2 = float((wy_n * y2_n).sum())
     for comp in (0, 1):
-        m1 = (wA_n[:, None] * y2_n[:, None] * W[:, comp, :]).sum(axis=0)
+        m1 = (wy_n[:, None] * W[:, comp, :]).sum(axis=0)
         W[:, comp, :] -= np.outer(y2_n, m1 / z2)
     return W.reshape(-1, 6)
+
+
+def _assert_thickness_axis_free(pts, red_of, n_sg, ftol):
+    """Refuse a plate SG whose thickness is not the LAST SG coordinate.
+
+    THE FAILURE THIS CATCHES.  The module convention (see the header) is
+    that y3, the plate thickness, is the last SG coordinate: the SG is
+    periodic in-plane and FREE through the thickness, so the last axis'
+    min/max planes are the two traction-free surfaces the pressure acts
+    on.  Nothing in the mesh enforces that.  Hand a mesh with thickness
+    along x and the face finder still succeeds -- it locates the x = min
+    and x = max planes, which are a PERIODIC PAIR -- and quietly applies
+    the pressure to the tiled faces instead of the free ones.  The run
+    completes and every downstream gate passes, because a self-cancelling
+    load on a periodic pair is a perfectly well-posed right-hand side.
+
+    THE TEST.  A periodic axis is exactly the one whose two extreme
+    planes are IDENTIFIED by the periodic reduction: master and slave
+    share a reduced dof.  So for each axis count the nodes on its min
+    plane whose reduced dof also appears on its max plane.  The in-plane
+    axes score ~100 %, the thickness axis ~0.  The thickness axis is the
+    argmin, and it must be the last one.
+
+    In:  pts (V, n_sg) SG coordinates; red_of (V,) int reduced-node
+         index per node (-1 where unused); n_sg int; ftol float on-plane
+         tolerance
+    Out: None; raises SystemExit naming the axis that should be last.
+
+    Skipped for n_sg < 2 (a 1-D SG has one axis and it is the thickness)
+    and whenever the periodic map is degenerate, so this can only ever
+    reject a mesh it positively identifies as wrong."""
+    if n_sg < 2:
+        return
+    frac = []
+    for a in range(n_sg):
+        c = pts[:, a]
+        lo = np.abs(c - c.min()) < ftol
+        hi = np.abs(c - c.max()) < ftol
+        rl, rh = red_of[lo], red_of[hi]
+        rl, rh = rl[rl >= 0], rh[rh >= 0]
+        if not len(rl) or not len(rh):
+            return
+        frac.append(np.isin(rl, rh).mean())
+    frac = np.asarray(frac)
+    free = int(np.argmin(frac))
+    if free == n_sg - 1:
+        return
+    if frac[n_sg - 1] - frac[free] < 0.5:
+        return                      # not a clear-cut call; stay silent
+    raise SystemExit(
+        "plate SG thickness axis looks like axis %d, not the last (axis"
+        " %d).\n  periodic-pairing fraction per axis: %s\n  a PERIODIC"
+        " axis pairs its two extreme planes (fraction ~1); the FREE"
+        " thickness axis does not (~0).\n  This build takes y3 = the"
+        " LAST SG coordinate as the thickness, so the pressure would be"
+        " applied to a periodic face pair and silently cancel."
+        "  Permute the mesh coordinates so axis %d is last."
+        % (free, n_sg - 1,
+           np.array2string(frac, precision=3), free))
+
+
+def _quad_facet_load(pts, fc, fh):
+    """Consistent nodal load of a UNIT pressure on one flat QUAD facet,
+    bilinear (4), serendipity (8) or Lagrange (9).
+
+    ORDER IS RECOVERED GEOMETRICALLY, never from a face table: the four
+    corners are sorted by angle about the facet centroid, then each
+    higher-order node is matched to the corner pair whose midpoint it is
+    nearest (and, for 9 nodes, the leftover one is the centre).  So gmsh,
+    basix and Abaqus face numbering all land on the same rule.
+
+    In:  pts (V, 3) SG coordinates; fc (4,) int the facet's corner node
+         ids; fh (0 | 4 | 5,) int its higher-order node ids
+    Out: (nid (n,) int, wgt (n,) float) with sum(wgt) == the facet area.
+
+    Raises when the weights do not sum to the facet area to 1e-9
+    relative -- the one check that catches a mis-ordered facet."""
+    pc = pts[fc][:, :2]
+    c = pc.mean(axis=0)
+    k = np.argsort(np.arctan2(pc[:, 1] - c[1], pc[:, 0] - c[0]))
+    fc, pc = np.asarray(fc)[k], pc[k]
+    nodes, xy = list(fc), list(pc)
+    sn = np.array([[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]])
+    if len(fh):
+        ph = pts[fh][:, :2]
+        mids = 0.5 * (pc + np.roll(pc, -1, axis=0))     # edges 01 12 23 30
+        used = np.zeros(len(fh), bool)
+        for m in mids:
+            j = int(np.argmin(np.where(used, np.inf,
+                                       np.linalg.norm(ph - m, axis=1))))
+            used[j] = True
+            nodes.append(fh[j]); xy.append(ph[j])
+        if len(fh) == 5:
+            j = int(np.argmin(np.where(used, np.inf,
+                                       np.linalg.norm(ph - c, axis=1))))
+            nodes.append(fh[j]); xy.append(ph[j])
+        elif used.sum() != len(fh):
+            raise ValueError("quad facet has %d higher-order nodes,"
+                             " expected 4 or 5" % len(fh))
+    P = np.asarray(xy, float)
+    n = len(nodes)
+    mid = np.array([[0.0, -1.0], [1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]])
+
+    def shape(xi, eta):
+        """Value and (dxi, deta) derivatives of the facet basis.
+
+        In:  xi, eta float in [-1, 1].  Out: (N (n,), dN (n, 2))."""
+        s, t = sn[:, 0], sn[:, 1]
+        if n == 4:
+            Nc = 0.25 * (1 + s * xi) * (1 + t * eta)
+            d = 0.25 * np.column_stack([s * (1 + t * eta),
+                                        t * (1 + s * xi)])
+            return Nc, d
+        if n == 8:                                   # serendipity
+            Nc = 0.25 * (1 + s * xi) * (1 + t * eta) \
+                * (s * xi + t * eta - 1.0)
+            dc = 0.25 * np.column_stack([
+                s * (1 + t * eta) * (2 * s * xi + t * eta),
+                t * (1 + s * xi) * (s * xi + 2 * t * eta)])
+            a, b = mid[:, 0], mid[:, 1]
+            vert = np.abs(a) < 0.5                    # xi-varying edges
+            Nm = np.where(vert,
+                          0.5 * (1 - xi ** 2) * (1 + b * eta),
+                          0.5 * (1 - eta ** 2) * (1 + a * xi))
+            dm = np.column_stack([
+                np.where(vert, -xi * (1 + b * eta),
+                         0.5 * a * (1 - eta ** 2)),
+                np.where(vert, 0.5 * b * (1 - xi ** 2),
+                         -eta * (1 + a * xi))])
+            return np.concatenate([Nc, Nm]), np.vstack([dc, dm])
+        # 9-node Lagrange: tensor product of 1-D quadratic bases
+        def L(u, u0):
+            """1-D quadratic Lagrange basis on [-1, 1], nodes -1, 0, +1.
+
+            In:  u float; u0 float the node (-1, 0 or +1)
+            Out: (value, d/du)."""
+            if u0 == 0.0:
+                return 1.0 - u * u, -2.0 * u
+            return 0.5 * u * (u + u0), u + 0.5 * u0
+        uv = np.vstack([sn, mid, [[0.0, 0.0]]])
+        Nc, d = np.zeros(9), np.zeros((9, 2))
+        for i, (a, b) in enumerate(uv):
+            fa, ga = L(xi, a)
+            fb, gb = L(eta, b)
+            Nc[i] = fa * fb
+            d[i] = (ga * fb, fa * gb)
+        return Nc, d
+
+    g = np.sqrt(3.0 / 5.0)
+    if n == 4:
+        pt, wt = np.array([-1 / np.sqrt(3), 1 / np.sqrt(3)]), np.ones(2)
+    else:
+        pt = np.array([-g, 0.0, g])
+        wt = np.array([5.0, 8.0, 5.0]) / 9.0
+    w = np.zeros(n)
+    for i, xi in enumerate(pt):
+        for j, eta in enumerate(pt):
+            Nq, dN = shape(xi, eta)
+            w += wt[i] * wt[j] * Nq * abs(np.linalg.det(dN.T @ P))
+    # shoelace over the four corners, which are P[:4] in cyclic order
+    # (np.cross no longer takes 2-D vectors in numpy 2)
+    Q = P[:4]
+    A = 0.5 * abs(float(np.dot(Q[:, 0], np.roll(Q[:, 1], -1))
+                        - np.dot(np.roll(Q[:, 0], -1), Q[:, 1])))
+    if abs(w.sum() - A) > 1e-9 * max(A, 1e-30):
+        raise ValueError("quad facet load sums to %.12g, facet area is"
+                         " %.12g -- facet ordering or basis is wrong"
+                         % (w.sum(), A))
+    return np.asarray(nodes), w
 
 
 def _plate_face_loads_3d(pts, cells, yf, ftol):
@@ -342,11 +565,25 @@ def _plate_face_loads_3d(pts, cells, yf, ftol):
 
     Facets are found GEOMETRICALLY (an element's nodes lying on the
     plane), never through topology tables, so gmsh-vs-basix corner
-    ordering cannot mislabel them: tet4 -> 3 on-plane nodes (linear
-    triangle, A/3 each), hex8 -> 4 (bilinear quad, 2x2 Gauss consistent
-    load), tet10 -> 6 (straight P2 triangle: corners 0, midsides A/3;
-    corner/midside split by the nodes-0..3-are-corners convention both
-    gmsh and basix share).
+    ordering cannot mislabel them.  Supported, by element node count:
+
+        tet4  -> 3 on-plane nodes, linear triangle    A/3 each
+        tet10 -> 6, straight P2 triangle              corners 0, mid A/3
+        hex8  -> 4, bilinear quad                     2x2 Gauss
+        hex20 -> 8, serendipity quad                  3x3 Gauss
+        hex27 -> 9, Lagrange quad                     3x3 Gauss
+
+    The triangles are closed form (exact on a flat facet); the quads are
+    integrated with Gauss quadrature of the mapped shape functions, so a
+    non-rectangular facet is handled exactly too.  Corner-vs-higher-order
+    nodes are split by the leading-corners convention that gmsh and basix
+    share (tet: nodes 0..3; hex: nodes 0..7); face node ORDER is then
+    recovered geometrically, by angle about the facet centroid for the
+    corners and by proximity to the corner-pair midpoints for the edge
+    nodes, so no face-numbering table is trusted.
+
+    Every rule is gated on sum(weights) == facet area, which is the one
+    check that catches a mis-ordered or mis-classified facet.
 
     In:  pts (V, 3) SG coordinates; cells (E, N) int; yf float the face
          plane; ftol float the on-plane tolerance
@@ -355,10 +592,11 @@ def _plate_face_loads_3d(pts, cells, yf, ftol):
     on = np.abs(pts[:, 2] - yf) < ftol
     onc = on[np.asarray(cells)]
     N = cells.shape[1]
-    need = {4: 3, 8: 4, 10: 6}.get(N)
+    need = {4: 3, 8: 4, 10: 6, 20: 8, 27: 9}.get(N)
+    n_corner = {4: 4, 10: 4, 8: 8, 20: 8, 27: 8}.get(N)
     if need is None:
-        raise ValueError("3-D plate face loads support tet4/hex8/tet10,"
-                         " got %d-node elements" % N)
+        raise ValueError("3-D plate face loads support tet4/tet10/hex8/"
+                         "hex20/hex27, got %d-node elements" % N)
     nid_l, wgt_l = [], []
     for e in np.nonzero(onc.sum(axis=1) == need)[0]:
         f = np.asarray(cells[e])[onc[e]]
@@ -368,27 +606,18 @@ def _plate_face_loads_3d(pts, cells, yf, ftol):
                           - (p[2, 0] - p[0, 0]) * (p[1, 1] - p[0, 1]))
             nid_l.append(f)
             wgt_l.append(np.full(3, A / 3.0))
-        elif N == 8:
-            c = p.mean(axis=0)
-            k = np.argsort(np.arctan2(p[:, 1] - c[1], p[:, 0] - c[0]))
-            f, p = f[k], p[k]
-            g = 1.0 / np.sqrt(3.0)
-            xi = np.array([[-g, -g], [g, -g], [g, g], [-g, g]])
-            sn = np.array([[-1.0, -1.0], [1.0, -1.0],
-                           [1.0, 1.0], [-1.0, 1.0]])
-            w = np.zeros(4)
-            for q in range(4):
-                Nq = 0.25 * (1 + sn[:, 0] * xi[q, 0]) \
-                    * (1 + sn[:, 1] * xi[q, 1])
-                dN = 0.25 * np.column_stack(
-                    [sn[:, 0] * (1 + sn[:, 1] * xi[q, 1]),
-                     sn[:, 1] * (1 + sn[:, 0] * xi[q, 0])])
-                J = dN.T @ p
-                w += Nq * abs(np.linalg.det(J))
+        elif need in (4, 8, 9):                 # quad facet, any order
+            corner = np.asarray(cells[e])[:n_corner]
+            fc = f[np.isin(f, corner)]
+            fh = f[~np.isin(f, corner)]
+            if len(fc) != 4:
+                raise ValueError("hex facet on y3 = %g has %d corner"
+                                 " nodes, expected 4" % (yf, len(fc)))
+            f, w = _quad_facet_load(pts, fc, fh)
             nid_l.append(f)
             wgt_l.append(w)
         else:                                   # tet10 P2 facet
-            corner = np.asarray(cells[e])[:4]
+            corner = np.asarray(cells[e])[:n_corner]
             fc = f[np.isin(f, corner)]
             fm = f[~np.isin(f, corner)]
             pc = pts[fc][:, :2]
@@ -536,6 +765,7 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
 
     G, X, ev_min, Ustar_rel, c1, c2 = _rm_ls_reduction(A6, H11, H12,
                                                        H22, S1, S2)
+    print_ustar(Ustar_rel)
     # the Eq. 63 recovery columns: V1bar = V1 + kernel c_a with the
     # kernel constants of the LS solution IN-PLANE only (w3 keeps its
     # gauge) -- msg_rm_plate Eq. 58; raw V1bar feeds Gamma_h (the tilt
@@ -554,10 +784,10 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
         # recovery.  TWO variants -- the source must MATCH the
         # recovery's Gamma_l columns: D-chain (detilted) feeds the
         # in-plane stress rows, T-chain (tilted) the 33/23/13 rows.
-        wA = np.asarray(blk["w_dof"])[0::3]
+        wy = np.asarray(blk["wy_dof"])[0::3]     # exact int(y3 N_a dV)
         V11bar, V12bar = out["V11bar"], out["V12bar"]
-        V11barD = _detilt_cols_2d(V11bar, node_y2, wA)
-        V12barD = _detilt_cols_2d(V12bar, node_y2, wA)
+        V11barD = _detilt_cols_2d(V11bar, node_y2, wy)
+        V12barD = _detilt_cols_2d(V12bar, node_y2, wy)
         AH1 = lambda M: D_hl1 @ M - D_hl1.T @ M          # noqa: E731
         AH2 = lambda M: D_hl2 @ M - D_hl2.T @ M          # noqa: E731
         D21D = AH1(V11barD) - D_l11 @ V0
@@ -581,12 +811,33 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
         # 332-352, ported term for term).  The KKT <w> = 0 rows absorb
         # the net face force exactly as the 1-D node constraint does,
         # so the pure-Neumann columns are well posed.
+        #
+        # DO NOT constrain this column's in-plane RESULTANTS.  It looks
+        # wrong that the recovered field carries membrane force the
+        # plate does not (Pagano N11 0 -> -0.143 the moment the load
+        # column switches on; -567.87 N/m against an applied 0.0014 on
+        # the rho=0.3 TPMS cell), but that content is LEGITIMATE: the
+        # column's e33 couples through C13/C23, so it carries a
+        # thickness-mean in-plane stress of order nu*q -- higher-order
+        # 3-D content a 2-D plate model cannot represent and its
+        # resultants therefore cannot see.  Measured -1893 Pa mean
+        # against nu*q = 2384 Pa: the right order.
+        # Tried 2026-09-01 and REVERTED: adding the six D_he resultant
+        # functionals as KKT rows drives N and M to zero, but the
+        # multipliers' reactions are distributed body forces in the
+        # shape of those functionals, which is not an admissible load --
+        # it destroyed sigma33 (the elasticity cubic 0 -> -q became
+        # +-0.095 noise, RMS 0.579 against a 1.5e-14 anchor,
+        # test_sigma33_pressure_cubic).  The moment identity is
+        # different and IS enforceable, because M is a resultant the
+        # 2-D model genuinely carries.
         V1L = solve_constrained(np.asarray(f_faces, float))
         V1Lt, V1Lb = V1L[:, 0], V1L[:, 1]
 
         def v2l(vl):
             """the five second-order load columns of one face
-            (q,1 q,2 q,11 q,12 q,22 drivers) -- msg_rm_plate v2l"""
+            (q,1 q,2 q,11 q,12 q,22 drivers) -- msg_rm_plate v2l.
+            Resultant-neutral for the same reason as V1L."""
             return solve_constrained(np.stack(
                 [(D_hl1 @ vl - D_hl1.T @ vl),
                  (D_hl2 @ vl - D_hl2.T @ vl),
@@ -596,6 +847,41 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
 
         out["V1Lt"], out["V2Lt"] = V1Lt, v2l(V1Lt)
         out["V1Lb"], out["V2Lb"] = V1Lb, v2l(V1Lb)
+        # L itself (Yu 2003, the line after Eq. 28:
+        #   L = S+^T s - S-^T b - <S^T phi>), exported so the Eq. 47
+        # load-related term
+        #   F = V0^T L - 1/2 (D1^T V1L,1 + V11^T L,1
+        #                     + D2^T V1L,2 + V12^T L,2)
+        # can be formed WITHOUT a dehomogenization run.  For a load that
+        # does not vary in plane -- the usual uniform pressure -- every
+        # bracketed term carries L,a or V1L,a and vanishes, leaving the
+        # single product F = V0^T L, with P = V1L^T L (Eq. 47).
+        # SIGN: as built above these columns are the NEGATIVE of the
+        # physical load (solve_constrained negates its rhs internally).
+        out["L_faces"] = np.asarray(f_faces)
+        # ... and the SG-level half of Eq. 47 itself.  F depends on the
+        # station's pressure, which is not an SG property, but V0^T L is
+        # -- so store it per UNIT face pressure and let the caller scale:
+        #     F = q_top * F_unit[:, 0] + q_bot * F_unit[:, 1]
+        # (sg_dehom.load_column_F does exactly that; f_faces is already
+        # /omega, so this IS per unit width -- no omega factor, fixed
+        # 2026-09-08).  Rows are the six
+        # conjugate slots [N11 N22 N12 M11 M22 M12], columns the two faces.
+        out["F_unit"] = np.asarray(V0).T @ np.asarray(f_faces)
+        # ... and the two GRADIENT blocks of Eq. 47, for a load that DOES
+        # vary in plane.  Write L(x) = q(x) L_u and V1L(x) = q(x) V1L_u
+        # (linear in the load), so L,a = q,a L_u and V1L,a = q,a V1L_u,
+        # and the bracket of Eq. 47 becomes
+        #     1/2 [ q,1 (D1^T V1L_u + V11^T L_u) + q,2 (D2^T V1L_u + V12^T L_u) ]
+        # with D1, D2 the Eq. 43-44 blocks (D1bar, D2bar above -- the
+        # right-hand sides of the V11/V12 solves).  Both blocks are SG
+        # properties, stored per unit face pressure like F_unit:
+        #     F = q F_unit - 1/2 (q,1 G1_unit + q,2 G2_unit)
+        # per face, summed over faces (per unit width, no omega factor).
+        # The station supplies q, q,1, q,2.
+        Lf = np.asarray(f_faces)
+        out["G1_unit"] = np.asarray(D1bar).T @ V1L + np.asarray(V11).T @ Lf
+        out["G2_unit"] = np.asarray(D2bar).T @ V1L + np.asarray(V12).T @ Lf
     return out
 
 
@@ -834,20 +1120,31 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
 
 
 def _to_basix_order(cells, n_sg, nn):
-    """gmsh -> basix order for quad4, hex8 and tet10; tri3, tet4 and the
-    interval degrees coincide (the interval only because sc_to_yaml swaps
-    the raw .sc 5-node order [end,end,25%,75%,50%] at read time).
+    """gmsh -> basix order for quad4, hex8, tet10, tri6 and quad9; tri3,
+    tet4 and the interval degrees coincide (the interval only because
+    sc_to_yaml swaps the raw .sc 5-node order [end,end,25%,75%,50%] at
+    read time).
 
     tet10: gmsh lists the 6 midsides on edges (12, 23, 13, 14, 34, 24)
     after the 4 corners; basix tetrahedron-P2 orders its edge DOFs
     (34, 24, 23, 14, 13, 12) -- the permutation below.  Without it det J
     changes sign inside every element and nothing raises.
 
+    tri6: gmsh midsides (12, 23, 13); basix triangle edges are
+    (23, 13, 12) -- vertices first either way.  quad9: gmsh corners
+    CYCLIC + midsides (12, 23, 34, 41) + center; basix quadrilateral is
+    TENSOR vertex order (the quad4 swap) with edges (v0v1, v0v2, v1v3,
+    v2v3) = gmsh mids (12, 41, 23, 34), interior last.
+
     In:  cells (E, nn) connectivity; n_sg SG dimension; nn nodes/elem
     Out: (E, nn) reordered connectivity (unchanged unless quad4/hex8/
-         tet10)."""
+         tet10/tri6/quad9)."""
     if n_sg == 2 and nn == 4:
         return cells[:, jnp.array([0, 1, 3, 2])]
+    if n_sg == 2 and nn == 6:
+        return cells[:, jnp.array([0, 1, 2, 4, 5, 3])]
+    if n_sg == 2 and nn == 9:
+        return cells[:, jnp.array([0, 1, 3, 2, 4, 7, 5, 6, 8])]
     if n_sg == 3 and nn == 8:
         return cells[:, jnp.array([0, 1, 3, 2, 4, 5, 7, 6])]
     if n_sg == 3 and nn == 10:
@@ -1446,6 +1743,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             node_y2[red_of] = thick
             ftol = 1e-6 * float(max(np.ptp(pts2[:, k])
                                     for k in range(n_sg)))
+            _assert_thickness_axis_free(pts2, red_of, n_sg, ftol)
             f_faces = np.zeros((n_unique, 2))
             # SIGNS: solve_constrained negates its rhs internally, so
             # the stored columns are the NEGATIVE of the physical load
@@ -1464,10 +1762,23 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                         wgt = np.ones(len(nid))     # the face is a node
                     else:
                         nid = nid[np.argsort(pts2[nid, 0])]
-                        seg = np.diff(pts2[nid, 0])
-                        wgt = np.zeros(len(nid))
-                        wgt[:-1] += 0.5 * seg
-                        wgt[1:] += 0.5 * seg
+                        if nn[0] in (6, 9) and len(nid) >= 3 \
+                                and len(nid) % 2 == 1:
+                            # quadratic edge chain corner-mid-corner...:
+                            # the P2-consistent (Simpson) load, corners
+                            # L/6 + L/6, midside 2L/3 -- the 2-D analog
+                            # of the tet10 face rule
+                            Le = (pts2[nid[2::2], 0]
+                                  - pts2[nid[:-2:2], 0])
+                            wgt = np.zeros(len(nid))
+                            wgt[0::2][:-1] += Le / 6.0
+                            wgt[0::2][1:] += Le / 6.0
+                            wgt[1::2] += 2.0 * Le / 3.0
+                        else:
+                            seg = np.diff(pts2[nid, 0])
+                            wgt = np.zeros(len(nid))
+                            wgt[:-1] += 0.5 * seg
+                            wgt[1:] += 0.5 * seg
                 np.add.at(f_faces[:, col], 3 * red_of[nid] + 2,
                           sgn * wgt / float(omega))
         if not mixed:
@@ -1518,7 +1829,9 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         # second-order Eq. 64 chains, when the SG shape supports them
         # (2-D, single batch)
         for k in ("V1Lt", "V2Lt", "V1Lb", "V2Lb", "V11barD", "V12barD",
-                  "V21", "V22", "V23", "V21t", "V22t", "V23t"):
+                  "V21", "V22", "V23", "V21t", "V22t", "V23t",
+                  "L_faces", "F_unit", "G1_unit", "G2_unit", "V11",
+                  "V12"):
             if k in lad:
                 r[k] = lad[k]
         # optional tau reaction of the load columns -- see the q_reaction
@@ -1538,100 +1851,16 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             # HC_pm45 finding).  Heterogeneity is read off the cell
             # itself: material fill fraction of the bounding box < 1.
             q_reaction = "uniform"
-            if f_faces is not None:
-                Je_ = np.einsum("end,qnp->eqdp", np.asarray(x_end),
-                                np.asarray(dphi_dxi_qnp))
-                dJ_ = (np.abs(Je_[..., 0, 0]) if n_sg == 1
-                       else np.abs(np.linalg.det(Je_)))
-                vol_ = float((dJ_ @ np.asarray(W_q)).sum())
-                hsg = float(thick.max() - thick.min())
-                fill = vol_ / (float(omega) * hsg)
-                if fill < 0.999:
-                    q_reaction = "tau"
-                print("q_reaction auto: fill fraction %.3f -> %s"
-                      " reaction (say q_reaction: uniform|tau in the"
-                      " .ff to override)" % (fill, q_reaction))
         q_reaction = str(q_reaction).strip().lower()
-        if q_reaction not in ("uniform", "tau"):
-            raise ValueError("q_reaction must be 'uniform' (the <w> = 0"
-                             " KKT reaction) or 'tau' (react along the"
-                             " cell's shear path), got %r" % q_reaction)
+        if q_reaction == "tau":
+            raise ValueError(
+                "q_reaction: tau was REMOVED (2026-08-30) -- the"
+                " formulation route is the Yu2003 Eq. (35)"
+                " multiplier (uniform), the only mode")
+        if q_reaction != "uniform":
+            raise ValueError("q_reaction must be uniform, got %r"
+                             % q_reaction)
         r["q_reaction"] = q_reaction
-        if (q_reaction == "tau" and f_faces is not None
-                and lad.get("V1Lt") is not None):
-            from .sg_dehom import _v2_batch
-            dE1u = np.linalg.solve(np.asarray(r["C_eff"], float),
-                                   np.array([0.0, 0, 0, 1.0, 0, 0]))
-            _, dSig = _v2_batch(periodic_cells_en,
-                                jnp.asarray(lad["V0"]),
-                                jnp.asarray(lad["V11bar"]),
-                                jnp.asarray(lad["V12bar"]),
-                                x_end, C_ess, dphi_dxi_qnp, phi_qn,
-                                jnp.asarray(dE1u), jnp.zeros(6), n_sg)
-            tau_e = np.asarray(dSig).mean(axis=1)[:, 4]      # sigma_xz
-            if n_sg == 3:
-                # a 3-D cell spreads the face load along BOTH in-plane
-                # directions: react along the SYMMETRIC shear path,
-                # (sigma_xz under unit Q1 + sigma_yz under unit Q2)/2
-                # (each integrates to 1); the 2-D SG keeps the x-only
-                # path it was validated with
-                dE2u = np.linalg.solve(
-                    np.asarray(r["C_eff"], float),
-                    np.array([0.0, 0, 0, 0, 1.0, 0]))
-                _, dSig2 = _v2_batch(periodic_cells_en,
-                                     jnp.asarray(lad["V0"]),
-                                     jnp.asarray(lad["V11bar"]),
-                                     jnp.asarray(lad["V12bar"]),
-                                     x_end, C_ess, dphi_dxi_qnp,
-                                     phi_qn, jnp.zeros(6),
-                                     jnp.asarray(dE2u), n_sg)
-                tau_e = 0.5 * (tau_e
-                               + np.asarray(dSig2).mean(axis=1)[:, 3])
-            if n_sg == 2 and nn[0] == 4:
-                # the original quad4 shoelace route, kept verbatim so
-                # existing 2-D results stay digit-identical
-                cyc = np.asarray(cells, dtype=np.int64)[:, [0, 1, 3, 2]]
-                xq, yq = pts2[cyc][:, :, 0], pts2[cyc][:, :, 1]
-                area_e = 0.5 * np.abs(
-                    (xq * np.roll(yq, -1, axis=1)
-                     - np.roll(xq, -1, axis=1) * yq).sum(axis=1))
-                scat = cyc
-            else:
-                # any other single-batch SG: the element measure from
-                # the quadrature itself (|det J| . W), the same measure
-                # the assembly integrates with
-                Je = np.einsum("end,qnp->eqdp", np.asarray(x_end),
-                               np.asarray(dphi_dxi_qnp))
-                if n_sg == 1:
-                    dJ = np.abs(Je[..., 0, 0])
-                else:
-                    dJ = np.abs(np.linalg.det(Je))
-                area_e = dJ @ np.asarray(W_q)
-                scat = np.asarray(cells, dtype=np.int64)
-            I_tau = float((tau_e * area_e).sum() / float(omega))
-            tau_w = np.zeros(n_unique // 3)
-            np.add.at(tau_w, red_of[scat.ravel()],
-                      np.repeat(tau_e * area_e / scat.shape[1],
-                                scat.shape[1]))
-            fv = f_faces.copy()
-            for col in (0, 1):
-                fv[2::3, col] -= (fv[2::3, col].sum()
-                                  * tau_w / tau_w.sum())
-            lad_q = plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi,
-                                       C_ess, periodic_cells_en,
-                                       n_unique, n_sg, float(omega),
-                                       f_faces=fv, node_y2=node_y2,
-                                       amg_ctx=_amg_ctx)
-            for k in ("V1Lt", "V2Lt", "V1Lb", "V2Lb"):
-                r[k] = lad_q[k]
-            print("q_reaction: tau -- load columns re-reacted along the"
-                  " cell's shear path (integral sigma_xz under unit Q1"
-                  " = %.6f, target 1)" % I_tau)
-        elif q_reaction == "tau":
-            print("note: q_reaction: tau needs a single-batch plate SG"
-                  " with the load ladder (mixed SGs do not carry it"
-                  " yet) -- keeping the uniform reaction")
-            r["q_reaction"] = "uniform"
         r["ABDG"] = None
         if lad["G_msg"] is not None:
             ABDG = np.zeros((8, 8))
