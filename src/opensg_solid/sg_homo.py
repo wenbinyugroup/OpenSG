@@ -319,20 +319,28 @@ def _rm_ls_reduction(A6, H11, H12, H22, S1, S2):
     # test_g_iso_nu03_converged). The equal weighting is what Yu's Eqs.
     # (57)-(61) minimize -- do not "fix" it.
 
-    def blocks(X, c1, c2):
-        Bs = H11 + AD1 @ X @ AD1.T + c1.T @ S1 + S1.T @ c1
-        Cs = H12 + AD1 @ X @ AD2.T + c1.T @ S2 + S1.T @ c2
-        Ds = H22 + AD2 @ X @ AD2.T + c2.T @ S2 + S2.T @ c2
+    def blocks(X, c1, c2, with_H=True):
+        h11, h12, h22 = (H11, H12, H22) if with_H else (0.0, 0.0, 0.0)
+        Bs = h11 + AD1 @ X @ AD1.T + c1.T @ S1 + S1.T @ c1
+        Cs = h12 + AD1 @ X @ AD2.T + c1.T @ S2 + S1.T @ c2
+        Ds = h22 + AD2 @ X @ AD2.T + c2.T @ S2 + S2.T @ c2
         return np.block([[Bs, Cs], [Cs.T, Ds]])
 
-    M0 = blocks(np.zeros((2, 2)), np.zeros((2, 6)), np.zeros((2, 6)))
-    b0 = -M0.ravel()
+    # The design columns are the LINEAR part of blocks(), formed WITHOUT
+    # H (2026-09-08).  Forming them as blocks(unit) - blocks(0) cancels
+    # H (~ L^3..L^5) against c-columns of size |S| (~ L..L^2); that
+    # round-off, eps*|H|/|S|, grows with the SG size and lifts the EXACT
+    # null direction of the c's (c_a -> c_a + alpha J S_a, J
+    # antisymmetric, invisible to the symmetrised objective) above
+    # _LS_RCOND -- 9.5e-17 at mm, 4.3e-8 for the same SG x100 -- after
+    # which the min-norm solve puts ~1e16 into c1/c2 and ~1 % into X/G.
+    b0 = -H_tt.ravel()
     cols = []
     for j in range(27):
         pj = np.zeros(27); pj[j] = 1.0
         Xj = np.array([[pj[0], pj[1]], [pj[1], pj[2]]])
         cols.append(blocks(Xj, pj[3:15].reshape(2, 6),
-                           pj[15:27].reshape(2, 6)).ravel() + b0)
+                           pj[15:27].reshape(2, 6), with_H=False).ravel())
     Amat = np.stack(cols, axis=1)
     cs = np.linalg.norm(Amat, axis=0)
     cs = np.where(cs == 0, 1.0, cs)
@@ -794,10 +802,18 @@ def plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
         D22D = (AH1(V12barD) + AH2(V11barD)
                 - (D_l12 @ V0 + D_l12.T @ V0))
         D23D = AH2(V12barD) - D_l22 @ V0
-        D21T = AH1(V11bar) - D_l11 @ V0
-        D22T = (AH1(V12bar) + AH2(V11bar)
+        # T-chain sourced from the ORIGINAL first-order warping V1 (Yu,
+        # text under Eq. 64: "obtained by taking the original first-order
+        # warping V1"), 2026-09-08.  It used to take V1bar: D_hla @ kernel
+        # equals a column of D_he, so the kernel constants c_a entered
+        # V2t as the V0-shaped response to a uniform membrane strain --
+        # gauge-dependent (the U* least squares fixes c only up to an
+        # exact null direction and an equal-weight convention) and not
+        # scale-covariant.  See dehom_fields.
+        D21T = AH1(V11) - D_l11 @ V0
+        D22T = (AH1(V12) + AH2(V11)
                 - (D_l12 @ V0 + D_l12.T @ V0))
-        D23T = AH2(V12bar) - D_l22 @ V0
+        D23T = AH2(V12) - D_l22 @ V0
         V2 = solve_constrained(np.concatenate(
             [D21D, D22D, D23D, D21T, D22T, D23T], axis=1))
         out["V11barD"], out["V12barD"] = V11barD, V12barD

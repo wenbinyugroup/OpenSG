@@ -768,14 +768,24 @@ def dehom_fields(r: Dict[str, Any],
         Gam, Sig = np.asarray(Gam), np.asarray(Sig)
         if second:
             # Eq. 50 is now applied to the DRIVERS above, so the
-            # detilted columns must NOT be used as well -- the RAW
-            # V1bar/V2 bank feeds every row (the tilt/detilt row split
-            # collapses).  Passing the raw columns in both slots keeps
-            # the kernel unchanged.
+            # detilted columns must NOT be used as well -- ONE bank feeds
+            # every row (the tilt/detilt row split collapses).  Passing
+            # the same columns in both slots keeps the kernel unchanged.
+            # The bank is the ORIGINAL V1 (2026-09-08), not V1bar: the
+            # kernel constants c_a of V1bar = V1 + kernel c_a are
+            # invisible to Gamma_h (Eq. 63 path) but the Eq. 66 Gamma_l
+            # VALUE terms turn c_a . eps,ab into a uniform membrane
+            # strain, i.e. the classical recovery of a net resultant
+            # N = A6 de the plate solution does not carry.  c_a is fixed
+            # by the U* least squares only up to an exact null direction
+            # and its equal-weight convention, so that term is gauge-
+            # dependent and breaks exact similarity (x100 SG: max|sigma|
+            # ratios 1e5..1e11 instead of 1).  V2t is sourced from V1
+            # for the same reason (sg_homo.plate_shear_ladder).
             dGam, dSig = _v266_batch(
                 cells_b, jnp.asarray(r["V0_ladder"]),
-                jnp.asarray(r["V11bar"]), jnp.asarray(r["V12bar"]),
-                jnp.asarray(r["V11bar"]), jnp.asarray(r["V12bar"]),
+                jnp.asarray(r["V11"]), jnp.asarray(r["V12"]),
+                jnp.asarray(r["V11"]), jnp.asarray(r["V12"]),
                 jnp.asarray(r["V21t"]), jnp.asarray(r["V22t"]),
                 jnp.asarray(r["V23t"]), jnp.asarray(r["V21t"]),
                 jnp.asarray(r["V22t"]), jnp.asarray(r["V23t"]),
