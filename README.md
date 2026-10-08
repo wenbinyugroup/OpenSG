@@ -12,7 +12,7 @@ OpenSG is the multiscale structural-mechanics capability of `fea-in-jax`, built 
 
 ### Installing OpenSG
 
-Two lines of OpenSG live in one repository: this JAX line on `main` (tags `v2.0.x`) and the FEniCS-based OpenSG 1.0 on the branch `fenics` (tag `v1.0.0`). Pick a version by its tag.
+Two lines of OpenSG live in one repository: this JAX line on `main` (package `opensg` 2.x: tags `v2.0.0`, `v2.1.0`, ..., every future OpenSG version) and the FEniCSx-based OpenSG on `opensg/fenicsx/v1` (OpenSG 1.0, package `opensg` 1.0.0, tag `v1.0.0`, frozen) and `opensg/fenicsx/v1.2` (its later code). The CompositesAI material is developed on `opensg/compositesai` and merged into `main` before each release. Pick a version by its tag.
 
 OpenSG needs one conda-packaged dependency block (the FEniCSx `basix` basis and quadrature stack) on top of the JAX stack. The repository ships an `environment.yml` that installs everything, including the repository itself in editable mode:
 
