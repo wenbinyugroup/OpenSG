@@ -44,7 +44,10 @@ output-folder flag -- `cd` to where you want the records and run it there.
   airfoil contour in the blade yaml IS the outer mold line, so the shell
   sits on the geometry the file states with the laminate hanging inward.
   Use `--center` when matching a 2-D solid / VABS section.  The surface
-  used is named in the `.out` banner.
+  used is named in the `.out` banner.  The same flag exists on the yaml
+  routes (`opensg <shell.yaml> --center`) and on `windio_st` /
+  `gen_windio_cs`; on a yaml it only selects the laminate law (the contour
+  is wherever the yaml put it), here it also places the generated contour.
 - `--xml` -- ALSO write the PreVABS XML byproduct per station
   (`{tag}.xml` + `{tag}.dat` + `materials.xml` under `xml/<tag>/` **in the
   blade yaml's own directory**) -- the cross-check input for the

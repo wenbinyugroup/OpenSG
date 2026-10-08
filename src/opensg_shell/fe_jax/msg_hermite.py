@@ -294,19 +294,19 @@ def solve_tw_from_yaml(yaml_path, reference="OML", frac=None):
     ``ABD_elems`` (E,6,6), ``layup_per_elem`` (E,), ``layup_db``,
     ``material_db``, ``elements`` (1-based connectivity), ``n_primal``.
 
-    ``reference`` : "OML" (default — YAML nodes are the outer mold line),
-    "CENTROID"/"MID" (offset inward by half the laminate thickness to the
-    material mid-surface — the most accurate reference; OML and IML bracket it),
-    or "IML" (offset by the full thickness to the inner mold line).  The offset
-    is along the material e3 and the plate ABD is reference-shifted by the same
-    amount (e3 kept inward), reducing the spar-cap/web overlap the OML
-    double-counts at junctions.
+    ``reference`` / ``frac`` name the laminate reference OF THE CONTOUR THE YAML
+    ALREADY DESCRIBES -- the same run-time rule as the RM ring route
+    (opensg_shell.sg_reference): "OML" / frac 0 (default) = the nodes are the
+    outer mold line and the laminate stacks inward; "MID"/"CENTROID" / frac 0.5
+    = the nodes are the laminate mid-surface (a center-offset mesh, run with
+    --center); "IML" / frac 1.  The plate ABD is parallel-axis shifted by
+    frac x thickness (e3 kept inward).  The nodes are NEVER moved: where the
+    contour sits was decided when the yaml was generated.
     """
     import numpy as _np
     import jax.numpy as _jnp
     import pypardiso
-    from .msg_mesh import (load_yaml, read_mesh, mesh_curvature,
-                           offset_oml_to_iml, element_e3_from_yaml)
+    from .msg_mesh import load_yaml, read_mesh, mesh_curvature
     from .msg_materials import compute_ABD_matrix, shift_abd_reference
     from .msg_solver import (gauss_legendre_01, compute_element_geometry,
         solve_fluctuation_field, prepare_v1_rhs, finalize_v1_and_compute_deff)
@@ -337,12 +337,10 @@ def solve_tw_from_yaml(yaml_path, reference="OML", frac=None):
     ABD_dict = {ln: _abd(i) for ln, i in layup_db.items()}
 
     # Mesh = YAML connectivity verbatim (every element kept; webs included).
+    # The nodes stay where the yaml puts them: ``frac`` only references the
+    # plate ABD (shift above) to that contour, exactly like the RM ring route
+    # -- a center-offset mesh run at frac 0.5 is NOT offset a second time.
     nodes, cells, layup_per_elem = read_mesh(nodes_3d, elements, elem_to_layup)
-    if frac:
-        # offset inward along the material e3 (true OML->IML normal per element)
-        elem_e3 = element_e3_from_yaml(yaml_path)
-        nodes = offset_oml_to_iml(nodes, cells, layup_per_elem, layup_db,
-                                  elem_e3=elem_e3, frac=frac)
     k22 = _jnp.array(mesh_curvature(nodes, cells, elements, is_closed=False))
     ABD_elems = _jnp.stack([_jnp.array(ABD_dict[ln], dtype=_jnp.float64) for ln in layup_per_elem])
 
@@ -387,6 +385,7 @@ def solve_tw_from_yaml(yaml_path, reference="OML", frac=None):
         "layup_per_elem": list(layup_per_elem), "layup_db": layup_db,
         "material_db": material_db, "elements": elements, "n_primal": n_primal,
         "frac": frac,
+        "ref": {0.0: "oml", 0.5: "center", 1.0: "iml"}.get(float(frac), "frac=%g" % frac),
     }
 
 
@@ -395,8 +394,10 @@ def timoshenko_from_yaml(yaml_path, reference="OML", frac=None):
 
     The mesh is taken straight from the YAML connectivity (``read_mesh`` — no
     chaining), so all elements are kept and shear-webbed / multi-component
-    cross-sections are handled.  ``reference`` = "OML" (default) or "IML"
-    (inward-offset reference; see :func:`solve_tw_from_yaml`).
+    cross-sections are handled.  ``reference`` / ``frac`` name the laminate
+    reference of the contour the yaml already describes ("OML" default, "MID"
+    for a center-offset mesh); the nodes are never moved (see
+    :func:`solve_tw_from_yaml`).
 
     Returns
     -------

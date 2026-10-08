@@ -480,7 +480,9 @@ class Blade:
     center-reference section (an inward half-thickness offset of that
     geometry, for matching a 2-D solid / VABS model) is an SG-engine
     study: emit the station yaml with emit_shell_yaml(...,
-    reference="center") and run the opensg_shell engine on it.
+    reference="center") -- that moves the contour to the mid-surface --
+    and run the opensg_shell engine on it WITH --center (the engine's
+    laminate reference is a run-time choice; the yaml carries no key).
 
     In (constructor):
         path: str | None, blade yaml (windIO v1/v2 or pyNuMAD dialect);

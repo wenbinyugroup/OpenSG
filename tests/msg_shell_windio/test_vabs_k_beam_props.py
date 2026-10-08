@@ -60,7 +60,9 @@ def test_beam_props_vs_vabs(blade, tmp_path, r, kref, tol):
     cs = build_cross_section(blade, r, mesh_size=0.01)
     y = str(tmp_path / ("st_r%04d_shell.yaml" % round(r * 1000)))
     emit_shell_yaml(cs, y, reference="center")
-    P = beam_props(y, out_k=str(tmp_path / "st.K"))
+    # the contour was generated on the mid-surface, so the run must say so:
+    # the laminate reference is a run-time choice (never a yaml key)
+    P = beam_props(y, out_k=str(tmp_path / "st.K"), ref="center")
     kpath = os.path.join(WDIR, "vabs_K", kref)
     Kv, Mv = read_k_file(kpath)
     C6, M6 = P["Timo"], P["Mass"]

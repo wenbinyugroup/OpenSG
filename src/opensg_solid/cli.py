@@ -3,8 +3,11 @@
     opensg_solid <sg.yaml>        homogenization (the default)
     opensg_solid <sg.yaml> D      dehomogenization: homogenize, then recover
     opensg_solid <sg.yaml> --mesh  the run above, AND force a redraw of
-                                  <base>_mesh.png (a flag, not an
-                                  analysis: combines with H | D)
+                                  <base>_mesh.png + emit the gmsh-2.2
+                                  twin <base>.msh (mat_id as physical
+                                  tags; an existing .msh is kept, never
+                                  clobbered).  A flag, not an analysis:
+                                  combines with H | D
     opensg_solid <sg.yaml> --solver F [N]  the linear solver of the
                                   fluctuation solves: family direct |
                                   iter (+ backend number), or a name
@@ -229,7 +232,7 @@ def main(argv=None):
                                if len(_ap) > 2 else "/".join(_ap)))
     # engine, SG space and element type on ONE line; the mesh line below
     # then carries the dofs alone
-    _eng, _dim, _otag = resolve_msg(path), node_span_dim(path), ""
+    _eng, _dim, _otag, _d = resolve_msg(path), node_span_dim(path), "", None
     try:
         # mesh size up front (parse is npz-sidecar cached, so this costs
         # nothing the run would not pay later); guarded -- a print must
@@ -270,6 +273,19 @@ def main(argv=None):
     if force_superlu:
         from . import sg_assembly as _sga
         _sga.DIRECT_BACKEND = "superlu"
+    if want_mesh and _d is not None:
+        # --mesh also GUARANTEES the gmsh-2.2 twin <base>.msh (mat_id as
+        # physical/elementary tags -- what the refinement chain and
+        # `opensg msh_to_yaml` consume).  An existing .msh is KEPT: a
+        # yaml is usually derived FROM a source mesh; never clobber it.
+        _msh = os.path.splitext(path)[0] + ".msh"
+        if not os.path.exists(_msh):      # keeping one is the silent case
+            try:
+                from .io.sc_to_yaml import write_msh as _write_msh
+                _write_msh(_d, _msh)
+                print(" mesh      : wrote %s" % os.path.basename(_msh))
+            except Exception as _e:
+                print(" mesh      : .msh export failed (%s)" % _e)
     # the solver line is printed by sg_homo once the family is RESOLVED
     # (an explicit --solver and an auto pick print identically)
     print("")
@@ -284,16 +300,6 @@ def main(argv=None):
     q_react = None if state is None else state.get("q_reaction")
     has_d2 = state is not None and any(
         state.get(k) is not None for k in ("dE11", "dE12", "dE22"))
-    if has_d2 and q_react == "tau":
-        # the forbidden pairing (2026-08-25 audit): the tau-reacted
-        # pressure column already carries the moment-gradient (shear-
-        # outflow) transverse content the Eq. 64-66 d2eps chains add,
-        # so running both double-counts it.  Respect the explicit
-        # override, but say so.
-        print("WARNING: q_reaction: tau combined with d2eps_* drivers"
-              " double-counts the moment-gradient transverse content"
-              " (sigma_i3/sigma_33 overshoot) -- drop the d2eps lines"
-              " (tau subsumes them) or use uniform")
     r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)),
                       q_reaction=q_react,
                       solver=solver or "auto",
@@ -311,9 +317,15 @@ def main(argv=None):
         from .sg_dehom import dehom_fields, export_gauss, gauss_coords
 
         # state was already read above (its q_reaction fed the ladder)
-        if state is not None:
+        if state is not None and state.get("EPS") is not None:
+            # 0: strain identifier -- consumed DIRECTLY, the law never
+            # enters the loading side
+            eps = np.asarray(state["EPS"], float)
+            print("macro state: 0: (global strain, used directly)")
+        elif state is not None:
             eps = np.linalg.solve(np.asarray(r["C_eff"], float),
                                   state["FF"])
+            print("macro state: 1:/FF (force, inverted through C_eff)")
         else:
             eps = hdr.get("epsilon_bar")
             if eps is None or len(eps) != 6:
@@ -363,29 +375,29 @@ def main(argv=None):
                       " (needs a refined single-batch plate run)"
                       " -- second-order recovery skipped"
                       % os.path.basename(base))
-            elif (r.get("q_reaction") == "tau"
-                  and (state.get("q_reaction") or "") != "tau"):
-                # AUTO picked tau (in-plane-heterogeneous cell): the
-                # tau-reacted load column subsumes the moment-gradient
-                # content, so the d2eps chains would double-count it
-                # (the HC_pm45-validated mode is tau WITHOUT d2).  The
-                # Yu d2 composition remains available by forcing
-                # q_reaction: uniform in the .ff.
-                print("d2eps drivers DROPPED: the auto-selected tau"
-                      " reaction already carries the moment-gradient"
-                      " content on this heterogeneous cell (HC_pm45"
-                      " mode; tau + d2eps double-counts -- 2026-08-25"
-                      " audit).  Force q_reaction: uniform in the .ff"
-                      " to run the Yu d2 composition instead")
             else:
                 dE11 = state.get("dE11")
                 dE12 = state.get("dE12")
                 dE22 = state.get("dE22")
                 print("V2 second order: d2eps drive the Eq. 64-66"
-                      " two-chain recovery (tilt/detilt row split)")
+                      " recovery (Yu Eq. 50 on the drivers; NO detilt)")
+        # the higher-derivative families, keyed by their multi-index --
+        # collected only if the .ff carries them (see read_ff_state)
+        dEhi = {}
+        if state is not None:
+            for _k in ("111", "112", "122", "222",
+                       "1111", "1112", "1122", "1222", "2222"):
+                _v = state.get("dE" + _k)
+                if _v is not None:
+                    dEhi[_k] = _v
+            if dEhi:
+                print("Eq. 50 driver conversion: %d higher-derivative"
+                      " families present (%s)"
+                      % (len(dEhi), " ".join(sorted(dEhi))))
         Gam, Sig, U = dehom_fields(r, eps, dE1=dE1, dE2=dE2, Q=Qff,
                                    qt6=qt6, qb6=qb6,
-                                   dE11=dE11, dE12=dE12, dE22=dE22)
+                                   dE11=dE11, dE12=dE12, dE22=dE22,
+                                   dEhi=(dEhi or None))
         # recovery computes in the SG-global frame (angle baked into C);
         # the default output rotates each element into its PLY frame
         if frame == "material":
@@ -498,8 +510,24 @@ def read_ff_state(path):
         d = _yaml.safe_load(open(path))
     except _yaml.YAMLError:
         return None
-    if not isinstance(d, dict) or "FF" not in d:
+    # the macro state may be strain (key 0, PREFERRED -- consumed
+    # directly, no C_eff^-1), force (key 1, or the legacy FF:), or both
+    if not isinstance(d, dict) or not any(
+            k in d for k in (0, 1, "FF")):
         return None
+    if 0 not in d and 1 not in d and "FF" in d:
+        # legacy force-only file: upgrade it on the spot so the 0:/1:
+        # identifiers become the on-disk convention everywhere
+        try:
+            with open(path, "a") as fh:
+                fh.write("# upgraded: 1: is the force identifier"
+                         " (== FF)\n")
+                fh.write("1: [%s]\n" % ", ".join(
+                    "%.10g" % float(v) for v in d["FF"]))
+            print("note: %s upgraded in place (legacy FF: -> 1:)"
+                  % os.path.basename(path))
+        except OSError:
+            pass
     u = np.asarray(d.get("u", [0.0, 0.0, 0.0]), float).reshape(3)
     th = np.asarray(d.get("theta", [0.0, 0.0, 0.0]), float).reshape(3)
     if d.get("C") is not None:
@@ -510,13 +538,38 @@ def read_ff_state(path):
                                   [-th[1], th[0], 0.0]])
     opt = lambda k, n: (None if d.get(k) is None else       # noqa: E731
                         np.asarray(d[k], float).reshape(n))
+    ff = d.get(1, d.get("FF"))
     return {"u": u, "theta": th, "C": C,
-            "FF": np.asarray(d["FF"], float).reshape(6),
+            # the RAW `C:` when the file states one, so a consumer that
+            # needs a different frame convention (io.ff_to_glb wants the
+            # SCManual transpose) can tell "the user gave me this frame"
+            # from "I synthesised it from theta" -- None means synthesised
+            "C_explicit": (None if d.get("C") is None else C),
+            "EPS": opt(0, 6),
+            "FF": (None if ff is None
+                   else np.asarray(ff, float).reshape(6)),
             "dE1": opt("deps_dx1", 6), "dE2": opt("deps_dx2", 6),
             "Q": opt("Q", 2),
             "qt6": opt("qt6", 6), "qb6": opt("qb6", 6),
             "dE11": opt("d2eps_dx1dx1", 6),
             "dE12": opt("d2eps_dx1dx2", 6),
             "dE22": opt("d2eps_dx2dx2", 6),
+            # THIRD/FOURTH derivatives, OPTIONAL.  Yu's Eqs. 63/64/66
+            # are written in the CLASSICAL measure throughout, so the
+            # DERIVATIVE drivers need the same Eq. 50 conversion the
+            # zeroth-order one gets: eps,a = R,a - D_b c,ba costs a
+            # third derivative of R, eps,ab = R,ab - D_b c,bab a fourth
+            # (c is itself built from second derivatives).  When these
+            # keys are absent the drivers keep their Reissner values and
+            # the run is bit-identical to before.
+            "dE111": opt("d3eps_dx1dx1dx1", 6),
+            "dE112": opt("d3eps_dx1dx1dx2", 6),
+            "dE122": opt("d3eps_dx1dx2dx2", 6),
+            "dE222": opt("d3eps_dx2dx2dx2", 6),
+            "dE1111": opt("d4eps_dx1dx1dx1dx1", 6),
+            "dE1112": opt("d4eps_dx1dx1dx1dx2", 6),
+            "dE1122": opt("d4eps_dx1dx1dx2dx2", 6),
+            "dE1222": opt("d4eps_dx1dx2dx2dx2", 6),
+            "dE2222": opt("d4eps_dx2dx2dx2dx2", 6),
             "q_reaction": (str(d["q_reaction"]).strip().lower()
                            if d.get("q_reaction") else None)}

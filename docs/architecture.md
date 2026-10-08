@@ -54,7 +54,7 @@ stress inside the SG.
 ```{mermaid}
 flowchart TD
     Y1["1-D shell yaml<br/>(nodes, elements, layups, materials)"] --> LR["sg_mesh.load_ring_ref<br/>contour arrays + ABD/G per section"]
-    LR --> MB["sg_materials._material_by_section<br/>ABD 6x6 (chosen reference) + G 2x2"]
+    LR --> MB["sg_materials._material_by_section<br/>ABD 6x6 at the run's reference (--center / ref=, default oml) + G 2x2"]
     MB --> GMSG["opensg_solid rm_plate_msg<br/>MSG (Yu-2002 LS) wall G"]
     LR --> K22["sg_assembly.compute_k22<br/>hoop curvature per edge"]
     GMSG --> RI["sg_homo.ring_indep<br/>6-DOF ring, drilling Lagrange, MITC g23"]

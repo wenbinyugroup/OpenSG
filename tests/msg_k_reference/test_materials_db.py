@@ -150,14 +150,16 @@ def test_cli_full_coverage_emits_filled_yaml(hex_msh, capsys):
     out = capsys.readouterr().out
     # the terse two-part shape: ONE transformation line + one mat line
     # per tag; the packaged default library path is NOT printed
-    assert "two_hex.msh -> two_hex.yaml   (hex8 linear;" in out
+    assert "two_hex.msh -> two_hex.yaml   (hex8;" in out
     assert "  mat 1 <- Al69" in out and "  mat 2 <- HC_ply:45" in out
     assert "library:" not in out and "NOT RUNNABLE" not in out
     yml = os.path.splitext(hex_msh)[0] + ".yaml"
     assert check_filled(yml) is None
-    hdr = read_yaml_header(yml)               # mesh_order must be TOLERATED
+    hdr = read_yaml_header(yml)
     assert hdr["n_model"] == 3 and hdr["refined"] == 0
-    assert hdr["mesh_order"] == "linear"
+    # the mesh grade is CONSOLE-ONLY now -- the yaml carries no order
+    # key (the solver reads the arity off the cells)
+    assert "mesh_order" not in hdr
     sg = read_opensg_yaml(yml)
     assert len(sg["nodes"]) == 12 and len(sg["cells"]) == 2
     angles = sorted(float(b.get("angle", 0.0))
@@ -206,14 +208,14 @@ def test_cli_p_refine_elevates_then_converts(tet_msh, capsys):
     # the chain rides INLINE on the one transformation line; the helper's
     # own progress prints stay silent on this path
     assert ("two_tet.msh -> two_tet_quad.msh -> two_tet_quad.yaml"
-            "   (tet10 quadratic; 14 nodes / 2 elements)") in out
+            "   (tet10; 14 nodes / 42 dofs)") in out
     assert "  mat 1 <- Al" in out
     assert "linear_msh_to_quad" not in out
     quad = os.path.splitext(tet_msh)[0] + "_quad.msh"
     yml = os.path.splitext(tet_msh)[0] + "_quad.yaml"
     assert os.path.exists(quad) and os.path.exists(yml)
     assert check_filled(yml) is None
-    assert read_yaml_header(yml)["mesh_order"] == "quadratic"
+    assert "mesh_order" not in read_yaml_header(yml)  # console-only
     sg = read_opensg_yaml(yml)
     # 2 tet10 cells; 5 corners + 9 unique edges = 14 nodes
     assert len(sg["cells"]) == 2 and len(sg["cells"][0]) == 10

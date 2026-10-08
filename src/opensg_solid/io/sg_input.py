@@ -268,18 +268,26 @@ NOT VALIDATED -- these RAISE rather than emit a guess
       this module's frames are in BEAM order (x1 axial first).  The two
       orderings cannot both be right.  write_sc refuses; use "bake"
       (exact, and read_sc reads it back) or "ignore".
-  `.sc` a nonzero density (or temperature).  The aux pair is
-      `T rho` in this repo's reader, but all four third-party decks write
-      `0 0`, which discriminates nothing; the decks here that DO carry a
-      nonzero one (square_tube.sc, four_case/*.sc) were written by this
-      module's own predecessor.  write_sc refuses unless the caller says
-      drop_density=True, which writes the `0 0` line every vendor deck
-      actually contains.  The `.sg` density is a different field and IS
-      validated (above).
-  `.sc` tet10.  All three 3-D decks here are tet4; the split layout
-      (corners 1-4, slots 5-6 zero, midsides 7-12) is this repo's own
-      sc_to_yaml convention read back by this repo.  _slots refuses.
   comments=True in EITHER dialect -- see the table above.
+
+VALIDATED SINCE (was refused above until 2026-09-07)
+  `.sc` a nonzero density or temperature: the aux pair IS `T rho` --
+      SCManual 8.2 ("T_i ... is the temperature, rho is the density")
+      and the `100 0.5   # temperature density` line of the three
+      AnalySwift-shipped micro{1,2,3}D.sc decks (copies under tests/
+      msg_k_reference/SwiftComp_examples/), both numbers nonzero.  Written
+      natively; drop_density=True still zeroes rho to reproduce the `0 0`
+      vendor decks.  See _guard_sc_aux.
+  `.sc` tet10: corners in slots 1-4, slot 5 = 0 (SCManual 8.2: "if the
+      fifth node is zero, it is a tetrahedral element"), the six midsides
+      in slots 6-11 on edges (12, 23, 13, 14, 24, 34) -- the layout
+      read_sc measured on the third-party BCC/CoreUC.sc and Plate_coarse.sc
+      (14,069/14,069 elements), and the one that a live SwiftComp 2.1 run
+      (2026-09-07, tests/msg_k_reference/SwiftComp_examples/tet10_gate/)
+      homogenizes to the exact one-material C and to OpenSG's own tet10
+      answer on a two-material cube, where the two rival layouts (GMSH
+      midside order in 6-11; the contiguous 1-10 fill) do not.  See
+      _slots.
 
 NOT VALIDATED, and currently emitted anyway -- documented, not guarded
   `.sg` orth 0 (`E nu`) and orth 2 (21 constants) material layouts: every
@@ -301,8 +309,8 @@ NOT VALIDATED, and currently emitted anyway -- documented, not guarded
 #   n_model, refined    the macro model (1 beam, 2 plate, 3 solid) and the
 #                       classical/shear-refined switch (.sc header)
 #   orientation         "bake" | "ignore" for write_sc ("points" refused)
-#   drop_density        write the vendor-evidenced `0 0` aux line instead
-#                       of refusing an unvalidated nonzero `.sc` density
+#   drop_density        zero a nonzero `.sc` density (the `0 0` aux line
+#                       the vendor decks carry) instead of writing it
 #   precision           decimals of the %e number format
 # working
 #   raw                 the yaml dict as loaded (CBaseLoader: all strings)
@@ -903,11 +911,20 @@ def _slots(conn, dim, width):
     slots 1-3 / 1-4 of 20) and all three 3-D decks (Sample_{1,2}.sc and
     preovios_try.sc, tet4 in slots 1-4 of 20).
 
-    The 10-node tetrahedron is REFUSED, because it is the one case that is
-    not a contiguous fill: the layout io.sc_to_yaml.read_sc decodes
-    (4 corners, slots 5-6 zero, the 6 midsides in slots 7-12) is this
-    repo's own convention read back by this repo, and no shipped deck
-    exercises it.  See NOT VALIDATED in the module docstring.
+    The 10-node tetrahedron is the one SPLIT record: corners in slots 1-4,
+    slot 5 = 0 (SCManual 8.2: "if the fifth node is zero, it is a
+    tetrahedral element"), the six midsides in slots 6-11 on edges
+    (12, 23, 13, 14, 24, 34), zeros to 20.  The yaml carries the GMSH
+    tet10 order (12, 23, 13, 14, 34, 24), so the last two midsides swap
+    here -- the inverse of the swap io.sc_to_yaml.read_sc applies.  That
+    layout is what read_sc measured on the third-party BCC/CoreUC.sc and
+    Plate_coarse.sc, and it is PINNED by a live SwiftComp 2.1 run
+    (2026-09-07, tests/msg_k_reference/SwiftComp_examples/tet10_gate/):
+    on a one-material tet10 cube it homogenizes to the exact C and reports
+    the deck's density back, on a two-material cube it matches OpenSG's
+    own tet10 solve, while the two rival records -- GMSH order in slots
+    6-11, and the contiguous 1-10 fill -- both die with "determinant of
+    Jacobian matrix less than 0" and a zero-byte `.k`.
 
     In:  conn list[int] 1-based; dim int; width int slots
     Out: list[int] of length `width`."""
@@ -916,19 +933,8 @@ def _slots(conn, dim, width):
         if n in (4, 8):
             row[:n] = conn
         elif n == 10:
-            raise NotImplementedError(
-                "a 10-node tetrahedron has no VALIDATED SwiftComp slot "
-                "layout here.  Every 3-D deck in this tree -- Sample_1.sc "
-                "and Sample_2.sc (the two SwiftComp demonstrably read, "
-                "their .sc.k sit beside them) and preovios_try.sc -- is "
-                "tet4 filling slots 1-4, so only the CONTIGUOUS fill is "
-                "evidenced.  The split layout sc_to_yaml.read_sc decodes "
-                "(corners 1-4, slots 5-6 zero, midsides 7-12) is this "
-                "repo's own convention read back by this repo, and a wrong "
-                "slot layout is silent -- the read is list-directed, so it "
-                "runs on into the next record and shears the mesh.  Write "
-                "the tet4 mesh, or pin the layout against a "
-                "SwiftComp-accepted tet10 deck first.")
+            row[:4] = conn[:4]
+            row[5:11] = conn[4:8] + [conn[9], conn[8]]
         else:
             raise ValueError(
                 "a 3-D SG element with %d nodes has no slot convention here"
@@ -1062,56 +1068,36 @@ def fold_angles(materials):
 
 
 def _guard_sc_aux(materials, temperature, drop_density):
-    """The `.sc` aux pair guard: refuse to write an unvalidated one.
+    """The `.sc` aux pair `T rho`: written as-is; drop_density zeroes rho.
 
     Every SwiftComp material block carries, per temperature, a two-number
-    line before the constants.  This repo reads it as `T rho`
-    (sc_to_yaml.read_sc), and this module writes it that way -- but that
-    ORDER is supported by nothing in the tree.  All four third-party decks
-    (RHC_SW_2UC_45.sc, Plate_1D_SG_2UC_45.sc and the two SwiftComp
-    demonstrably read, Sample_{1,2}.sc) write `0 0`, which cannot tell the
-    two orders apart; the decks here that DO carry a nonzero one
-    (square_tube.sc, four_case/*.sc) were written by this module's own
-    predecessor through this same convention, so they are circular.
+    line before the constants, and its ORDER is evidenced twice over --
+    which the four `0 0` vendor decks in examples/ (RHC_SW_2UC_45.sc,
+    Plate_1D_SG_2UC_45.sc, Sample_{1,2}.sc) could not do on their own:
+      SCManual 8.2 spells the block out as `mat_id isotropy ntemp`
+        followed by ntemp sets `T_i rho ...`, "where T_i, i = 1, ...,
+        ntemp is the temperature, rho is the density, and the rest are
+        material constants";
+      the three example decks AnalySwift ships beside SwiftComp.exe
+        (micro1D.sc, micro2D.sc, micro3D.sc -- copies with their origin
+        noted under tests/msg_k_reference/SwiftComp_examples/) each carry
+        the line `100 0.5   # temperature density`, BOTH numbers nonzero
+        and the order named in the vendor's own comment.
+    So the density goes in its slot and `temperature` in its, and this
+    repo's reader (sc_to_yaml.read_sc, `T rho`) agrees.  drop_density=True
+    still zeroes a nonzero density -- reported -- which is what reproduces
+    the vendor `0 0` decks field for field; an elastic run does not use it.
 
-    So: `0 0` is the only aux line this writer will emit unasked.  A
-    nonzero density raises unless the caller passes drop_density=True, in
-    which case the density is dropped (an elastic SwiftComp run does not
-    use it) and reported -- never guessed into a slot.  A nonzero
-    temperature has no such escape; pass 0.0.
-
-    The VABS `.sg` density is a DIFFERENT field with its own line and is
-    validated -- see _write_material_sg.
+    The VABS `.sg` density is a DIFFERENT field with its own line -- see
+    _write_material_sg.
 
     In:  materials {id: block}; temperature float; drop_density bool
     Out: ({id: block} with the densities dropped when asked,
          dropped list[int] -- the ids whose nonzero density was zeroed)."""
-    if float(temperature) != 0.0:
-        raise NotImplementedError(
-            "temperature=%r: the `.sc` material aux line is a PAIR and its "
-            "order is not validated in this tree -- every third-party deck "
-            "writes `0 0`, which cannot tell `T rho` from `rho T`.  Only "
-            "0.0 can be written without guessing." % (temperature,))
     hot = sorted(int(m) for m, b in materials.items()
                  if float(b.get("density", 0.0)) != 0.0)
-    if not hot:
+    if not hot or not drop_density:
         return materials, []
-    if not drop_density:
-        raise NotImplementedError(
-            "material(s) %s carry a nonzero density, and WHERE a density "
-            "goes in a `.sc` is not validated in this tree.  The aux line "
-            "is two numbers; this repo reads them as `T rho`, but all four "
-            "third-party decks write `0 0` -- which discriminates nothing "
-            "-- and the decks here with a nonzero one were written by this "
-            "writer's own predecessor, so they are circular evidence.  "
-            "Emitting the density in the wrong slot would set a "
-            "TEMPERATURE of %g and a density of 0 with nothing to flag it. "
-            " Pass drop_density=True to write the `0 0` line every vendor "
-            "deck actually contains (the stiffness is unaffected; an "
-            "elastic run does not use the density), or write the VABS "
-            "`.sg` dialect, whose density field IS validated against "
-            "PreVABS."
-            % (hot, float(materials[hot[0]]["density"])))
     out = {}
     for mid, blk in materials.items():
         if float(blk.get("density", 0.0)) != 0.0:
@@ -1170,9 +1156,10 @@ def _write_material_sc(f, mid, blk, temperature, fe):
     with the aux pair on the next line, BEFORE the constants) and the
     shape io.sc_to_yaml.read_sc parses back.
 
-    The PAIR's shape and position are validated; the ORDER of its two
-    numbers is not, so _guard_sc_aux has already ensured both are 0.0 by
-    the time this runs -- the `0 0` line every third-party deck contains.
+    The PAIR's shape, position AND order are validated: `T rho`, per
+    SCManual 8.2 and the `100 0.5   # temperature density` line of the
+    AnalySwift-shipped micro{1,2,3}D.sc decks -- see _guard_sc_aux, which
+    has already zeroed the density when drop_density asked for it.
 
     In:  f open file; mid int; blk canonical block; temperature float;
          fe str number format
@@ -1222,7 +1209,12 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
             every macro model carries (see THE SUBMODEL LINE in the module
             docstring; a 3-D macro model has the line but no meaning for
             the value, and both SwiftComp-accepted 3-D decks here write 0).
-            None takes the yaml header's `refined:`, defaulting to 0.
+            None takes the yaml header's `refined:`, defaulting to 0 --
+            and for the PLATE macro model a header `refined: 1` is
+            DOWNGRADED to 0 (the report's `forced_classical` = True): a
+            `.sc` plate deck is the classical Kirchhoff-Love one, see the
+            measured evidence at the downgrade in the body.  Pass
+            refined=1 explicitly to write the submodel-1 line anyway.
         analysis: int, the SwiftComp analysis code (0 = elastic).
         elem_flag: int, 0 = regular elements (the only kind implemented).
         temp_flag: int, 0 = uniform temperature.
@@ -1249,11 +1241,12 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
         frame_atol: float, the rounding that decides two frames are one.
         precision: int, decimals of the %e number format (15 significant
             digits is what SwiftComp reads).
-        drop_density: bool.  A nonzero material density is REFUSED by
-            default (the aux pair's order is unevidenced -- all four
-            third-party decks write `0 0`).  True writes that evidenced
-            `0 0` line instead of raising, losing only the density, which
-            an elastic run does not use.
+        drop_density: bool.  False (default) writes each material's
+            density in the aux pair's second slot -- `T rho`, the order
+            SCManual 8.2 and the AnalySwift-shipped micro{1,2,3}D.sc decks
+            fix (see _guard_sc_aux).  True zeroes it instead (reported in
+            `dropped_density`), the `0 0` line the vendor decks in
+            examples/ carry; an elastic run does not use the density.
         angle_mode: "layers" | "fold" -- what carries a material `angle:`.
             "layers" (default) is the NATIVE SCManual 8.2 spelling: the
             size line's nlayer /= 0, a `layer_id mate_id angle` table
@@ -1269,8 +1262,10 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
         comments: bool -- REFUSED when True, see the module docstring.
     Out:
         dict {path, dim, n_nodes, n_elems, n_mats, n_model, refined,
-        omega, omega_source, trans_flag, orientation, folded_angles,
-        dropped_density} -- what was actually written.  `omega_source` is
+        forced_classical, omega, omega_source, trans_flag, orientation,
+        folded_angles, dropped_density} -- what was actually written.
+        `forced_classical` is True when a header `refined: 1` was written
+        as the submodel-0 classical plate (see `refined`); `omega_source` is
         "header" | "measured" | "argument"; `folded_angles` lists the
         material ids whose `angle:` was folded into a pre-rotated type-2
         block (see fold_angles); `dropped_density` lists the ids whose
@@ -1308,8 +1303,37 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
             "VABS `.sg` dialect for a beam cross-section -- it is the "
             "beam format and it IS validated field for field -- or pin "
             "the beam header against a SwiftComp-accepted beam deck.")
-    refined = (int(sg.get("refined") or 0) if refined is None
-               else int(refined))
+    # A PLATE DECK IS THE CLASSICAL ONE unless the CALLER insists.  A yaml
+    # `refined: 1` header states the OpenSG macro model, and OpenSG's own
+    # RM stack is what serves it; the `.sc` written to cross-check it is
+    # the CLASSICAL Kirchhoff-Love plate, because that is all SwiftComp
+    # hands back here -- MEASURED twice in this tree, on both SG shapes:
+    #   (1) the HC 2-D SG (Final_pipeline/dehom_classical) -- a submodel-1
+    #       deck homogenized WITHOUT complaint, but its `.sc.k` came back
+    #       with the 6x6 ABD and the in-plane/flexural engineering
+    #       constants ALONE, no transverse-shear Gij block (SCManual 4.3
+    #       Eqs. (15)-(17) say an RM model must carry one), and the
+    #       dehomogenization that followed left every local-field output
+    #       (.u .sn .sg .snm .sgm) at ZERO BYTES with no error text in the
+    #       .ech;
+    #   (2) examples/OpenSG-solid/"9_get_plate_refined_rpops_from 3DSG"/
+    #       SwiftComp/preovios_try.sc -- a submodel-1 3-D SG plate deck
+    #       SwiftComp did accept: its preovios_try.sc.k is that SAME
+    #       ABD-plus-in-plane/flexural pair, again with no Gij block.
+    # So the submodel-1 line buys no shear answer and costs the recovery
+    # (io.ff_to_glb sizes the `.glb` by it: 0 -> 6 resultants, 1 -> 8).  A
+    # header `refined: 1` is therefore DOWNGRADED to the classical plate
+    # -- loudly, via the report's `forced_classical` -- instead of writing
+    # a deck whose shear answer never arrives.  An explicit refined=1
+    # ARGUMENT is still honoured: the vendor plate decks here are all
+    # submodel 1, and that is how they stay reproducible field for field.
+    forced_classical = False
+    if refined is None:
+        refined = int(sg.get("refined") or 0)
+        if n_model == 2 and refined == 1:
+            refined, forced_classical = 0, True
+    else:
+        refined = int(refined)
 
     materials, mat_id = dict(sg["materials"]), np.asarray(sg["mat_id"], int)
     trans = 0                        # trans_flag: every deck in this tree
@@ -1399,44 +1423,58 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
     fe, fb = _fe(int(precision)), _fb(int(precision))
     width = SC_SLOTS
 
-    with open(path, "w") as f:
-        # the submodel line is there for EVERY macro model, 3-D included --
-        # see THE SUBMODEL LINE in the module docstring for the evidence
-        f.write("%d\n" % refined)
-        if n_model == 2:              # only a plate has a curvature line
-            k = ([float(v) for v in curvature] if curvature is not None
-                 else [0.0, 0.0])
-            f.write(" ".join(fb % v for v in k) + "\n")
-        f.write("%d %d %d %d\n\n" % (int(analysis), int(elem_flag), trans,
-                                     int(temp_flag)))
-        f.write("%d %d %d %d 0 %d\n\n"
-                % (dim, len(nodes), len(sg["cells"]), len(materials),
-                   len(layers)))
+    # written to `<path>.part` and renamed only when complete: a refusal
+    # raised mid-element-block (an unhandled element shape, say) must not
+    # leave a TRUNCATED deck under the real name -- SwiftComp's read is
+    # list-directed, so a short deck is not an error there, just a wrong
+    # answer.
+    part = path + ".part"
+    try:
+        with open(part, "w") as f:
+            # the submodel line is there for EVERY macro model, 3-D
+            # included -- see THE SUBMODEL LINE in the module docstring
+            f.write("%d\n" % refined)
+            if n_model == 2:          # only a plate has a curvature line
+                k = ([float(v) for v in curvature] if curvature is not None
+                     else [0.0, 0.0])
+                f.write(" ".join(fb % v for v in k) + "\n")
+            f.write("%d %d %d %d\n\n" % (int(analysis), int(elem_flag),
+                                         trans, int(temp_flag)))
+            f.write("%d %d %d %d 0 %d\n\n"
+                    % (dim, len(nodes), len(sg["cells"]), len(materials),
+                       len(layers)))
 
-        for i, x in enumerate(nodes):
-            f.write(("%d" + fe * dim + "\n") % ((i + 1,) + tuple(x[:dim])))
-        f.write("\n")
-
-        for e, c in enumerate(sg["cells"]):
-            row = _slots([int(v) + 1 for v in c], dim, width)
-            f.write("%d %d %s\n" % (e + 1, int(mat_id[e]),
-                                    " ".join(str(v) for v in row)))
-        f.write("\n")
-
-        # SCManual 8.2 block order with nslave = 0: the layer table sits
-        # between the element block and the material blocks
-        if layers:
-            for lid, mid, ang in layers:
-                f.write(("%d %d " + fb + "\n") % (lid, mid, ang))
+            for i, x in enumerate(nodes):
+                f.write(("%d" + fe * dim + "\n")
+                        % ((i + 1,) + tuple(x[:dim])))
             f.write("\n")
 
-        for mid in sorted(materials):
-            _write_material_sc(f, mid, materials[mid], temperature, fe)
-        f.write((fb + "\n") % float(omega))
+            for e, c in enumerate(sg["cells"]):
+                row = _slots([int(v) + 1 for v in c], dim, width)
+                f.write("%d %d %s\n" % (e + 1, int(mat_id[e]),
+                                        " ".join(str(v) for v in row)))
+            f.write("\n")
+
+            # SCManual 8.2 block order with nslave = 0: the layer table
+            # sits between the element block and the material blocks
+            if layers:
+                for lid, mid, ang in layers:
+                    f.write(("%d %d " + fb + "\n") % (lid, mid, ang))
+                f.write("\n")
+
+            for mid in sorted(materials):
+                _write_material_sc(f, mid, materials[mid], temperature, fe)
+            f.write((fb + "\n") % float(omega))
+    except BaseException:
+        if os.path.exists(part):
+            os.remove(part)
+        raise
+    os.replace(part, path)
 
     return {"path": path, "dim": dim, "n_nodes": len(nodes),
             "n_elems": len(sg["cells"]), "n_mats": len(materials),
-            "n_model": n_model, "refined": refined, "omega": float(omega),
+            "n_model": n_model, "refined": refined,
+            "forced_classical": forced_classical, "omega": float(omega),
             "omega_source": omega_source, "trans_flag": trans,
             "orientation": orientation, "folded_angles": folded,
             "n_layers": len(layers),
@@ -1456,8 +1494,8 @@ def _write_material_sg(f, mid, blk, fe):
     square_tube.sg carries 1.600000e+03 and iea_s10.sg 1.6e3 / 1.94e3 on
     exactly this line, and the writer reproduces both files field for
     field including those numbers.  There is no ordering ambiguity because
-    the density is alone on its line -- the `.sc` aux PAIR is the case
-    that cannot be pinned; see _guard_sc_aux.
+    the density is alone on its line (the `.sc` aux PAIR is pinned
+    separately, see _guard_sc_aux).
 
     NOTE the orth 0 (`E nu`) and orth 2 (21 constants) layouts are the
     SwiftComp ones by analogy; every vendor `.sg` in this repo is orth 1,

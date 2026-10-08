@@ -281,6 +281,7 @@ def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
     D_l2e = np.zeros((n_unique, 6))
     D_ee = np.zeros((6, 6))
     w_node = np.zeros(n_unique // 3)
+    wy_node = np.zeros(n_unique // 3)      # exact int(y3 N_a dV)
     _acc = lambda A, B: B if A is None else A + B          # noqa: E731
     # element SLABS inside each batch: the whole-batch jit holds the
     # full per-element block stack live (49 GiB at 2.19M tet4), so the
@@ -299,7 +300,7 @@ def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
         out = plate_ladder_element_blocks(x_b, dp_b, ph_b, W_b,
                                           jnp.asarray(C_b), n_sg)
         (hh_b, he_b, ee_b, hl1_b, hl2_b, l11_b, l12_b, l22_b,
-         l1e_b, l2e_b, wN_b) = [np.asarray(o) for o in out]
+         l1e_b, l2e_b, wN_b, wyN_b) = [np.asarray(o) for o in out]
 
         E_elem, n_ed = he_b.shape[0], he_b.shape[1]
         N_nodes = n_ed // 3
@@ -343,9 +344,12 @@ def ladder_blocks(x_end, dphi_hi, phi_hi, W_hi, C_ess, reduced_cells,
         D_ee += ee_b.sum(axis=0) / omega
         np.add.at(w_node, np.asarray(rc_b, dtype=np.int64).ravel(),
                   wN_b.ravel())
+        np.add.at(wy_node, np.asarray(rc_b, dtype=np.int64).ravel(),
+                  wyN_b.ravel())
         if _bar:
             sg_progress.solve(_k / _n)
     return {"D_hh": D_hh, "D_hl1": D_hl1, "D_hl2": D_hl2,
             "D_l11": D_l11, "D_l12": D_l12, "D_l22": D_l22,
             "D_he": D_he, "D_l1e": D_l1e, "D_l2e": D_l2e, "D_ee": D_ee,
-            "w_dof": np.repeat(w_node, 3)}
+            "w_dof": np.repeat(w_node, 3),
+            "wy_dof": np.repeat(wy_node, 3)}

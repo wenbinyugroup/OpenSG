@@ -1,7 +1,30 @@
 """opensg_shell command line -- the shell twin of `opensg_solid`:
 
-    opensg_shell <sg.yaml>        homogenization (the default)
+    opensg_shell <sg.yaml>        homogenization (the default).  The laminate
+                                  reference is the OML: the node contour is
+                                  the outer mold line and every wall laminate
+                                  stacks INWARD from it
     opensg_shell <sg.yaml> D      dehomogenization: homogenize, then recover
+    opensg_shell <sg.yaml> --center
+                                  the node contour is the laminate MID-SURFACE
+                                  (a center-offset mesh, e.g. the IEA
+                                  stations): the wall ABD is parallel-axis
+                                  shifted by t/2 and the recovery depths run
+                                  -t/2 .. +t/2 about the contour.  A FLAG for
+                                  every msg-shell route (ring, classical, 3-D
+                                  shell SG, segment, D).  The nodes are NEVER
+                                  moved: where the contour sits was decided
+                                  when the yaml was generated.  A `reference:`
+                                  key in the yaml is IGNORED (a note says so)
+    opensg_shell <sg.yaml> --mesh
+                                  also write <base>_mesh.png (elements by
+                                  section, the laminate band at the active
+                                  reference) and the gmsh-2.2 <base>.msh (one
+                                  physical group per section); a flag, it
+                                  combines with H | D and --center
+    opensg_shell <sg.yaml> D --material | --global
+                                  D output frame: each element's PLY axes
+                                  (the default) | the wall (plate) axes
 
     opensg_shell gen_windio_cs <windio.yaml>
                                   every blade station -> VABS-layout .out
@@ -27,9 +50,10 @@
                                   file's own elastic_properties_mb; "all"
                                   sweeps every station (pynumad --help)
 
-No flags, no codes: everything else lives in the yaml header (the
-leading scalar keys above the mesh blocks), and every key has a default
--- a headerless msg-shell SG runs as a classical beam homogenization.
+Three run flags (--center, --mesh, the D frame) and no codes: everything
+else lives in the yaml header (the leading scalar keys above the mesh
+blocks), and every key has a default -- a headerless msg-shell SG runs as
+a classical beam homogenization at the OML reference.
 
     msg: shell          # which ENGINE owns this file: `shell` = this one,
                         #   `solid` = opensg_solid.  Omit it and the mesh
@@ -80,6 +104,22 @@ leading scalar keys above the mesh blocks), and every key has a default
                         #   contour KINK a junction; 5-15 lists the wall
                         #   crossings only (it moves the advisory `near`
                         #   count, not the overlap flags)
+    junction_twist: hinged
+                        # OPTIONAL, the refined (RM) ring only -- the twist
+                        #   condition of a wall that ENDS at a junction node:
+                        #   hinged    = (default) nothing added, the wall's
+                        #               own natural condition M12 = 0 at the
+                        #               node (a free-edge twist boundary
+                        #               layer at the joint; bit-identical to
+                        #               the pre-existing behaviour)
+                        #   kirchhoff = one Lagrange-multiplier row per
+                        #               (junction node, ending wall) imposing
+                        #               that wall's transverse shear 2g13 = 0
+                        #               at the node: a rigid twist joint
+                        #               (sg_homo.ring_indep; a constraint,
+                        #               never a penalty).  A wall passing
+                        #               THROUGH the node is never touched.
+                        #   (NOT the `junction:` dehom recovery tier above)
     aperiodic: 1        # OPTIONAL, and only for the n_model 3 3-D shell
                         #   SG: replace periodicity by the BOUNDARY
                         #   SOLUTION (w = 0 Dirichlet on the bounding-box
@@ -121,9 +161,15 @@ from opensg_solid.cli import BANNER, read_ff_state   # ONE banner and ONE .ff
                                                      # reader for both CLIs
 
 _MDL = {1: "beam", 2: "plate", 3: "3-D solid"}
-# reference surface -> laminate-thickness fraction, the SAME map
-# build_rm_bundle / build_solid_bundle use
-_FRAC = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}
+# the laminate reference is a RUN-TIME choice (--center), never a yaml key:
+# sg_reference is the one definition every route shares
+from .sg_reference import (describe, frac_of, ref_from_flag,   # noqa: E402
+                           reference_note)
+# the one --center help string of the blade routes (gen_windio_cs, windio_st,
+# pynumad): there the flag ALSO places the generated contour on the mid-surface
+_CENTER_HELP = ("put the shell on the laminate MID-SURFACE (for matching a"
+                " 2-D solid / VABS section); omit it and the reference is the"
+                " OML, the blade yaml's own airfoil contour")
 
 
 def mesh_kind(path):
@@ -141,19 +187,6 @@ def mesh_kind(path):
     from opensg_solid.sg_mesh import elem_node_count   # ONE element scanner
 
     return 1 if elem_node_count(path) <= 2 else 2
-
-
-def sg_reference(path, default="center"):
-    """The reference surface the yaml records (`reference:`), read cheaply.
-
-    In:  path str -- an msg-shell SG yaml; default str when the key is absent
-    Out: str -- "center" | "oml" | "oml_flip" | "iml"."""
-    with open(path) as f:
-        for ln in f:
-            if ln.startswith("reference:"):
-                return ln.split(":", 1)[1].split("#")[0].strip().strip("'\"") \
-                    or default
-    return default
 
 
 def node_extents(path):
@@ -239,6 +272,7 @@ def gen_windio_cs(argv):
                    help="target element arc length / chord (default 0.01)")
     p.add_argument("--no-xml", action="store_true",
                    help="accepted for compatibility; ignored")
+    p.add_argument("--center", action="store_true", help=_CENTER_HELP)
     p.add_argument("--out", default="cross_sections", metavar="DIR",
                    help="output folder (default cross_sections)")
     p.add_argument("--prefix", default=None, metavar="TAG",
@@ -258,7 +292,8 @@ def gen_windio_cs(argv):
     _t0 = _time.perf_counter()
     from .pynumad import generate_cross_sections
     out = generate_cross_sections(a.windio, out_dir=a.out, stations=st,
-                                  mesh_size=a.mesh_size, prefix=a.prefix)
+                                  mesh_size=a.mesh_size, prefix=a.prefix,
+                                  reference=ref_from_flag(a.center))
     print("Station records stored in %s (%d stations: .out + spanwise"
           " .dat tables)" % (a.out, len(out)))
     print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
@@ -287,6 +322,7 @@ def windio_st(argv):
                    help="non-dimensional span station(s) in [0, 1]")
     p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
                    help="target element arc length / chord (default 0.01)")
+    p.add_argument("--center", action="store_true", help=_CENTER_HELP)
     p.add_argument("--out", default=".", metavar="DIR",
                    help="output folder (default: the current directory)")
     p.add_argument("--prefix", default=None, metavar="TAG",
@@ -308,7 +344,8 @@ def windio_st(argv):
     for r in a.r:
         t0 = _time.perf_counter()
         P = station_timo(a.windio, "%.10f" % r, mesh_size=a.mesh_size,
-                         out_dir=a.out, prefix=a.prefix)
+                         out_dir=a.out, prefix=a.prefix,
+                         reference=ref_from_flag(a.center))
         m = P["mesh"]
         print(" station   : r = %.4f   chord = %.3f m   %d nodes  %d elems"
               "  %d sets  %d webs"
@@ -358,11 +395,7 @@ def pynumad(argv):
                         " when omitted")
     p.add_argument("--mesh-size", type=float, default=0.01, metavar="H",
                    help="target element arc length / chord (default 0.01)")
-    p.add_argument("--center", action="store_true",
-                   help="put the shell on the laminate MID-SURFACE (for"
-                        " matching a 2-D solid / VABS section); omit it and"
-                        " the reference is the OML, the blade yaml's own"
-                        " airfoil contour")
+    p.add_argument("--center", action="store_true", help=_CENTER_HELP)
     p.add_argument("--no-xml", action="store_true",
                    help="accepted for compatibility; ignored")
     p.add_argument("--xml", action="store_true",
@@ -485,6 +518,27 @@ def main(argv=None):
             _kept.append(argv[_i])
             _i += 1
         argv = _kept
+    # the msg-shell run flags -- none of them counts toward the <yaml> [H|D]
+    # arity: --center picks the laminate reference (the contour is the
+    # mid-surface; default = the OML), --mesh also writes <base>_mesh.png +
+    # <base>.msh, --material / --global pick the D output frame (ply axes,
+    # the default, or the wall/plate axes: the solid engine's SG axes have no
+    # shell analogue)
+    center, want_mesh, frame, _kept = False, False, "material", []
+    for a in argv:
+        al = str(a).strip().lower()
+        if al == "--center":
+            center = True
+        elif al in ("--mesh", "-m", "mesh"):
+            want_mesh = True
+        elif al == "--material":
+            frame = "material"
+        elif al == "--global":
+            frame = "plate"
+        else:
+            _kept.append(a)
+    argv = _kept
+    ref = ref_from_flag(center)
     if not 1 <= len(argv) <= 2 or argv[0] in ("-h", "--help"):
         print(__doc__)
         return 2
@@ -539,6 +593,12 @@ def main(argv=None):
     # of the header so a typo never survives an H run)
     from .sg_dehom_junction import read_tier
     junction, junction_bl, junction_ang = read_tier(hdr)
+    # twist condition of a wall ending at a junction node (refined ring only);
+    # validated here with the rest of the header
+    junction_twist = str(hdr.get("junction_twist", "hinged")).strip().lower()
+    if junction_twist not in ("hinged", "kirchhoff"):
+        raise SystemExit("junction_twist must be hinged | kirchhoff, got %r"
+                         % (hdr.get("junction_twist"),))
 
     _t0 = _time.perf_counter()
     _ap = os.path.abspath(path).replace("\\", "/").split("/")
@@ -551,22 +611,46 @@ def main(argv=None):
     print(" macro model: %s, %s%s"
           % (_MDL[n_model], "shear-refined" if refined else "classical",
              ", aperiodic" if int(hdr.get("aperiodic", 0) or 0) else ""))
+    print(" reference : %s" % describe(ref))
+    _note = reference_note(path, ref)   # a leftover `reference:` yaml key
+    if _note:
+        print(_note)
     print("")
 
     base = os.path.splitext(path)[0]
     kind = mesh_kind(path)
     B = None                      # the RM bundle, when the route builds one
+    if junction_twist != "hinged":
+        if not (n_model == 1 and refined and kind == 1):
+            raise SystemExit(
+                "junction_twist: %s applies to the refined (RM) cross-section"
+                " RING only\n(n_model 1, refined 1, 2-node line elements);"
+                " remove the key or set it to hinged." % junction_twist)
+        print(" junction  : twist %s (ending walls tied to 2g13 = 0 at the"
+              " junction nodes)" % junction_twist)
+
+    if want_mesh:
+        # the picture and the gmsh twin come BEFORE the solve, so a failing
+        # analysis still leaves the mesh to look at; a plotting problem is
+        # reported, never allowed to kill the analysis
+        from .sg_mesh_out import write_mesh_files
+        try:
+            _mf = write_mesh_files(path, base, ref=ref)
+            print(" mesh      : %s + %s" % tuple(os.path.basename(p) for p in _mf))
+        except Exception as _e:
+            print(" mesh      : NOT written (%s: %s)" % (type(_e).__name__, _e))
+        print("")
 
     if n_model == 1 and refined:
         # Reissner-Mindlin wall -> Timoshenko beam 6x6
         if kind == 1:
             from .sg_homo import build_rm_bundle
-            B = build_rm_bundle(path)
+            B = build_rm_bundle(path, ref=ref, junction_twist=junction_twist)
             law, out_path = np.asarray(B["Timo"]), base + "_Timo.out"
             solve_time = float(B.get("solve_time", _time.perf_counter() - _t0))
         else:
             from .sg_homo import segment_timo_from_3dyaml
-            S = segment_timo_from_3dyaml(path)
+            S = segment_timo_from_3dyaml(path, ref=ref)
             law, out_path = np.asarray(S["S6"]), base + "_Timo.out"
             solve_time = float(S["solve_time"])
         law_title = ("Timoshenko Beam Stiffness Matrix  "
@@ -582,8 +666,9 @@ def main(argv=None):
                 " result to report.\nSet refined: 1 in the header.")
         from .fe_jax.msg_hermite import solve_tw_from_yaml
         from opensg_solid.sg_homo import write_sc_K
-        ref = sg_reference(path)
-        KL = solve_tw_from_yaml(path, frac=_FRAC.get(ref, 0.0))
+        # same rule as the RM ring: the nodes stay where the yaml puts them,
+        # ``frac`` only references the wall ABD to that contour
+        KL = solve_tw_from_yaml(path, frac=frac_of(ref))
         law = np.asarray(KL["EB"])
         law, out_path = 0.5*(law + law.T), base + "_EB.out"
         solve_time = _time.perf_counter() - _t0
@@ -603,7 +688,7 @@ def main(argv=None):
         # measure (e.g. the wall MATERIAL area), exactly the drivers'
         # build_solid_bundle(..., cell_area=...) user measure.
         from .sg_homo import build_solid_bundle
-        B = build_solid_bundle(path, cell_area=sg_cell_area(path))
+        B = build_solid_bundle(path, ref=ref, cell_area=sg_cell_area(path))
         law, out_path = np.asarray(B["C3D"]), base + "_C3D.out"
         solve_time = float(B["solve_time"])
         law_title = "Cauchy Continuum Stiffness Matrix  [11 22 33 23 13 12]"
@@ -616,7 +701,7 @@ def main(argv=None):
         # the MEASURED SG measure -- the node bounding-box VOLUME, the volume
         # the equivalent continuum occupies and the cell the periodic assembly
         # map ties (nothing is supplied in code)
-        r = shell_sg3d(path, omega=hdr.get("omega"))
+        r = shell_sg3d(path, omega=hdr.get("omega"), ref=ref)
         # the .out normalizes per unit cell (SwiftComp parity); print THAT.
         # With the default measure this is exactly r["C3D"]; the cell volume
         # comes back from the solve, so the 4 MB node block is scanned once.
@@ -652,7 +737,7 @@ def main(argv=None):
                     " C, FF) or `epsilon_bar:` in the yaml header"
                     % os.path.basename(base))
             eps = np.asarray([float(x) for x in eps], float)
-        dehom_write(B, eps, base + "_dehom", state=state,
+        dehom_write(B, eps, base + "_dehom", state=state, frame=frame,
                     junction=junction, junction_bl=junction_bl,
                     junction_ang=junction_ang)
         print("Local field files are computed and stored.")
@@ -786,7 +871,7 @@ def dehom_write(B, eps, out_base, state=None, n_depth=9, frame="material",
             " reference)\n  S11 S22 S33 S23 S13 S12 (Pa)  "
             "E11 E22 E33 2E23 2E13 2E12  u1 u2 u3 (m)"
             % (frame, np.array2string(np.asarray(eps, float), precision=6),
-               B.get("ref", "center")))
+               B.get("ref", "oml")))
     # junction-aware recovery: the two EXTRA columns go at the END, so every
     # existing column index is untouched and `junction: off` is byte-identical
     jflag = None

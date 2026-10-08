@@ -100,6 +100,10 @@ SQ_YAML = os.path.join(ROOT, "examples", "OpenSG-solid",
                        "square_tube_2Dsolid.yaml")
 IEA_SG = os.path.join(ROOT, "examples", "OpenSG_shell", "windio", "vabs_K",
                       "iea_s10.sg")
+# the AnalySwift-shipped example decks + the live tet10 gate (evidence, not
+# inputs to run -- see the README there)
+SC_EX = os.path.join(HERE, "SwiftComp_examples")
+TET10_GATE = os.path.join(SC_EX, "tet10_gate")
 
 # the square tube: 1.03 outer, 0.03 wall -> the four wall frames PreVABS
 # writes as theta1 = 0 / 90 / 180 / -90, and the ply it writes as theta3
@@ -842,36 +846,47 @@ def test_writer_refuses_the_unvalidated_paths(tmp_path):
         sg_input.write_sc(tube_sg(frames=True, density=None), "/dev/null",
                           orientation="points")
 
-    # (c) a nonzero `.sc` density.  Evidence: every third-party deck's aux
-    #     line is `0 0`, which cannot tell `T rho` from `rho T`.
+    # (c) [VALIDATED 2026-09-07, no longer refused] the `.sc` aux pair is
+    #     `T rho`.  Evidence: the four vendor decks in examples/ write
+    #     `0 0` (re-measured -- they discriminate nothing), but the three
+    #     decks AnalySwift ships beside SwiftComp.exe each carry
+    #     `100 0.5   # temperature density`, both nonzero, and SCManual 8.2
+    #     names the order ("T_i ... is the temperature, rho is the
+    #     density").  So the density is written in slot 2 unasked, the
+    #     temperature in slot 1, and drop_density=True still zeroes rho.
     for p in (RHC, P1D):
         L = [ln.strip() for ln in open(p) if ln.strip()]
         aux = [L[i + 1] for i, ln in enumerate(L)
                if len(ln.split()) == 3 and ln.split()[2] == "1"
                and ln.split()[1] in ("0", "1", "2")]
         assert aux and all(set(a.split()) <= {"0", "0.0"} for a in aux), aux
+    for name in ("micro1D.sc", "micro2D.sc", "micro3D.sc"):
+        L = [ln for ln in open(os.path.join(SC_EX, name))]
+        aux = [ln for ln in L if "# temperature density" in ln]
+        assert len(aux) == 1 and aux[0].split()[:2] == ["100", "0.5"], aux
     hot = tube_sg(frames=False)                 # density 1600
-    with pytest.raises(NotImplementedError, match="nonzero density"):
-        sg_input.write_sc(hot, "/dev/null")
-    with pytest.raises(NotImplementedError, match="aux line"):
-        sg_input.write_sc(plain, "/dev/null", temperature=300.0)
-    # ... and the escape writes the line the vendor decks DO contain
+
+    def aux_pair(path):
+        L = [ln.strip() for ln in open(path) if ln.strip()]
+        head = next(i for i, ln in enumerate(L) if ln.split()[-1] == "1"
+                    and len(ln.split()) == 3)
+        return [float(v) for v in L[head + 1].split()]
+
+    q = str(tmp_path / "dens.sc")
+    r = sg_input.write_sc(hot, q)
+    assert r["dropped_density"] == []
+    assert aux_pair(q) == [0.0, 1600.0]                       # T rho
+    q = str(tmp_path / "hot.sc")
+    sg_input.write_sc(plain, q, temperature=300.0)
+    assert aux_pair(q) == [300.0, 0.0]
+    # ... and drop_density still writes the line the vendor decks contain
     q = str(tmp_path / "nodens.sc")
     r = sg_input.write_sc(hot, q, drop_density=True)
     assert r["dropped_density"] == [1]
-    L = [ln.strip() for ln in open(q) if ln.strip()]
-    head = next(i for i, ln in enumerate(L) if ln.split()[-1] == "1"
-                and len(ln.split()) == 3)
-    assert [float(v) for v in L[head + 1].split()] == [0.0, 0.0]
+    assert aux_pair(q) == [0.0, 0.0]
 
-    # (d) tet10 in a `.sc`.  Evidence: all three 3-D decks are tet4.
-    t10 = {"dim": 3, "nodes": np.zeros((10, 3)), "cells": [list(range(10))],
-           "mat_id": np.ones(1, int),
-           "materials": {1: {"type": 0, "E": 1.0, "nu": 0.3}},
-           "orientation": None, "n_model": None, "refined": None,
-           "omega": None, "scale": 1.0}
-    with pytest.raises(NotImplementedError, match="10-node tetrahedron"):
-        sg_input.write_sc(t10, str(tmp_path / "t10.sc"), n_model=3)
+    # (d) tet10 in a `.sc` -- see test_sc_tet10_slot_layout: validated by
+    #     a live SwiftComp run on 2026-09-07, no longer refused.
 
     # (e) comments, in EITHER dialect.  Evidence: no deck carries one.
     for p in (RHC, P1D, SQ_SG, IEA_SG):
@@ -881,6 +896,51 @@ def test_writer_refuses_the_unvalidated_paths(tmp_path):
         sg_input.write_sc(plain, "/dev/null", comments=True)
     with pytest.raises(NotImplementedError, match="comments=True"):
         sg_input.write_sg(plain, "/dev/null", comments=True)
+
+
+# ======================================= the tet10 record, pinned live
+def test_sc_tet10_slot_layout(tmp_path):
+    """A tet10 goes out as corners in slots 1-4, slot 5 = 0, the six
+    midsides in slots 6-11 on edges (12, 23, 13, 14, 24, 34), zeros to 20
+    -- the yaml's GMSH order (…, 34, 24) has its last two midsides swapped.
+    Evidence, re-checked here: the live SwiftComp 2.1 gate of 2026-09-07
+    (SwiftComp_examples/tet10_gate/) -- this record homogenized both cubes
+    (non-empty `.k`, the one-material density 2700 read back), the two
+    rival records left zero-byte `.k` files behind a negative-Jacobian
+    message -- and read_sc reads the record back into GMSH order."""
+    from opensg_solid.io import sg_input
+    from opensg_solid.io.sc_to_yaml import read_sc
+
+    # one straight tet, midsides at the true edge midpoints, GMSH order
+    c = np.array([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
+    gmsh_edges = [(0, 1), (1, 2), (0, 2), (0, 3), (2, 3), (1, 3)]
+    nodes = np.vstack([c] + [(c[a] + c[b]) / 2 for a, b in gmsh_edges])
+    sg = {"dim": 3, "nodes": nodes, "cells": [list(range(10))],
+          "mat_id": np.ones(1, int),
+          "materials": {1: {"type": 0, "E": 1.0, "nu": 0.3}},
+          "orientation": None, "n_model": None, "refined": None,
+          "omega": None, "scale": 1.0}
+    p = str(tmp_path / "t10.sc")
+    sg_input.write_sc(sg, p, n_model=3)
+    rec = next(ln for ln in open(p) if ln.split()[:2] == ["1", "1"]
+               and len(ln.split()) == 22)
+    assert [int(v) for v in rec.split()[2:]] == \
+        [1, 2, 3, 4, 0, 5, 6, 7, 8, 10, 9] + [0] * 9
+    back = read_sc(p)
+    assert [list(cc) for cc in back["cells"]] == [list(range(10))]
+    assert np.allclose(np.asarray(back["nodes"]), nodes)
+
+    # the gate's artifacts say what they said
+    for case in ("iso", "bilayer"):
+        for L, ok in (("A", True), ("B", False), ("C", False)):
+            k = os.path.join(TET10_GATE, "cube_%s_%s.sc.k" % (case, L))
+            log = os.path.join(TET10_GATE,
+                               "cube_%s_%s.swiftcomp.log" % (case, L))
+            assert (os.path.getsize(k) > 0) == ok, k
+            assert ("determinant of Jacobian matrix less than 0"
+                    in open(log).read()) == (not ok), log
+    k = open(os.path.join(TET10_GATE, "cube_iso_A.sc.k")).read()
+    assert "Effective Density =       2.7000000E+003" in k
 
 
 def test_write_sg_refuses_to_rotate_a_prerotated_C(tmp_path):

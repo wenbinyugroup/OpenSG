@@ -123,7 +123,10 @@ def stack_shell_law(stack, sections, materials, g_source=None, frac=0.5):
         if mir:
             s["layup"] = [[p[0], p[1], -float(p[2])]
                           for p in list(sections[sec]["layup"])[::-1]]
-        D_by, G_by = _material_by_section([s], materials, center_ref=True)
+        # the member's ABD at the SAME reference the ring runs at (frac 0.5 =
+        # center, the only value the parallel-axis branch of the loader knows)
+        D_by, G_by = _material_by_section([s], materials,
+                                          center_ref=(abs(float(frac) - 0.5) < 1e-12))
         Dk = np.asarray(D_by[0], float)
         Gk = np.asarray(G_by[0], float)
         pl = [[str(p[0]), float(p[1]), float(p[2])] for p in s["layup"]]

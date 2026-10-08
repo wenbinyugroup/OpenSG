@@ -496,7 +496,7 @@ def write_sidecar(path, B, R, tier="flag", ang_tol_deg=1.0):
                 "# junction_bl     : %.4f   (k_bl, r_bl = k_bl * max t)\n"
                 "# ang_tol_deg     : %.4f\n"
                 "# n_depth         : %d\n"
-                % (B.get("ref", "center"), float(B.get("frac", 0.0)), tier,
+                % (B.get("ref", "oml"), float(B.get("frac", 0.0)), tier,
                    c["k_bl"], ang_tol_deg, nd_))
         f.write("# jflag  0 clean | 1 near | 2 overlapped, this wall owns |"
                 " 3 overlapped, another\n"

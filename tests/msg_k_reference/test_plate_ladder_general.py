@@ -209,8 +209,10 @@ def test_q_column_inplane_parity_sandwich(tmp_path):
                 (split, j)
 
 
-def test_q_reaction_auto_tau_for_voided_cell(tmp_path):
-    """A cell with an in-plane void (fill < 1) must auto-select tau."""
+def test_q_reaction_uniform_only_voided_cell(tmp_path):
+    """A voided cell (fill < 1) ALSO resolves to uniform now: the tau
+    reaction was REMOVED (2026-08-30, the Yu2003 Eq. 35 multiplier is
+    the one mode) and an explicit 'tau' is refused loudly."""
     import os
     os.chdir(tmp_path)
     sc = sg_3d(nx=3, ny=3, w=0.75)
@@ -224,4 +226,6 @@ def test_q_reaction_auto_tau_for_voided_cell(tmp_path):
     sc["cells"] = [list(c) for c in cells[keep]]
     sc["mat_id"] = np.ones(int(keep.sum()), int)
     r = plate_homo_2d(sc, refined=1)
-    assert r["q_reaction"] == "tau"
+    assert r["q_reaction"] == "uniform"
+    with pytest.raises(ValueError, match="REMOVED"):
+        plate_homo_2d(sc, refined=1, q_reaction="tau")

@@ -195,34 +195,35 @@ compliance to a $6\times6$. Units follow the input; the examples are SI, so modu
 thicknesses in m, `density` in kg/m$^3$. `density` feeds the section mass per unit area that
 `emit_station_abd` reports as `mass_per_area`; it is not needed for the stiffness.
 
-### `reference`
+### The laminate reference (`--center`) — a run-time choice, not a key
 
-```yaml
-reference: center
-```
+The yaml carries **no** reference key. Which surface of the wall the node contour is —
+and therefore where the wall ABD, the plate-SG $z$ origin, the mass moments and the
+recovery depths are referenced — is decided at run time, the same way for every msg-shell
+route (ring, classical, 3-D shell SG, segment, dehomogenization):
 
-This single scalar names the surface the wall ABD — and therefore the whole cross-section
-model — is referenced to, and it is the single source of truth: `build_rm_bundle(shell_yaml)`
-reads it when its `ref` argument is left `None`, and the same value then drives the ring
-laminate reference, the plate-SG `z_ref`, the emitted ABD file, and the depth conversion used
-in stress recovery. Absent, it defaults to `center`.
-
-| value | meaning | fraction of thickness from the outer face |
+| run | meaning | fraction of thickness from the outer face |
 |---|---|---|
-| `center` | the contour is the laminate **mid-surface**; the ABD is parallel-axis shifted by $t/2$ | 0.5 |
-| `oml` | the contour is the **outer mold line**; the laminate stacks inward from it, no shift | 0.0 |
-| `oml_flip` | diagnostic: the reference is moved the full thickness the other way | 1.0 |
-| `iml` | the contour is the **inner mold line**; the laminate stacks outward | 1.0 |
+| `opensg <yaml>` (default, `oml`) | the contour is the **outer mold line**; every laminate stacks inward from it, no shift | 0.0 |
+| `opensg <yaml> --center` | the contour is the laminate **mid-surface**; the ABD is parallel-axis shifted by $t/2$ ($B' = B - \tfrac{t}{2}A$, $D' = D - tB + \tfrac{t^2}{4}A$); recovery depths run $-t/2 \ldots +t/2$ about the contour | 0.5 |
 
-Mid-surface meshes (tubes, ellipses, generated cross-sections) use `center`; airfoil YAMLs
-written on the OML use `oml`. Getting this wrong shifts $B$ and $D$ by a parallel-axis term of
-the wall thickness and moves every bending and torsion entry of the beam $6\times6$, so it is
-recorded in the file rather than passed at the call site.
+The Python API takes the same choice as `ref=` (`build_rm_bundle(yaml, ref="center")`,
+`beam_props(yaml, ref="center")`, `dehom_station(..., ref="center")`; default `"oml"`); the
+diagnostic values `oml_flip` / `iml` (full-thickness shift) exist in the API only.
+
+Where the contour sits is a **generation** decision: `emit_shell_yaml(..., reference="center")`
+and the OpenSG_io converter (`fraction=0.5`) move the skin nodes inward by $t/2$ before writing,
+and record that only as a leading comment line. OpenSG never moves the nodes — a center-offset
+yaml must be run with `--center`. Getting this wrong shifts $B$ and $D$ by a parallel-axis term
+of the wall thickness and moves every bending and torsion entry of the beam $6\times6$. A
+leftover `reference:` key in an older yaml is ignored; the run prints a note (a warning when it
+disagrees with the flag). An unknown `ref=` name is refused.
 
 ### Running it
 
 ```bash
-opensg iea_s10_shell.yaml
+opensg iea_s10_shell.yaml --center     # the IEA stations are center-offset meshes
+opensg iea_s10_shell.yaml --center --mesh   # also <base>_mesh.png + gmsh <base>.msh
 ```
 
 The header of `iea_s10_shell.yaml` carries `msg: shell`, `n_model: 1` and `refined: 1`, so the

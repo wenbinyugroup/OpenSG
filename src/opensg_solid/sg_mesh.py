@@ -47,7 +47,8 @@ def _cell_basis(dim, nodes_per_elem):
     table = {
         1: {2: (CellType.interval, 1), 3: (CellType.interval, 2),
             4: (CellType.interval, 3), 5: (CellType.interval, 4)},
-        2: {3: (CellType.triangle, 1), 4: (CellType.quadrilateral, 1)},
+        2: {3: (CellType.triangle, 1), 4: (CellType.quadrilateral, 1),
+            6: (CellType.triangle, 2), 9: (CellType.quadrilateral, 2)},
         3: {4: (CellType.tetrahedron, 1), 8: (CellType.hexahedron, 1),
             10: (CellType.tetrahedron, 2)},
     }
@@ -330,8 +331,11 @@ def load_sg_input(path, out_base=None):
     Speed: the yaml is parsed with CBaseLoader (libyaml parser, NO Python
     resolver/constructor typing -- the pure/typed loaders spend ~30 s building
     the ~1e6 typed objects of a multi-MB 3-D SG) and the big blocks are bulk
-    numpy-converted; the result is cached in a <base>_sg.npz sidecar that later
-    runs load in ~0.2 s (invalidated by the yaml mtime).
+    numpy-converted.  No <base>_sg.npz sidecar is written by default (user
+    rule: no cache-file clutter next to the yaml); OPENSG_SG_CACHE=1
+    re-enables writing it, and an already-present FRESH sidecar (yaml-mtime
+    guarded) is still read -- without one a multi-MB 3-D SG re-parses on
+    every run.
 
     Out: the parsed dict {dim, nodes, cells, mat_id, materials, scale}."""
     if isinstance(path, dict):
@@ -371,7 +375,7 @@ def load_sg_input(path, out_base=None):
         # `sets` / `elementOrientations` / list-form `materials` -- what
         # io.msh_to_yaml and the opensg_io pipelines emit; sg_dialect calls
         # the two spellings one dialect): io.sg_input owns that reader.
-        # Cached in the same npz sidecar, so the parse happens once.
+        # Sidecar-cached the same way, only under OPENSG_SG_CACHE=1.
         from opensg_solid.io.sg_input import read_opensg_yaml
         sg = read_opensg_yaml(path)
         nodes = np.asarray(sg["nodes"], float)
@@ -380,18 +384,20 @@ def load_sg_input(path, out_base=None):
         sc = {"dim": int(sg["dim"]), "nodes": nodes, "cells": cells,
               "mat_id": mat_id, "materials": sg["materials"],
               "scale": float(sg.get("scale", 1.0))}
-        try:                                      # best-effort sidecar cache
-            cells_arr = np.asarray(cells, np.int64)
-        except (ValueError, TypeError):
-            cells_arr = np.array([np.array(c) for c in cells], dtype=object)
-        try:
-            np.savez_compressed(
-                npz, dim=sc["dim"], nodes=nodes, cells=cells_arr,
-                mat_id=mat_id,
-                materials=np.array(sg["materials"], dtype=object),
-                scale=sc["scale"])
-        except Exception:
-            pass
+        if os.environ.get("OPENSG_SG_CACHE", "0") not in ("", "0"):
+            try:                                  # best-effort sidecar cache
+                cells_arr = np.asarray(cells, np.int64)
+            except (ValueError, TypeError):
+                cells_arr = np.array([np.array(c) for c in cells],
+                                     dtype=object)
+            try:
+                np.savez_compressed(
+                    npz, dim=sc["dim"], nodes=nodes, cells=cells_arr,
+                    mat_id=mat_id,
+                    materials=np.array(sg["materials"], dtype=object),
+                    scale=sc["scale"])
+            except Exception:
+                pass
         return sc
 
     try:
@@ -420,15 +426,17 @@ def load_sg_input(path, out_base=None):
     dim = int(dim)
     sc = {"dim": dim, "nodes": nodes, "cells": cells,
           "mat_id": mat_id, "materials": materials, "scale": scale}
-    try:                                          # best-effort sidecar cache
-        np.savez_compressed(
-            npz, dim=dim, nodes=nodes,
-            cells=(cells_arr if cells_arr is not None
-                   else np.array([np.array(c) for c in cells], dtype=object)),
-            mat_id=mat_id, materials=np.array(materials, dtype=object),
-            scale=scale)
-    except Exception:
-        pass
+    if os.environ.get("OPENSG_SG_CACHE", "0") not in ("", "0"):
+        try:                                      # best-effort sidecar cache
+            np.savez_compressed(
+                npz, dim=dim, nodes=nodes,
+                cells=(cells_arr if cells_arr is not None
+                       else np.array([np.array(c) for c in cells],
+                                     dtype=object)),
+                mat_id=mat_id, materials=np.array(materials, dtype=object),
+                scale=scale)
+        except Exception:
+            pass
     return sc
 
 

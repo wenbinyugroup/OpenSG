@@ -38,14 +38,16 @@ mesh.
 | `sections` | per set: `elementSet` plus `layup` as `[material, thickness, angle]` triples, outer ply first | 6 sections |
 | `elementOrientations` | per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$ | 310 rows |
 | `materials` | `name`, `density`, `elastic: {E, G, nu}` as 3-vectors | 6 materials |
-| `reference` | the reference surface the whole run is referred to | `center` |
+| (leading comment) | which surface the contour was generated on — here the laminate mid-surface | run with `--center` |
 
-The `reference` field is the single source of truth. `build_rm_bundle(yaml)` reads it and maps it
-to a thickness fraction (`center` $\to$ 0.5, `oml` $\to$ 0.0, `iml` and `oml_flip` $\to$ 1.0)
-that is then used consistently for the ring laminate reference, the plate-SG $z$ origin, the
-emitted ABD cache and the recovery depth conversion. Pass `ref=` explicitly only to override it.
-Because the reference here is the mid-surface, quantities that depend on the reference axis (in
-particular $GJ$ and the bending–extension couplings) are mid-surface values.
+The laminate reference is a run-time choice, not a yaml key: `opensg <yaml>` takes the contour
+as the OML (laminates stack inward), `opensg <yaml> --center` — `build_rm_bundle(yaml, ref="center")`
+in Python — takes it as the laminate mid-surface. The choice maps to a thickness fraction
+(`oml` $\to$ 0.0, `center` $\to$ 0.5) that is then used consistently for the ring laminate
+reference, the plate-SG $z$ origin, the emitted ABD cache and the recovery depth conversion.
+This station was generated center-offset, so every command below passes `--center`; because the
+reference is the mid-surface, quantities that depend on the reference axis (in particular $GJ$
+and the bending–extension couplings) are mid-surface values.
 
 ![Cross-section contour coloured by layup](../_static/shell_xsec_mesh.png)
 
@@ -141,12 +143,14 @@ cd examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section
 ```
 
 ```bash
-opensg iea_s10_shell.yaml
+opensg iea_s10_shell.yaml --center
 ```
 
 That is the whole homogenization: the header carries `msg: shell`, `n_model: 1` and
 `refined: 1`, so the unified command resolves the msg-shell engine, runs the Reissner–Mindlin
-ring and writes `iea_s10_shell_Timo.out` and `iea_s10_shell_ABDG.out`. The example's driver
+ring and writes `iea_s10_shell_Timo.out` and `iea_s10_shell_ABDG.out`; `--center` says the
+contour is the laminate mid-surface (add `--mesh` for `iea_s10_shell_mesh.png` and the gmsh
+`iea_s10_shell.msh`). The example's driver
 does the same through the API and adds the two figures the CLI does not emit:
 
 ```bash
@@ -161,7 +165,7 @@ Everything is behind one function:
 import numpy as np
 from opensg_shell import build_rm_bundle, auto_emit
 
-B = build_rm_bundle("iea_s10_shell.yaml")   # RM 6-DOF ring + MSG wall G
+B = build_rm_bundle("iea_s10_shell.yaml", ref="center")   # RM 6-DOF ring + MSG wall G
 C6 = np.asarray(B["Timo"])                  # (6, 6) Timoshenko stiffness
 print(B["ref"], B["g_source"])              # "center msg"
 print(np.diag(C6))
@@ -263,7 +267,7 @@ $$FF = [\,4.1927\times10^{4}\;\;8.2674\times10^{3}\;\;1.4673\times10^{6}\;\;1.21
 
 — a 60 MN·m flapwise moment with a 1.47 MN flapwise shear, which is what dominates everything
 that follows. The forces must be referred to the same axis as the stiffness: this table is
-center-referenced, matching `reference: center` in the YAML.
+center-referenced, matching the `--center` run.
 
 ### Run it
 
@@ -272,7 +276,7 @@ cd examples/OpenSG_shell/2_get_beam_dehom_from_shell_cross_section
 ```
 
 ```bash
-opensg iea_s10_shell.yaml D
+opensg iea_s10_shell.yaml D --center
 ```
 
 The `D` argument (or `analysis: D` in the header) runs the homogenization and then the recovery
@@ -321,7 +325,7 @@ import numpy as np
 from opensg_shell import build_rm_bundle, _macro_fields, _rm_shell_strain
 from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
 
-B = build_rm_bundle("iea_s10_shell.yaml")
+B = build_rm_bundle("iea_s10_shell.yaml", ref="center")
 FF = np.loadtxt("ff51_rmc_reform.dat")[10, 1:]
 st, st_m, aA, aB = _macro_fields(B, beam_force_vabs=FF)
 s6, s2 = _rm_shell_strain(B, 75, 0.5, st_m, aA, aB)   # element 75, mid-arc
@@ -337,7 +341,7 @@ print(Sig / 1e6)      # MPa, Voigt [S11 S22 S33 S23 S13 S12]
 
 ### What comes out
 
-From `opensg iea_s10_shell.yaml D`:
+From `opensg iea_s10_shell.yaml D --center`:
 
 | file | content |
 |---|---|

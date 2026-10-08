@@ -15,8 +15,8 @@ Two RM cross-section (boundary-ring) formulations, BOTH tying only gamma_23:
   B = 5-DOF drilling-ELIMINATED MITC element        -> sg_assembly.ring_general(shear="mitc4_g23")
 compared against the 2-D solid cross-section 6x6 (VABS-convention .txt), per Timo term.
 
-All rings referenced at the contour CENTROID (center_ref=True), matching the centroidal
-2-D solid reference.
+The laminate reference of a ring is an explicit argument of every loader (center_ref /
+ref; default = the OML) -- a run-time choice, never read from the yaml (sg_reference).
 
 Public entry points: load_ring, load_solid, ring_6dof, ring_5dof, pct, show.
 
@@ -78,11 +78,6 @@ try:                                    # libyaml C loader: ~5x faster on big SG
 except ImportError:
     from yaml import SafeLoader as _YLoader
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers 3d projection)
-
 from .sg_assembly import compute_k22
 from .sg_assembly import ring_general
 from .sg_assembly import require_quad_mesh
@@ -122,7 +117,7 @@ def _norm_materials(mats):
     return out
 
 
-def load_ring(path, center_ref=True):
+def load_ring(path, center_ref=False):
     """1-D contour shell YAML -> ring arrays (rx, cells, rsub, re3, D_by, G_by, k22, ax, cross).
     center_ref=True references the plate ABD to the laminate MID-surface (default, for a mid-surface
     contour); center_ref=False references it to the OML (use with an OML contour, fraction=0.0)."""
@@ -503,6 +498,17 @@ def frame_report(nodes, cells, e1, e2, e3, tol=1e-6):
     return ok, txt
 
 
+def _pyplot():
+    """matplotlib.pyplot, imported on first use only: importing it at module
+    load cost every plain `opensg <shell.yaml>` run ~0.5 s for a picture it
+    never drew (the ring loaders import this module)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers 3d projection)
+    return plt
+
+
 def _set_equal_3d(ax, pts):
     """Set an equal-aspect 3-D box on the axes from the data extents.
 
@@ -530,6 +536,7 @@ def orientation_png(nodes, cells, e1, e2, e3, out_png, title="", step=1, scale=N
     Out:
         str: out_png (file written at 130 dpi, figure closed).
     """
+    plt = _pyplot()
     nodes = np.asarray(nodes)
     cent = np.array([nodes[list(c)].mean(axis=0) for c in cells])
     if scale is None:
@@ -560,6 +567,7 @@ def orientation_png_ring(ring_nodes, ring_cells, e2, e3, out_png, title=""):
     Out:
         str: out_png (file written at 130 dpi, figure closed).
     """
+    plt = _pyplot()
     rn = np.asarray(ring_nodes)
     mid = np.array([rn[list(c)].mean(axis=0) for c in ring_cells])
     fig, ax = plt.subplots(figsize=(6, 6))

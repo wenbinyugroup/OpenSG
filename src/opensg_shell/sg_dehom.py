@@ -174,8 +174,8 @@ def _wall_band(B, e):
     """The recovery band of ring element ``e`` about its reference surface.
 
     The wall owns depths z in [-frac*h, (1-frac)*h] (h = its OWN layup
-    thickness, frac = B["frac"]); with the default center reference that is
-    exactly +-h/2, the wall's own half-thickness.
+    thickness, frac = B["frac"], the reference the bundle ran with): [0, h]
+    inward at the default OML reference, +-h/2 with --center.
 
     In:  B: dict, RM bundle; e: int, ring element index.
     Out: (lo, hi, h) floats.

@@ -38,10 +38,10 @@ SG drivers read (UDcomp_2D.yaml, square_tube_2Dsolid.yaml), NOT the
 `dim`/`nodes`/`cells`/`mat_id`/`materials` dialect sc_to_yaml emits for
 opensg_solid.sg_mesh.load_sg_input.
 
-Only the element types the solid drivers accept are converted -- 3-node
-triangles (gmsh type 2), 4-node quads (type 3), 4-node tets (type 4),
-8-node hexes (type 5) and 10-node tets (type 11, the quadratic grade
-helper.linear_msh_to_quad emits).  The 0-/1-D entities gmsh writes for
+Only the element types the solid drivers accept are converted -- 3-/6-node
+triangles (gmsh types 2/9), 4-/9-node quads (types 3/10), 4-/10-node tets
+(types 4/11) and 8-node hexes (type 5); the quadratic grades are what
+helper.linear_msh_to_quad emits.  The 0-/1-D entities gmsh writes for
 physical points and curves are skipped; anything else is an error.  The
 mesh grade (linear | quadratic) is CONSOLE-ONLY information -- the
 solver reads the arity off the cells, so the yaml carries no order key;
@@ -64,16 +64,17 @@ import numpy as np
 FILL = "FILL_IN"
 
 # gmsh element type -> node count, for the types the solid loaders accept
-_SOLID_TYPES = {2: 3, 3: 4, 4: 4, 5: 8, 11: 10}
+_SOLID_TYPES = {2: 3, 3: 4, 4: 4, 5: 8, 9: 6, 10: 9, 11: 10}
 # gmsh 0-/1-D entities: written for physical points/curves, not solid cells
 _SKIP_TYPES = {15: 1, 1: 2, 8: 3}
 _TYPE_NAME = {6: "6-node prism", 7: "5-node pyramid",
-              9: "6-node triangle (2nd order)", 10: "9-node quad (2nd order)",
-              16: "8-node quad (2nd order)",
+              16: "8-node serendipity quad (unsupported -- the engine's"
+                  " quadrilateral-P2 is the 9-node Lagrange quad)",
               29: "20-node tetrahedron (3rd order)"}
 # accepted type -> (the informational `mesh_order:` word, the cell name)
 _ORDER_OF = {2: ("linear", "tri3"), 3: ("linear", "quad4"),
              4: ("linear", "tet4"), 5: ("linear", "hex8"),
+             9: ("quadratic", "tri6"), 10: ("quadratic", "quad9"),
              11: ("quadratic", "tet10")}
 
 # the default per-element frame of a 2-D cross-section SG: e1 along the beam
@@ -115,8 +116,8 @@ def read_msh22(path):
     if not solid:
         bad = sorted(t for t in kinds if t not in _SKIP_TYPES)
         raise ValueError(
-            "%s carries no element type the solid loaders accept (3-node tri,"
-            " 4-node quad, 4-/10-node tet, 8-node hex); it has %s"
+            "%s carries no element type the solid loaders accept (3-/6-node"
+            " tri, 4-/9-node quad, 4-/10-node tet, 8-node hex); it has %s"
             % (os.path.basename(path),
                ", ".join(_TYPE_NAME.get(t, "gmsh type %d" % t) for t in bad)
                or "only 0-/1-D entities"))
@@ -200,7 +201,8 @@ def _template_banner():
          " -- the",
          "# fiber rotation about y3 (the thickness axis); OpenSG angle a ="
          " Abaqus",
-         "# *Orientation 3, -a.  Omit it for isotropic/unrotated materials.",
+         "# *Orientation 3, a (2026-08-25 unified sign: fiber +a).  Omit it"
+         " for isotropic/unrotated materials.",
          "# The `opensg msh_to_yaml` mat flags fill entries from the"
          " material",
          "# library instead: --mat<TAG> NAME[:ANGLE] per gmsh physical tag"

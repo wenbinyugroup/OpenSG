@@ -195,7 +195,7 @@ def solve_boundary_yaml(yaml_path, center_ref=True, shear="mitc_both"):
     return {"C6": np.asarray(C6), "V0": np.asarray(V0), "V1": np.asarray(V1), "R": R, "m": len(nd2)}
 
 
-def _material_by_section(sections, materials, center_ref=True):
+def _material_by_section(sections, materials, center_ref=False):
     """Build the plate ABD and transverse-shear stiffness for each layup section.
 
     In:
@@ -321,7 +321,8 @@ def main(npz_path):
 # from emit_abd.py
 # ============================================================================
 
-_ZREF = {"oml": 0.0, "mid": 0.5, "iml": 1.0}     # fraction of total thickness from the OML face
+# fraction of total thickness from the OML face; "center" = the run-time name of "mid"
+_ZREF = {"oml": 0.0, "mid": 0.5, "center": 0.5, "iml": 1.0, "oml_flip": 1.0}
 
 
 def material_db_from_yaml(materials):
@@ -342,8 +343,9 @@ def material_db_from_yaml(materials):
     return db
 
 
-def emit_station_abd(shell_yaml, out_yaml, station=None, r=None, ref="mid", g_source=None):
-    """Write the per-layup 8x8 RM wall law (default MID reference) for one cross-section.
+def emit_station_abd(shell_yaml, out_yaml, station=None, r=None, ref="oml", g_source=None):
+    """Write the per-layup 8x8 RM wall law at reference ``ref`` (default OML; "mid"/"center"
+    = the laminate mid-surface, the choice the bundle ran with) for one cross-section.
 
     The machine-readable companion of the human-readable <base>_ABDG.out: every layup
     stores ONE matrix, the full 8x8  ABDG = [[A,B,0],[B,D,0],[0,0,G]]  (SwiftComp-style
