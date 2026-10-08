@@ -21,32 +21,31 @@ conda env create -f environment.yml
 conda activate opensg
 ```
 
-Run OpenSG with one argument, the SG yaml:
+Run OpenSG from the command line, one command for both engines:
 
-```bash
-opensg <sg.yaml>
+```text
+opensg <sg.yaml>            homogenization (the default); writes <base>.out with the effective stiffness and compliance
+opensg <sg.yaml> D          dehomogenization: homogenize, then recover the local fields
+opensg <sg.yaml> --center   shell SG only: the contour is the laminate mid-surface instead of the outer mold line
 ```
 
-Every run writes `<base>.out` in the SwiftComp `.K` layout: the effective stiffness and compliance matrices of the macro model, with the time taken.
+Meshes from other tools convert to the yaml with `opensg inp_to_yaml <file.inp> --n_model {1,2,3}` (Abaqus) and `opensg msh_to_yaml <file.msh> --mat1 NAME --n_model {1,2,3}` (gmsh); `opensg --help` lists the flags.
 
 ### OpenSG yaml input
 
-One yaml describes one Structure Gene. A short header states the analysis request, and the mesh blocks follow:
+One yaml per Structure Gene: a short header, then the mesh.
 
 ```yaml
-msg: shell        # engine: shell (SG of shell elements) or solid (SG of solid elements)
-n_model: 1        # macro model: 1 beam, 2 plate, 3 equivalent 3D solid
-refined: 1        # 0 classical (plate ABD 6x6, Euler-Bernoulli beam 4x4); 1 shear-refined (plate ABDG 8x8, Timoshenko beam 6x6)
-analysis: H       # H homogenize, D dehomogenize
+msg: shell        # shell or solid: the element type of the SG
+n_model: 1        # 1 beam, 2 plate, 3 equivalent 3D solid
+refined: 1        # 0 classical, 1 shear-refined
 nodes:            # node coordinates
 elements:         # element connectivity
-sets:             # element sets, each carrying its layup or material
+sets:             # element sets with their layup or material
 materials:        # engineering constants
 ```
 
-Conventions: the SG dimension (1D, 2D or 3D) is read from the mesh and never declared; the SG measure is measured from the mesh unless `omega:` overrides it; a dehomogenization (`D`) recovers from the macro strain `epsilon_bar` in the header, or from a `<base>.ff` file next to the yaml. The shell and solid dialects differ in their mesh blocks; the key-by-key reference with worked files is [docs/input_format.md](docs/input_format.md).
-
-Worked examples are under `examples/OpenSG-solid` and `examples/OpenSG_shell`. Version pins, the GPU variant and the solver options are in [docs/installation.md](docs/installation.md).
+The SG dimension (1D, 2D or 3D) is read from the mesh. Key-by-key reference and worked files: [docs/input_format.md](docs/input_format.md). Examples: `examples/OpenSG-solid` and `examples/OpenSG_shell`. Install details: [docs/installation.md](docs/installation.md).
 
 ## Features
 
