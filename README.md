@@ -24,26 +24,50 @@ conda activate opensg
 Run OpenSG from the command line, one command for both engines:
 
 ```text
-opensg <sg.yaml>            homogenization (the default); writes <base>.out with the effective stiffness and compliance
+opensg <sg.yaml>            homogenization (the default)
 opensg <sg.yaml> D          dehomogenization: homogenize, then recover the local fields
 opensg <sg.yaml> --center   shell SG only: the contour is the laminate mid-surface instead of the outer mold line
 ```
+
+A homogenization writes `<base>.out` with the effective stiffness and compliance matrices of the macro model. A dehomogenization also writes the local stress, strain and displacement in the material frame as `<base>.SM`, `<base>.EM` and `<base>.U`, and `<base>.vtk` to visualize their distribution.
 
 Meshes from other tools convert to the yaml with `opensg inp_to_yaml <file.inp> --n_model {1,2,3}` (Abaqus) and `opensg msh_to_yaml <file.msh> --mat1 NAME --n_model {1,2,3}` (gmsh); `opensg --help` lists the flags.
 
 ### OpenSG yaml input
 
-One yaml per Structure Gene: a short header, then the mesh.
+One yaml per Structure Gene: a short header, then the mesh. Each engine reads its own dialect:
 
-```yaml
-msg: shell        # shell or solid: the element type of the SG
-n_model: 1        # 1 beam, 2 plate, 3 equivalent 3D solid
-refined: 1        # 0 classical, 1 shear-refined
-nodes:            # node coordinates
-elements:         # element connectivity
-sets:             # element sets with their layup or material
-materials:        # engineering constants
-```
+<table>
+<tr><th>SG of shell elements</th><th>SG of solid elements</th></tr>
+<tr><td><pre>
+msg: shell
+n_model: 1          # 1 beam, 2 plate, 3 solid
+refined: 1          # 0 classical, 1 shear-refined
+nodes:              # node coordinates
+elements:           # element connectivity
+sets:               # element sets, one per layup
+sections:           # one per element set
+  - elementSet: layup_0
+    layup:          # [material, thickness, angle] per ply
+      - [glass_triax, 0.003, 0.0]
+      - [glass_uniax, 0.026, 0.0]
+elementOrientations:  # material frame per element
+materials:          # engineering constants by name
+</pre></td>
+<td><pre>
+msg: solid
+n_model: 2          # 1 beam, 2 plate, 3 solid
+refined: 1          # 0 classical, 1 shear-refined
+nodes:              # node coordinates
+cells:              # element connectivity
+mat_id:             # material id per element
+materials:          # by id
+  1:
+    type: 1         # engineering constants
+    engineering: [E1, E2, E3, G12, G13, G23, nu12, nu13, nu23]
+    angle: 45.0     # ply angle
+</pre></td></tr>
+</table>
 
 The SG dimension (1D, 2D or 3D) is read from the mesh. Key-by-key reference and worked files: [docs/input_format.md](docs/input_format.md). Examples: `examples/OpenSG-solid` and `examples/OpenSG_shell`. Install details: [docs/installation.md](docs/installation.md).
 
