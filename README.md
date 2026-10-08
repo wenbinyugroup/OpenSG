@@ -4,17 +4,11 @@
 
 ## OpenSG: multiscale structural mechanics
 
-![OpenSG: Structure Genes homogenized into solid, plate/shell and beam models](docs/images/opensg_overview.webp)
+<p align="center"><img src="docs/images/opensg_overview.png" alt="OpenSG: Structure Genes homogenized into solid, plate/shell and beam models" width="600"></p>
 
 OpenSG is the multiscale structural-mechanics capability of `fea-in-jax`, built on the Mechanics of Structure Genome (MSG). It uses a Structure Gene (SG) to obtain the constitutive relations of solid, plate/shell and beam models, and it performs dehomogenization to recover the local stresses from the structural response.
 
-**Structure Gene (SG):** heterogeneity and anisotropy come from a Structure Gene meshed with solid elements. An SG can be built from solid, shell and beam elements.
-
-| SG meshed with | examples | homogenized model |
-|---|---|---|
-| solid elements | 1D SG, 2D SG, 3D SG | 3D solid, 2D plate/shell, 1D beam |
-| shell elements | airfoil, tapered shell, TPMS shell | 1D beam, 2D plate/shell |
-| beam elements | BCC, octahedron, FCC lattices | 3D solid, 2D plate/shell |
+**Structure Gene (SG):** heterogeneity and anisotropy come from a Structure Gene, meshed with solid elements as a 1D, 2D or 3D SG. An SG can be built from solid, shell and beam elements.
 
 ### Installing OpenSG
 

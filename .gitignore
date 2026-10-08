@@ -30,3 +30,6 @@ Thumbs.db
 
 # Sphinx build output (regenerate with: python -m sphinx -b html docs docs/_build)
 docs/_build/
+
+# README figures are tracked even though generated *.png files are ignored
+!docs/images/*.png
