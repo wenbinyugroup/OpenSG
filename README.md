@@ -12,11 +12,13 @@ OpenSG is the multiscale structural-mechanics capability of `fea-in-jax`, built 
 
 ### Installing OpenSG
 
+Two lines of OpenSG live in one repository: this JAX line on `main` (tags `v2.0.x`) and the FEniCS-based OpenSG 1.0 on the branch `fenics` (tag `v1.0.0`). Pick a version by its tag.
+
 OpenSG needs one conda-packaged dependency block (the FEniCSx `basix` basis and quadrature stack) on top of the JAX stack. The repository ships an `environment.yml` that installs everything, including the repository itself in editable mode:
 
 ```bash
-git clone -b akshat/opensg https://github.com/KeithBallard/fea-in-jax.git
-cd fea-in-jax
+git clone --branch v2.0.0 https://github.com/wenbinyugroup/OpenSG.git
+cd OpenSG
 conda env create -f environment.yml
 conda activate opensg
 ```
