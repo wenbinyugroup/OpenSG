@@ -24,7 +24,7 @@ OpenSG needs one conda-packaged dependency block (the FEniCSx `basix` basis and 
 git clone -b akshat/opensg https://github.com/KeithBallard/fea-in-jax.git
 cd fea-in-jax
 conda env create -f environment.yml
-conda activate opensg_2_0
+conda activate opensg
 ```
 
 The editable install puts three commands on your `PATH`; each takes an SG yaml and `H` (homogenize) or `D` (dehomogenize):

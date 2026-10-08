@@ -1,4 +1,4 @@
-name: opensg_2_0
+name: opensg
 channels:
   - conda-forge
 dependencies:

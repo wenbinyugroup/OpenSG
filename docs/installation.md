@@ -27,7 +27,7 @@ conda env create -f environment.yml
 ```
 
 ```bash
-conda activate opensg_2_0
+conda activate opensg
 ```
 
 The environment file does three things, in order: it installs the conda-forge
