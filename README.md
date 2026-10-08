@@ -2,6 +2,41 @@
 
 `fea-in-jax` is a Finite Element Analysis (FEA) library written in JAX. It leverages JAX's composable function transformations—JIT compilation, automatic differentiation, and vectorization—to provide a high-performance solver capable of running on GPUs and TPUs.
 
+## OpenSG: multiscale structural mechanics
+
+![OpenSG: Structure Genes homogenized into solid, plate/shell and beam models](docs/images/opensg_overview.webp)
+
+OpenSG is the multiscale structural-mechanics capability of `fea-in-jax`, built on the Mechanics of Structure Genome (MSG). It uses a Structure Gene (SG) to obtain the constitutive relations of solid, plate/shell and beam models, and it performs dehomogenization to recover the local stresses from the structural response.
+
+**Structure Gene (SG):** heterogeneity and anisotropy come from a Structure Gene meshed with solid elements. An SG can be built from solid, shell and beam elements.
+
+| SG meshed with | examples | homogenized model |
+|---|---|---|
+| solid elements | 1D SG, 2D SG, 3D SG | 3D solid, 2D plate/shell, 1D beam |
+| shell elements | airfoil, tapered shell, TPMS shell | 1D beam, 2D plate/shell |
+| beam elements | BCC, octahedron, FCC lattices | 3D solid, 2D plate/shell |
+
+### Installing OpenSG
+
+OpenSG needs one conda-packaged dependency block (the FEniCSx `basix` basis and quadrature stack) on top of the JAX stack. The repository ships an `environment.yml` that installs everything, including the repository itself in editable mode:
+
+```bash
+git clone -b akshat/opensg https://github.com/KeithBallard/fea-in-jax.git
+cd fea-in-jax
+conda env create -f environment.yml
+conda activate opensg_2_0
+```
+
+The editable install puts three commands on your `PATH`; each takes an SG yaml and `H` (homogenize) or `D` (dehomogenize):
+
+| command | what it is |
+|---|---|
+| `opensg <sg.yaml> [H\|D]` | the unified entry point, dispatching on the yaml's `msg:` key |
+| `opensg_solid <sg.yaml> [H\|D]` | the general 1D / 2D / 3D SG engine (solid elements) |
+| `opensg_shell <sg.yaml> [H\|D]` | the shell-element SG engine (contours and surfaces) |
+
+Worked examples are under `examples/OpenSG-solid` and `examples/OpenSG_shell`. Version pins, the GPU variant and the solver options are in [docs/installation.md](docs/installation.md).
+
 ## Features
 
 *   **GPU Acceleration**: Native support for hardware acceleration via JAX.
