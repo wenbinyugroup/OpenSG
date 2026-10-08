@@ -37,7 +37,8 @@ def station(tmp_path_factory):
     cs = build_cross_section(blade, 0.2, mesh_size=0.01)
     y = str(tmp / "st_r0200_shell.yaml")
     emit_shell_yaml(cs, y, reference="center")
-    P = beam_props(y, out_k=str(tmp / "st.K"))
+    # a center-offset contour is run at the center reference (run-time choice)
+    P = beam_props(y, out_k=str(tmp / "st.K"), ref="center")
     return dict(yaml=y, bundle=P["bundle"], tmp=tmp)
 
 

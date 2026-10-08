@@ -27,11 +27,14 @@ _MSGRM_TO_VABS = [0, 5, 4, 1, 3, 2]                       # -> [11, 12, 13, 22, 
 
 
 def dehom_station(shell_yaml, ff, n_depth=9, frame="material", bundle=None,
-                  rot="transpose"):
+                  rot="transpose", ref="oml"):
     """Two-step RM dehomogenization of one station over the full cross-section.
 
     In:
-        shell_yaml: str, 1-D shell SG yaml (its `reference` field sets frac).
+        shell_yaml: str, 1-D shell SG yaml.
+        ref: str, the laminate reference of its contour ("oml" default | "center";
+            opensg_shell.sg_reference) -- used only when no ``bundle`` is given,
+            the bundle carries its own reference.
         ff: str .ff path (read_ff) | dict from read_ff | (6,) [F1 F2 F3 M1 M2 M3].
         n_depth: int, through-thickness recovery points per element (ply-interior,
             zeta = (k + 0.5)/n_depth, 0 = OML .. 1 = IML).
@@ -52,7 +55,7 @@ def dehom_station(shell_yaml, ff, n_depth=9, frame="material", bundle=None,
     from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
     from .sg_beamdyn import read_ff
 
-    B = bundle if bundle is not None else build_rm_bundle(shell_yaml)
+    B = bundle if bundle is not None else build_rm_bundle(shell_yaml, ref=ref)
     C6 = np.asarray(B["Timo"])
     u0 = R3 = None; eta = float("nan")
     if isinstance(ff, str):
@@ -205,18 +208,19 @@ def write_vabs_u(path, pts, u):
 
 
 def dehom_to_files(shell_yaml, ff, out_base=None, n_depth=9, frame="material",
-                   bundle=None):
+                   bundle=None, ref="oml"):
     """Run dehom_station and write the .SM / .EM / .U triple.
 
     In:
         shell_yaml: str, 1-D shell SG yaml.
         ff: str | dict | (6,), see dehom_station.
         out_base: str | None, output base path (default <yaml base>, `_shell` stripped).
-        n_depth, frame, bundle: see dehom_station.
+        n_depth, frame, bundle, ref: see dehom_station.
     Out:
         dict from dehom_station, plus "files" [.SM, .EM, .U paths].
     """
-    D = dehom_station(shell_yaml, ff, n_depth=n_depth, frame=frame, bundle=bundle)
+    D = dehom_station(shell_yaml, ff, n_depth=n_depth, frame=frame, bundle=bundle,
+                      ref=ref)
     if out_base is None:
         out_base = os.path.splitext(shell_yaml)[0]
         if out_base.endswith("_shell"):

@@ -359,7 +359,8 @@ Each block is preceded by its section identity and full layup, for example
 
 Two facts about how these blocks are built matter when comparing them against hand
 calculations. First, the ABD is shifted by the parallel-axis rule to the reference surface the
-YAML declares (`reference: center` gives the laminate mid-surface, `fraction = 0.5`), so the
+run chose (`--center` / `ref="center"` gives the laminate mid-surface, `fraction = 0.5`; the
+default is the OML, `fraction = 0`), so the
 $\mathbf B$ block depends on that choice. Second, the transverse-shear block $\mathbf G$ is
 **always replaced** by the MSG least-squares result from `rm_plate_msg` — it is not a
 shear-correction-factor estimate, and there is no switch that selects anything else.

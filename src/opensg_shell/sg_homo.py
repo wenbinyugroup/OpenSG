@@ -187,7 +187,8 @@ BENCH = os.path.join(REPO, "examples", "data", "benchmark")
 
 
 def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
-               shear="mitc4_g23", lam_space="elem", return_fields=False):
+               shear="mitc4_g23", lam_space="elem", return_fields=False,
+               junction_twist="hinged"):
     """Constrained 6-DOF ring SG.  Returns the ring Timoshenko C6 (6,6); with
     return_fields=True also the zeroth/first-order warping fields V0, V1 (6m x 4,
     multiplier rows stripped) for the segment Dirichlet transfer -- including the
@@ -195,12 +196,27 @@ def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
 
     PRODUCTION shear scheme (ring): 'mitc4_g23' -- tie ONLY gamma_23.  Under span
     invariance gamma_13 carries no fluctuation gradient (it is algebraic in the
-    directors), so only gamma_23 pairs a differentiated displacement with rotations."""
+    directors), so only gamma_23 pairs a differentiated displacement with rotations.
+
+    junction_twist -- the twist condition of a wall that ENDS at a junction node
+    (its element chain terminates there; a wall passing through is never touched):
+      'hinged'    (default) nothing is added: the ending wall's own natural
+                  condition M12 = 0 holds at the node (the pre-existing behaviour,
+                  bit-identical), i.e. a free-edge twist boundary layer at the joint;
+      'kirchhoff' one extra Lagrange-multiplier row per (junction node, ending wall)
+                  imposing the element's transverse shear 2g13 = 0 at that node
+                  (junction_kirchhoff_rows): the wall's twist rotation t.om is tied
+                  to the rigid value -k1 (x2 y3 - x3 y2), a rigid twist joint.  A
+                  constraint, never a penalty; the multiplier is the twisting moment
+                  per unit length the wall transmits into the joint."""
     import jax.numpy as jnp
     from .sg_assembly import (assemble_segment_indep, assemble_constraint, NDOF6)
     from .fe_jax.msg_rm_timo import build_C_Psi
     from .fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
 
+    if junction_twist not in ("hinged", "kirchhoff"):
+        raise ValueError("junction_twist must be 'hinged' or 'kirchhoff', got %r"
+                         % (junction_twist,))
     m = len(rx)
     if h is None:
         h = float(np.mean(np.linalg.norm(rx[rcells[:, 1]] - rx[rcells[:, 0]], axis=1)))
@@ -218,6 +234,12 @@ def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     Dhh, Dhe, Dhl, Dll, Dle = [np.asarray(A) / h for A in (Dhh, Dhe, Dhl, Dll, Dle)]
     Dee = np.asarray(Dee) / h
     Gc, Gl, Ge = Gc / h, Gl / h, Ge / h
+    if junction_twist == "kirchhoff":
+        # appended AFTER the /h scaling: the rows are pointwise (2g13 at a node,
+        # dimensionless), so their multipliers are moments per unit length
+        Jc, Jl, Je, _ = junction_kirchhoff_rows(nodes, quads, rsub, e3q, rx, rcells,
+                                                cross, ax, dof_map)
+        Gc = np.vstack([Gc, Jc]); Gl = np.vstack([Gl, Jl]); Ge = np.vstack([Ge, Je])
 
     M = Dhh.shape[0]; P = Gc.shape[0]
     # 5-DOF rigid kernel/constraints on the contour, embedded into 6 DOF (om3 rigid-free)
@@ -585,11 +607,13 @@ def _voigt_rotate(C, Q):
     return Cr
 
 
-def junction_inventory(rx, cells, rsub, cross, ang_tol_deg=1.0):
+def junction_inventory(rx, cells, rsub, cross, ang_tol_deg=1.0, with_elems=False):
     """Junction nodes of the midline mesh: a node shared by walls with
     distinct tangents.  Per junction: walls = [(section, tangent2d, weight)],
     weight = 1 if the wall runs THROUGH the node (elements on both sides,
-    counted overlap length t_other), 1/2 if it ENDS there (counted t_other/2)."""
+    counted overlap length t_other), 1/2 if it ENDS there (counted t_other/2).
+    with_elems=True adds "wall_elems": the incident element ids of every wall
+    family, in the order of ``walls`` (opt-in; the default output is unchanged)."""
     ctol = np.cos(np.radians(ang_tol_deg))
     adj = {}
     for e, (n1, n2) in enumerate(cells):
@@ -612,16 +636,84 @@ def junction_inventory(rx, cells, rsub, cross, ang_tol_deg=1.0):
                 if float(np.dot(g["dir"], d)) > ctol:
                     g["sides"].add(side)
                     g["secs"].add(int(rsub[e]))
+                    g["elems"].append(int(e))
                     break
             else:
                 groups.append({"dir": d, "sides": {side},
-                               "secs": {int(rsub[e])}})
+                               "secs": {int(rsub[e])}, "elems": [int(e)]})
         if len(groups) < 2:
             continue
         walls = [(sorted(g["secs"])[0], g["dir"],
                   1.0 if len(g["sides"]) == 2 else 0.5) for g in groups]
-        out.append({"node": int(nd), "walls": walls})
+        J = {"node": int(nd), "walls": walls}
+        if with_elems:
+            J["wall_elems"] = [list(g["elems"]) for g in groups]
+        out.append(J)
     return out
+
+
+def junction_kirchhoff_rows(nodes, quads, rsub, e3q, rx, rcells, cross, ax, dof_map,
+                            ang_tol_deg=1.0):
+    """Kirchhoff (zero transverse shear) constraint rows at the junction nodes of
+    the RM ring strip -- the ``junction_twist='kirchhoff'`` option of ring_indep.
+
+    For every junction node J (junction_inventory) and every wall family that ENDS
+    at J (its element chain terminates there; a wall running THROUGH J gets no row)
+    one Lagrange-multiplier row imposes the ending element's own transverse-shear
+    measure at that node,
+        2g13(J) = t.om + x11 [k1 (x2 y3 - x3 y2) + n.w'] + D1(n.w) = 0 ,
+    taken verbatim from quad_ops_indep_batch (rows BGh[0], BGl[0], BGe[0]) at the
+    parent point of node J of that element, so the sign of the k1 term, the -1/-2
+    split of the twist and any frame flip are exactly the element's.  In the ring
+    the D1 term cancels through the dof_map (top row = bottom row), so the row acts
+    on the rotation slots 3:6 of J with the wall tangent (x12, x22, x32), on the w'
+    slots 0:3 with x11 (y1, y2, y3), and on the beam-strain block with
+    [x11 y1, x11 (x2 y3 - x3 y2), x11 y1 x3, -x11 y1 x2] (k1 column = the rigid
+    twist part).  The rows are pointwise and dimensionless (NOT area-integrated):
+    their multipliers are the twisting moment per unit length the ending wall
+    pushes into the joint (-+ M12 at the wall end).
+
+    In:
+      nodes, quads, rsub, e3q: the ring strip as ring_indep builds it
+        ((2m,3), (ne,4) [a, b, m+b, m+a], (ne,), (ne,3)).
+      rx, rcells: (m,3) contour nodes and (ne,2) contour elements.
+      cross, ax: cross-section coordinate pair and beam-axis index.
+      dof_map: (2m,) int node -> dof-node map of the strip.
+      ang_tol_deg: tangent-grouping tolerance of junction_inventory.
+    Out:
+      Jc (P,6Nd) on w_s, Jl (P,6Nd) on w_s', Je (P,4) on eb (P = number of
+      (junction, ending wall) pairs, possibly 0), and rows: list of dicts
+      {"node", "elem", "sec", "tangent", "xi"} describing each row in order."""
+    from .sg_assembly import quad_ops_indep_batch, NDOF6
+    nodes = np.asarray(nodes, float); quads = np.asarray(quads, int)
+    dof_map = np.asarray(dof_map, int)
+    Nd = int(np.max(dof_map)) + 1; M = NDOF6 * Nd
+    inv = junction_inventory(rx, rcells, rsub, cross, ang_tol_deg=ang_tol_deg,
+                             with_elems=True)
+    rows = []
+    for J in inv:
+        nd = J["node"]
+        for (sec, d2, w), elems in zip(J["walls"], J["wall_elems"]):
+            if w >= 1.0:
+                continue                      # runs through J: no row
+            e = int(elems[0])                 # the one element of the ending chain at J
+            a, b = int(rcells[e][0]), int(rcells[e][1])
+            xi = -1.0 if a == nd else 1.0     # parent coordinate of node J in quad e
+            rows.append({"node": int(nd), "elem": e, "sec": int(sec),
+                         "tangent": [float(d2[0]), float(d2[1])], "xi": xi})
+    P = len(rows)
+    Jc = np.zeros((P, M)); Jl = np.zeros((P, M)); Je = np.zeros((P, 4))
+    for r, row in enumerate(rows):
+        e = row["elem"]
+        Xe = nodes[quads[e]][None]; e3e = np.asarray(e3q, float)[e][None]
+        _, _, _, BGe, BGh, BGl, _, _, _, _ = quad_ops_indep_batch(
+            Xe, e3e, row["xi"], -1.0, cross, ax)
+        gloc = (NDOF6 * dof_map[quads[e]])[:, None] + np.arange(NDOF6)[None, :]
+        gloc = gloc.reshape(-1)
+        np.add.at(Jc[r], gloc, BGh[0, 0])     # D1 parts cancel on the mapped pairs
+        np.add.at(Jl[r], gloc, BGl[0, 0])
+        Je[r] = BGe[0, 0]
+    return Jc, Jl, Je, rows
 
 
 def _wall_normal_integrand(d2, ABD, G):
@@ -995,9 +1087,10 @@ def write_abdg_out(out_path, sections, D_by, G_by):
     return out_path
 
 
-def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
+def build_solid_bundle(shell_yaml, ref="oml", shear="mitc4_g23", g_source=None,
                        cell_area=None, periodic=True, junction=None):
-    """Load the shell yaml exactly as build_rm_bundle does (same reference logic,
+    """Load the shell yaml exactly as build_rm_bundle does (same reference rule --
+    ``ref`` is the run-time laminate reference, default "oml", never a yaml key --
     same MSG wall transverse-shear upgrade), run ring_solid, and package:
 
         {"C3D", "D_eff", "cell_area", "area_source", "V0", geometry..., "order"}
@@ -1009,14 +1102,14 @@ def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
     import yaml as _yaml
     from .sg_mesh import load_ring_ref
     from .sg_materials import check_g_source
+    from .sg_reference import norm_ref, frac_of
 
     check_g_source(g_source, "build_solid_bundle")
     _t0 = _time.perf_counter()
     d = _yaml.safe_load(open(shell_yaml))
-    if ref is None:
-        ref = d.get("reference", "center")
+    ref = norm_ref(ref)
     R = load_ring_ref(shell_yaml, ref)
-    frac = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}.get(ref, 0.0)
+    frac = frac_of(ref)
     G_by = list(R["G_by"])
     # wall transverse-shear G: the MSG (Yu-2002 LS) construction, the only route
     from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
@@ -1038,6 +1131,14 @@ def build_solid_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
                           R["k22"], R["ax"], R["cross"], shear=shear,
                           lam_space="elem", return_fields=True, periodic=periodic)
     jinfo = None
+    if junction and ref != "center":
+        # the corrections stack the crossing walls on COINCIDENT MIDLINES
+        # (sg_junction.stack_shell_law / corner_micro_law, frac 0.5): with
+        # any other laminate reference the patch geometry and the ring law
+        # would disagree -- refuse rather than mix references silently
+        raise ValueError("junction=%r builds coincident-midline wall stacks:"
+                         " run it with the center reference (--center /"
+                         " ref='center'), not %r" % (junction, ref))
     if junction == "census":
         # sigma_nn is blocked on the t_A x t_B wall-overlap blocks: swap the
         # condensed wall law for the full 3-D law there (normal block only;
@@ -1275,8 +1376,14 @@ def _kkt_solve(A, R, n_dual, scale, rtol=1e-10, atol=1e-7, max_refine=20):
 
 def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
                solver="direct",
-               boundary=None, shear="mitc"):
+               boundary=None, shear="mitc", ref="oml"):
     """Equivalent 3-D solid stiffness of a 3-D shell SG.
+
+    ``ref`` is the laminate reference of the facets -- the same run-time rule
+    as every msg-shell route (sg_reference): "oml" (default) = each laminate
+    stacks inward from the mesh surface; "center" (the CLI's --center) = the
+    mesh is the laminate mid-surface (ABD shifted by t/2, plate-SG z origin at
+    the mid-surface).  Never read from the yaml; the nodes are never moved.
 
     DRILLING.  The independent omega_3 is pinned by an element-wise LAGRANGE
     MULTIPLIER -- one piecewise-constant multiplier per element enforcing
@@ -1353,7 +1460,10 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
               sg_materials.check_g_source
     """
     from .sg_materials import check_g_source
+    from .sg_reference import norm_ref, frac_of
     check_g_source(g_source, "shell_sg3d")
+    ref = norm_ref(ref)
+    frac = frac_of(ref)
     if drill_pen is not None:
         import warnings
         warnings.warn(
@@ -1406,8 +1516,10 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
     # Done for ALL sections (not just the one the SG solve uses) so the emitted
     # _ABDG.out is the complete step-1 record, exactly as the cross-section
     # routes build_rm_bundle / build_solid_bundle write it.
+    # at the run-time laminate reference (``ref``: default oml, --center = the
+    # facets sit on the laminate mid-surface), exactly like the ring routes
     D_by, G_by = _material_by_section(d["sections"], d["materials"],
-                                      center_ref=True)
+                                      center_ref=(ref == "center"))
     # wall transverse-shear G: the MSG (Yu-2002 LS) construction, the only route
     from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
     from .sg_materials import material_db_from_yaml
@@ -1417,7 +1529,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
     for si, sec in enumerate(d["sections"]):
         pl = [[str(p[0]), float(p[1]), float(p[2])] for p in sec["layup"]]
         rr = rm_plate_msg([p[1] for p in pl], [p[2] for p in pl],
-                          [p[0] for p in pl], _mdb, fraction=0.5)
+                          [p[0] for p in pl], _mdb, fraction=frac)
         if rr["G_msg"] is not None:
             G_by[si] = np.asarray(rr["G_msg"], float).reshape(2, 2)
     # step 1 on disk, same emitter and same layout as the cross-section routes
@@ -1656,6 +1768,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
                      % (nn, ne, el_txt, n_junc_edges, bc_txt, P, V_cell),
                name="Cauchy Continuum")
     return {"C3D": C3D, "D_eff": Deff, "solve_time": solve_time,
+            "ref": ref, "frac": frac,
             "n_junction_edges": n_junc_edges, "ndof": ndof,
             "boundary": boundary, "n_boundary_nodes": n_bnd,
             "omega": float(omega), "cell_volume": V_cell,
@@ -1736,7 +1849,7 @@ def _boundary_dirichlet(rings, b, key):
 
 def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
                              shear="full", write_boundary_yamls=True,
-                             return_full=False):
+                             return_full=False, ref="oml"):
     """Timoshenko 6x6 of a shell SEGMENT with aperiodic (Dirichlet) ends.
 
     Zeroth order (Euler-Bernoulli):
@@ -1757,8 +1870,11 @@ def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
     shear     : transverse-shear integration for the SEGMENT operators;
                 "full" is the production default (MITC tying aliases the
                 drilling content on flat-walled/webbed sections)
+    ref       : the laminate reference of the facets, a run-time choice
+                (sg_reference): "oml" (default, laminate stacked inward from
+                the mesh surface) | "center" (the mesh is the mid-surface)
     ax, cross : axial coordinate index and the two cross-section indices
-    D_by, G_by: per-section laminate stiffness / shear blocks (center ref)
+    D_by, G_by: per-section laminate stiffness / shear blocks (at ``ref``)
     k22_e,kg_e: element hoop-curvature and geometric-curvature corrections
     rings     : per-side ring results {C6, V0, V1} solved SEPARATELY
     Lz        : segment length = extent of nodes along the axis
@@ -1774,8 +1890,10 @@ def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
     from .sg_assembly import (assemble_segment_indep, assemble_constraint,
                                 build_C_Psi_segment6)
     from .sg_materials import _material_by_section
+    from .sg_reference import norm_ref
     from .fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
 
+    ref = norm_ref(ref)
     t0 = time.perf_counter()
     base = os.path.splitext(seg_yaml)[0]
     if workdir is not None:
@@ -1794,7 +1912,7 @@ def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
                      np.asarray(b["seg_e3"]))
     D_by, G_by = _material_by_section(json.loads(str(b["sections"])),
                                       json.loads(str(b["materials"])),
-                                      center_ref=True)
+                                      center_ref=(ref == "center"))
     cents = nodes[quads].mean(1)
     k22_e = compute_k22(cents, e2s, e3s, quads)
     kg_e = compute_kg(cents, e1s, e2s, e3s, quads)
@@ -1889,17 +2007,20 @@ def _strip(rx3, cells, ax):
     return nodes, quads, h
 
 
-def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
-                    abd_out=True):
+def build_rm_bundle(shell_yaml, ref="oml", shear="mitc4_g23", g_source=None,
+                    abd_out=True, junction_twist="hinged"):
     """Homogenize with the RM ring and package everything the two-step dehom needs.
 
-    ``ref=None`` reads the reference surface from the yaml's ``reference`` field -- the single
-    source of truth, set when the 1-D yaml is created (absent -> "center" = mid-surface) -- so
-    homogenization and dehom follow the same reference; pass an explicit ``ref`` only to override.
+    ``ref`` names the laminate reference of the node contour -- a RUN-TIME choice (the CLI's
+    --center flag; default "oml"), never read from the yaml: "oml" = the contour is the outer
+    mold line and every laminate stacks inward from it; "center" = the contour is the laminate
+    mid-surface and the ABD is parallel-axis shifted by t/2 (sg_reference).  The nodes are
+    never moved -- where the contour sits was decided when the yaml was generated.  The
+    bundle carries ``ref``/``frac`` so homogenization and dehom follow the same reference.
 
     In:
         shell_yaml: str, path to the 1-D shell section yaml.
-        ref: None | "center" | "oml" | "oml_flip" | "iml", reference-surface override.
+        ref: "oml" (default) | "center" | "oml_flip" | "iml", the laminate reference.
         shear: str, RM transverse-shear tying scheme passed to ring_indep.
         g_source: DEPRECATED, accepted and ignored.  The wall transverse-shear block
             G is always the MSG (Yu-2002 least-squares) projection -- the only route;
@@ -1907,6 +2028,9 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
         abd_out: bool, write the <base>_ABDG.out record and the abd/ station
             cache (default True = the pipeline behavior); False = the terminal
             st-id routes, which keep only yaml + _Timo.out + .K.
+        junction_twist: "hinged" (default, the pre-existing behaviour) |
+            "kirchhoff", the twist condition of a wall ending at a junction node,
+            passed to ring_indep (the CLI header key `junction_twist:`).
     Out:
         dict bundle: "Timo" (6,6) RM Timoshenko matrix; "solve_time" float (the
         value written into <base>_Timo.out); "V0"/"V1" (6m,4) warping modes;
@@ -1926,12 +2050,12 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
     except ImportError:
         from yaml import SafeLoader as _YL
     d = yaml.load(open(shell_yaml), Loader=_YL)
-    if ref is None:                                       # single source of truth: yaml records its ref
-        ref = d.get("reference", "center")                # (set at 1-D-yaml creation; absent -> center)
+    from .sg_reference import norm_ref, frac_of
+    ref = norm_ref(ref)                                   # run-time choice; a yaml key is never read
     R = load_ring_ref(shell_yaml, ref)
     # Single reference decision: ring laminate ref, plate-SG z_ref, layup_db frac, emitted ABD,
     # and the recovery depth conversion in stress_at_points ALL follow ``frac``.
-    frac = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}.get(ref, 0.0)
+    frac = frac_of(ref)
     # G_msg is reference-independent, but the SG carries the recovery warping, so its z_ref
     # must sit at the chosen reference surface.
     # R["G_by"] is a per-section DICT {si: (2,2)} -- materialize the per-section list of
@@ -1962,7 +2086,7 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
                        d["sections"], R["D_by"], G_by)
     C6, V0, V1 = ring_indep(R["rx"], R["cells"], R["rsub"], R["re3"], R["D_by"], G_by,
                             R["k22"], R["ax"], R["cross"], shear=shear, lam_space="elem",
-                            return_fields=True)
+                            return_fields=True, junction_twist=junction_twist)
     C6 = 0.5 * (C6 + C6.T)
     nodes, quads, h = _strip(R["rx"], R["cells"], R["ax"])
 
@@ -1980,9 +2104,19 @@ def build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23", g_source=None,
             from .sg_materials import emit_station_abd
             _tag = _os.path.splitext(_os.path.basename(shell_yaml))[0]
             _ay = _os.path.join(_os.path.dirname(shell_yaml) or ".", "abd", _tag + "_abd.yaml")
-            if not _os.path.exists(_ay):
-                emit_station_abd(shell_yaml, _ay, station=_tag,
-                                 ref="mid" if ref == "center" else "oml")
+            # the cache is reused only when it was emitted at THIS run's
+            # reference (its own `reference:` line says which); a cache left
+            # by a run at the other reference is re-emitted, never trusted
+            _want = {"center": "mid", "oml": "oml"}.get(ref, "iml")
+            _have = None
+            if _os.path.exists(_ay):
+                with open(_ay) as _f:
+                    for _ln in _f:
+                        if _ln.startswith("reference:"):
+                            _have = _ln.split(":", 1)[1].split("#")[0].strip().strip("'\"")
+                            break
+            if _have != _want:
+                emit_station_abd(shell_yaml, _ay, station=_tag, ref=_want)
         except Exception:
             # intentional best-effort: ABD yaml emission failure must not abort the bundle build
             pass

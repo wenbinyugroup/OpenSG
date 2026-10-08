@@ -217,7 +217,7 @@ Key & Content \\
 \texttt{elementOrientations} & one $3\times3$ frame per element, flattened; the first row is $\mathbf{e}_1$, \\
   & out of the section plane, along the beam axis \\
 \texttt{materials} & \texttt{density} in kg/m$^3$ and orthotropic \texttt{elastic: \{E, G, nu\}} triples in Pa \\
-\texttt{reference} & which surface the section geometry refers to \\
+(leading comment) & which surface the contour was generated on --- the run passes \texttt{--center} for a mid-surface contour \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -243,26 +243,27 @@ sections:
     - 0.0
 \end{lstlisting}
 
-The \texttt{reference} field is load-bearing and is the single source of truth
-for the whole chapter. \texttt{build\_rm\_bundle} reads it when no override is
-passed, and it fixes the through-thickness offset \texttt{frac} used by the
-ring laminate law, the plate SG's reference plane, the emitted ABD and the
-recovery depth conversion alike. The IEA stations all carry
-\texttt{reference: center}.
+The laminate reference is load-bearing for the whole chapter, and it is a
+run-time choice rather than a yaml field: the IEA station contours are
+generated on the laminate mid-surface (the skin is offset inward by $t/2$
+from the OML, recorded as a leading comment line of each yaml), so every run
+of this chapter passes \texttt{--center} (\texttt{build\_rm\_bundle(...,
+ref="center")} in Python). That flag fixes the through-thickness offset
+\texttt{frac} used by the ring laminate law, the plate SG's reference plane,
+the emitted ABD and the recovery depth conversion alike; without it the
+contour is taken as the OML and every laminate stacks inward from it.
 
 \begin{table}[htbp]
 \centering
 \small
-\caption{The \texttt{reference} field and the through-thickness fraction it sets.}
+\caption{The laminate reference of a run and the through-thickness fraction it sets.}
 \label{tab:windio:reference}
 \begin{tabular}{lll}
 \toprule
-\texttt{reference} & \texttt{frac} & Meaning \\
+run & \texttt{frac} & Meaning \\
 \midrule
-\texttt{center} & 0.5 & mid-surface (what the IEA stations use) \\
-\texttt{oml} & 0.0 & outer mould line \\
-\texttt{oml\_flip} & 1.0 & outer mould line, reversed stacking \\
-\texttt{iml} & 1.0 & inner mould line \\
+\texttt{opensg <yaml> --center} & 0.5 & mid-surface (what the IEA stations need) \\
+\texttt{opensg <yaml>} (default) & 0.0 & outer mould line \\
 \bottomrule
 \end{tabular}
 \end{table}

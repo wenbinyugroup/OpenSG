@@ -13,8 +13,10 @@
                            n_model/refined ALWAYS from the yaml header)
     ff_to_glb.convert      its dehom side (`opensg ff_to_glb`): the `.ff`
                            macro state -> the SwiftComp `<base>.sc.glb`
-                           (SCManual section 9; id1=0 generalized
-                           stresses, RM plate 8 resultants / else 6)
+                           (SCManual section 9: the Eq. 38/39 direction
+                           cosines, id1 1 + the `0:` strain by default
+                           or id1 0 + the `1:` forces; RM plate 8 values
+                           / else 6, GATED against the .sc submodel)
     k_file                 the ONE `.K` / `.sc.k` reader + compare_to_K
 
 (the opensg_shell.helper

@@ -25,7 +25,9 @@ from ..fe_jax.msg_rm_timo import build_C_Psi
 from ..fe_jax.msg_solver import finalize_v1_and_compute_deff
 
 _GP = np.array([-1.0, 1.0]) / np.sqrt(3.0)               # 2-pt Gauss (exact: quadratic)
-_FRAC = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}
+# reference name -> thickness fraction: the ONE definition (a typo raises, never
+# silently runs as OML)
+from ..sg_reference import frac_of as _frac_of                # noqa: E402
 
 
 def compute_k22(centroids, e2s, e3s, elems, flat_tol=1e-3, k22_max=None,
@@ -339,7 +341,7 @@ def ring_laws(sections, materials, reference):
             for si, sec in enumerate(sections):
                 t = sum(float(p[1]) for p in sec["layup"])
                 D_by[si] = shift_abd_reference(np.asarray(D_by[si]), t)
-    frac = _FRAC.get(reference, 0.0)
+    frac = _frac_of(reference)
     G_by = [np.asarray(G_by[si], float) for si in range(len(sections))]
     from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg
     _mdb = material_db_from_yaml(materials)
@@ -391,7 +393,7 @@ def mass_ring(rx, cells, re3, rsub, sections, materials, reference):
         (M (6,6), info dict) -- mass_matrix_ring's schema (mass_center,
         M_center, principal inertias, mpus, area, geometric_center, ref).
     """
-    frac = _FRAC.get(reference, 0.0)
+    frac = _frac_of(reference)
     rho = {m["name"]: float(m["density"]) for m in materials}
     layups = [[(str(p[0]), float(p[1]), float(p[2])) for p in s["layup"]]
               for s in sections]

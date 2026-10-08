@@ -57,9 +57,11 @@ Conventions
   blade route (Blade, `gen_windio_cs`, `windio_st`, `pynumad` -- no option).
   A **center** (mid-surface) section for matching a 2-D solid / VABS model is
   an SG-engine study: `reference = "center"` in step 1's `emit_shell_yaml`
-  call, recorded in the emitted yaml's `reference` field (single source of
-  truth for homogenization and dehom), as
-  `tests/msg_shell_windio/test_vabs_k_beam_props.py` does.
+  call moves the contour to the mid-surface (recorded only as a comment line
+  of the yaml), and the engine is then run with `--center`
+  (`beam_props(yaml, ref="center")`), as
+  `tests/msg_shell_windio/test_vabs_k_beam_props.py` does.  The engine's
+  laminate reference is a run-time choice; nothing in the yaml sets it.
 - Cross-section matrices are VABS order/frame (1 = axial); BeamDyn files are written
   in the IEC blade frame via the beam-axis swap `B = [[0,0,1],[0,-1,0],[1,0,0]]`.
 - BeamDyn runs TRAPEZOIDAL quadrature so output nodes coincide with the property

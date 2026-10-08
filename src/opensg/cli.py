@@ -5,13 +5,25 @@
                             Output frame: --material (each element's PLY
                             axes, the DEFAULT) | --global (the SG axes
                             every pre-flag .SM was written in)
+    opensg <sg.yaml> --center
+                            msg-shell only: the node contour is the
+                            laminate MID-SURFACE (a center-offset mesh,
+                            e.g. the IEA stations), so the wall ABD is
+                            referenced to it (parallel-axis shift t/2)
+                            and the recovery depths run -t/2..+t/2.
+                            Without it the contour is the OML and every
+                            laminate stacks inward from it.  The nodes
+                            are never moved; a `reference:` yaml key is
+                            ignored.  Refused for a solid SG
     opensg <sg.yaml> --mesh  run as above AND (re)draw <base>_mesh.png,
                             elements coloured by material -- a FLAG, not
                             an analysis, so it combines: `<sg.yaml> D
-                            --mesh` dehomogenizes and redraws.  Every run
-                            writes that PNG anyway when it is missing or
-                            older than the yaml; --mesh forces it
-                            (`-m` / `mesh` are accepted too)
+                            --mesh` dehomogenizes and redraws.  A solid
+                            run writes that PNG anyway when it is missing
+                            or older than the yaml (--mesh forces it and
+                            emits the gmsh-2.2 <base>.msh); an msg-shell
+                            run writes <base>_mesh.png + <base>.msh only
+                            with the flag (`-m` / `mesh` are accepted too)
     opensg <sg.yaml> --solver F [N]
                             pick the linear solver of the fluctuation
                             solves: F = direct (assembled sparse
@@ -49,8 +61,10 @@
     opensg sc_to_yaml <file.sc> [...] --n_model {1,2,3}
                             SwiftComp .sc -> <base>.yaml + <base>.msh (the
                             solid-dialect SG yaml opensg_solid reads).
-                            --n_model is the ONLY flag; everything else
-                            (refined: 1, omega, ...) the user adds BY HAND
+                            --refine {0,1} writes the `refined:` header
+                            (an explicit flag re-emits a kept yaml whose
+                            header disagrees); everything else (omega,
+                            ...) the user adds BY HAND
                             in the emitted yaml header.  An existing
                             <base>.yaml is therefore KEPT (hand edits
                             win) -- delete it to re-emit
@@ -72,16 +86,20 @@
 
     opensg ff_to_glb <file.ff> [...]
                             the DEHOM side of yaml_to_sc: the `.ff` macro
-                            state (u / theta|C / FF [/ Q]) -> the
+                            state (u / theta|C / 0: / 1: [/ Q]) -> the
                             SwiftComp dehom input <base>.sc.glb (SCManual
-                            section 9: v, Cij, id1=0, the generalized
-                            STRESSES -- 8 resultants for a refined: 1
-                            plate, N13/N23 from the .ff `Q:` or 0 0 with
-                            a note; 6 otherwise).  The resultant count
-                            comes from `<stem>.yaml` beside the .ff when
-                            it exists, or --yaml / --n_model/--refined;
-                            with none of those the RM plate is assumed
-                            and printed.  Then run
+                            section 9: v, the Eq. 38/39 direction cosines
+                            Cij, id1, then the generalized STRAIN (`0:`,
+                            id1 1 -- default when present, the state
+                            OpenSG's own recovery used) or STRESSES (`1:`,
+                            id1 0 / --id1 0): 8 values for a refined: 1
+                            plate, 6 otherwise).  The count comes from
+                            `<stem>.yaml` beside the .ff, or --yaml /
+                            --n_model/--refined (classical plate assumed
+                            and printed otherwise), and is GATED against
+                            the submodel line of the sibling .sc -- a
+                            mismatch is silent in SwiftComp (zero-byte
+                            outputs, nothing in the .ech).  Then run
                             `SwiftComp <base>.sc 2D|3D L`
                             (ff_to_glb --help for the flags)
 
@@ -195,6 +213,12 @@ def main(argv=None):
                 if _i + 1 < len(argv):
                     conv.append(argv[_i + 1])
                     _i += 1
+            elif _al in ("--h_refine", "--h-refine"):
+                raise SystemExit(
+                    "--h_refine is a conversion step, not an analysis"
+                    " flag: run `opensg msh_to_yaml <mesh>.msh"
+                    " --h_refine N ...` first, then analyse the emitted"
+                    " yaml")
             elif _al in ("--p_refine", "--p-refine", "--force"):
                 conv.append(_a)
             else:
@@ -253,7 +277,7 @@ def main(argv=None):
                 _i += 1
             continue
         if _al in ("--mesh", "-m", "mesh", "--material", "--global",
-                   "--gpu", "gpu"):
+                   "--gpu", "gpu", "--center"):
             _i += 1
             continue
         _pos.append(argv[_i])
@@ -277,6 +301,13 @@ def main(argv=None):
     if resolve_msg(argv[0]) == "shell":
         from opensg_shell.cli import main as _engine
     else:
+        if any(str(a).strip().lower() == "--center" for a in argv):
+            # the laminate reference is an msg-shell notion (which surface
+            # of a WALL the contour is); a solid SG carries its material
+            # explicitly and has nothing to reference
+            raise SystemExit("--center is an msg-shell flag (the laminate"
+                             " reference of a shell contour); %s is a solid"
+                             " SG -- drop the flag" % os.path.basename(argv[0]))
         from opensg_solid.cli import main as _engine
     return _engine(argv)
 
@@ -321,15 +352,18 @@ def sc_to_yaml(argv):
     """The `opensg sc_to_yaml` subcommand: SwiftComp .sc -> SG yaml + .msh.
 
     A thin batch driver over opensg_solid.io.sc_to_yaml.convert.
-    --n_model is the ONLY flag: every other header key (refined:,
-    omega:, ...) the user adds BY HAND in the emitted yaml afterwards.
-    For exactly that reason an existing UP-TO-DATE <base>.yaml is KEPT,
-    never overwritten (convert()'s hand-edits-win rule); a stale pair
-    (the .sc is newer) is re-emitted with the requested n_model.
-    Delete the yaml to force a fresh emit.
+    --refine {0,1} writes the `refined:` header key (io convert()
+    always carried the argument; this flag exposes it).  Every other
+    header key (omega:, ...) the user adds BY HAND in the emitted yaml
+    afterwards, so an existing UP-TO-DATE <base>.yaml is KEPT, never
+    overwritten (convert()'s hand-edits-win rule) -- EXCEPT when an
+    explicit --refine disagrees with the kept yaml's own header: an
+    explicit flag is an emission request (the msh_to_yaml rule), so
+    the yaml is re-emitted.  A stale pair (the .sc is newer) re-emits
+    either way.  Delete the yaml to force a fresh emit.
 
     In:  argv (list[str]) -- everything after the `sc_to_yaml` keyword:
-         .sc paths/globs + --n_model {1,2,3}
+         .sc paths/globs + --n_model {1,2,3} [--refine {0,1}]
     Out: int exit code (0 ok, 1 any file failed, 2 usage)."""
     import argparse
     import glob
@@ -344,6 +378,11 @@ def sc_to_yaml(argv):
     p.add_argument("--n_model", "--n-model", dest="n_model", type=int,
                    required=True, choices=(1, 2, 3),
                    help="yaml header n_model: 1 beam, 2 plate, 3 solid")
+    p.add_argument("--refine", "--refined", dest="refined", type=int,
+                   choices=(0, 1), default=None,
+                   help="yaml header refined: 0 classical | 1 shear-"
+                        "refined; an explicit flag re-emits a kept yaml"
+                        " whose header disagrees")
     a = p.parse_args(argv)
 
     paths = sorted(glob.glob(a.sc)) or [a.sc]
@@ -357,8 +396,22 @@ def sc_to_yaml(argv):
             kept = (os.path.exists(yml) and os.path.exists(msh)
                     and os.path.getmtime(yml) >= os.path.getmtime(sc)
                     and os.path.getmtime(msh) >= os.path.getmtime(sc))
+            if kept and a.refined is not None:
+                # an explicit --refine is an emission request (the
+                # msh_to_yaml rule): a kept yaml whose header disagrees
+                # is re-emitted; one that already agrees stays kept
+                import re as _re
+                _m = _re.search(r"^refined:\s*(\d)",
+                                open(yml).read(2048), _re.M)
+                if _m is None or int(_m.group(1)) != a.refined:
+                    os.remove(yml)
+                    kept = False
+                    print("sc_to_yaml: re-emitting %s.yaml -- explicit"
+                          " --refine %d differs from the kept header"
+                          % (base, a.refined))
             from opensg_solid.io.sc_to_yaml import convert
-            convert(sc, n_model=a.n_model)
+            convert(sc, n_model=a.n_model,
+                    refined=0 if a.refined is None else a.refined)
             if kept:
                 print("sc_to_yaml: kept the existing %s.yaml (hand"
                       " edits win) -- delete it to re-emit from the"
@@ -461,15 +514,17 @@ def msh_to_yaml(argv):
     either way (io.msh_to_yaml.check_filled), so a leftover placeholder
     can never silently pick the wrong macro model.  The orientation is
     not in a .msh either; every element gets convert()'s constant
-    e1-out-of-plane default frame.  --p_refine elevates a LINEAR tet mesh
-    to its conforming quadratic (tet10) twin first
-    (opensg_solid.helper.linear_msh_to_quad) and converts THAT; an
-    already-quadratic input is refused (cubic is not supported yet).
+    e1-out-of-plane default frame.  --p_refine elevates a LINEAR
+    tet/tri/quad mesh to its conforming quadratic (tet10/tri6/quad9)
+    twin first (opensg_solid.helper.linear_msh_to_quad) and converts
+    THAT; an already-quadratic input is refused (cubic is not supported
+    yet).
 
     In:  argv (list[str]) -- everything after the `msh_to_yaml` keyword:
          .msh paths/globs, plus --mat<K> NAME[:ANGLE] per physical tag,
          --materials PATH (library override), --n_model {1,2,3},
-         --refined {0,1}, --p_refine, --out-base BASE (single input only),
+         --refined {0,1}, --h_refine [N] (N uniform subdivision levels
+         first), --p_refine, --out-base BASE (single input only),
          --force
     Out: int exit code (0 ok, 1 any file failed, 2 usage)."""
     import argparse
@@ -527,11 +582,39 @@ def msh_to_yaml(argv):
                         "(default resolution: ./materials.yaml, then one "
                         "next to the .msh, then the packaged "
                         "opensg_solid/io/materials.yaml)")
+    def _levels(v):
+        """--h_refine N: the number of split LEVELS, a whole number."""
+        try:
+            n = int(str(v).strip())
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                "--h_refine takes a whole number of split LEVELS (1 = "
+                "one split, 2 = two, ...), got %r" % (v,))
+        if n < 1:
+            raise argparse.ArgumentTypeError(
+                "--h_refine levels must be >= 1, got %d" % n)
+        return n
+
+    p.add_argument("--h_refine", "--h-refine", dest="h_refine",
+                   nargs="?", const=1, type=_levels, default=None,
+                   metavar="N",
+                   help="uniform CONFORMING subdivision of the mesh "
+                        "BEFORE any --p_refine, h HALVES per level: "
+                        "tri3/quad4 -> 4, tet4/hex8 -> 8, and the "
+                        "quadratic grades (tri6/quad9/tet10) through "
+                        "their linear skeleton.  N = how many levels: "
+                        "2 splits twice, 3 three times; bare flag = 1. "
+                        "The level lives in the output name "
+                        "(mesh_h2/_h4/_h8...), so rerunning on the "
+                        "newest mesh gives the next one.  Edge "
+                        "min/mean/max is printed at every level "
+                        "(helper.msh_h_refine; gate it with "
+                        "helper.verify_refinement)")
     p.add_argument("--p_refine", "--p-refine", dest="p_refine",
                    action="store_true",
                    help="elevate the mesh one polynomial grade BEFORE "
-                        "converting: a linear tet mesh becomes its "
-                        "conforming quadratic (tet10) twin "
+                        "converting: a linear tet/tri/quad mesh becomes "
+                        "its conforming quadratic (tet10/tri6/quad9) twin "
                         "(<stem>_quad.msh, helper.linear_msh_to_quad) and "
                         "the yaml is emitted from THAT; an already-"
                         "quadratic mesh is refused (cubic not supported "
@@ -551,17 +634,23 @@ def msh_to_yaml(argv):
             if not os.path.exists(msh):
                 raise FileNotFoundError("no such file: %s" % msh)
             src = msh
+            if a.h_refine is not None:
+                # h BEFORE p: split the linear mesh, then (optionally)
+                # promote the split one -- the ladder workflow
+                from opensg_solid.helper import msh_h_refine
+                src = msh_h_refine(src, levels=int(a.h_refine))["msh"]
             if a.p_refine:
                 from opensg_solid.io.msh_to_yaml import read_msh22
-                et = read_msh22(msh)["etype"]
-                if et == 11:
-                    print("msh_to_yaml: %s is ALREADY QUADRATIC (tet10) --"
-                          " cubic elevation is not supported yet; nothing"
-                          " converted" % os.path.basename(msh))
+                et = read_msh22(src)["etype"]
+                if et in (9, 10, 11):
+                    print("msh_to_yaml: %s is ALREADY QUADRATIC"
+                          " (tri6/quad9/tet10) -- cubic elevation is not"
+                          " supported yet; nothing converted"
+                          % os.path.basename(src))
                     failed += 1
                     continue
                 from opensg_solid.helper import linear_msh_to_quad
-                src = linear_msh_to_quad(msh, verbose=False)["msh"]
+                src = linear_msh_to_quad(src, verbose=False)["msh"]
             base = a.out_base or os.path.splitext(src)[0]
             yml = base + ".yaml"
             # header/material flags are an EXPLICIT emission request: the
@@ -749,14 +838,19 @@ def ff_to_glb(argv):
     dehomogenization side of `opensg yaml_to_sc`.  The `.ff` is the
     input; the resultant COUNT (RM plate 8, classical plate / solid 6)
     comes from `<stem>.yaml` beside it when one exists, or --yaml /
-    --n_model/--refined, else the RM plate is assumed with a printed
-    note.  Every call REWRITES the .glb, for the same reason yaml_to_sc
-    rewrites the .sc.
+    --n_model/--refined, else the classical plate is assumed with a
+    printed note -- and is then gated against the submodel line of the
+    `.sc` the .glb will sit beside (a mismatch raises; --no-check-sc
+    downgrades it to a warning).  Every call REWRITES the .glb, for the
+    same reason yaml_to_sc rewrites the .sc.
 
     In:  argv (list[str]) -- everything after the `ff_to_glb` keyword:
          .ff paths/globs, plus --yaml YAML (single input only),
          --n_model {2,3} / --refined {0,1} explicit overrides,
-         --out PATH (single input only; default <ff stem>.sc.glb)
+         --out PATH (single input only; default <ff stem>.sc.glb),
+         --id1 {auto,0,1} (which macro state: auto = the `0:` strain
+         when present), --sc PATH (the deck to gate against; default
+         the .glb path minus `.glb`), --no-check-sc
     Out: int exit code (0 ok, 1 any file failed, 2 usage)."""
     import argparse
     import glob
@@ -787,12 +881,29 @@ def ff_to_glb(argv):
                    help="the .glb to write (single input only; default: "
                         "<ff stem>.sc.glb -- the name `SwiftComp "
                         "<stem>.sc ... L` looks for)")
+    p.add_argument("--id1", default="auto", choices=("auto", "0", "1"),
+                   help="which macro state to write: 1 = the `.ff` `0:` "
+                        "generalized STRAIN (what OpenSG's own recovery "
+                        "consumed, so both codes start from the same "
+                        "state), 0 = the `1:`/FF generalized STRESSES, "
+                        "which SwiftComp then inverts through ITS law.  "
+                        "auto (default) = 1 when the .ff has a `0:` line")
+    p.add_argument("--sc", default=None, metavar="PATH",
+                   help="the .sc whose submodel line the .glb must agree "
+                        "with (single input only; default: the .glb path "
+                        "minus `.glb`)")
+    p.add_argument("--no-check-sc", dest="check_sc", action="store_false",
+                   help="downgrade that submodel gate to a warning.  A "
+                        "mismatched count is SILENT in SwiftComp: it "
+                        "over-reads the .glb and leaves every local-field "
+                        "output at zero bytes")
     a = p.parse_args(argv)
 
     paths = sum((sorted(glob.glob(s)) or [s] for s in a.ff), [])
-    if (a.yaml is not None or a.out is not None) and len(paths) != 1:
-        raise SystemExit("--yaml/--out need exactly one input .ff, got %d"
-                         % len(paths))
+    if (a.yaml is not None or a.out is not None or a.sc is not None) \
+            and len(paths) != 1:
+        raise SystemExit("--yaml/--out/--sc need exactly one input .ff, "
+                         "got %d" % len(paths))
     failed = 0
     for ff in paths:
         try:
@@ -800,7 +911,9 @@ def ff_to_glb(argv):
                 raise FileNotFoundError("no such file: %s" % ff)
             from opensg_solid.io.ff_to_glb import convert
             convert(ff, yaml_path=a.yaml, out_path=a.out,
-                    n_model=a.n_model, refined=a.refined)
+                    n_model=a.n_model, refined=a.refined, sc_path=a.sc,
+                    check_sc=a.check_sc,
+                    id1=("auto" if a.id1 == "auto" else int(a.id1)))
         except Exception as e:
             print("ff_to_glb: %s FAILED: %s" % (ff, e))
             failed += 1

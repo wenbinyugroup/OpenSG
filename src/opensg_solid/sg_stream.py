@@ -655,12 +655,13 @@ def _ladder_dense_pass(x_np, C_np, rc_np, dphi_hi, phi_hi, W_hi, n_sg,
         out = plate_ladder_element_blocks(jnp.asarray(px(a, b)), dphi_hi,
                                           phi_hi, W_hi,
                                           jnp.asarray(pC(a, b)), n_sg)
-        hh, he, ee, l1e, l2e, wN = (np.asarray(out[0][:b - a]),
-                                    np.asarray(out[1][:b - a]),
-                                    np.asarray(out[2][:b - a]),
-                                    np.asarray(out[8][:b - a]),
-                                    np.asarray(out[9][:b - a]),
-                                    np.asarray(out[10][:b - a]))
+        hh, he, ee, l1e, l2e, wN, wyN = (np.asarray(out[0][:b - a]),
+                                         np.asarray(out[1][:b - a]),
+                                         np.asarray(out[2][:b - a]),
+                                         np.asarray(out[8][:b - a]),
+                                         np.asarray(out[9][:b - a]),
+                                         np.asarray(out[10][:b - a]),
+                                         np.asarray(out[11][:b - a]))
         dof = ((rc_np[a:b] * 3)[:, :, None]
                + np.arange(3)).reshape(b - a, n_ed)
         if op is not None and op.mode == "packed":
@@ -669,6 +670,7 @@ def _ladder_dense_pass(x_np, C_np, rc_np, dphi_hi, phi_hi, W_hi, n_sg,
             np.add.at(dense[key], dof.ravel(), Be.reshape(-1, 6) / omega)
         dense["D_ee"] += ee.sum(axis=0) / omega
         np.add.at(dense["w_node"], rc_np[a:b].ravel(), wN.ravel())
+        np.add.at(dense["wy_node"], rc_np[a:b].ravel(), wyN.ravel())
         del out, hh
 
 
@@ -717,7 +719,8 @@ def stream_plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
          V0, V11, V12, V11bar, V12bar}, or None when a CG stage fails
          to converge (the deferral is printed; the classical law
          stands)."""
-    from opensg_solid.sg_homo import _rm_ls_reduction   # call-time: no cycle
+    from opensg_solid.sg_homo import (_rm_ls_reduction,  # call-time: no cycle
+                                      print_ustar)
     t0 = time.perf_counter()
     x_np = np.asarray(x_end)
     C_np = np.asarray(C_ess)
@@ -742,7 +745,8 @@ def stream_plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
              "D_l1e": np.zeros((n_unique, 6)),
              "D_l2e": np.zeros((n_unique, 6)),
              "D_ee": np.zeros((6, 6)),
-             "w_node": np.zeros(n_unique // 3)}
+             "w_node": np.zeros(n_unique // 3),
+             "wy_node": np.zeros(n_unique // 3)}
     _ladder_dense_pass(x_np, C_np, rc_np, dphi_hi, phi_hi, W_hi, n_sg,
                        omega, S, px, pC, dense, op=op)
     print(" iter3 ladder assembly pass: done (%.1f s)"
@@ -789,6 +793,7 @@ def stream_plate_shear_ladder(x_end, dphi_hi, phi_hi, W_hi, C_ess,
     S2 = (kernel.T @ D2bar)[:2]
     G, X, ev_min, Ustar_rel, c1, c2 = _rm_ls_reduction(A6, H11, H12,
                                                        H22, S1, S2)
+    print_ustar(Ustar_rel)
     c1_ks = np.zeros((3, 6)); c1_ks[:2] = c1
     c2_ks = np.zeros((3, 6)); c2_ks[:2] = c2
     print(" iter3 ladder: done (%.1f s, %d streamed applies, %s mode)"

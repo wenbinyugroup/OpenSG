@@ -9,8 +9,9 @@ contour arc.  The ring generalisation projects the thickness moments on the wall
     x(z) = x_ref + z n  ->  int rho x3 dA   = int (mu x3 + n3 mx3) ds
                             int rho x3^2 dA = int (mu x3^2 + 2 x3 n3 mx3 + n3^2 i22) ds
 
-z runs from the yaml's `reference` surface along +e3 (inward), plies outer -> inner,
-so OML sits at z = -frac*h and IML at z = +(1-frac)*h.
+z runs from the chosen laminate reference surface (``ref``: "oml" default, "center" =
+the contour is the mid-surface -- opensg_shell.sg_reference, never a yaml key) along
++e3 (inward), plies outer -> inner, so OML sits at z = -frac*h and IML at z = +(1-frac)*h.
 
 All matrices are in the VABS frame/order (1 = axial x1, 2-3 = section x2, x3):
 rows/cols [F1 F2 F3 M1 M2 M3].
@@ -36,11 +37,12 @@ def _row(v):
     return [float(x) for x in v]
 
 
-def _ring_arrays(shell_yaml):
+def _ring_arrays(shell_yaml, ref="oml"):
     """Parse the 1-D shell SG yaml into ring arrays for the mass/geometry integrals.
 
     In:
         shell_yaml: str, 1-D shell SG yaml path.
+        ref: str, the laminate reference of the contour ("oml" default | "center").
     Out:
         dict: "x" (n_nd,2) node coords (x2,x3); "cells" (n_el,2) 0-based; "n" (n_el,2)
         wall normal (e3 in-plane components); "sec" (n_el,) section index; "layups"
@@ -63,8 +65,9 @@ def _ring_arrays(shell_yaml):
     layups = [[(str(p[0]), float(p[1]), float(p[2])) for p in s["layup"]]
               for s in d["sections"]]
     rho = {m["name"]: float(m.get("density", 1.0)) for m in d["materials"]}
-    ref = d.get("reference", "center")
-    frac = {"center": 0.5, "oml": 0.0, "oml_flip": 1.0, "iml": 1.0}.get(ref, 0.0)
+    from ..sg_reference import norm_ref, frac_of
+    ref = norm_ref(ref)                                   # run-time choice, never the yaml
+    frac = frac_of(ref)
     return dict(x=x, cells=cells, n=n, sec=sec, layups=layups, rho=rho, frac=frac, ref=ref)
 
 
@@ -91,7 +94,7 @@ def _density_moments(layup, rho, frac):
     return mu, mx3, i22
 
 
-def mass_matrix_ring(shell_yaml):
+def mass_matrix_ring(shell_yaml, ref="oml"):
     """6x6 mass matrix of the 1-D shell ring (VABS frame, about the section origin).
 
     JAX translation of OpenSG-FEniCSx get_mass_shell with the ring's wall-normal
@@ -99,6 +102,8 @@ def mass_matrix_ring(shell_yaml):
 
     In:
         shell_yaml: str, 1-D shell SG yaml path.
+        ref: str, the laminate reference of the contour ("oml" default | "center"),
+            the same run-time choice the stiffness ran with (never a yaml key).
     Out:
         (M, info): M (6,6) mass matrix
             [[ m    0    0    0    S3  -S2 ]
@@ -112,7 +117,7 @@ def mass_matrix_ring(shell_yaml):
         "rgyr" mass-weighted radius of gyration, "area" material area,
         "geometric_center" (2,), "mpus" mass per unit span.
     """
-    R = _ring_arrays(shell_yaml)
+    R = _ring_arrays(shell_yaml, ref)
     x, cells, nrm, sec = R["x"], R["cells"], R["n"], R["sec"]
     mom = np.array([_density_moments(L, R["rho"], R["frac"]) for L in R["layups"]])
     geo = np.array([_density_moments(L, {m: 1.0 for m in R["rho"]}, R["frac"])
@@ -200,14 +205,17 @@ def _append_mass_to_timo_out(timo_out, M):
 
 
 def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None,
-               abd_out=True):
+               abd_out=True, ref="oml"):
     """Timoshenko 6x6 + mass 6x6 of a 1-D shell SG, written as a VABS .K-layout file.
 
     Also inserts the same 6x6 mass block into the station's <base>_Timo.out
     (build_rm_bundle's SwiftComp-layout output), VABS .K style.
 
     In:
-        shell_yaml: str, 1-D shell SG yaml (its `reference` field sets the surface).
+        shell_yaml: str, 1-D shell SG yaml.
+        ref: str, the laminate reference of its contour -- "oml" (default) |
+            "center" (the contour is the mid-surface; the CLI's --center); a
+            run-time choice, never read from the yaml (opensg_shell.sg_reference).
         out_k: str | None, output .K path (default <yaml base>.K, `_shell` stripped).
         shear: str, passed to build_rm_bundle (production RM default).
         g_source: DEPRECATED, accepted and ignored -- the wall transverse-shear G is
@@ -224,10 +232,10 @@ def beam_props(shell_yaml, out_k=None, shear="mitc4_g23", g_source=None,
     from ..sg_homo import build_rm_bundle
 
     t0 = time.perf_counter()
-    B = build_rm_bundle(shell_yaml, shear=shear, g_source=g_source,
+    B = build_rm_bundle(shell_yaml, ref=ref, shear=shear, g_source=g_source,
                         abd_out=abd_out)
     C6 = np.asarray(B["Timo"])
-    M6, info = mass_matrix_ring(shell_yaml)
+    M6, info = mass_matrix_ring(shell_yaml, ref=B["ref"])
     if out_k is None:
         base = os.path.splitext(shell_yaml)[0]
         if base.endswith("_shell"):

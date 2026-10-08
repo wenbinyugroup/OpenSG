@@ -846,9 +846,14 @@ def plate_ladder_element_blocks(x_end, dphi_dxi_qnp, phi_qn, W_q, C_ess,
 
         ee = jnp.einsum("qis,ij,qjt,q->st", Ge, C, Ge, dV)
         wN = jnp.einsum("qn,q->n", phi_qn, dV)
+        # EXACT first moment int(y3 N_a dV) -- the detilt projection
+        # needs the true L2(dV) moment, not the lumped product w_a y_a
+        # (for a P2 tet int(N_a dV) is NEGATIVE at the corners, so the
+        # lumped form is a badly biased measure; see _detilt_cols_2d)
+        wyN = jnp.einsum("qn,q,q->n", phi_qn, y3, dV)
         return (bil(Bh, Bh), bil_s(Bh), ee, bil(Bh, Bl1), bil(Bh, Bl2),
                 bil(Bl1, Bl1), bil(Bl1, Bl2), bil(Bl2, Bl2),
-                bil_s(Bl1), bil_s(Bl2), wN)
+                bil_s(Bl1), bil_s(Bl2), wN, wyN)
 
     return jax.vmap(one, in_axes=(0, 0))(x_end, C_ess)
 
@@ -1054,7 +1059,7 @@ def sparse_projected_cg(A_sp, C, B, ndof_per_node, tol=1e-8, cheb_degree=4,
 
     eig_max = estimate_max_eigenvalue(A_op, M_blk, proj(B_d[:, 0]))
 
-    def _solve(eig):
+    def _solve(eig, kcap):
         eig_min = eig / 25.0
         d_c = (eig + eig_min) / 2.0
         c_c = (eig - eig_min) / 2.0
@@ -1074,35 +1079,41 @@ def sparse_projected_cg(A_sp, C, B, ndof_per_node, tol=1e-8, cheb_degree=4,
                 bp = proj(bc)
                 x, _ = jax.scipy.sparse.linalg.cg(A_op, bp, M=cheb,
                                                   tol=tol,
-                                                  maxiter=maxiter)
+                                                  maxiter=kcap)
                 return proj(x)
             return jax.vmap(one)(Bcols.T).T      # vmap over the load cases
 
         return solve_all(B_d)
 
-    # SOLVE + VERIFY: jax's cg cannot signal failure, and an
-    # under-estimated eig_max makes the Chebyshev preconditioner
-    # INDEFINITE (CG stagnates on a still-SPD system).  Check the true
-    # projected residual of every column; on failure widen the interval
-    # 4x and re-solve (a fresh CG is digit-safe -- the converged answer
-    # does not depend on M).
+    # SOLVE + VERIFY: jax's cg cannot signal failure, so the true
+    # projected residual of every column is checked, and a failed solve
+    # RESTARTS (fresh CG is digit-safe) with the remedy matched to the
+    # failure signature: a LARGE residual (stagnation/NaN) means an
+    # under-estimated eig_max made the Chebyshev preconditioner
+    # INDEFINITE -> widen the interval 4x; a residual that is small but
+    # above tol means the interval is fine and CG simply ran out of
+    # iterations -> 4x maxiter (widening would only slow it further).
     Bp = jax.vmap(proj)(B_d.T).T
     bn = jnp.maximum(jnp.linalg.norm(Bp, axis=0), 1e-300)
-    worst = float("nan")
-    for _attempt in range(3):
-        X = _solve(eig_max)
+    worst, kcap = float("nan"), int(maxiter)
+    for _attempt in range(4):
+        X = _solve(eig_max, kcap)
         R = jax.vmap(lambda x, b: jnp.linalg.norm(A_op(x) - b))(X.T, Bp.T)
         worst = float(jnp.max(R / bn))
         if np.isfinite(worst) and worst <= 10.0 * tol:
             break
-        eig_max = eig_max * 4.0
+        if not np.isfinite(worst) or worst > 1e-2:
+            eig_max = eig_max * 4.0
+            what = "interval widened to eig_max %.4g" % float(eig_max)
+        else:
+            kcap = kcap * 4
+            what = "maxiter raised to %d" % kcap
         print(" cg WARNING: projected-CG worst relres %.2e (tol %.0e)"
-              " -- Chebyshev interval widened to eig_max %.4g,"
-              " re-solving" % (worst, tol, float(eig_max)))
+              " -- %s, re-solving" % (worst, tol, what))
     else:
         raise RuntimeError(
             "projected CG did not converge (worst relres %.2e, tol"
-            " %.0e) after 3 Chebyshev intervals -- run --solver direct"
+            " %.0e) after 4 attempts -- run --solver direct"
             % (worst, tol))
     return np.asarray(X)
 

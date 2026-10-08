@@ -67,6 +67,8 @@ def convert(yaml_path, out_path=None, **kw):
           % (r["dim"], r["n_nodes"], r["n_elems"], r["n_mats"],
              r["n_model"], "shear-refined" if r["refined"] else "classical",
              r["omega"], r["omega_source"], r["path"]))
+    if r.get("forced_classical"):
+        print("yaml_to_sc: refined 1 -> submodel 0 (classical plate)")
     if r["orientation"] == "identity":
         print("yaml_to_sc: per-element frames are all the no-op identity"
               " -- dropped (nothing to fold)")

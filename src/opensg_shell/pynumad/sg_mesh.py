@@ -590,6 +590,13 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="oml"):
     loop inward frames), serialized: the yaml is the record artifact and
     the handoff to the opensg_shell SG homo/dehom engine.
 
+    Where the contour sits is a GENERATION decision: with reference="center"
+    the skin nodes are moved inward by 0.5 x the laminate thickness before
+    writing.  The yaml records that only as a leading comment line, never
+    as a key -- the engine's laminate reference is a run-time choice
+    (opensg_shell.sg_reference), so a center-offset yaml must be run with
+    `opensg <yaml> --center` (or build_rm_bundle(..., ref="center")).
+
     In:
         cs: dict from build_cross_section.
         out_path: str, output yaml path.
@@ -597,7 +604,7 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="oml"):
         reference: "oml" | "center", shell reference surface (default oml;
             "center" = laminate mid-surface, matching a 2-D solid section).
     Out:
-        dict(n_nodes, n_elems, n_sets, n_webs, n_mats, out).
+        dict(n_nodes, n_elems, n_sets, n_webs, n_mats, out, reference).
     """
     blade = cs["blade"]; chord = cs["chord"]
     fraction = {"center": 0.5, "oml": 0.0}[reference]
@@ -656,7 +663,7 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="oml"):
                          - np.roll(skin_xy[:, 0], -1) * skin_xy[:, 1]))
     inward = 1.0 if area2 > 0 else -1.0
 
-    seg = {"msg": "shell", "refined": 1, "reference": reference,
+    seg = {"msg": "shell", "refined": 1,
            "nodes": [], "elements": [], "sets": {"element": []},
            "sections": [], "elementOrientations": [], "materials": []}
     for (X, Y) in nodes:
@@ -690,6 +697,13 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="oml"):
     for name in used:
         seg["materials"].append(_mat_card_yaml(blade, name))
     with open(out_path, "w") as f:
+        # the contour placement is recorded as a COMMENT (no colon: the header
+        # line scanners never see a key); the engine reads no reference key
+        f.write("# contour placed on the %s\n"
+                % ("laminate mid-surface (skin offset 0.5 t inward from the OML)"
+                   " -- run opensg with --center" if fraction
+                   else "outer mold line (OML) -- the default laminate reference"))
         yaml.dump(seg, f, sort_keys=False, default_flow_style=False)
     return dict(n_nodes=len(nodes), n_elems=len(elems), n_sets=nsets,
-                n_webs=len(cs["webs"]), n_mats=len(used), out=out_path)
+                n_webs=len(cs["webs"]), n_mats=len(used), out=out_path,
+                reference=reference)

@@ -168,7 +168,8 @@ def recover_shell_strains(bundle, beam_force_vabs=None, beam_strain=None,
 
 
 def dehomogenize(yaml_path, beam_force_vabs=None, beam_strain=None,
-                 n_eval_per_elem=3, bundle=None, elem_order=2, n_per_layer=2):
+                 n_eval_per_elem=3, bundle=None, elem_order=2, n_per_layer=2,
+                 ref="oml"):
     """Full two-step dehomogenization for a YAML cross-section.
 
     Step 1 recovers the shell strains; step 2 runs the MSG plate model per
@@ -179,6 +180,12 @@ def dehomogenize(yaml_path, beam_force_vabs=None, beam_strain=None,
     Parameters
     ----------
     yaml_path : str — OpenSG cross-section YAML
+    ref : str — the laminate reference of the contour ("oml" default |
+             "center", see opensg_shell.sg_reference); used only when no
+             ``bundle`` is given (the bundle carries its own ``frac``).  The
+             plate warp is OML-referenced, so at a non-OML reference the
+             recovered membrane strain is moved to the OML before step 2 and
+             the returned ``z`` is measured from the reference surface
     beam_force_vabs : (6,) — applied beam force in VABS order, OR
     beam_strain : (6,) — prescribed beam strain in VABS order
     n_eval_per_elem : int — through-thickness sample points per plate sub-element
@@ -201,7 +208,8 @@ def dehomogenize(yaml_path, beam_force_vabs=None, beam_strain=None,
       ``bundle`` — the solution bundle (for reuse / inspection)
     """
     if bundle is None:
-        bundle = solve_tw_from_yaml(yaml_path)
+        from ..sg_reference import frac_of
+        bundle = solve_tw_from_yaml(yaml_path, frac=frac_of(ref))
     shell = recover_shell_strains(bundle, beam_force_vabs, beam_strain)
 
     # plate warping cache per layup name
@@ -213,13 +221,22 @@ def dehomogenize(yaml_path, beam_force_vabs=None, beam_strain=None,
             return_warping=True, elem_order=elem_order)
         warp_cache[ln] = warp
 
+    # the plate warp is OML-referenced: at a non-OML reference the membrane
+    # strain moves back to the OML (m_OML = m_ref - frac*h*kappa, exactly as
+    # stress_at_points does) and the plate depth is re-based on the reference
+    fr = float(bundle.get("frac", 0.0))
+    h_elem = {ln: float(sum(i["thick"])) for ln, i in bundle["layup_db"].items()}
     ss_elem = shell["shell_strain_elem"]
     layups = bundle["layup_per_elem"]
     elem = []
     for e in range(len(layups)):
         ln = layups[e]
-        z, Gam, Sig = plate_dehom_strain(warp_cache[ln], ss_elem[e], n_eval_per_elem)
-        elem.append({"z": z, "strain_3d": Gam, "stress_3d": Sig, "layup": ln})
+        ss = np.asarray(ss_elem[e], float)
+        if fr:
+            ss = ss.copy(); ss[0:3] = ss[0:3] - fr * h_elem[ln] * ss[3:6]
+        z, Gam, Sig = plate_dehom_strain(warp_cache[ln], ss, n_eval_per_elem)
+        elem.append({"z": np.asarray(z, float) - fr * h_elem[ln],
+                     "strain_3d": Gam, "stress_3d": Sig, "layup": ln})
 
     out = dict(shell)
     out["elem"] = elem

@@ -102,18 +102,19 @@ emit_prevabs(cs, "prevabs_r050", name="r050")  # PreVABS XML -> 2-D solid route
 | `sections` | `type: shell`, `elementSet: layup_k`, and the `layup` as `[material, thickness (m), angle (deg)]` triples, outermost ply first |
 | `elementOrientations` | one $3\times3$ frame per element, flattened; the first row is $e_1$, out of the section plane (the beam axis) |
 | `materials` | `density` (kg/m³) and orthotropic `elastic: {E, G, nu}` triples, in Pa |
-| `reference` | `center` — which surface the section geometry refers to |
+| (leading comment) | which surface the contour was generated on — the IEA stations are center-offset, so they are run with `--center` |
 
-The `reference` field is load-bearing and is the single source of truth: `build_rm_bundle` reads
-it when no override is passed, and it fixes the through-thickness offset `frac` used by the ring
-laminate law, the plate SG's `z_ref`, the emitted ABD and the recovery depth conversion alike.
+The laminate reference is load-bearing and is a run-time choice, not a yaml field: `opensg <yaml>`
+takes the contour as the OML, `opensg <yaml> --center` (`build_rm_bundle(yaml, ref="center")`)
+as the laminate mid-surface. That choice fixes the through-thickness offset `frac` used by the
+ring laminate law, the plate SG's `z_ref`, the emitted ABD and the recovery depth conversion alike.
+The IEA station contours were generated on the mid-surface, so every command in this tutorial
+passes `--center`.
 
-| `reference` | `frac` | meaning |
+| run | `frac` | meaning |
 |---|---|---|
-| `center` | 0.5 | mid-surface (what the IEA stations use) |
-| `oml` | 0.0 | outer mould line |
-| `oml_flip` | 1.0 | outer mould line, reversed stacking |
-| `iml` | 1.0 | inner mould line |
+| `opensg <yaml> --center` | 0.5 | mid-surface (what the IEA stations need) |
+| `opensg <yaml>` (default) | 0.0 | outer mould line |
 
 ## 2. Each station → a Timoshenko $6\times6$
 
@@ -153,12 +154,12 @@ because the pipeline also wants the bare $6\times6$ text file and the ring figur
 import numpy as np
 from opensg_shell import build_rm_bundle
 
-B = build_rm_bundle("iea_s10_shell.yaml")
+B = build_rm_bundle("iea_s10_shell.yaml", ref="center")
 C6 = np.asarray(B["Timo"])        # (6,6) Timoshenko stiffness
 print(B["ref"], B["g_source"])    # 'center'  'msg'
 ```
 
-`build_rm_bundle(shell_yaml, ref=None, shear="mitc4_g23")` returns a bundle, not
+`build_rm_bundle(shell_yaml, ref="oml", shear="mitc4_g23")` returns a bundle, not
 just a matrix: `Timo`, the warping modes `V0`/`V1`, the ring geometry (`corners`, `red_cells`,
 `re3`, `k22`, `strip`), `layup_per_elem`, the geometry-free `layup_db`/`material_db`, and
 `frac`/`ref`/`g_source`. Step 5 consumes all of it — do not throw the bundle away.

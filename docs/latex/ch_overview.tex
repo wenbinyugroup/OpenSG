@@ -546,15 +546,14 @@ g\_source=None)}, and it proceeds as follows.
       arrays --- nodal coordinates \texttt{rx}, connectivity \texttt{cells},
       the per-element section index \texttt{rsub}, the element normals
       \texttt{re3}, the axial index \texttt{ax} and the two cross-section
-      indices \texttt{cross}. The laminate reference surface comes from the
-      YAML's own \texttt{reference} field (absent $\rightarrow$ \texttt{center},
-      the mid-surface), so homogenization and recovery cannot disagree; pass
-      \texttt{ref} explicitly only to override. The reference is converted once
-      into a thickness fraction \texttt{frac}
-      (\texttt{center} $\rightarrow 0.5$, \texttt{oml} $\rightarrow 0.0$,
-      \texttt{oml\_flip} and \texttt{iml} $\rightarrow 1.0$) and that single
-      number then drives the ring laminate reference, the plate-SG $z$
-      reference, the emitted ABD and the recovery depth conversion.
+      indices \texttt{cross}. The laminate reference surface is a run-time
+      choice (\texttt{ref}, the CLI's \texttt{--center}; default \texttt{oml},
+      never a yaml key) carried in the bundle, so homogenization and recovery
+      cannot disagree. The reference is converted once into a thickness
+      fraction \texttt{frac} (\texttt{oml} $\rightarrow 0.0$, \texttt{center}
+      $\rightarrow 0.5$) and that single number then drives the ring laminate
+      reference, the plate-SG $z$ reference, the emitted ABD and the recovery
+      depth conversion.
 \item \texttt{sg\_materials.\_material\_by\_section} builds, per section, the
       wall plate ABD $6\times6$ at the chosen reference and the $2\times2$
       transverse-shear $G$.

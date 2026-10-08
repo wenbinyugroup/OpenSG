@@ -111,14 +111,16 @@ block & content & this station \\
 \label{tab:shell-yaml-blocks}
 \end{table}
 
-The \texttt{reference} field is the single source of truth. \texttt{build\_rm\_bundle}
-reads it and maps it to a thickness fraction (\texttt{center} $\to$ 0.5,
-\texttt{oml} $\to$ 0.0, \texttt{iml} and \texttt{oml\_flip} $\to$ 1.0). That one
-number is then used consistently for the ring laminate reference, the plate-SG
-$z$ origin, the emitted ABD cache and the recovery depth conversion. Pass
-\texttt{ref=} explicitly only to override it. Because the reference here is the
-mid-surface, quantities that depend on the reference axis, in particular $GJ$ and
-the bending--extension couplings, are mid-surface values.
+The laminate reference is a run-time choice, not a yaml field: \texttt{opensg
+<yaml>} takes the contour as the OML (laminates stack inward), \texttt{opensg
+<yaml> --center} --- \texttt{build\_rm\_bundle(yaml, ref="center")} in Python
+--- as the laminate mid-surface. The choice maps to a thickness fraction
+(\texttt{oml} $\to$ 0.0, \texttt{center} $\to$ 0.5) that is then used
+consistently for the ring laminate reference, the plate-SG $z$ origin, the
+emitted ABD cache and the recovery depth conversion. This station was generated
+center-offset, so it is run with \texttt{--center}; because the reference is
+the mid-surface, quantities that depend on the reference axis, in particular
+$GJ$ and the bending--extension couplings, are mid-surface values.
 
 \begin{figure}[htbp]
 \centering

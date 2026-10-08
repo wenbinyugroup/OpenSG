@@ -279,39 +279,45 @@ stiffness.
 reference: center
 \end{lstlisting}
 
-This single scalar names the surface the wall ABD --- and therefore the whole
-cross-section model --- is referenced to, and it is the single source of truth.
-\texttt{build\_rm\_bundle(shell\_yaml)} reads it when its \texttt{ref} argument
-is left \texttt{None} via \texttt{ref = d.get("reference", "center")}, and the
-value is immediately turned into a thickness fraction
-\texttt{frac = \{"center": 0.5, "oml": 0.0, "oml\_flip": 1.0, "iml": 1.0\}} that
-then drives the ring laminate reference, the plate-SG \texttt{z\_ref}, the
-emitted ABD file, and the depth conversion used in stress recovery. Absent, it
-defaults to \texttt{center}. The four accepted values and the fraction each maps
-to are listed in Table~\ref{tab:input-reference}.
+The yaml carries \emph{no} reference key. Which surface of the wall the node
+contour is --- and therefore where the wall ABD, the plate-SG \texttt{z\_ref},
+the mass moments and the recovery depths are referenced --- is a run-time
+choice made the same way on every msg-shell route (ring, classical, 3-D shell
+SG, segment, dehomogenization): the default is the OML, and the
+\texttt{--center} flag (Python: \texttt{ref="center"}) selects the mid-surface.
+The value is turned into a thickness fraction
+\texttt{frac = \{"oml": 0.0, "center": 0.5\}} (module
+\texttt{opensg\_shell.sg\_reference}) that then drives the ring laminate
+reference, the plate-SG \texttt{z\_ref}, the emitted ABD file, and the depth
+conversion used in stress recovery. Table~\ref{tab:input-reference} lists the
+two choices; the diagnostic values \texttt{oml\_flip} / \texttt{iml}
+(full-thickness shift) exist in the API only.
 
 \begin{table}[htbp]
 \centering
 \small
-\caption{Values of \texttt{reference} and the thickness fraction each maps to.}
+\caption{The laminate reference and the thickness fraction each maps to.}
 \label{tab:input-reference}
 \begin{tabular}{@{}llc@{}}
 \toprule
-value & meaning & fraction from the outer face \\
+run & meaning & fraction from the outer face \\
 \midrule
-\texttt{center} & contour is the laminate mid-surface; ABD shifted by $t/2$ & 0.5 \\
-\texttt{oml} & contour is the outer mold line; laminate stacks inward, no shift & 0.0 \\
-\texttt{oml\_flip} & diagnostic: reference moved the full thickness the other way & 1.0 \\
-\texttt{iml} & contour is the inner mold line; laminate stacks outward & 1.0 \\
+\texttt{opensg <yaml>} (default) & contour is the outer mold line; laminate stacks inward, no shift & 0.0 \\
+\texttt{opensg <yaml> --center} & contour is the laminate mid-surface; ABD shifted by $t/2$ & 0.5 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Mid-surface meshes (tubes, ellipses, generated cross-sections) use
-\texttt{center}; airfoil YAMLs written on the OML use \texttt{oml}. Getting this
-wrong shifts $\mathbf{B}$ and $\mathbf{D}$ by a parallel-axis term of the wall
-thickness and moves every bending and torsion entry of the beam $6\times6$, which
-is why it is recorded in the file rather than passed at the call site.
+Where the contour sits is a \emph{generation} decision: the pynumad writer
+(\texttt{emit\_shell\_yaml(..., reference="center")}) and the OpenSG\_io
+converter (\texttt{fraction=0.5}) move the skin nodes inward by $t/2$ before
+writing and record that only as a leading comment line. OpenSG never moves the
+nodes, so a center-offset yaml (every IEA station) must be run with
+\texttt{--center}. Getting this wrong shifts $\mathbf{B}$ and $\mathbf{D}$ by a
+parallel-axis term of the wall thickness and moves every bending and torsion
+entry of the beam $6\times6$. A leftover \texttt{reference:} key in an older
+yaml is ignored; the run prints a note, or a warning when the key disagrees with
+the flag.
 
 \subsection{Running it}
 

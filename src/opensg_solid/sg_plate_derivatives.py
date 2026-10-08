@@ -64,36 +64,53 @@ def _row(f, key, vals, fmt="%.10g"):
     f.write("%s: [%s]\n" % (key, ", ".join(fmt % float(v) for v in vals)))
 
 
-def build_ff(path, FF, E_stencil=None, h1=None, h2=None,
+def build_ff(path, FF=None, E_stencil=None, h1=None, h2=None,
              u=(0.0, 0.0, 0.0), theta=(0.0, 0.0, 0.0), C=None,
-             Q=None, qt6=None, qb6=None):
+             Q=None, qt6=None, qb6=None, EPS=None, derivs=None):
     """Write the `<base>.ff` macro-state file for `opensg <yaml> D`.
 
-    In:  path str -- the .ff to write (conventionally <yaml stem>.ff);
-         FF (6,) -- the generalized macro forces
-         [N11 N22 N12 M11 M22 M12];
-         E_stencil (3, 3, 6) | None -- the strain stencil around the
-         station; when given, sg_center_diff(E_stencil, h1, h2) supplies
-         deps_dx1/deps_dx2 AND d2eps_* (h1/h2 then required);
+    THE MACRO-STATE IDENTIFIERS.  The state may be strain, force, or
+    both:
+
+        0:  [e11 e22 2e12 k11 k22 2k12]  the GLOBAL plate strain --
+            PREFERRED: the dehom consumes it directly, no C_eff^-1
+            inversion, so the law never enters the loading side
+            (beam: the 1-D measures; solid: the 3-D strain)
+        1:  [N11 N22 N12 M11 M22 M12]    the generalized macro FORCES
+            (beam [F1 F2 F3 M1 M2 M3]; solid [S11 S22 S33 S23 S13
+            S12]) -- inverted through the law only when no 0: exists
+
+    A legacy `FF:` key is written alongside `1:` so older readers keep
+    working; read_ff_state upgrades old force-only files on the spot.
+
+    In:  path str; FF (6,) | None -- identifier 1:; EPS (6,) | None --
+         identifier 0: (at least one required);
+         E_stencil (3, 3, 6) | None -- strain stencil around the
+         station -> sg_center_diff(E_stencil, h1, h2) supplies
+         deps_dx1/deps_dx2 and d2eps_* (h1/h2 then required);
+         derivs dict | None -- PRECOMPUTED {dE1, dE2, dE11, dE12,
+         dE22}, each (6,): overrides the stencil route (e.g. the
+         5-point sub-element scheme forms these itself);
          u (3,), theta (3,) -- macro displacement / rotation;
          C (3, 3) | None -- macro direction cosines (omitted -> the
          reader builds the small-rotation frame from theta);
-         Q (2,) | None -- [Q1 Q2] for the Q-consistency rescale;
+         Q (2,) | None -- [Q1 Q2] Q-consistency rescale;
          qt6/qb6 (6,) | None -- [q q,1 q,2 q,11 q,12 q,22] of the
          TOP/BOTTOM face pressure, q positive pushing INTO the face
          (a UNIFORM pressure is [q, 0, 0, 0, 0, 0]).
-    Out: path str -- the file written; keys exactly the read_ff_state
-         layout, derivative keys only when a stencil was given, optional
-         keys only when given."""
-    d = None
-    if E_stencil is not None:
+    Out: path str -- the file written; optional keys only when given."""
+    if FF is None and EPS is None:
+        raise ValueError("at least one of EPS (0:) / FF (1:) is needed")
+    d = derivs
+    if d is None and E_stencil is not None:
         if h1 is None or h2 is None:
             raise ValueError("E_stencil needs its pitches: h1 and h2")
         d = sg_center_diff(E_stencil, h1, h2)
     with open(path, "w") as f:
         f.write("# macro state for `opensg <yaml> D` -- read_ff_state"
-                " layout;\n# derivatives by sg_plate_derivatives."
-                "sg_center_diff (3x3 stencil, O(h^2))\n")
+                " layout\n# 0: = global strain (preferred, used"
+                " directly); 1: = global force (inverted\n# through the"
+                " law only when no 0: is present)\n")
         _row(f, "u", u)
         _row(f, "theta", theta)
         if C is not None:
@@ -101,7 +118,11 @@ def build_ff(path, FF, E_stencil=None, h1=None, h2=None,
             for r3 in C:
                 f.write("- [%s]\n" % ", ".join("%.10g" % float(v)
                                                for v in r3))
-        _row(f, "FF", FF)
+        if EPS is not None:
+            _row(f, "0", EPS)
+        if FF is not None:
+            _row(f, "1", FF)
+            _row(f, "FF", FF)               # legacy readers
         if Q is not None:
             _row(f, "Q", Q)
         if d is not None:

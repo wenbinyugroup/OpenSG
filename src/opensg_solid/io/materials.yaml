@@ -42,8 +42,11 @@ materials:
 
 # the +-45 facesheet ply of the CMC/HC sandwich studies, MPa-mm, density
 # zeroed as in the study : preovios_try.yaml ply_p45/ply_m45 and
-# 3_get_plate_props_from_2D_SG/RHC_SW_2UC_45.yaml
+# 3_get_plate_props_from_2D_SG/RHC_SW_2UC_45.yaml.  ONE card for every
+# use angle -- the angle is PER-USE on the CLI (unified sign, fiber +a;
+# no :ANGLE -> 0):  --mat2 lam_HC:45 --mat3 lam_HC:-45
 - name: HC_ply
+  aliases: [lam_HC]
   density: 0.0
   elastic:
     E: [108000.0, 8000.0, 8000.0]
