@@ -2,9 +2,16 @@
 fake dof counts through the resolution function, no mesh, no solve.
 The policy is DOF-BANDED ONLY and identical on every machine (GPU
 presence changes where the iterative solvers execute, never which one
-auto picks): direct below the $OPENSG_DIRECT_WALL (default 1.2e6),
-above it amg -> cg -> warned direct as availability/legality allow;
-stream is NEVER an auto choice."""
+auto picks): direct below the $OPENSG_DIRECT_WALL (default 1.2e6);
+above it amg for a single-element-type periodic plate/solid SG when
+pyamg is importable, a SystemExit with the `pip install pyamg` fix for
+such an SG without pyamg (no silent cg fallback; cg stays reachable via
+--solver cg), and a warned direct attempt for mixed/aperiodic SGs;
+stream is NEVER an auto choice.  pyamg importability is checked by the
+caller (plate_homo_2d) and passed in as amg_ok, so every branch here
+runs whether or not pyamg is installed."""
+import pytest
+
 from opensg_solid.sg_homo import resolve_auto_solver
 
 
@@ -29,9 +36,12 @@ def test_above_wall_amg():
     assert s == "amg" and warn is None and "wall" in why
 
 
-def test_above_wall_no_pyamg_falls_to_cheb_with_hint():
-    s, why, warn = _pick(2_080_000, amg=False, ok=True)
-    assert s == "cg" and warn is None and "pyamg" in why
+def test_above_wall_no_pyamg_stops_with_pip_hint():
+    with pytest.raises(SystemExit) as exc:
+        _pick(2_080_000, amg=False, ok=True)
+    msg = str(exc.value)
+    assert "direct wall" in msg and "pyamg is missing" in msg
+    assert "pip install pyamg" in msg and "--solver cg" in msg
 
 
 def test_above_wall_iter_illegal_warns_and_attempts_direct():
