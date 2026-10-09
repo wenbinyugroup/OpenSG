@@ -22,6 +22,7 @@ dependencies = [
     "numpy",
     "psutil",
     "pyamg",
+    "pypardiso",
     "pyyaml",
     "scipy",
 ]
@@ -34,6 +35,7 @@ opensg_shell = "opensg_shell.cli:main"
 [project.optional-dependencies]
 amg = [
     "pyamg",
+    "pypardiso",
 ]
 cuda12 = [
     "cupy-cuda12x",
