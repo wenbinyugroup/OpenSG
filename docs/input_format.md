@@ -439,6 +439,39 @@ converted from SwiftComp it agrees with the `.sc` trailing line (`35.248` here) 
 digits that line carries, which is the check that the mesh and the `.sc` header describe the
 same cell.
 
+### From a gmsh mesh (solid SG): `opensg msh_to_yaml`
+
+`opensg_solid.io.msh_to_yaml` writes the mesh side of the solid dialect (`nodes`, 1-based
+`elements`, `elementOrientations`, one `sets: element:` entry per tag) from a gmsh mesh; the
+materials come from the library flags, one per tag (cards in one unit system, here MPa-mm):
+
+```bash
+opensg msh_to_yaml cell.msh --mat1 Al69 --mat2 epoxy --n_model 3
+```
+
+- **Format.** Legacy ASCII 2.2 only (unlike the shell helper above, which also reads 4.1).
+  gmsh's default msh 4.1 and binary files are refused with the fix:
+  `gmsh cell.msh -format msh22 -o cell_msh22.msh -save` (API: `Mesh.MshFileVersion 2.2`,
+  `Mesh.Binary 0`).
+- **Cells.** The cells of the highest dimension present form the SG and must be one accepted
+  type: tri3/tri6, quad4/quad9, tet4/tet10 or hex8 (gmsh types 2/9, 3/10, 4/11, 5). Two cell
+  types of that dimension, or an unsupported one (prism, pyramid, quad8, hex20/hex27, tet20),
+  is an error. Every lower-dimensional cell (the faces, curves and points gmsh writes for
+  physical groups, without physical groups, or with `Mesh.SaveAll`) is dropped and counted.
+  2-D cells that span z are refused: a 3-D mesh saved with Physical Surfaces but no Physical
+  Volume, or a shell surface (that goes through the shell helper above). Cells written twice are refused: a volume in two Physical Volumes (gmsh 2.2
+  writes its cells once per group) or a repeated element id.
+- **Nodes.** Node ids are honoured as ids (any `$Nodes` row order, gaps allowed); a cell naming
+  an id that `$Nodes` lacks is an error. Nodes no kept cell uses are compacted away.
+  Coordinates are written at full precision (`%.17g`).
+- **Tags.** Sets follow the physical tag. A file without physical tags (no physical groups, or
+  `Mesh.SaveAll 1`, which writes physical tag 0 on every cell) takes its sets from the
+  elementary (gmsh entity) tags, so `--mat<entity>` fills each volume; `--mat0` alone (or a
+  one-material list) still fills the whole mesh as one set, as before.
+
+The console line reports what was dropped, compacted or fallen back, e.g.
+`cell.msh -> cell.yaml   (tet10; 35782 nodes / 107346 dofs; dropped 12090 tri6 + 836 line3 + 92 point lower-dim cells; no physical tags: sets from elementary tags [1])`.
+
 ## The SwiftComp `.sc` input and the converter
 
 A `.sc` file can be used directly — `load_sg_input` dispatches on the extension and converts —
