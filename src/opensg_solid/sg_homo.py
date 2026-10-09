@@ -1466,6 +1466,22 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     import time as _time
     _t0 = _time.perf_counter()
     sc = load_sg_input(sc_path, base)
+    if elem_rotation is None and sc.get("orientation") is not None:
+        # v2.1: the per-element frames stored in the SG file
+        # (`elementOrientations`, yaml component order) are applied on
+        # EVERY route, the command line included -- before v2.1 only an
+        # explicit elem_rotation= reached the solver and `opensg x.yaml`
+        # silently ran every element in the global frame.  The global
+        # (no-op) triad costs one identity rotation per element.
+        from .sg_materials import elem_rotation_from_yaml
+        from .io.sg_input import frames_are_noop
+        elem_rotation = elem_rotation_from_yaml(sc["orientation"])
+        print(" frames    : %d per-element frames from the file (%s)"
+              % (len(elem_rotation),
+                 "the global triad, no rotation"
+                 if frames_are_noop(sc["orientation"]) else "applied"))
+    elif elem_rotation is None:
+        print(" frames    : none in the file (material angle only)")
     n_sg = sc["dim"]
 
     def _emit_plot():

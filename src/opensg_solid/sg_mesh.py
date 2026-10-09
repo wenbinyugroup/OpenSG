@@ -351,7 +351,9 @@ def load_sg_input(path, out_base=None):
                 "cells": [list(c) for c in z["cells"]],
                 "mat_id": np.asarray(z["mat_id"], int),
                 "materials": z["materials"].item(),
-                "scale": float(z["scale"])}
+                "scale": float(z["scale"]),
+                "orientation": (np.asarray(z["orientation"], float)
+                                if "orientation" in z.files else None)}
 
     bkeys = block_keys(path)
     if "sections" in bkeys and "cells" not in bkeys \
@@ -383,7 +385,12 @@ def load_sg_input(path, out_base=None):
         mat_id = np.asarray(sg["mat_id"], np.int64)
         sc = {"dim": int(sg["dim"]), "nodes": nodes, "cells": cells,
               "mat_id": mat_id, "materials": sg["materials"],
-              "scale": float(sg.get("scale", 1.0))}
+              "scale": float(sg.get("scale", 1.0)),
+              # the file's per-element frames (E, 9) in yaml component order,
+              # or None: plate_homo_2d applies them on every route (v2.1)
+              "orientation": (None if sg.get("orientation") is None else
+                              np.asarray(sg["orientation"], float)
+                              .reshape(len(cells), 9))}
         if os.environ.get("OPENSG_SG_CACHE", "0") not in ("", "0"):
             try:                                  # best-effort sidecar cache
                 cells_arr = np.asarray(cells, np.int64)
@@ -395,7 +402,9 @@ def load_sg_input(path, out_base=None):
                     npz, dim=sc["dim"], nodes=nodes, cells=cells_arr,
                     mat_id=mat_id,
                     materials=np.array(sg["materials"], dtype=object),
-                    scale=sc["scale"])
+                    scale=sc["scale"],
+                    **({} if sc["orientation"] is None
+                       else {"orientation": sc["orientation"]}))
             except Exception:
                 pass
         return sc
@@ -415,6 +424,14 @@ def load_sg_input(path, out_base=None):
     mat_id = np.asarray(raw["mat_id"], np.int64)
     materials = {int(k): _numify(v) for k, v in raw["materials"].items()}
     scale = float(raw.get("scale", 1.0))
+    ori = raw.get("elementOrientations")      # optional (E, 9) frames, yaml order
+    if ori is not None:
+        ori = np.asarray(ori, float)
+        if ori.size != 9 * len(cells):
+            raise ValueError(
+                "%s: elementOrientations holds %d values, expected %d rows x 9"
+                % (path, ori.size, len(cells)))
+        ori = ori.reshape(len(cells), 9)
     dim = raw.get("dim")
     if dim is None:
         # no user input needed: the SG dimension IS the mesh -- the
@@ -425,7 +442,8 @@ def load_sg_input(path, out_base=None):
         dim = int(np.nonzero(used)[0].max() + 1) if used.any() else 1
     dim = int(dim)
     sc = {"dim": dim, "nodes": nodes, "cells": cells,
-          "mat_id": mat_id, "materials": materials, "scale": scale}
+          "mat_id": mat_id, "materials": materials, "scale": scale,
+          "orientation": ori}
     if os.environ.get("OPENSG_SG_CACHE", "0") not in ("", "0"):
         try:                                      # best-effort sidecar cache
             np.savez_compressed(
@@ -434,7 +452,7 @@ def load_sg_input(path, out_base=None):
                        else np.array([np.array(c) for c in cells],
                                      dtype=object)),
                 mat_id=mat_id, materials=np.array(materials, dtype=object),
-                scale=scale)
+                scale=scale, **({} if ori is None else {"orientation": ori}))
         except Exception:
             pass
     return sc
