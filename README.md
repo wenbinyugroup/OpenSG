@@ -100,7 +100,7 @@ Every example folder holds its input yaml, a short driver script and the `.out` 
 
 ## Documentation
 
-The Sphinx documentation of this line is in `docs/`, starting at [docs/index.md](docs/index.md): installation, the input format, the constitutive models, the architecture, one tutorial per capability, and the formulation rules under `docs/rules/`. The hosted site [wenbinyugroup.github.io/OpenSG](https://wenbinyugroup.github.io/OpenSG/) carries the documentation of OpenSG 1.0. Build the 2.x documentation with
+The Sphinx documentation of this line is in `docs/`, starting at [docs/index.md](docs/index.md): installation, the input format, the constitutive models, the architecture, one tutorial per capability, and the formulation rules under `docs/rules/`. It is hosted at [wenbinyugroup.github.io/OpenSG/OpenSG_v2_0](https://wenbinyugroup.github.io/OpenSG/OpenSG_v2_0/), beside the documentation of OpenSG 1.0 at [wenbinyugroup.github.io/OpenSG](https://wenbinyugroup.github.io/OpenSG/); `.github/workflows/docs.yml` rebuilds the site on every push to `docs/`. Build it locally with
 
 ```bash
 pip install -r docs/requirements.txt
