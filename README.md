@@ -1,6 +1,6 @@
 # OpenSG
 
-> **Reviewers:** the version under review is OpenSG 1.0 (FEniCSx), tag [`v1.0.0`](https://github.com/wenbinyugroup/OpenSG/releases/tag/v1.0.0) on branch [`opensg/fenicsx/v1`](https://github.com/wenbinyugroup/OpenSG/tree/opensg/fenicsx/v1). This branch is OpenSG 2.x, the JAX line, which replaces the 1.0 code.
+> The initial version is OpenSG 1.0 (FEniCSx), tag [`v1.0.0`](https://github.com/wenbinyugroup/OpenSG/releases/tag/v1.0.0) on branch [`opensg/fenicsx/v1`](https://github.com/wenbinyugroup/OpenSG/tree/opensg/fenicsx/v1). This branch is OpenSG 2.x, the JAX line, which replaces the 1.0 code.
 
 <p align="center"><img src="docs/images/opensg_overview.png" alt="OpenSG: Structure Genes homogenized into solid, plate/shell and beam models" width="600"></p>
 
