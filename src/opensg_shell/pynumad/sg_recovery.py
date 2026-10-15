@@ -51,7 +51,7 @@ def dehom_station(shell_yaml, ff, n_depth=9, frame="material", bundle=None,
     from ..sg_homo import build_rm_bundle
     from ..sg_dehom import _macro_fields, _rm_shell_strain
     from ..sg_assembly import quad_ops_indep
-    from ..fe_jax.msg_dehom import _macro_recovery
+    from ..kernels.msg_dehom import _macro_recovery
     from opensg_solid.rm_plate_1D.msg_rm_plate import rm_plate_msg, msgrm_strain_at_depth
     from .sg_beamdyn import read_ff
 

@@ -2,7 +2,7 @@
 OpenSG NEW architecture (opensg_solid.sg_homo, n_model = 3).
 
 Reads square_tube_2Dsolid.yaml (3228 nodes, 5384 linear triangles, one
-orthotropic ply; e1 is out of plane per Rules/orientation_e1_out_of_plane.md)
+orthotropic ply; e1 is out of plane per docs/rules/orientation_e1_out_of_plane.md)
 and writes the 6x6 C_eff plus the 9 engineering constants.
 
 USE_ORIENTATIONS = False reproduces exactly what the old .sc-based script can

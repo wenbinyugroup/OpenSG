@@ -6,7 +6,7 @@ one orthotropic ply at −45°) homogenized to the equivalent 3-D solid
 
 | file | what |
 |---|---|
-| `square_tube_2Dsolid.yaml` | the 2-D SG: 3228 nodes, 5384 linear triangles, `elementOrientations` with `e1` out of plane (see `Rules/orientation_e1_out_of_plane.md`) |
+| `square_tube_2Dsolid.yaml` | the 2-D SG: 3228 nodes, 5384 linear triangles, `elementOrientations` with `e1` out of plane (see `docs/rules/orientation_e1_out_of_plane.md`) |
 | `square_tube.sc` | the same mesh in SwiftComp `.sc` form (what the old script reads) |
 | `solid_props_new_architecture.py` | `opensg_solid.sg_homo.plate_homo_2d`, `n_model = 3` |
 | `solid_props_old_architecture.py` | the original single-script JAX_BICGoptimize driver, `n_model = 3` |
@@ -66,6 +66,5 @@ nu12 = 0.2276368   nu13 = 0.3312396   nu23 = -0.0112453
 
 which the old script cannot reproduce from a `.sc`.
 
-The mesh came from PreVABS — see `.claude/skills/prevabs-xml-to-2dyaml/SKILL.md`
-for the XML → `.sg` → 2-D yaml recipe, and `tests/08072026_square_shell_mesh/`
-for the full working folder including the beam (Timoshenko) runs.
+The mesh came from PreVABS (XML → `.sg` → 2-D yaml); the PreVABS input and its `.sg`
+are kept in `tests/msg_k_reference/fixtures/prevabs/`.

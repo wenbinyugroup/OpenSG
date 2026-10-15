@@ -1,6 +1,6 @@
 # Architecture
 
-OpenSG-2.0 is two engines over one theory, both driven the same way: **a yaml
+OpenSG is two engines over one theory, both driven the same way: **a yaml
 (or SwiftComp `.sc`) in, a timed SwiftComp-layout `.out` back**. The core
 packages contain no `main` blocks and no directory assumptions — every path
 decision lives in the example scripts, which call one entry function on the
@@ -63,7 +63,7 @@ flowchart TD
     RI --> CON["sg_assembly.assemble_constraint<br/>drilling rows Gc/Gl/Ge"]
     ASM --> LU["one LU of the KKT<br/>V0 = LU \ (-Dhe)"]
     CON --> LU
-    LU --> V1["fe_jax.msg_solver.prepare_v1_rhs<br/>V1 = LU \ b(V0)"]
+    LU --> V1["opensg_shell.kernels.msg_solver.prepare_v1_rhs<br/>V1 = LU \ b(V0)"]
     V1 --> FIN["finalize_v1_and_compute_deff<br/>generalized-Timoshenko 6x6"]
     FIN --> OUT1[["&lt;yaml&gt;_Timo.out + &lt;yaml&gt;_ABDG.out<br/>(.K layout, timed)"]]
 ```

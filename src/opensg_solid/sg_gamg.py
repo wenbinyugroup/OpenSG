@@ -1,20 +1,19 @@
 """sg_gamg.py -- iter 4 of the --solver menu: PETSc GAMG
 (smoothed-aggregation)-preconditioned CG for the fluctuation solves of
-the SSDM plate/solid routes (sg_homo dispatch solver="gamg"), through
-the vendored jetsci PETSc layer.
+the SSDM plate/solid routes (sg_homo dispatch solver="gamg"), through petsc4py.
 
 Same contract as sg_amg.amg_homo: the exact pinned SPD CSR that
 _homo_direct factorizes (sg_assembly.assemble_rhs_and_pinned_csr,
-sym=True) is handed to ONE PETSc KSP (CG, unpreconditioned norm --
-jetsci's convention) with PC GAMG; setup runs ONCE and every RHS
+sym=True) is handed to ONE PETSc KSP (CG, unpreconditioned norm,
+the fea-in-jax convention) with PC GAMG; setup runs ONCE and every RHS
 column reuses it (KSPMatSolve when the build carries it, else a
-per-column loop on the same KSP).  jetsci supplies the option plumbing
-(petsc_ksp.options.PETScMethodOptions: aij on CPU, aijcusparse on GPU
-exactly as its default) and the Mat construction recipe (COO
-preallocation + setValuesCOO, the buildKSP_Keith sequence); the
-Mat/KSP objects themselves are built with petsc4py directly because
-jetsci's buffer-callback lifecycle is cupy/CUDA-bound and has no hook
-for PC config, tolerances or near-nullspace attachment.
+per-column loop on the same KSP).  The option names come from
+opensg_solid.petsc_options (PETScMethodOptions, vendored from the
+jetsci layer of fea-in-jax: aij on CPU, aijcusparse on GPU) and the
+Mat construction follows its COO recipe (preallocation +
+setValuesCOO); the Mat/KSP objects are built with petsc4py directly,
+which gives the hooks for the PC configuration, the tolerances and the
+near-nullspace attachment.
 
 DOCTRINE.  OpenSG removes rigid-body modes via the KKT / pinned-dof
 construction ONLY -- never nullspace deflation.  The rigid-body
@@ -58,6 +57,7 @@ from scipy.sparse import diags
 from opensg_solid.sg_assembly import (assemble_rhs_and_pinned_csr,
                                       compute_homogenized_constants)
 from opensg_solid import sg_progress
+from opensg_solid.petsc_options import PETScMethodOptions
 
 # same stopping pair as sg_amg (a tolerance certificate is one rerun
 # with OPENSG_AMG_RTOL tightened 100x: the law must hold its digits)
@@ -81,24 +81,18 @@ def _require_petsc():
 
 
 def _petsc_type_names():
-    """Mat/KSP/PC PETSc type names through the vendored jetsci options
-    plumbing: aijcusparse on GPU (jetsci's own default), aij on CPU,
-    CG + GAMG.  Falls back to the literal names if the jetsci package
-    is unimportable (e.g. a snapshot without the CPU import guard).
+    """Mat/KSP/PC PETSc type names through PETScMethodOptions
+    (opensg_solid.petsc_options): aijcusparse on GPU, aij on CPU,
+    CG + GAMG.
 
     In:  --
     Out: (mat, ksp, pc) str PETSc type names."""
     on_gpu = jax.default_backend() == "gpu"
     mt = "aijcusparse" if on_gpu else "aij"
-    try:
-        from jetsci.petsc_ksp.options import PETScMethodOptions
-        o = PETScMethodOptions(mat_type=mt, ksp_type="cg",
-                               pc_type="gamg")
-        return (o.matrix_construction_options()[0],
-                o.ksp_construction_options()[0],
-                o.pc_construction_options()[0])
-    except ImportError:
-        return mt, "cg", "gamg"
+    o = PETScMethodOptions(mat_type=mt, ksp_type="cg", pc_type="gamg")
+    return (o.matrix_construction_options()[0],
+            o.ksp_construction_options()[0],
+            o.pc_construction_options()[0])
 
 
 def _usable_mat_type(PETSc, mat_type):
@@ -128,7 +122,7 @@ def _usable_mat_type(PETSc, mat_type):
 
 
 def _mat_from_csr(PETSc, A, mat_type):
-    """PETSc Mat from a scipy sparse matrix.  The jetsci buildKSP COO
+    """PETSc Mat from a scipy sparse matrix.  The fea-in-jax buildKSP COO
     recipe (create / setSizes / setType / setPreallocationCOO /
     setValuesCOO -- one sequence for aij and aijcusparse) when this
     petsc4py build carries the COO api; older builds (<= 3.21) take
@@ -186,7 +180,7 @@ def _attach_near_nullspace(PETSc, mat, B):
 def _build_ksp(PETSc, mat, ksp_name, pc_name, rtol, maxiter):
     """KSP CG + PC GAMG (smoothed aggregation) on an assembled Mat,
     set up ONCE -- every subsequent solve reuses the hierarchy.
-    Unpreconditioned norm (the jetsci convention), so rtol gates the
+    Unpreconditioned norm (the fea-in-jax convention), so rtol gates the
     same relative residual sg_amg reports.
 
     GAMG's aggressive coarsening SQUARES the graph (a sparse A*A whose

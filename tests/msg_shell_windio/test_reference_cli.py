@@ -111,7 +111,7 @@ def test_default_is_oml_and_center_is_a_flag(yamls):
 
 def test_center_shifts_the_wall_law_only(yamls):
     from opensg_shell.sg_mesh import load_ring_ref
-    from opensg_shell.fe_jax.msg_materials import shift_abd_reference
+    from opensg_shell.kernels.msg_materials import shift_abd_reference
     import yaml as _yaml
     Ro = load_ring_ref(yamls["center"], "oml")
     Rc = load_ring_ref(yamls["center"], "center")
@@ -163,7 +163,7 @@ def test_unknown_reference_is_refused(yamls):
 
 
 def test_classical_route_never_moves_nodes(yamls):
-    from opensg_shell.fe_jax.msg_hermite import solve_tw_from_yaml
+    from opensg_shell.kernels.msg_hermite import solve_tw_from_yaml
     tmp = yamls["tmp"]
     a = solve_tw_from_yaml(yamls["center"], frac=0.0)
     b = solve_tw_from_yaml(yamls["center"], frac=0.5)

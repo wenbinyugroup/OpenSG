@@ -97,7 +97,7 @@ SOLVER_MENU = """\
    iter 2     amg      AMG-preconditioned CG; runs on the GPU when
                        jax sees one (needs pyamg)
    iter 3     stream   host-streamed EBE CG for >10M dofs  [WIP]
-   iter 4     gamg     PETSc GAMG-preconditioned CG via jetsci
+   iter 4     gamg     PETSc GAMG-preconditioned CG via petsc4py
                        (needs petsc4py; explicit-only, auto never
                        picks it)
 

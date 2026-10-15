@@ -23,8 +23,7 @@ dialect beside the SwiftComp one, and states every place the two differ.
 its printed one-liner; new code should call
 `opensg_solid.io.sg_input.convert(path, dialect="sc" | "sg")`.
 
-NOTE for the one caller in the tree (tests/08072026_square_shell_mesh/
-four_case/make_inputs.py): the new writer REFUSES rather than guesses.
+NOTE for callers of the legacy signature: the new writer REFUSES rather than guesses.
 Those yamls carry `elementOrientations` and a nonzero density, so the
 call now needs `orientation="bake"` (or "ignore") and
 `drop_density=True`; see VALIDATED / NOT VALIDATED in the sg_input module

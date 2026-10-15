@@ -12,14 +12,14 @@ import jax.numpy as jnp
 
 from opensg_solid.sg_homo import plate_homo_2d
 
-SCDIR = "../../../tests/08072026_square_shell_mesh/TPMS_SC_files"
+SCDIR = "."
 E, nu = 70.0e9, 0.30
 G = E/(2*(1+nu))
 material_param = jnp.array([(E, E, E, G, G, G, nu, nu, nu)])
 
 which = sys.argv[1:] or ["2", "1"]
 for s in which:
-    sc = "%s/Sample_%s.sc" % (SCDIR, s)
+    sc = "%s/sample_%s/Sample_%s.sc" % (SCDIR, s, s)
     t0 = time.perf_counter()
     r = plate_homo_2d(sc, material_param=material_param,
                       angles=jnp.array([0.0]), n_model=3, workdir=".",

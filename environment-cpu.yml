@@ -1,0 +1,35 @@
+# CPU-only environment: the same package set as environment.yml with the CPU builds
+# of JAX and PETSc (no NVIDIA wheels).  Used by the CI workflow; for a GPU machine
+# use environment.yml.
+name: opensg
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - numpy
+  - scipy
+  - mpi4py
+  - mpich
+  - meshio
+  - pyyaml
+  # CPU PETSc for the optional GAMG solver (--solver iter 4).  The version pin is
+  # load-bearing: unpinned, conda picks a petsc4py without a python-3.13 build and
+  # drags the whole environment down to python 3.10.
+  - petsc4py=3.23.7
+  # basix supplies the reference bases and quadrature that fe_jax evaluates.
+  - fenics-basix=0.8.0
+  - matplotlib
+  - pyvista
+  - numba
+  - psutil
+  - pip
+  - pip:
+    - jax
+    - jaxopt
+    - flax
+    - libigl
+    - pyamg
+    - pypardiso
+    - windio
+    - pytest
+    - -e .

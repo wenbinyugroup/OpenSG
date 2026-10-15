@@ -15,8 +15,7 @@ Everything the analysis needs then lives in the yaml, so
 Run (from this folder):  python make_schwarz_yaml.py"""
 from opensg_shell.helper.msh_to_yaml import convert
 
-MSH = ("../../../tests/08072026_square_shell_mesh/TPMS_SC_files/"
-       "schwarz_p_D2_shell.msh")
+MSH = "shell_msh/schwarz_p_D2_shell.msh"
 YAML = "schwarz_p_3Dshell.yaml"
 T = 0.036457           # Sample_2, volume-consistent
 E, nu = 69.0e9, 0.30

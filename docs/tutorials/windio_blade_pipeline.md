@@ -12,10 +12,10 @@ Three separate tools are involved, and the boundary between them matters:
 | stage | tool | who runs it |
 |---|---|---|
 | windIO blade → per-station 1-D shell SG yaml | **OpenSG_io** (separate repository) | you, once per blade |
-| 1-D shell SG → Timoshenko $6\times6$ | **OpenSG-2.0**, `opensg_shell` | `1_homo_beam_props.py`, `4_sweep_51_stations.py` |
+| 1-D shell SG → Timoshenko $6\times6$ | **OpenSG**, `opensg_shell` | `1_homo_beam_props.py`, `4_sweep_51_stations.py` |
 | spanwise $6\times6$ table → blade dynamics, sectional loads | **BeamDyn / OpenFAST** | you, outside OpenSG |
-| sectional loads + $6\times6$ → 3-D wall stress | **OpenSG-2.0**, `opensg_shell` + `opensg_solid.rm_plate_1D` | `2_dehom_v2_vabs.py`, `4_sweep_51_stations.py` |
-| correctness check on the recovered transverse shear | **OpenSG-2.0** | `3_q_consistency_check.py` |
+| sectional loads + $6\times6$ → 3-D wall stress | **OpenSG**, `opensg_shell` + `opensg_solid.rm_plate_1D` | `2_dehom_v2_vabs.py`, `4_sweep_51_stations.py` |
+| correctness check on the recovered transverse shear | **OpenSG** | `3_q_consistency_check.py` |
 
 OpenSG never runs the beam dynamics. It produces the sectional constitutive law that the beam
 solver needs, and it consumes the sectional loads that the beam solver returns.
@@ -55,7 +55,7 @@ a **PreVABS XML** that meshes to a 2-D solid cross-section (the route that produ
 reference used in step 5). It also reads PreVABS XML and OpenFAST ElastoDyn/BeamDyn blade data,
 so published beam properties can be pulled in as a validation reference.
 
-Install it alongside OpenSG-2.0:
+Install it alongside OpenSG:
 
 ```bash
 git clone --recurse-submodules https://github.com/bagla0/OpenSG_io
@@ -246,7 +246,7 @@ across the blade, six and a half decades.
 Per the OpenFAST/BeamDyn documentation, BeamDyn (the geometrically exact beam module of
 OpenFAST) represents the blade by a sectional $6\times6$ **stiffness** matrix and a sectional
 $6\times6$ **mass** matrix given at a list of normalized span stations in its blade input file.
-Nothing in OpenSG-2.0 reads or writes that file; the implementation to look at is OpenSG_io's
+Nothing in OpenSG reads or writes that file; the implementation to look at is OpenSG_io's
 `openfast_io.read_beamdyn_blade` and `openfast_io.write_beamdyn_blade`. Two practical points:
 
 - **The station list must line up with BeamDyn's quadrature points.** The BeamDyn documentation
@@ -261,7 +261,7 @@ Nothing in OpenSG-2.0 reads or writes that file; the implementation to look at i
 Be clear about what OpenSG supplies here: **the stiffness matrix only**. These scripts compute no
 sectional mass matrix; the only mass quantity produced is `mass_per_area` per laminate in the
 emitted ABD yaml. The sectional inertia and the aeroelastic run itself are yours, outside
-OpenSG-2.0. The BeamDyn input assembly need not be done by hand, though: OpenSG_io ships
+OpenSG. The BeamDyn input assembly need not be done by hand, though: OpenSG_io ships
 `openfast_io.timo_to_beamdyn`, which permutes an OpenSG Timoshenko $6\times6$ into BeamDyn DOF
 order, and `openfast_io.write_beamdyn_blade`, which writes a BeamDyn blade input from a list of
 etas and homogenized stiffness matrices. Its `M_list` argument is optional and zero-filled when
@@ -487,7 +487,7 @@ route's $\sigma_{13}$ or $\sigma_{33}$ as a design quantity.
 
 ## Where the tool ends
 
-| produced by OpenSG_io | produced by OpenSG-2.0 | produced by BeamDyn/OpenFAST |
+| produced by OpenSG_io | produced by OpenSG | produced by BeamDyn/OpenFAST |
 |---|---|---|
 | per-station 1-D shell SG yamls; PreVABS XML for the 2-D solid route; OpenFAST blade data read back as a reference | the Timoshenko $6\times6$ per station and its `.out`; the RM wall law `ABDG.out`; the recovered 3-D wall stress and its validation against VABS; the Q-consistency diagnostic | the blade dynamics, and the per-station sectional resultants that come back as the FF table |
 

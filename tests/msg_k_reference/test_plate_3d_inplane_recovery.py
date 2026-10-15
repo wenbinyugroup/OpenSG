@@ -33,11 +33,14 @@ This file closes that gap three ways:
   2. PROBED banks.  blank_ladder zeroes every stored warping column and
      one bank is set back to a field whose gradient is known in closed
      form (w_i = A_ij y_j, exactly representable in any FE space), so
-     each refined kernel -- _v2_batch, _v266_batch's D and T chains,
-     _vq_batch -- is made to return its Gamma_h/Gamma_l ALONE and is
-     checked against the constant symmetric gradient of A.  This is the
-     only construction in the suite that drives the in-plane rows of
-     Gamma_h at n_sg == 3, and it is absolute.
+     each refined kernel -- _v2_batch, _v266_batch (which dehom_fields
+     feeds ONE bank in both chain slots since the 2026-09-01 Yu Eq. 50
+     change), _vq_batch -- is made to return its Gamma_h/Gamma_l ALONE
+     and is checked against the constant symmetric gradient of A.  The
+     two Eq. 66 chains are still probed apart, at kernel level with
+     distinct banks, in section 5.  This is the only construction in
+     the suite that drives the in-plane rows of Gamma_h at n_sg == 3,
+     and it is absolute.
 
   3. PARITY + LINEARITY + the row split, so an n_sg-dependent branch
      error, a broken ablation ladder or a silent edit to the Eq. 66 row
@@ -52,24 +55,43 @@ tolerances are pinned several orders above these:
   nu=0.3 hex8 3-D bending:          element dV-mean rel 2.5e-16, but
       POINTWISE 2.3e-2 -- the p1 warping-space error, which is exactly
       why the mean is the anchor and the pointwise value only a guard
-  linear-field probe, all 10 banks x n_sg 1/2/3:  max 1.4e-15 absolute
-      (seam-free elements 8/8 at 1-D, 8/16 at 2-D, 16/36 at 3-D)
+  linear-field probe, all 10 banks x n_sg 1/2/3 (re-measured 2026-10-15
+      on the one-bank engine, the second-order cases net of the
+      bank-blank Eq. 50 run):  max 1.4e-15 absolute, V21/V22/V23
+      exactly 0 (seam-free elements 8/8 at 1-D, 8/16 at 2-D, 16/36 at
+      3-D); the bank-blank run itself is exactly 0.0 for dE1/dE2/qt6/
+      qb6 and equals the recomputed Eq. 50 macro strain to 2.8e-17
+      absolute (|term| 0.04..0.13) for dE11/dE12/dE22
   1-D vs 2-D vs 3-D layer-mean parity, all drives: rel 1.9e-14
 
-Mutation-checked (2026-08-31): seven injected defects, each caught.  The
-headline one -- Gamma_h's in-plane rows scaled by 0.915 for n_sg == 3
-ONLY, i.e. the reported "right shape, ~8.5% short in amplitude"
-signature -- is caught HERE and by nothing else: all 12 tests of
-test_plate_ladder_general and test_plate_shear_refined_anchors still
-pass with it in place.  Same for a 3-D SG wrongly padded like a 1-D one,
-a mis-scaled classical Ge tilt, a scrambled Gamma_l row map and a
-silently dropped detilt.
+Mutation-checked (2026-08-31, on the two-chain engine of that date):
+seven injected defects, each caught.  The headline one -- Gamma_h's
+in-plane rows scaled by 0.915 for n_sg == 3 ONLY, i.e. the reported
+"right shape, ~8.5% short in amplitude" signature -- is caught HERE and
+by nothing else: all 12 tests of test_plate_ladder_general and
+test_plate_shear_refined_anchors still pass with it in place.  Same for
+a 3-D SG wrongly padded like a 1-D one, a mis-scaled classical Ge tilt
+and a scrambled Gamma_l row map.  (That list also held a silently
+dropped detilt; since the 2026-09-01 Yu Eq. 50 change, dehom_fields
+reading no detilted column IS the production state, and
+test_row_split_chains_really_differ pins it.)
+
+Re-checked 2026-10-15 on the one-bank engine, each defect in a COPY of
+src (failing tests of this file in brackets): the 0.915 shortfall [8;
+the 12 tests of the two files above still pass], V11barD/V12barD put
+back in the chain-A Gamma_l slots [1], V21/V22/V23 put back in the
+chain-A V2 slots [13], the kernel row split narrowed to 2:4 [1], and a
+bank-independent 1e-3 |driver| term added on the first-order refined
+path [7, among them gamma_h[V11bar] at 1-D, 2-D and 3-D] or on the
+second-order path [18, every second-order gamma_h case, through the
+Eq. 50 check of the bank-blank run].
 """
 import numpy as np
 import pytest
 
-from opensg_solid.sg_homo import plate_homo_2d, _detilt_cols_2d
-from opensg_solid.sg_dehom import dehom_fields
+from opensg_solid.sg_homo import (plate_homo_2d, _detilt_cols_2d,
+                                  _D1_SG, _D2_SG)
+from opensg_solid.sg_dehom import dehom_fields, _v266_batch
 
 E0, NU, H, NZ = 1000.0, 0.3, 1.0, 8
 W = 0.25                                  # in-plane cell size
@@ -314,6 +336,31 @@ def first_moment_weights(r):
     return out
 
 
+_SECOND = ("dE11", "dE12", "dE22")
+
+
+def eq50_macro_strain(r, drv, slot):
+    """The macro strain Yu Eq. 50 puts into a recovery driven by ONE
+    unit second-order driver with every bank blank, rebuilt here from
+    the run's own A6_ladder and G_msg (sg_dehom.dehom_fields):
+        gamma,a = G^-1 (D1^T A R,1a + D2^T A R,2a)     (Eq. 54, m = 0)
+        eps     = -(D1 gamma,1 + D2 gamma,2)           (Eq. 50, R = 0)
+    then Gamma_eps eps at the Gauss points with no warping (the nu = 0
+    closed form, whose eps33 row is zero).
+
+    In:  r refined single-batch dict; drv one of dE11/dE12/dE22; slot
+         the loaded measure (0..5).
+    Out: (E*Q, 6) the macro strain, SwiftComp order."""
+    A6 = np.asarray(r["A6_ladder"], float)[:6, :6]
+    Gi = np.linalg.inv(np.asarray(r["G_msg"], float))
+    d = {k: np.zeros(6) for k in _SECOND}
+    d[drv] = np.eye(6)[slot]
+    g1 = Gi @ (_D1_SG.T @ A6 @ d["dE11"] + _D2_SG.T @ A6 @ d["dE12"])
+    g2 = Gi @ (_D1_SG.T @ A6 @ d["dE12"] + _D2_SG.T @ A6 @ d["dE22"])
+    eps = -(_D1_SG @ g1 + _D2_SG @ g2)
+    return analytic_plate(E0, 0.0, gauss_z(r).ravel(), eps)[0]
+
+
 # UNIT-scale macro states (the suite's convention: unit drives, so a
 # recovered stress is O(E) and a tolerance reads as a relative error).
 E6_GEN = np.array([1.3, -0.7, 0.9, 2.1, -1.1, 0.6])
@@ -479,7 +526,7 @@ def test_inplane_rows_are_carried_not_dropped(runs):
 
 
 # ===================================================================== 3
-# The DETILTED chain's IN-PLANE rows, and every other refined bank
+# PROBED banks -- Gamma_h's IN-PLANE rows through every refined bank
 # =====================================================================
 _A_PROBE = np.array([[0.31, -0.47, 0.72],
                      [0.58, 0.19, -0.36],
@@ -491,12 +538,17 @@ _BANKS = [
     #  slot to load, the output rows that bank's chain owns)
     ("V11bar", "dE1", 0, _ALL6),          # Eq. 63 first order
     ("V12bar", "dE2", 1, _ALL6),
-    ("V21", "dE11", 3, (0, 1, 5)),        # Eq. 64-66 D chain: in-plane
-    ("V22", "dE12", 5, (0, 1, 5)),
-    ("V23", "dE22", 4, (0, 1, 5)),
-    ("V21t", "dE11", 3, (2, 3, 4)),       # T chain: 33 / 23 / 13
-    ("V22t", "dE12", 5, (2, 3, 4)),
-    ("V23t", "dE22", 4, (2, 3, 4)),
+    # Eq. 64-66 since the 2026-09-01 TPMS correction (sg_dehom.
+    # _v266_batch docstring): dehom_fields feeds ONE bank -- V21t/V22t/
+    # V23t with Gamma_l on the original V11/V12 (2026-09-08) -- into
+    # BOTH chain slots, so the T banks own every row and the detilted-
+    # source D banks V21/V22/V23 are stored but contracted by no row.
+    ("V21", "dE11", 3, ()),
+    ("V22", "dE12", 5, ()),
+    ("V23", "dE22", 4, ()),
+    ("V21t", "dE11", 3, _ALL6),
+    ("V22t", "dE12", 5, _ALL6),
+    ("V23t", "dE22", 4, _ALL6),
     ("V1Lt", "qt6", 0, _ALL6),            # the pressure load ladder
     ("V1Lb", "qb6", 0, _ALL6),
 ]
@@ -518,9 +570,30 @@ def test_gamma_h_of_every_bank_is_the_exact_gradient(runs, tag, bank,
     with genuinely nonzero in-plane derivatives, which no laminate SG at
     any dimension can do (their warping is a function of y3 alone) and
     which the padding makes structurally impossible at n_sg == 1.  The
-    D-chain banks V21/V22/V23 are checked on the in-plane rows they own
-    and the T-chain banks V21t/V22t/V23t on rows 33/23/13, so the
-    detilted chain's in-plane content is asserted directly.
+    T banks V21t/V22t/V23t feed BOTH Eq. 66 chains (one bank in both
+    slots since the 2026-09-01 TPMS correction), so each is checked
+    against the gradient on ALL six rows -- the in-plane rows through
+    the chain-A slot, 33/23/13 through chain B -- and the detilted-
+    source banks V21/V22/V23, which no row contracts any more, must
+    contribute exactly nothing.
+
+    The second-order drivers also enter through Yu Eq. 50 in driver
+    space (eps = R - D_a gamma,a, sg_dehom.dehom_fields): with every
+    bank blank that leaves a macro Gamma_eps term that belongs to no
+    bank.  For dE11/dE12/dE22 ONLY, that bank-blank run is subtracted,
+    and what remains is the bank's chain because dehom_fields is linear
+    in the bank columns by construction (each kernel contracts the
+    operator applied to a column with its driver, every other bank is
+    zero, so full run = blank run + that chain).  The linearity test
+    below checks linearity in the DRIVERS, not in the bank columns, so
+    it does not cover this step; the subtracted run is checked itself
+    instead -- it must be a real (nonzero) term and equal the Eq. 50
+    macro strain recomputed from A6_ladder, G_msg, _D1_SG and _D2_SG
+    (eq50_macro_strain), so a bank-independent term that does not
+    belong there cannot be subtracted away.  The first-order and load
+    drivers (dE1, dE2, qt6, qb6) carry no Eq. 50 term: their bank-blank
+    run must be EXACTLY 0.0 and nothing is subtracted, so those cases
+    stay absolute.
 
     Run at n_sg = 1, 2 and 3 so a branch that is right in one dimension
     and wrong in another cannot hide."""
@@ -531,14 +604,25 @@ def test_gamma_h_of_every_bank_is_the_exact_gradient(runs, tag, bank,
     assert keep.size, "no seam-free element on %s" % tag
 
     r2 = blank_ladder(r)
+    kw = {drv: np.eye(6)[slot]}
+    blank = np.asarray(dehom_fields(r2, np.zeros(6), **kw)[0])
+    if drv in _SECOND:                   # the Eq. 50 macro term, checked
+        assert r.get("A6_ladder") is not None and \
+            r.get("G_msg") is not None, "no Eq. 50 route on %s" % tag
+        macro = eq50_macro_strain(r, drv, slot).reshape(blank.shape)
+        assert np.abs(macro).max() > 1e-3, drv
+        assert np.abs(blank - macro).max() <= \
+            1e-12 * np.abs(macro).max(), drv
+    else:                                # no Eq. 50 term on this path
+        assert np.abs(blank).max() == 0.0, drv
     col = np.zeros_like(np.asarray(r[bank], float))
     if col.ndim == 1:                    # (n_unique,) load column
         col = w.copy()
     else:                                # (n_unique, 6): one slot only
         col[:, slot] = w
     r2[bank] = col
-    kw = {drv: np.eye(6)[slot]}
-    dGam = np.asarray(dehom_fields(r2, np.zeros(6), **kw)[0])[keep]
+    full = np.asarray(dehom_fields(r2, np.zeros(6), **kw)[0])
+    dGam = (full - blank if drv in _SECOND else full)[keep]
 
     ref = gamma_of(Adj)
     scale = max(np.abs(ref).max(), 1.0)
@@ -743,59 +827,121 @@ def test_second_order_path_collapses_to_first_order(runs):
 # ===================================================================== 5
 # The Eq. 66 ROW SPLIT is a CHOICE -- pin it so a change is deliberate
 # =====================================================================
+def _kernel_stress(r, d11=DE11, d12=DE12, d22=DE22, **bank):
+    """The Eq. 64-66 kernel itself, fed DISTINCT chain-A / chain-B banks
+    (the pre-2026-09-01 assignment: A = V11barD/V12barD + V21/V22/V23,
+    B = V11bar/V12bar + V21t/V22t/V23t), so its row split is visible.
+
+    In:  r refined single-batch dict; d11/d12/d22 (6,) second-order
+         drivers (first-order drivers zero); bank -- overrides of the
+         column blocks by key (zeroed or swapped ones).
+    Out: (E, Q, 6) the kernel's second-order stress dSig."""
+    c = {k: np.asarray(bank.get(k, r[k]), float) for k in (
+        "V0_ladder", "V11bar", "V12bar", "V11barD", "V12barD",
+        "V21", "V22", "V23", "V21t", "V22t", "V23t")}
+    return np.asarray(_v266_batch(
+        np.asarray(r["periodic_cells_en"]), c["V0_ladder"],
+        c["V11bar"], c["V12bar"], c["V11barD"], c["V12barD"],
+        c["V21"], c["V22"], c["V23"], c["V21t"], c["V22t"], c["V23t"],
+        np.asarray(r["x_end"]), np.asarray(r["C_ess"]),
+        np.asarray(r["dphi_dxi_qnp"]), np.asarray(r["phi_qn"]),
+        np.zeros(6), np.zeros(6), np.asarray(d11, float),
+        np.asarray(d12, float), np.asarray(d22, float),
+        n_sg=int(r["n_sg"]))[1])
+
+
 def test_eq66_row_split_is_exactly_rows_2_to_5(runs):
-    """sg_dehom._v266_batch sends rows 2:5 (33, 23, 13) to the TILTED
-    chain and keeps rows 0/1/5 (11, 22, 12) on the DETILTED one:
+    """sg_dehom._v266_batch sends rows 2:5 (33, 23, 13) to chain B and
+    keeps rows 0/1/5 (11, 22, 12) on chain A:
 
         dSig = SigD.at[:, :, 2:5].set(SigT[:, :, 2:5])
 
-    That split is a modelling choice, not an identity, and it is under
-    active question (using the detilted chain for ALL rows was measured
-    to improve sigma13 and sigma33 on a lattice SG while leaving the
-    in-plane rows bit-identical).  This test states the CURRENT contract
-    so any edit to it is a deliberate act with a failing test attached,
-    not a silent drift:
+    That split is a modelling choice, not an identity.  Since the
+    2026-09-01 TPMS correction (Yu Eq. 50 applied to the DRIVERS in
+    sg_dehom.dehom_fields; "Do NOT reintroduce a detilted bank in the A
+    slots", _v266_batch docstring) and the 2026-09-08 scale-invariance
+    fix (commit 0f56f78: Gamma_l and the T chain on the ORIGINAL V1),
+    dehom_fields passes ONE bank -- V11/V12 and V21t/V22t/V23t -- into
+    both slots, so the split is a no-op in production; the kernel keeps
+    it "so it still reads against Yu's text".  Both halves of that
+    contract are pinned, so an edit to either is a deliberate act with
+    a failing test attached, not a silent drift:
 
-      * zeroing the T-chain sources V21t/V22t/V23t moves rows 2/3/4 ONLY
-      * zeroing the D-chain sources V21/V22/V23 moves rows 0/1/5 ONLY
+      kernel, DISTINCT banks (_kernel_stress):
+        * zeroing the B sources V21t/V22t/V23t moves rows 2/3/4 ONLY
+        * zeroing the A sources V21/V22/V23 moves rows 0/1/5 ONLY
+      dehom_fields, one bank in both slots:
+        * zeroing V21/V22/V23 moves NO row
+        * zeroing V21t/V22t/V23t moves rows 0/1/5 AND rows 2/3/4
 
-    Both directions are asserted, so neither a widened nor a narrowed
-    slice survives."""
+    Both directions are asserted each time, so neither a widened nor a
+    narrowed slice, nor a split silently reinstated, survives."""
     r = runs["3d"]
     kw = dict(dE11=DE11, dE12=DE12, dE22=DE22)
     base = np.asarray(dehom_fields(r, E6_GEN, **kw)[1])
     scale = np.abs(base).max()
 
+    def zero(keys):
+        return {k: np.zeros_like(np.asarray(r[k], float)) for k in keys}
+
+    kbase = _kernel_stress(r)
     for keys, moved, still in ((("V21t", "V22t", "V23t"), (2, 3, 4),
                                 (0, 1, 5)),
                                (("V21", "V22", "V23"), (0, 1, 5),
                                 (2, 3, 4))):
-        r2 = dict(r)
-        for k in keys:
-            r2[k] = np.zeros_like(np.asarray(r[k], float))
-        got = np.asarray(dehom_fields(r2, E6_GEN, **kw)[1])
+        got = _kernel_stress(r, **zero(keys))
         for row in still:
-            assert np.abs(got[..., row] - base[..., row]).max() == 0.0, \
+            assert np.abs(got[..., row] - kbase[..., row]).max() == 0.0, \
                 (keys, row)
-        assert max(np.abs(got[..., row] - base[..., row]).max()
+        assert max(np.abs(got[..., row] - kbase[..., row]).max()
                    for row in moved) > 1e-9 * scale, keys
+
+    r2 = dict(r)
+    r2.update(zero(("V21", "V22", "V23")))
+    got = np.asarray(dehom_fields(r2, E6_GEN, **kw)[1])
+    for row in _ALL6:
+        assert np.abs(got[..., row] - base[..., row]).max() == 0.0, row
+    r2 = dict(r)
+    r2.update(zero(("V21t", "V22t", "V23t")))
+    got = np.asarray(dehom_fields(r2, E6_GEN, **kw)[1])
+    for rows in ((0, 1, 5), (2, 3, 4)):
+        assert max(np.abs(got[..., row] - base[..., row]).max()
+                   for row in rows) > 1e-9 * scale, rows
 
 
 def test_row_split_chains_really_differ(runs):
-    """The split only means something if the two chains disagree: the
-    D-chain's Gamma_l uses the DETILTED V11barD/V12barD and the T-chain
-    the raw V11bar/V12bar.  Assert the recovered in-plane stress
-    actually changes when the D chain is forced onto the tilted columns
-    -- otherwise the test above would be pinning a distinction without
-    a difference."""
+    """The split only means something if the two chains can disagree:
+    in the kernel, chain A's Gamma_l takes the A-slot columns and chain
+    B the B-slot ones.  Fed the DETILTED V11barD/V12barD in A and the
+    raw V11bar/V12bar in B, forcing A onto the raw columns must change
+    the recovered in-plane stress and leave rows 2/3/4 bit-identical --
+    otherwise the kernel half of the test above would be pinning a
+    distinction without a difference.
+
+    The production half: dehom_fields no longer reads the detilted
+    columns at all (Yu Eq. 50 on the drivers replaced the detilt, which
+    applied as well would double the conversion), so the same swap on
+    the dict must move NO row; the Gamma_l bank it does read, the
+    original V11/V12 (commit 0f56f78), is live -- the detilted columns
+    put there must change the in-plane stress."""
     r = runs["3d"]
     kw = dict(dE11=DE11, dE22=DE22)
     base = np.asarray(dehom_fields(r, E6_GEN, **kw)[1])
+    scale = np.abs(base).max()
+
+    k0 = dict(d12=np.zeros(6))
+    d = np.abs(_kernel_stress(r, V11barD=r["V11bar"], V12barD=r["V12bar"],
+                              **k0) - _kernel_stress(r, **k0))
+    assert max(d[..., row].max() for row in (0, 1, 5)) > 1e-9 * scale
+    for row in (2, 3, 4):                     # chain B never saw them
+        assert d[..., row].max() == 0.0, row
+
     r2 = dict(r)
     r2["V11barD"], r2["V12barD"] = r["V11bar"], r["V12bar"]
-    got = np.asarray(dehom_fields(r2, E6_GEN, **kw)[1])
-    d = np.abs(got - base)
-    assert max(d[..., row].max() for row in (0, 1, 5)) \
-        > 1e-9 * np.abs(base).max()
-    for row in (2, 3, 4):                     # T chain never saw them
+    d = np.abs(np.asarray(dehom_fields(r2, E6_GEN, **kw)[1]) - base)
+    for row in _ALL6:                         # the detilt is not read
         assert d[..., row].max() == 0.0, row
+    r2 = dict(r)
+    r2["V11"], r2["V12"] = r["V11barD"], r["V12barD"]
+    d = np.abs(np.asarray(dehom_fields(r2, E6_GEN, **kw)[1]) - base)
+    assert max(d[..., row].max() for row in (0, 1, 5)) > 1e-9 * scale

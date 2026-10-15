@@ -19,7 +19,7 @@ yaml header say what to do about it, through the `junction:` key:
              CELL_DATA scalars, the <base>_dehom.junc sidecar and the stdout
              census.  It changes NO field value -- it corrects nothing, so it
              does not violate the default-OFF rule of
-             Rules/junction_corrections.md (that rule governs the
+             docs/rules/junction_corrections.md (that rule governs the
              homogenization Dee correction, a different validity domain --
              see the note at the end of this docstring).
     exclude  as `flag`, plus every duplicate (jflag 3) row carries NaN in its
@@ -88,7 +88,7 @@ NOT the same switch as the homogenization correction.  `junction:` here is a
 RECOVERY bookkeeping tier and must never be wired to `build_solid_bundle
 (junction="census"|"micro"|"microcell")`: that one is an energy correction
 with its own validity domain (stretch-dominated cells only -- it is invalid on
-bending-dominated lattices, see Rules/junction_corrections.md) and it stays
+bending-dominated lattices, see docs/rules/junction_corrections.md) and it stays
 default-OFF.  `flag` corrects nothing at all.
 
 ALL VARIABLES USED IN THIS MODULE

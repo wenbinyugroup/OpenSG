@@ -176,7 +176,7 @@ from .sg_assembly import (_surf_frame_batch, _shear_batch, NDOF6,
                           check_element_edges, TRI_GPTS, TIE_MITC3, TRI_NDOF)
 from .sg_materials import _material_by_section
 from .sg_periodicity import mesh_to_periodic_sparse_assembly_map
-from .fe_jax.msg_hermite import solve_tw_from_yaml          # layup_db / material_db by name
+from .kernels.msg_hermite import solve_tw_from_yaml          # layup_db / material_db by name
 
 
 # ===================== from run_ring_indep.py =====================
@@ -211,8 +211,8 @@ def ring_indep(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
                   per unit length the wall transmits into the joint."""
     import jax.numpy as jnp
     from .sg_assembly import (assemble_segment_indep, assemble_constraint, NDOF6)
-    from .fe_jax.msg_rm_timo import build_C_Psi
-    from .fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
+    from .kernels.msg_rm_timo import build_C_Psi
+    from .kernels.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
 
     if junction_twist not in ("hinged", "kirchhoff"):
         raise ValueError("junction_twist must be 'hinged' or 'kirchhoff', got %r"
@@ -978,7 +978,7 @@ def ring_solid(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     one by construction: every macro strain except Gamma_11 is cancelled at zero
     energy by an affine fluctuation, which only periodicity forbids.  Kept for
     diagnostics only."""
-    from .fe_jax.msg_rm_timo import build_C_Psi
+    from .kernels.msg_rm_timo import build_C_Psi
     from scipy.linalg import lu_factor, lu_solve
 
     m = len(rx)
@@ -1430,7 +1430,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
         faces; the rotational DOFs stay natural (free).  Translations are
         what the macro solid strain prescribes, and clamping them forbids
         the affine fluctuations that make a FREE aperiodic SG rank-one
-        (see Rules/periodicity_in_solid_props.md) and fixes the rigid
+        (see docs/rules/periodicity_in_solid_props.md) and fixes the rigid
         modes -- no Lagrange border.  Clamping the ROTATIONS too would
         over-stiffen the cut edges (measured: +12 %% -> +7 %% on C11 by
         freeing them).  Kinematic (Dirichlet) homogenization is an upper
@@ -1891,7 +1891,7 @@ def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
                                 build_C_Psi_segment6)
     from .sg_materials import _material_by_section
     from .sg_reference import norm_ref
-    from .fe_jax.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
+    from .kernels.msg_solver import prepare_v1_rhs, finalize_v1_and_compute_deff
 
     ref = norm_ref(ref)
     t0 = time.perf_counter()
@@ -2095,7 +2095,7 @@ def build_rm_bundle(shell_yaml, ref="oml", shear="mitc4_g23", g_source=None,
     # by-name plate layup_db + material_db are GEOMETRY-FREE loader dicts -- read them
     # directly (the KL solve_tw_from_yaml previously used here spent ~5 s/station
     # solving the whole Hermite ring just to surface these two dicts).
-    from .fe_jax.msg_mesh import load_yaml as _load_sg_yaml
+    from .kernels.msg_mesh import load_yaml as _load_sg_yaml
     _, _, _mat_db_kl, _layup_db_kl, _ = _load_sg_yaml(shell_yaml)
     # emit the per-station ABD yaml at the SAME reference (once, cached) for dehom + shell buckling
     if abd_out:

@@ -19,10 +19,10 @@ import numpy as np
 import jax.numpy as jnp
 
 from ..sg_assembly import assemble_segment_indep, assemble_constraint
-from ..fe_jax.msg_materials import compute_ABD_matrix, shift_abd_reference
-from ..fe_jax.msg_transverse_shear import transverse_shear_stiffness
-from ..fe_jax.msg_rm_timo import build_C_Psi
-from ..fe_jax.msg_solver import finalize_v1_and_compute_deff
+from ..kernels.msg_materials import compute_ABD_matrix, shift_abd_reference
+from ..kernels.msg_transverse_shear import transverse_shear_stiffness
+from ..kernels.msg_rm_timo import build_C_Psi
+from ..kernels.msg_solver import finalize_v1_and_compute_deff
 
 _GP = np.array([-1.0, 1.0]) / np.sqrt(3.0)               # 2-pt Gauss (exact: quadratic)
 # reference name -> thickness fraction: the ONE definition (a typo raises, never

@@ -27,7 +27,7 @@ from opensg_solid.sg_homo import plate_homo_2d
 E, nu = 69.0e9, 0.30
 G = E/(2*(1+nu))
 MP = jnp.array([(E, E, E, G, G, G, nu, nu, nu)])
-SCROOT = "../../../tests/08072026_square_shell_mesh/TPMS_SC_files/"
+SCROOT = "./"
 IJ = [("C11", 0, 0), ("C22", 1, 1), ("C33", 2, 2), ("C12", 0, 1),
       ("C13", 0, 2), ("C23", 1, 2), ("C44", 3, 3), ("C55", 4, 4),
       ("C66", 5, 5)]
@@ -38,7 +38,7 @@ rows = ["# TPMS solid 3-D SG (tets): aperiodic (w=0 Dirichlet on boundary"
 for S in ("1", "2"):
     res = {}
     for mode in ("aperiodic", "periodic"):
-        r = plate_homo_2d(SCROOT + "Sample_%s.sc" % S, material_param=MP,
+        r = plate_homo_2d(SCROOT + "sample_%s/Sample_%s.sc" % (S, S), material_param=MP,
                           angles=jnp.array([0.0]), n_model=3, workdir=".",
                           plot=False, boundary=mode)
         C = np.asarray(r["C_eff"])

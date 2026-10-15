@@ -25,7 +25,7 @@ from opensg_solid.sg_homo import write_sc_K
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS SCRIPT
 # ----------------------------------------------------------------------------
-#   HERE, ROOT   this folder; the repo root (walk up until opensg_jax/)
+#   HERE, ROOT   this folder; the repo root (walk up until src/)
 #   ROWS         row/column labels of the plate matrix: 3 membrane strains,
 #                3 curvatures, then the 2 transverse shears of the 8x8
 #   DB, db       layup_db.yaml path (argv[1] overrides) and its parsed dict

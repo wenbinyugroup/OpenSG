@@ -1374,7 +1374,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     device -- GPU when jax sees one; the SAME hierarchy also replaces
     the shear-refined ladder's KKT factorization, see sg_amg; single
     element type, periodic), "gamg" (iter 4: the same pinned CSR on a
-    PETSc KSP -- CG + PC GAMG via the vendored jetsci layer, rigid-body
+    PETSc KSP -- CG + PC GAMG via petsc4py, rigid-body
     vectors attached ONLY as preconditioner coarse-space hints, see
     sg_gamg; explicit-only, needs petsc4py; single element type,
     periodic) or "stream" (iter 3: the same CG with the
@@ -1679,7 +1679,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
             points, cells)
     elif solver == "gamg":
         # iter 4: the SAME pinned CSR handed to a PETSc KSP -- CG with
-        # PC GAMG (smoothed aggregation) via the vendored jetsci layer
+        # PC GAMG (smoothed aggregation) via petsc4py
         # (sg_gamg); rigid-body vectors ride along ONLY as GAMG
         # coarse-space hints (MatSetNearNullSpace), the solved system
         # is the pinned SPD CSR unchanged.  _amg_ctx routes the

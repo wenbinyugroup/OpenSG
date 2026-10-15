@@ -82,7 +82,7 @@ from .sg_assembly import compute_k22
 from .sg_assembly import ring_general
 from .sg_assembly import require_quad_mesh
 from .sg_materials import _material_by_section
-from .fe_jax.msg_materials import shift_abd_reference
+from .kernels.msg_materials import shift_abd_reference
 
 # NOTE: `from .sg_homo import ring_indep` would be circular at module import time
 # (sg_homo imports sg_mesh); it is imported inside ring_6dof() and c6() instead.

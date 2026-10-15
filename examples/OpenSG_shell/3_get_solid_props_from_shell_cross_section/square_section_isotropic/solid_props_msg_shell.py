@@ -2,7 +2,7 @@
 
 Reads the 1-D shell SG (square_tube_1Dshell.yaml: wall midline, center
 reference, isotropic wall) and writes the 6x6 C3D plus the 9 engineering
-constants.  PERIODIC by default per Rules/periodicity_in_solid_props.md: for a
+constants.  PERIODIC by default per docs/rules/periodicity_in_solid_props.md: for a
 2-D SG the opposite face edges and the corners are tied through the shell
 periodic assembly map.
 
