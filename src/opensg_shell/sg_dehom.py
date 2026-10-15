@@ -16,7 +16,7 @@ energy-consistent adjoint of the RM 6x6 assembly:
     s2 = BGe st_m + BGt (a1+a2) + BGl (a4+a3)  -> [2g13,2g23]  (BGt = MITC-tied g23)
 
 Unlike the Kirchhoff-Love bundle, the recovery carries the wall transverse shears
-(2g13, 2g23).  Step 2 (plate through-thickness SG) reuses the opensg_jax plate machinery.
+(2g13, 2g23).  Step 2 (plate through-thickness SG) reuses the rm_plate_1D plate machinery.
 
 Public entry points: disp_at_points, stress_at_points, ring_wall_strains
 (bundle from sg_homo.build_rm_bundle).  ring_wall_strains is the per-ELEMENT
@@ -28,11 +28,11 @@ import numpy as np
 import jax.numpy as jnp
 
 from .sg_assembly import quad_ops_indep, _mitc_shear_indep          # RM 8-strain operator
-from .fe_jax.msg_dehom import (_macro_recovery, _project_point,
+from .kernels.msg_dehom import (_macro_recovery, _project_point,
                                          _voigt_to_tensor, _tensor_to_voigt)
-from .fe_jax.msg_materials import (compute_ABD_matrix, plate_stress_at_depth,
+from .kernels.msg_materials import (compute_ABD_matrix, plate_stress_at_depth,
                                              rotation_6x6)
-from .fe_jax.msg_transverse_shear import transverse_shear_stiffness
+from .kernels.msg_transverse_shear import transverse_shear_stiffness
 
 
 def _rm_shell_strain(B, e, xi, st_m, aA, aB, s2_scheme="mitc4_g23"):

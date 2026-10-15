@@ -8,8 +8,7 @@ import jax.numpy as jnp
 from opensg_solid.sg_homo import plate_homo_2d
 
 S = "2"
-SC = ("../../../../tests/08072026_square_shell_mesh/TPMS_SC_files/"
-      "Sample_%s.sc" % S)
+SC = "Sample_%s.sc" % S
 E, nu = 69.0e9, 0.30
 G = E/(2*(1+nu))
 

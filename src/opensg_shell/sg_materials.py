@@ -17,7 +17,7 @@ PLAN
 ----
   PART 1  (implemented, self-validating)
       Solve each END RING as a 1-D Reissner-Mindlin / MITC cross-section SG,
-      reusing the VALIDATED opensg_jax RM assembly (msg_rm_timo.timoshenko_rm
+      reusing the VALIDATED RM assembly (msg_rm_timo.timoshenko_rm
       with return_warp=True).  This yields the boundary warping fields
       V0 (4 Euler-Bernoulli modes) and V1 (Timoshenko shear-warping), plus the
       ring Timoshenko 6x6.  We check the ring 6x6 against the closed-form
@@ -63,9 +63,9 @@ import json
 import numpy as np
 import yaml
 
-from .fe_jax.msg_materials import compute_ABD_matrix, shift_abd_reference
-from .fe_jax.msg_transverse_shear import transverse_shear_stiffness
-from .fe_jax.msg_rm_timo import timoshenko_rm     # 1-D RM solve (return_warp -> V0,V1)
+from .kernels.msg_materials import compute_ABD_matrix, shift_abd_reference
+from .kernels.msg_transverse_shear import transverse_shear_stiffness
+from .kernels.msg_rm_timo import timoshenko_rm     # 1-D RM solve (return_warp -> V0,V1)
 
 
 # ============================================================================

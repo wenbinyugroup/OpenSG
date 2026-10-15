@@ -109,7 +109,7 @@ _ORDER_OF = {2: ("linear", "tri3"), 3: ("linear", "quad4"),
 
 # the default per-element frame of a 2-D cross-section SG: e1 along the beam
 # axis (out of plane, +z), e2 = +x, e3 = +y -- the frame the 2-D solid SG
-# examples use (Rules/orientation_e1_out_of_plane.md)
+# examples use (docs/rules/orientation_e1_out_of_plane.md)
 E1_OUT_OF_PLANE = (0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
 
 

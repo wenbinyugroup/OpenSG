@@ -13,15 +13,14 @@ REFERENCES, and how much authority each carries:
         RHC_SW_2UC_45.sc            2-D SG, plate model, three type-2
                                     (21-constant, pre-rotated) materials
         Plate_1D_SG_2UC_45.sc       1-D SG, plate model
-    tests/msg_shell_solid_prop/SC_files/SC_files/Sample_{1,2}.sc
+    examples/OpenSG-solid/6_get_solid_props_from_3D_SG/sample_{1,2}/Sample_{1,2}.sc
                                     3-D SG.  THE strongest evidence in the
                                     tree: SwiftComp's own output for these
                                     two sits beside them as
-                                    tests/08072026_square_shell_mesh/
-                                    TPMS_SC_files/Sample_{1,2}.sc.k, so
+                                    Sample_{1,2}.sc.k, so
                                     SwiftComp demonstrably read them.  Where
                                     a layout rule is in doubt, these decide.
-    tests/08072026_square_shell_mesh/prevabs/square_tube.sg
+    tests/msg_k_reference/fixtures/prevabs/square_tube.sg
                                     VABS `.sg` written by PreVABS for the
                                     same section as
                                     examples/OpenSG-solid/5_get_solid_props_
@@ -91,10 +90,9 @@ S3 = os.path.join(ROOT, "examples", "OpenSG-solid",
                   "3_get_plate_props_from_2D_SG")
 RHC = os.path.join(S3, "RHC_SW_2UC_45.sc")
 P1D = os.path.join(S3, "Plate_1D_SG_2UC_45.sc")
-TPMS = os.path.join(ROOT, "tests", "msg_shell_solid_prop", "SC_files",
-                    "SC_files")
-SQ_SG = os.path.join(ROOT, "tests", "08072026_square_shell_mesh", "prevabs",
-                     "square_tube.sg")
+TPMS = os.path.join(ROOT, "examples", "OpenSG-solid",
+                    "6_get_solid_props_from_3D_SG")
+SQ_SG = os.path.join(HERE, "fixtures", "prevabs", "square_tube.sg")
 SQ_YAML = os.path.join(ROOT, "examples", "OpenSG-solid",
                        "5_get_solid_props_from_SG", "square_section",
                        "square_tube_2Dsolid.yaml")
@@ -247,7 +245,7 @@ def test_submodel_line_is_present_for_a_3d_macro_model(tmp_path):
     from opensg_solid.io.sg_input import write_sc
 
     for name in ("Sample_1.sc", "Sample_2.sc"):
-        vend = sc_fields_header_only(os.path.join(TPMS, name))
+        vend = sc_fields_header_only(os.path.join(TPMS, name[:-3].lower(), name))
         assert vend == ["0", "0 0 0 0"], (name, vend)
 
     nodes = np.array([[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [0., 0., 1.]])
@@ -306,7 +304,7 @@ def test_sc_header_line_count_by_macro_model(tmp_path, n_model, nhdr):
         assert len(hdr[1].split()) == 2          # k12 k21
     # and the shape matches the vendor decks of the same macro model
     vend = sc_fields_header_only(RHC if n_model == 2 else
-                                 os.path.join(TPMS, "Sample_1.sc"))
+                                 os.path.join(TPMS, "sample_1", "Sample_1.sc"))
     assert [len(l.split()) for l in hdr] == [len(l.split()) for l in vend]
 
 
@@ -830,16 +828,16 @@ def test_writer_refuses_the_unvalidated_paths(tmp_path):
         "whether a beam header is now evidenced")
     for hdr in (sc_fields_header_only(RHC),
                 sc_fields_header_only(P1D),
-                sc_fields_header_only(os.path.join(TPMS, "Sample_1.sc")),
-                sc_fields_header_only(os.path.join(TPMS, "Sample_2.sc"))):
+                sc_fields_header_only(os.path.join(TPMS, "sample_1", "Sample_1.sc")),
+                sc_fields_header_only(os.path.join(TPMS, "sample_2", "Sample_2.sc"))):
         assert len(hdr) in (2, 3), hdr          # never the 4-line beam one
     with pytest.raises(NotImplementedError, match="BEAM macro-model"):
         sg_input.write_sc(plain, "/dev/null", n_model=1)
 
     # (b) orientation="points" -- the trans_flag=1 a/b/c block.  Evidence:
     #     every deck here is trans_flag=0 (the third control-line integer).
-    for p in (RHC, P1D, os.path.join(TPMS, "Sample_1.sc"),
-              os.path.join(TPMS, "Sample_2.sc")):
+    for p in (RHC, P1D, os.path.join(TPMS, "sample_1", "Sample_1.sc"),
+              os.path.join(TPMS, "sample_2", "Sample_2.sc")):
         ctrl = [int(v) for v in sc_fields_header_only(p)[-1].split()]
         assert ctrl[2] == 0, (p, ctrl)
     with pytest.raises(NotImplementedError, match="points"):
@@ -984,8 +982,7 @@ def test_only_one_yaml_to_sg_input_implementation_survives():
 
 
 def test_legacy_convert_signature_still_writes_a_file(tmp_path):
-    """The one caller in the tree (tests/08072026_square_shell_mesh/
-    four_case/make_inputs.py) calls convert(yaml, out, dim=2)."""
+    """Legacy callers call convert(yaml, out, dim=2)."""
     from opensg_solid.rm_plate_1D.helper.yaml_to_sc import convert
 
     y = tmp_path / "legacy.yaml"

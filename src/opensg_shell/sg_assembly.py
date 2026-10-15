@@ -171,7 +171,7 @@ ALIASES -- 'full' (untied) integration is the default; tied variants are ablatio
       warped d/h = 0.15     4.4e-02     warped d/h = 0.50      1.7e-01
   So the mechanism is quad WARP, not the independence of om3, and 'mitc4_wonly'
   (rotation columns kept at full integration) is clean by construction.  See
-  Rules/tri3_in_the_segment_route.md for the numbers and for why the objection
+  docs/rules/tri3_in_the_segment_route.md for the numbers and for why the objection
   does NOT transfer to MITC3 on a triangle.
 
 Boundary: reuse the validated 5-DOF rings (ring_general) for dofs [0..4]; om3
@@ -183,7 +183,7 @@ build_C_Psi_segment6, quad_ops_indep.
 
 import numpy as np
 from collections import defaultdict
-from .fe_jax.msg_rm import _macro_BD
+from .kernels.msg_rm import _macro_BD
 
 
 # =========================================================================
@@ -1002,9 +1002,9 @@ def ring_general(rx, rcells, rsub, re3, D_by, G_by, k22_edge, ax, cross, h=None,
     """
     from scipy.sparse import coo_matrix
     import jax.numpy as jnp
-    from .fe_jax.msg_solver import (solve_fluctuation_field,
+    from .kernels.msg_solver import (solve_fluctuation_field,
                                               prepare_v1_rhs, finalize_v1_and_compute_deff)
-    from .fe_jax.msg_rm_timo import build_C_Psi
+    from .kernels.msg_rm_timo import build_C_Psi
     import pypardiso
     m = len(rx)
     if h is None:                                       # strip depth ~ hoop spacing
@@ -1631,8 +1631,8 @@ def mitc3_shear_batch(Gm, gA, gB, gC, r, s):
 # Writing tri_ops_indep_batch is a new element family, not a wiring job; a mixed
 # segment element must also project Gamma_e and Gamma_l with the same assumed
 # field it applies to Gamma_h (the tied path today projects Gamma_h alone -- see
-# Rules/gamma_e_gamma_h_consistency.md).  Recorded in
-# Rules/tri3_in_the_segment_route.md so the assessment is not repeated.
+# docs/rules/gamma_e_gamma_h_consistency.md).  Recorded in
+# docs/rules/tri3_in_the_segment_route.md so the assessment is not repeated.
 
 
 def _ragged(cells):
@@ -1658,7 +1658,7 @@ def require_quad_mesh(cells, where):
             "opensg_shell: %s got a MIXED-ARITY element table.  The 3-D shell "
             "SEGMENT/RING element family is bilinear 4-node only (24 dof, 2x2 "
             "Gauss); it cannot hold triangles and quads at once the way "
-            "shell_sg3d can.  See Rules/tri3_in_the_segment_route.md." % where)
+            "shell_sg3d can.  See docs/rules/tri3_in_the_segment_route.md." % where)
     if cells.shape[1] != 4:
         raise ValueError(
             "opensg_shell: %s got %d-NODE elements; the 3-D shell SEGMENT/RING "
@@ -1669,7 +1669,7 @@ def require_quad_mesh(cells, where):
             "OPERATOR gap, not a transverse-shear-scheme one: MITC3 is sound "
             "here (an affine triangle ties on one frame, so it cannot alias the "
             "drilling).  Re-mesh the segment with quads, or implement "
-            "tri_ops_indep_batch.  See Rules/tri3_in_the_segment_route.md."
+            "tri_ops_indep_batch.  See docs/rules/tri3_in_the_segment_route.md."
             % (where, cells.shape[1]))
     return cells
 

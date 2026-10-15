@@ -1,6 +1,6 @@
 # Input Formats and Conventions
 
-OpenSG-2.0 reads three kinds of structure-gene (SG) description, plus one laminate
+OpenSG reads three kinds of structure-gene (SG) description, plus one laminate
 shorthand and one legacy converter:
 
 | dialect | package that reads it | example file |
@@ -31,7 +31,7 @@ the same:
 
 Only the 3-D solid law also prints `The Engineering Constants (Approximated as Orthotropic)`.
 The writer is `opensg_solid.sg_homo.write_sc_K`; the contract is
-`Rules/output_format_and_timing.md`. The per-section **wall** plate laws that a shell run also
+{doc}`rules/output_format_and_timing`. The per-section **wall** plate laws that a shell run also
 emits as `<base>_ABDG.out` come from a different writer,
 `opensg_shell.sg_homo.write_abdg_out`, and keep the title
 `The Effective Reissner-Mindlin Plate Stiffness Matrix` — one block per section.
@@ -703,7 +703,7 @@ $$\bar{Q}_{11} = Q_{11}\cos^4\theta + 2(Q_{12} + 2Q_{66})\sin^2\theta\cos^2\thet
 
 so `angle: 0.0` places the fibre along $e_1$ — the beam axis. A wind-blade unidirectional spar
 cap therefore carries `angle: 0.0`, and a $\pm45$ ply carries `45.0` / `-45.0`. The governing
-repo rule is `Rules/orientation_e1_out_of_plane.md`, which also records the failure mode: a
+repo rule is {doc}`rules/orientation_e1_out_of_plane`, which also records the failure mode: a
 YAML whose $e_1$ already contains the fibre rotation (so $|e_{1z}| < 1$) is a *fibre* frame, and
 combining it with a non-zero `angle` applies the rotation twice.
 

@@ -1,5 +1,5 @@
 """OpenSG-RM plate stack: MSG 1-D SG homogenization (8x8 ABDG) +
-3-D dehomogenization/recovery.  See msg_rm_plate_README.md.
+3-D dehomogenization/recovery.  See docs/rm_plate_1d_notes.md.
 
 The x64 switch below is LOAD-BEARING: the warping ladder, the KKT solves
 and the V2L face enforcement are validated in double precision -- without

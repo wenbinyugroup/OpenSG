@@ -426,7 +426,7 @@ genuine 3-D microstructure — the same macro model is reached with
 default on every route, and `boundary="aperiodic"` (zero fluctuation on the bounding-box-face
 nodes) is the explicit request for SGs that are genuinely not periodic. The runnable cases
 live in `examples/OpenSG-solid/6_get_solid_props_from_3D_SG`, where `tpms_solid_props.py`
-homogenizes two TPMS samples in aluminium and `compare_boundary_modes.py`,
-`solid_vs_shell_compare.py` and `tpms_all_compare.py` produce the comparison tables. That
+homogenizes two TPMS samples in aluminium, and `compare_boundary_modes.py` and
+`solid_vs_shell_compare.py` produce the comparison tables. That
 route, its SwiftComp digit-for-digit benchmark and the head-to-head against the msg-shell
 solver are covered in full by the page *Equivalent 3-D Solid Properties from a 3-D SG (TPMS)*.

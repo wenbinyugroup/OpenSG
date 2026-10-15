@@ -1,4 +1,4 @@
-# OpenSG-2.0
+# OpenSG
 
 **Mechanics of Structure Genome (MSG) homogenization in JAX** — beam, plate and equivalent 3-D
 solid properties from 1-D, 2-D and 3-D structure genes, through two codes that share the same
@@ -138,13 +138,18 @@ theory
 | Schwarz-P shell SG vs its own solid | SwiftComp-exact msg-solid | −3 % normals, −6 % shears, +0.3 % $\nu$ |
 | Aperiodic segment, prismatic tube (iso + ±45) | its own boundary ring $6\times6$ | identity to $\le 5\times10^{-5}$ rel |
 
-## Working rules
+```{toctree}
+:maxdepth: 1
+:caption: Conventions and benchmarks
 
-Formulation and workflow rules live in `Rules/` at the repository root:
-
-- `gamma_e_gamma_h_consistency.md` — $\Gamma_e$ is $\Gamma_h$ on the macro embedding
-- `junction_corrections.md` — when a junction term applies, and when it must stay off
-- `output_format_and_timing.md` — the `.out` contract
-- `benchmarking_solid_props.md` — reference hierarchy and how to compare
-- `periodicity_in_solid_props.md` — periodic vs aperiodic boundary treatment
-- `orientation_e1_out_of_plane.md` — $e_1$ convention for 1-D/2-D YAML
+rules/output_format_and_timing
+rules/orientation_e1_out_of_plane
+rules/periodicity_in_solid_props
+rules/benchmarking_solid_props
+rules/gamma_e_gamma_h_consistency
+rules/junction_corrections
+rules/tri3_in_the_segment_route
+benchmarks
+rm_plate_1d_user_guide
+rm_plate_1d_notes
+```

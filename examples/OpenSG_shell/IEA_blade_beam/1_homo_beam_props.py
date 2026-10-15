@@ -4,7 +4,7 @@ cross-section (the benchmark's homogenization half).
 RM 6-DOF shell ring homogenization (independent-omega3 element, element-wise
 drilling Lagrange multiplier, gamma_23 tied by MITC) with the MSG (Yu-2002
 least-squares) wall transverse-shear G -- opensg_shell.build_rm_bundle, the
-production OpenSG-TW route, now running on the OpenSG-2.0 stack.
+production OpenSG-TW route, now running on the OpenSG 2.x stack.
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS SCRIPT

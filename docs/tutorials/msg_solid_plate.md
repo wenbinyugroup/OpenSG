@@ -152,7 +152,7 @@ with the dashed line marking the reference surface at mid-thickness.
 
 ### What it is validated against
 
-`src/opensg_solid/rm_plate_1D/tests/test_msg_rm_plate.py` gates the construction on analytic
+`tests/rm_plate_1D/test_msg_rm_plate.py` gates the construction on analytic
 anchors and on an independent plain-NumPy re-assembly of the same SG matrices: for an isotropic
 plate with $\nu = 0$ the transverse-shear block comes out exactly $\tfrac56 G h$, the textbook
 shear-correction factor, with the least-squares residual $U^*$ at machine zero;
@@ -297,10 +297,9 @@ matter when you read them:
 
 ### What it is validated against
 
-The recovery is measured against reference elasticity solutions — the example tree carries
-`pagano_S4/S10/S50.dat` and `yu_case1/2/3` reference data under
-`examples/OpenSG-solid/CS_OpeNSG_exampels/static/`. The accuracy table in
-`src/opensg_solid/rm_plate_1D/USER_GUIDE.md` records errors falling at $\mathcal{O}(S^{-2})$ in the
+The recovery is measured against reference elasticity solutions, the Pagano cylindrical-bending
+solutions at slenderness $S = 4, 10, 50$ and the Yu 2003 cases 1–3. The accuracy table in
+{doc}`../rm_plate_1d_user_guide` records errors falling at $\mathcal{O}(S^{-2})$ in the
 slenderness $S$: cross-ply $\sigma_{13}$ is 21 % at $S = 4$, 4.4 % at $S = 10$ and 0.18 % at
 $S = 50$; equilibrium $\sigma_{33}$ is 5.5 % / 1.2 % / 0.05 %; the second-order in-plane
 $\sigma_{11}$ is 27 % / 2.0 % / 0.04 % at $S = 64$. Soft-core sandwiches need a larger $S$ for the

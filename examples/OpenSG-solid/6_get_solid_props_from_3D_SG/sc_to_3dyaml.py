@@ -6,8 +6,8 @@ overridden per the study definition).
 Run (from this folder):  python sc_to_3dyaml.py"""
 import numpy as np
 
-SC = ["../../../tests/08072026_square_shell_mesh/TPMS_SC_files/Sample_1.sc",
-      "../../../tests/08072026_square_shell_mesh/TPMS_SC_files/Sample_2.sc"]
+SC = ["sample_1/Sample_1.sc",
+      "sample_2/Sample_2.sc"]
 E, nu = 70.0e9, 0.30
 G = E/(2*(1+nu))
 

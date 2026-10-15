@@ -425,7 +425,7 @@ $A_j = \sum t_i t_j / |\sin\theta_{ij}|$ and per-wall ownership decision.
 ```{warning}
 `junction:` here is a **recovery bookkeeping tier**. It is not the homogenization junction
 correction (`build_solid_bundle(junction="census"|"micro"|"microcell")`), which is an energy
-correction with its own validity domain — see `Rules/junction_corrections.md`.
+correction with its own validity domain — see {doc}`../rules/junction_corrections`.
 ```
 
 ### Reading the result

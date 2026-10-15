@@ -1,9 +1,9 @@
-"""Sphinx configuration for the OpenSG-2.0 docs.
+"""Sphinx configuration for the OpenSG docs.
 
 Deliberately dependency-light: MyST markdown only, no autodoc, so the site
 builds from a clean checkout without the JAX/basix runtime.
 """
-project = "OpenSG-2.0"
+project = "OpenSG"
 author = "Akshat Bagla"
 copyright = "2026, Akshat Bagla"
 
@@ -16,4 +16,4 @@ master_doc = "index"
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "sphinx_rtd_theme"
-html_title = "OpenSG-2.0"
+html_title = "OpenSG"

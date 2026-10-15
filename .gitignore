@@ -1,35 +1,45 @@
-*.nsys-rep
-*.ncu-rep
-*.prof
-*.png
-*.npy
-*.log
-.DS_Store
-
+# Python
 __pycache__/
-__jax_cache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
 .pytest_cache/
 .ruff_cache/
 .venv/
 .vscode/
-build/
-dist/
-doc/
-install/
-prof/
-*.egg-info/
-tests/output/
-tests/__pycache__/
-
-# reproducible bulk dehom dumps (regenerate with the example scripts)
-examples/msg_shell/IEA_blade_beam/*_dehom_v2.txt
+.DS_Store
 Thumbs.db
+
+# JAX compilation cache and profiler output
+__jax_cache__/
+*.nsys-rep
+*.ncu-rep
+*.prof
+prof/
 
 # generated SG sidecar caches (load_sg_input / sc_to_yaml)
 *_sg.npz
 
-# Sphinx build output (regenerate with: python -m sphinx -b html docs docs/_build)
-docs/_build/
-
-# README figures are tracked even though generated *.png files are ignored
+# run output: figures, arrays and logs (the figures in docs/images are tracked)
+*.png
+*.npy
+*.log
 !docs/images/*.png
+!docs/_static/*.png
+tests/output/
+
+# regenerable dehomogenization output of the example scripts
+examples/**/*.SM
+examples/**/*.EM
+examples/**/*.U
+examples/**/*.vtk
+examples/**/*.junc
+examples/**/*_dehom.txt
+examples/**/*_dehom_shell.txt
+examples/**/*_dehom_v2.npz
+examples/**/*_dehom_v2.txt
+!examples/OpenSG_shell/IEA_blade_beam/iea_s10.sg.SM
+
+# Sphinx build output (python -m sphinx -b html docs docs/_build)
+docs/_build/

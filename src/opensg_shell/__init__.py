@@ -69,7 +69,7 @@ from .sg_dehom import (stress_at_points, disp_at_points,                   # noq
 from .sg_dehom_junction import (flag_recovery_points,                      # noqa: E402
                                 junction_families)
 from .sg_materials import emit_station_abd, load_station_abd               # noqa: E402
-from .fe_jax.msg_rm_timo import timoshenko_rm                              # noqa: E402
-from .fe_jax.orient_plot import plot_orient, auto_emit                     # noqa: E402
+from .kernels.msg_rm_timo import timoshenko_rm                              # noqa: E402
+from .kernels.orient_plot import plot_orient, auto_emit                     # noqa: E402
 
 from .pynumad.sg_blade import Blade, Section, opensg_blade                         # noqa: E402,F401

@@ -10,9 +10,8 @@ Volovoi, Computers & Structures 81:439-454 (2003).  The ladder:
   from the tilted chain).
 
 All rationale, conventions (tilt/detilt rules, V2 variant choice, load-column
-signs), history and validation numbers: msg_rm_plate_README.md next to this
-file.  Tests: tests/test_msg_rm_plate.py; recovery gate:
-examples/opensg_rm_static/validate_v2.py.
+signs), history and validation numbers: docs/rm_plate_1d_notes.md.
+Tests: tests/rm_plate_1D/test_msg_rm_plate.py.
 
 Voigt strain order [11,22,33,23,13,12]; plate strains E = [e11,e22,g12,k11,
 k22,k12]; shears gamma = [2g13,2g23].  x = through-thickness coordinate from

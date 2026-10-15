@@ -5,10 +5,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "opensg"
 version = "2.1.0"
-description = "Finite element analysis utilities written in JAX."
+description = "OpenSG: multiscale structural mechanics by the Mechanics of Structure Genome (MSG), in JAX"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
+authors = [{ name = "Akshat Bagla" }]
+keywords = ["homogenization", "mechanics of structure genome", "composites", "finite elements", "jax"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
     "fenics-basix",
     "flax",
@@ -27,16 +35,17 @@ dependencies = [
     "scipy",
 ]
 
+[project.urls]
+Homepage = "https://github.com/wenbinyugroup/OpenSG"
+Documentation = "https://github.com/wenbinyugroup/OpenSG/tree/main/docs"
+Issues = "https://github.com/wenbinyugroup/OpenSG/issues"
+
 [project.scripts]
 opensg = "opensg.cli:main"
 opensg_solid = "opensg_solid.cli:main"
 opensg_shell = "opensg_shell.cli:main"
 
 [project.optional-dependencies]
-amg = [
-    "pyamg",
-    "pypardiso",
-]
 cuda12 = [
     "cupy-cuda12x",
     "jax[cuda12]",
@@ -45,14 +54,17 @@ cuda13 = [
     "cupy-cuda13x",
     "jax[cuda13]",
 ]
-dev = [
-    "pytest",
-]
 gamg = [
     "petsc4py",
 ]
-pardiso = [
-    "pypardiso",
+dev = [
+    "pytest",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+    "myst-parser",
+    "sphinxcontrib-mermaid",
 ]
 
 [tool.setuptools.packages.find]
@@ -64,19 +76,10 @@ opensg_solid = ["io/*.yaml"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "tests"]
-norecursedirs = [
-    "amgx",
-    "exploring_jax",
-    "prnn",
-    "test_amgx",
-    "test_mpi4py_cuda",
-    "test_petsc",
-]
 addopts = [
     "--strict-config",
     "--strict-markers",
 ]
 markers = [
-    "truss: truss-element regression and integration tests",
     "slow: tests that are too expensive for the default fast suite",
 ]

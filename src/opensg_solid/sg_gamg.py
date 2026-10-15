@@ -1,7 +1,6 @@
 """sg_gamg.py -- iter 4 of the --solver menu: PETSc GAMG
 (smoothed-aggregation)-preconditioned CG for the fluctuation solves of
-the SSDM plate/solid routes (sg_homo dispatch solver="gamg"), through
-the vendored jetsci PETSc layer.
+the SSDM plate/solid routes (sg_homo dispatch solver="gamg"), through petsc4py.
 
 Same contract as sg_amg.amg_homo: the exact pinned SPD CSR that
 _homo_direct factorizes (sg_assembly.assemble_rhs_and_pinned_csr,

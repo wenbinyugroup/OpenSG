@@ -53,7 +53,7 @@ def test_triangle_p1_basis_and_quadrature():
         family=ElementFamily.P,
         basis_degree=1,
         lagrange_variant=LagrangeVariant.equispaced,
-        quadrature_type=QuadratureType.default,
+        quadrature_type=QuadratureType.Default,
         quadrature_degree=3,
     )
 

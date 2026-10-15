@@ -1,43 +1,58 @@
-# FEA in JAX
+# OpenSG
 
 > **Reviewers:** the version under review is OpenSG 1.0 (FEniCSx), tag [`v1.0.0`](https://github.com/wenbinyugroup/OpenSG/releases/tag/v1.0.0) on branch [`opensg/fenicsx/v1`](https://github.com/wenbinyugroup/OpenSG/tree/opensg/fenicsx/v1). This branch is OpenSG 2.x, the JAX line, which replaces the 1.0 code.
 
-`fea-in-jax` is a Finite Element Analysis (FEA) library written in JAX. It leverages JAX's composable function transformations—JIT compilation, automatic differentiation, and vectorization—to provide a high-performance solver capable of running on GPUs and TPUs.
-
-## OpenSG: multiscale structural mechanics
-
 <p align="center"><img src="docs/images/opensg_overview.png" alt="OpenSG: Structure Genes homogenized into solid, plate/shell and beam models" width="600"></p>
 
-OpenSG is the multiscale structural-mechanics capability of `fea-in-jax`, built on the Mechanics of Structure Genome (MSG). It uses a Structure Gene (SG) to obtain the constitutive relations of solid, plate/shell and beam models, and it performs dehomogenization to recover the local stresses from the structural response.
+OpenSG is a multiscale structural-analysis code based on the Mechanics of Structure Genome (MSG), developed by the Multiscale Structural Mechanics Group led by Prof. Wenbin Yu at Purdue University. From a Structure Gene (SG), the smallest building block of a structure, it computes the constitutive relations of solid, plate/shell and beam models (homogenization), and it recovers the local stress, strain and displacement fields from the structural response (dehomogenization).
 
-**Structure Gene (SG):** heterogeneity and anisotropy come from a Structure Gene, meshed with solid elements as a 1D, 2D or 3D SG. An SG can be built from solid, shell and beam elements.
+An SG is a 1-D, 2-D or 3-D finite-element mesh. OpenSG has two engines that share one theory and one command:
 
-### Installing OpenSG
+| engine | SG | produces |
+|---|---|---|
+| `opensg_solid` | 1-D, 2-D or 3-D SG of solid elements | plate ABD (6x6) or Reissner-Mindlin (8x8), Timoshenko beam 6x6, equivalent 3-D solid 6x6 |
+| `opensg_shell` | 1-D shell SG (cross-section contour), 3-D shell SG (surface) | Timoshenko beam 6x6, equivalent 3-D solid 6x6 |
 
-Two lines of OpenSG live in one repository: this JAX line on `main` (package `opensg` 2.x: tags `v2.0.0`, `v2.1.0`, ..., every future OpenSG version) and the FEniCSx-based OpenSG on `opensg/fenicsx/v1` (OpenSG 1.0, package `opensg` 1.0.0, tag `v1.0.0`, frozen) and `opensg/fenicsx/v1.2` (its later code). Pick a version by its tag.
+Both run on JAX, on the CPU or on a GPU.
 
-OpenSG needs one conda-packaged dependency block (the FEniCSx `basix` basis and quadrature stack) on top of the JAX stack. The repository ships an `environment.yml` that installs everything, including the repository itself in editable mode:
+## Versions
+
+| branch / tag | package | content |
+|---|---|---|
+| `main`, tags `v2.0.0`, `v2.1.0`, ... | `opensg` 2.x | this code, the JAX line |
+| `opensg/fenicsx/v1`, tag `v1.0.0` | `opensg` 1.0.0 | OpenSG 1.0 on FEniCSx (frozen) |
+| `opensg/fenicsx/v1.2` | | the later FEniCSx code |
+
+## Installation
+
+Requirements: Linux x86-64 and [conda](https://docs.conda.io) (Miniconda or Miniforge). No GPU is needed.
 
 ```bash
-git clone --branch v2.0.0 https://github.com/wenbinyugroup/OpenSG.git
+git clone https://github.com/wenbinyugroup/OpenSG.git
 cd OpenSG
 conda env create -f environment.yml
 conda activate opensg
 ```
 
-Run OpenSG from the command line, one command for both engines:
+`environment.yml` installs the conda-forge scientific stack (including the FEniCSx `basix` basis and quadrature library and PETSc), the JAX stack, and the repository itself in editable mode, so the three commands below are on the `PATH`. Pinned versions, the GPU and CPU-only variants, and a plain `pip` route are described in [docs/installation.md](docs/installation.md).
+
+## Running OpenSG
+
+One command, one argument. The yaml says what to do:
 
 ```text
 opensg <sg.yaml>            homogenization (the default)
 opensg <sg.yaml> D          dehomogenization: homogenize, then recover the local fields
 opensg <sg.yaml> --center   shell SG only: the contour is the laminate mid-surface instead of the outer mold line
+opensg <sg.yaml> --mesh     also draw <base>_mesh.png
+opensg --help               every flag, the solver menu and the conversion sub-commands
 ```
 
-A homogenization writes `<base>.out` with the effective stiffness and compliance matrices of the macro model. A dehomogenization also writes the local stress, strain and displacement in the material frame as `<base>.SM`, `<base>.EM` and `<base>.U`, and `<base>.vtk` to visualize their distribution.
+`opensg` reads the yaml's `msg:` key (`shell` or `solid`) and hands the file to the engine that owns it; `opensg_solid <sg.yaml>` and `opensg_shell <sg.yaml>` call the engines directly. A homogenization writes `<base>.out` with the effective stiffness and compliance matrices of the macro model in the SwiftComp `.K` layout. A dehomogenization also writes the local stress, strain and displacement in the material frame as `<base>.SM`, `<base>.EM` and `<base>.U`, and `<base>.vtk` to visualize them.
 
-Meshes from other tools convert to the yaml with `opensg inp_to_yaml <file.inp> --n_model {1,2,3}` (Abaqus) and `opensg msh_to_yaml <file.msh> --mat1 NAME --n_model {1,2,3}` (gmsh); `opensg --help` lists the flags.
+Meshes from other tools convert to the yaml with `opensg inp_to_yaml <file.inp> --n_model {1,2,3}` (Abaqus), `opensg msh_to_yaml <file.msh> --mat1 NAME --n_model {1,2,3}` (gmsh) and `opensg sc_to_yaml <file.sc>` (SwiftComp).
 
-### OpenSG yaml input
+## Input
 
 One yaml per Structure Gene: a short header, then the mesh. Each engine reads its own dialect:
 
@@ -73,110 +88,58 @@ materials:          # by id
 </pre></td></tr>
 </table>
 
-The SG dimension (1D, 2D or 3D) is read from the mesh. Key-by-key reference and worked files: [docs/input_format.md](docs/input_format.md). Examples: `examples/OpenSG-solid` and `examples/OpenSG_shell`. Install details: [docs/installation.md](docs/installation.md).
+The SG dimension (1-D, 2-D or 3-D) is read from the mesh. Every header key is defaulted. The key-by-key reference is [docs/input_format.md](docs/input_format.md).
 
-## Features
+## Examples
 
-*   **GPU Acceleration**: Native support for hardware acceleration via JAX.
-*   **Differentiability**: Differentiate through the physics simulation for gradient-based optimization and machine learning integration.
-*   **Batched Computation**: Designed to efficiently handle large batches of elements and quadrature points.
+Every example folder holds its input yaml, a short driver script and the `.out` it produces, and runs in place.
 
-## Project Structure
+- `examples/OpenSG-solid/`: plate properties and stress recovery from a 1-D SG (layup), plate and beam properties and dehomogenization from a 2-D SG (honeycomb unit cell), equivalent solid properties from 2-D and 3-D SGs (unidirectional composite, TPMS lattices).
+- `examples/OpenSG_shell/`: beam properties and stress recovery from a blade cross-section of shell elements, equivalent solid properties from shell SGs (cellular, hierarchical and TPMS structures), a tapered segment with aperiodic boundaries, the IEA blade beam, and the full windIO blade pipeline to BeamDyn.
+- `examples/pynumad/`: the `opensg.read(blade.yaml)` Blade object for station-by-station blade work.
 
-*   `src/fe_jax`: Core library source code, including element definitions, quadrature rules, and solver implementations.
-*   `tests`: extensive test suite that also serves as a catalogue of usage examples.
-*   `docs`: Documentation and theoretical background.
+## Documentation
 
-## Getting Started
+The Sphinx documentation in `docs/` covers installation, the input format, the constitutive models, the architecture, one tutorial per capability, and the formulation rules under `docs/rules/`. Build it with
 
-### Prerequisites
+```bash
+pip install -r docs/requirements.txt
+python -m sphinx -b html docs docs/_build
+```
 
-*   Python 3.10+
-*   [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) (optional, strictly for GPU acceleration)
+A typeset tutorial is included as [docs/latex/opensg_tutorial.pdf](docs/latex/opensg_tutorial.pdf).
 
-### Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository_url>
-    cd fea-in-jax
-    ```
-
-2.  **Set up a virtual environment (recommended):**
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-    ```
-
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *Note: `jax` installation instructions vary depending on your hardware (CPU, GPU, TPU). Please refer to the [JAX installation guide](https://github.com/google/jax#installation) if the default pip install does not match your system configuration.*
-
-    For development, install the package in editable mode with the test dependency:
-    ```bash
-    pip install -e ".[dev]"
-    ```
-
-4.  **(Optional) Install `pyamgx`:**
-    To enable GPU-accelerated algebraic multigrid preconditioners:
-    1.  Install NVIDIA's [AMGX](https://github.com/NVIDIA/AMGX?tab=readme-ov-file#quickstart).
-    2.  Install [pyamgx](https://pyamgx.readthedocs.io/en/latest/install.html).
-
-## Running Tests
-
-To verify the installation and run the test suite:
+## Tests
 
 ```bash
 pytest tests
 ```
 
-## Usage
+`tests/unit` exercises the FE core, `tests/msg_k_reference` the solid engine against SwiftComp references, `tests/msg_shell_windio` the shell engine and the blade route, `tests/rm_plate_1D` the Reissner-Mindlin plate chain and `tests/msg_shell_tri3` the shell element kernels.
 
-The `tests` directory contains numerous examples demonstrating how to define meshes, apply boundary conditions, and solve boundary value problems.
+## Repository layout
 
-*   **Basic Linear Elasticity**: See `tests/test_simple_fea_solve.py` for a straightforward example.
-*   **Complex Scenarios**: See `tests/test_fea_solve.py`.
-
-## Theory and Implementation
-
-For detailed information on the nonlinear solver derivation, handling of Dirichlet boundary conditions, and internal variable definitions, please refer to [docs/theory.md](docs/theory.md).
-
-## Resources
-
-*   **JAX Interoperability**: [External Callbacks](https://apxml.com/courses/advanced-jax/chapter-5-jax-interoperability-custom-operations/using-jax-pure-callback)
-*   **Scientific Computing in JAX**:
-    *   [Wrapping Scipy KD trees](https://robertdyro.com/articles/jax_advanced/)
-    *   [HPC Lecture Notes](https://tbetcke.github.io/hpc_lecture_notes/intro.html)
-*   **Performance Optimization**:
-    *   [JAX GPU Performance Tips](https://jax.readthedocs.io/en/latest/gpu_performance_tips.html)
-    *   [JAX AOT Compilation](https://jax.readthedocs.io/en/latest/aot.html)
-    *   [Multi-Process/Distributed Support](https://jax.readthedocs.io/en/latest/gpu_performance_tips.html#multi-process)
-
-### Profiling Performance
-
-*   [JAX Profiling Docs](https://jax.readthedocs.io/en/latest/profiling.html)
-*   [NVIDIA JAX Toolbox](https://github.com/NVIDIA/JAX-Toolbox/blob/main/docs/profiling.md)
-*   [NSys-JAX Wrapper](https://github.com/NVIDIA/JAX-Toolbox/blob/main/docs/nsys-jax.md)
-*   [JAX Device Memory Profiling](https://jax.readthedocs.io/en/latest/device_memory_profiling.html)
-*   [jax-smi (GPU Memory Tracking)](https://github.com/ayaka14732/jax-smi)
-
-To profile time and memory for JIT-compiled sections:
-1.  Collect trace: `jax.profiler.start_trace("<directory>/prof")`
-2.  Visualize: using TensorBoard or `xprof`.
+```text
+src/opensg         the opensg command: dispatches a yaml to its engine, and the Blade entry point
+src/opensg_solid   the general 1-D / 2-D / 3-D solid-SG engine, its io conversions and the RM plate chain
+src/opensg_shell   the shell-SG engine (contour and surface), its kernels and the blade workflow
+src/fe_jax         the finite-element core (see Authors and credit)
+docs               Sphinx documentation, rules and the tutorial PDF
+examples           runnable examples with their inputs and outputs
+tests              pytest suite
+```
 
 ## Authors and credit
 
 - **Akshat Bagla** (Purdue University): lead developer of OpenSG 2.x (`opensg`, `opensg_shell`, `opensg_solid`), its documentation and tests
 - **Wenbin Yu** (Purdue University): the Mechanics of Structure Genome; principal investigator
 - **Ernesto Camarena** (Sandia National Laboratories): wind-blade applications and verification
-- `fe_jax` by **Keith Ballard** (Air Force Research Laboratory), the finite-element core of [fea-in-jax](https://github.com/KeithBallard/fea-in-jax)
+- `fe_jax` by **Keith Ballard** (Air Force Research Laboratory): the finite-element core of [fea-in-jax](https://github.com/KeithBallard/fea-in-jax), which provides the basis and quadrature tables, the periodic assembly map and the matrix-free solvers used by both engines. It is included at `src/fe_jax` so that OpenSG installs as one package; OpenSG is intended to be merged into that repository. Distribution Statement A. Approved for public release: distribution is unlimited. Case #: AFRL-2025-4644.
 
 OpenSG 1.0 (FEniCSx, branch `opensg/fenicsx/v1`, tag `v1.0.0`): code and mechanics: Akshat Bagla; repository, packaging and release engineering: Kirk Bonney (Sandia National Laboratories); with Ernesto Camarena and Wenbin Yu.
 
 Cite OpenSG with the "Cite this repository" button (from `CITATION.cff`).
 
-## Public Release Information
+## License
 
-Distribution Statement A. Approved for public release: distribution is unlimited. Case #: AFRL-2025-4644
+Apache License 2.0, see [LICENSE](LICENSE).

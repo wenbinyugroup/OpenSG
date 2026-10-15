@@ -664,7 +664,7 @@ def main(argv=None):
                 "the 3-D shell SEGMENT route (aperiodic boundary V0/V1) returns"
                 " the\nTimoshenko 6x6 only -- there is no classical segment"
                 " result to report.\nSet refined: 1 in the header.")
-        from .fe_jax.msg_hermite import solve_tw_from_yaml
+        from .kernels.msg_hermite import solve_tw_from_yaml
         from opensg_solid.sg_homo import write_sc_K
         # same rule as the RM ring: the nodes stay where the yaml puts them,
         # ``frac`` only references the wall ABD to that contour
