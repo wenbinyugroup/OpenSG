@@ -93,15 +93,15 @@ the segment's end nodes — the boundary condition that replaces periodicity.
 The figure below shows a BAR-URC blade segment with its per-element material
 frames, the surface the segment solve runs on:
 
-![BAR-URC tapered shell segment with element material frames](_static/aperiodic_segment_bar_urc.png)
+![BAR-URC tapered shell segment with element material frames](../_static/aperiodic_segment_bar_urc.png)
 
 The two end rings are extracted topologically — a mesh edge used by exactly
 one quad is a free edge, and the connected components of the free-edge graph
 are the end cross-sections. Each is written as a standalone 1-D SG yaml and
 solved on its own:
 
-![Left boundary ring extracted from the segment](_static/aperiodic_ring_L.png)
-![Right boundary ring extracted from the segment](_static/aperiodic_ring_R.png)
+![Left boundary ring extracted from the segment](../_static/aperiodic_ring_L.png)
+![Right boundary ring extracted from the segment](../_static/aperiodic_ring_R.png)
 
 ## msg-shell: 3-D shell SG → equivalent solid C3D
 
@@ -121,7 +121,7 @@ Because the wall law is a Reissner–Mindlin plate law, thickness is a
 parameter of the material model rather than of the mesh — the same surface
 mesh serves any sheet thickness, which is what makes the TPMS sweep cheap:
 
-![Schwarz-P TPMS shell unit cell](_static/schwarz_p_mesh.png)
+![Schwarz-P TPMS shell unit cell](../_static/schwarz_p_mesh.png)
 
 ## msg-solid over the fe_jax core
 

@@ -1,131 +1,68 @@
 # OpenSG
 
-**Mechanics of Structure Genome (MSG) homogenization in JAX** — beam, plate and equivalent 3-D
-solid properties from 1-D, 2-D and 3-D structure genes, through two codes that share the same
-theory:
+OpenSG is a multiscale structural-analysis code based on the Mechanics of Structure Genome (MSG), developed by the
+Multiscale Structural Mechanics Group led by Prof. Wenbin Yu at Purdue University. From a Structure Gene (SG), the
+smallest building block of a structure, it computes the constitutive relations of solid, plate/shell and beam models
+(homogenization), and it recovers the local stress, strain and displacement fields from the structural response
+(dehomogenization).
 
-| code | input | produces |
+```{figure} images/opensg_overview.png
+:width: 70%
+:name: fig-overview
+
+Structure Genes homogenized into solid, plate/shell and beam models.
+```
+
+An SG is a 1-D, 2-D or 3-D finite-element mesh. OpenSG has two engines that share one theory and one command,
+`opensg <sg.yaml>`:
+
+| engine | SG | produces |
 |---|---|---|
-| **msg-shell** (`opensg_shell`) | 1-D shell SG (cross-section), 3-D shell SG (surface) | Timoshenko $6\times6$, equivalent 3-D solid $6\times6$ |
-| **msg-solid** (`opensg_solid`) | 1-D / 2-D / 3-D solid SG | plate ABD, Timoshenko $6\times6$, equivalent 3-D solid $6\times6$ |
+| `opensg_solid` | 1-D, 2-D or 3-D SG of solid elements | plate ABD (6x6) or Reissner-Mindlin ABDG (8x8), Timoshenko beam 6x6, equivalent 3-D solid 6x6 |
+| `opensg_shell` | 1-D shell SG (cross-section contour), 3-D shell SG (surface) | Timoshenko beam 6x6, equivalent 3-D solid 6x6 |
 
-Every run is the same shape: **a YAML (or SwiftComp `.sc`) goes in, a timed `.out` in the
-SwiftComp `.K` layout comes back**. The core packages hold no paths and no `main` blocks — each
-example script names its input file and calls one entry function.
+::::{grid} 2
+:gutter: 3
 
-## Running OpenSG
+:::{grid-item-card} Getting started
+:link: getting_started/index
+:link-type: doc
 
-One command, one argument — **the file says what to do**:
+Install OpenSG, run the first case, and follow the tutorial on a blade cross-section.
+:::
 
-```bash
-opensg <sg.yaml>        # homogenization (the default)
-```
+:::{grid-item-card} User guide
+:link: user_guide/index
+:link-type: doc
 
-```bash
-opensg <sg.yaml> D      # dehomogenization: homogenize, then recover the local fields
-```
+How to prepare the yaml input: the analysis header, the mesh, materials and layups, recovery, converters and output files.
+:::
 
-`opensg` is a *dispatcher*: it reads the yaml's `msg:` key (`shell` or `solid`) and hands the
-file to the engine that owns it. Without the key the mesh **dialect** decides, so every YAML
-written before the key existed still runs. The two engine commands remain and behave
-identically once the file has been resolved:
+:::{grid-item-card} Examples
+:link: examples/index
+:link-type: doc
 
-```bash
-opensg_solid <sg.yaml> [H|D]     # the general 1-D / 2-D / 3-D SG engine
-```
+Worked examples for every capability, each with its input, command, result and the reference it is compared with.
+:::
 
-```bash
-opensg_shell <sg.yaml> [H|D]     # the msg-shell contour / surface engine
-```
+:::{grid-item-card} Theory and reference
+:link: theory/index
+:link-type: doc
 
-(`python -m opensg_solid <sg.yaml>` and `python -m opensg_shell <sg.yaml>` are the same entry
-points.) Everything else — the macro model, the refinement, the boundary treatment, the macro
-state for a recovery — lives in the YAML header and is documented under
-{doc}`input_format`. Every key is defaulted, so a headerless mesh still runs.
-
-A run prints what it resolved, then the law, then where it was stored:
-
-```text
- ============================================================================
- OpenSG -- a multiscale structural analysis tool based on the Mechanics of
- Structure Genome (MSG), developed by the Multiscale Structural Mechanics
- Group led by Prof. Wenbin Yu at Purdue University
- ============================================================================
-
- input     : /.../1_get_beam_props_from_shell_cross_section/iea_s10_shell.yaml
- msg       : shell
- SG dim    : 2D
- analysis  : homogenization
- macro model: beam, shear-refined
-
-Timoshenko Beam Stiffness Matrix  [eps11 gam12 gam13 kappa1 kappa2 kappa3]:
-[[ 2.76606e+10 -1.72307e-05  4.66505e-06  5.40202e-06  1.66864e+09 -2.07730e+09]
- ...
-Homogenization stored in iea_s10_shell_Timo.out
-Time taken: 2.58 sec
-```
-
-`SG dim` is the **ambient** dimension — the space the SG occupies, not the dimension of the SG
-manifold. A cross-section ring and a 2-D cell both print `2D`; a Schwarz-P shell surface, whose
-facets live in space, prints `3D`. A dehomogenization closes with
-`Local field files are computed and stored.` and one `Time taken` covering the whole run
-instead.
-
-Every entry function is also importable, for driving a run from your own script:
-
-```python
-from opensg_shell import build_rm_bundle
-
-B = build_rm_bundle("iea_s10_shell.yaml")   # writes iea_s10_shell_Timo.out
-B["Timo"]                                    # the Timoshenko 6x6
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Start here
-
-installation
-input_format
-constitutive
-architecture
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Tutorials — msg-shell
-
-tutorials/msg_shell_beam
-tutorials/solid_props_shell_sg
-tutorials/taper_segment_aperiodic
-tutorials/windio_blade_pipeline
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Tutorials — msg-solid
-
-tutorials/msg_solid_plate
-tutorials/msg_solid_beam_and_solid
-tutorials/solid_props_3d_sg
-```
-
-```{toctree}
-:maxdepth: 1
-:caption: Theory & conventions
-
-theory
-```
+The constitutive relations, the architecture of the two engines, the formulation rules and the benchmarks.
+:::
+::::
 
 ## What each capability answers
 
-| you have | you want | tutorial |
+| you have | you want | where to look |
 |---|---|---|
-| a laminate stacking sequence | plate ABD / Reissner–Mindlin $8\times8$, and stress through the thickness | Plate Properties and Recovery (msg-solid) |
-| a 2-D unit cell (honeycomb, lattice) | plate ABD, beam $6\times6$, or an equivalent 3-D solid | Plate / Beam and Equivalent-Solid (msg-solid) |
-| a composite blade cross-section | Timoshenko $6\times6$ and 3-D wall stress from beam loads | Beam Properties from a Shell Cross-Section |
-| a tapered blade segment (two different ends) | the segment's Timoshenko $6\times6$ without periodicity | Tapered / Aperiodic Shell Segment |
-| a TPMS or lattice unit cell | the equivalent 3-D solid law | Equivalent 3-D Solid Properties |
-| a windIO blade file | a full spanwise beam model for BeamDyn, plus recovery | Full Blade Pipeline |
+| a laminate stacking sequence | plate ABD or Reissner-Mindlin 8x8, and stress through the thickness | {doc}`examples/solid_plate_1d_layup`, {doc}`examples/solid_plate_1d_recovery` |
+| a 2-D unit cell (honeycomb, lattice) | plate ABD, beam 6x6, or an equivalent 3-D solid | {doc}`examples/solid_plate_2d_honeycomb`, {doc}`examples/solid_beam_2d`, {doc}`examples/solid_equivalent_2d` |
+| a composite blade cross-section | Timoshenko 6x6 and 3-D wall stress from beam loads | {doc}`getting_started/tutorial`, {doc}`examples/shell_beam_cross_section`, {doc}`examples/shell_beam_recovery` |
+| a tapered blade segment (two different ends) | the segment's Timoshenko 6x6 without periodicity | {doc}`examples/shell_taper_segment` |
+| a TPMS or lattice unit cell | the equivalent 3-D solid law | {doc}`examples/solid_equivalent_3d_tpms`, {doc}`examples/shell_solid_3d_tpms`, {doc}`examples/shell_solid_cellular` |
+| a windIO blade file | a full spanwise beam model for BeamDyn, plus recovery | {doc}`examples/blade_windio_pipeline`, {doc}`examples/blade_iea_beam` |
 
 ## Validation status
 
@@ -139,17 +76,12 @@ theory
 | Aperiodic segment, prismatic tube (iso + ±45) | its own boundary ring $6\times6$ | identity to $\le 5\times10^{-5}$ rel |
 
 ```{toctree}
-:maxdepth: 1
-:caption: Conventions and benchmarks
+:hidden:
+:maxdepth: 2
 
-rules/output_format_and_timing
-rules/orientation_e1_out_of_plane
-rules/periodicity_in_solid_props
-rules/benchmarking_solid_props
-rules/gamma_e_gamma_h_consistency
-rules/junction_corrections
-rules/tri3_in_the_segment_route
-benchmarks
-rm_plate_1d_user_guide
-rm_plate_1d_notes
+getting_started/index
+user_guide/index
+examples/index
+theory/index
+references
 ```

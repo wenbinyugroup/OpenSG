@@ -66,8 +66,10 @@ dev = [
 ]
 docs = [
     "sphinx",
-    "sphinx-rtd-theme",
+    "pydata-sphinx-theme",
     "myst-parser",
+    "sphinx-design",
+    "sphinx-copybutton",
     "sphinxcontrib-mermaid",
 ]
 

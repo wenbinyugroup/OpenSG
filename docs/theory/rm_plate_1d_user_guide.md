@@ -76,7 +76,7 @@ sections:         # one per ply, BOTTOM FIRST
 The reader cross-checks header vs. mesh and refuses inconsistent files (see
 the error table below).
 
-```{image} _static/plate_1dsg.png
+```{image} ../_static/plate_1dsg.png
 :width: 60%
 :align: center
 ```

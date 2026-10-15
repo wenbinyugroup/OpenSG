@@ -118,4 +118,4 @@ get integrated twice (and, in a solid mesh, bonded face-to-face into a wall of
 twice the thickness). Put the walls **through** the cell instead — one wall of
 each family, interior to the cell — so each is owned by exactly one cell.
 
-Related: `docs/rules/orientation_e1_out_of_plane.md`.
+Related: `docs/theory/rules/orientation_e1_out_of_plane.md`.

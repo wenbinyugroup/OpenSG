@@ -107,7 +107,7 @@ energy of one assumed field. `BGe` genuinely varies inside an element (its colum
 the interpolated `x2`, `x3`), measured in-element spread `(max-min)/max` of 2.000 on both
 the prismatic and the BAR-URC segment meshes. A consistent element must apply the same
 projection to `Gamma_e` and `Gamma_l` — the sibling of
-`docs/rules/gamma_e_gamma_h_consistency.md`.
+`docs/theory/rules/gamma_e_gamma_h_consistency.md`.
 
 ## Acceptance: the prismatic identity measures scheme CONSISTENCY, not the transfer
 
