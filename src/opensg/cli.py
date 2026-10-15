@@ -288,7 +288,7 @@ def main(argv=None):
         print(BANNER)
         print(__doc__)
         print(SOLVER_MENU)
-        return 2
+        return 0 if argv and argv[0] in ("-h", "--help") else 2
 
     if not os.path.exists(argv[0]):
         # the "no such file" (and "did you mean <stem>.yaml ?") message is the
