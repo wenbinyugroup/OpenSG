@@ -100,7 +100,7 @@ Every example folder holds its input yaml, a short driver script and the `.out` 
 
 ## Documentation
 
-The Sphinx documentation in `docs/` covers installation, the input format, the constitutive models, the architecture, one tutorial per capability, and the formulation rules under `docs/rules/`. Build it with
+The Sphinx documentation of this line is in `docs/`, starting at [docs/index.md](docs/index.md): installation, the input format, the constitutive models, the architecture, one tutorial per capability, and the formulation rules under `docs/rules/`. The hosted site [wenbinyugroup.github.io/OpenSG](https://wenbinyugroup.github.io/OpenSG/) carries the documentation of OpenSG 1.0. Build the 2.x documentation with
 
 ```bash
 pip install -r docs/requirements.txt
@@ -131,12 +131,12 @@ tests              pytest suite
 
 ## Authors and credit
 
-- **Akshat Bagla** (Purdue University): lead developer of OpenSG 2.x (`opensg`, `opensg_shell`, `opensg_solid`), its documentation and tests
+- **Akshat Bagla** (Purdue University): lead developer of OpenSG 1.0 and 2.x (`opensg`, `opensg_shell`, `opensg_solid`), their documentation and tests
 - **Wenbin Yu** (Purdue University): the Mechanics of Structure Genome; principal investigator
 - **Ernesto Camarena** (Sandia National Laboratories): wind-blade applications and verification
 - `fe_jax` by **Keith Ballard** (Air Force Research Laboratory): the finite-element core of [fea-in-jax](https://github.com/KeithBallard/fea-in-jax), which provides the basis and quadrature tables, the periodic assembly map and the matrix-free solvers used by both engines. It is included at `src/fe_jax` so that OpenSG installs as one package; OpenSG is intended to be merged into that repository. Distribution Statement A. Approved for public release: distribution is unlimited. Case #: AFRL-2025-4644.
 
-OpenSG 1.0 (FEniCSx, branch `opensg/fenicsx/v1`, tag `v1.0.0`): code and mechanics: Akshat Bagla; repository, packaging and release engineering: Kirk Bonney (Sandia National Laboratories); with Ernesto Camarena and Wenbin Yu.
+OpenSG 1.0 (FEniCSx, branch `opensg/fenicsx/v1`, tag `v1.0.0`): lead developer, code and mechanics: Akshat Bagla; repository, packaging and release engineering: Kirk Bonney (Sandia National Laboratories); with Ernesto Camarena and Wenbin Yu.
 
 Cite OpenSG with the "Cite this repository" button (from `CITATION.cff`).
 
