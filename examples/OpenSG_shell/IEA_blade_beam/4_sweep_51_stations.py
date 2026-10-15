@@ -40,8 +40,8 @@ from opensg_solid.rm_plate_1D.msg_rm_plate import (
     rm_plate_msg, msgrm_strain_at_depth_batch)
 
 ############### User Input #################################
-yaml_dir = os.path.expanduser(
-    "~/OpenSG-TW-claude/examples/data/iea_all_stations/shell51/1d_yaml")
+yaml_dir = os.environ.get(                       # the 51 station yamls (OpenSG_io output)
+    "OPENSG_IEA51_DIR", os.path.join("data", "iea_all_stations", "shell51", "1d_yaml"))
 ff_file = "ff51_rmc_reform.dat"
 n_depth = 9                  # through-thickness recovery points per element
 stations = range(51)         # s00 .. s50
