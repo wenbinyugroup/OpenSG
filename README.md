@@ -1,5 +1,7 @@
 # FEA in JAX
 
+> **Reviewers:** the version under review is OpenSG 1.0 (FEniCSx), tag [`v1.0.0`](https://github.com/wenbinyugroup/OpenSG/releases/tag/v1.0.0) on branch [`opensg/fenicsx/v1`](https://github.com/wenbinyugroup/OpenSG/tree/opensg/fenicsx/v1). This branch is OpenSG 2.x, the JAX line, which replaces the 1.0 code.
+
 `fea-in-jax` is a Finite Element Analysis (FEA) library written in JAX. It leverages JAX's composable function transformations—JIT compilation, automatic differentiation, and vectorization—to provide a high-performance solver capable of running on GPUs and TPUs.
 
 ## OpenSG: multiscale structural mechanics
@@ -163,6 +165,17 @@ For detailed information on the nonlinear solver derivation, handling of Dirichl
 To profile time and memory for JIT-compiled sections:
 1.  Collect trace: `jax.profiler.start_trace("<directory>/prof")`
 2.  Visualize: using TensorBoard or `xprof`.
+
+## Authors and credit
+
+- **Akshat Bagla** (Purdue University): lead developer of OpenSG 2.x (`opensg`, `opensg_shell`, `opensg_solid`), its documentation and tests
+- **Wenbin Yu** (Purdue University): the Mechanics of Structure Genome; principal investigator
+- **Ernesto Camarena** (Sandia National Laboratories): wind-blade applications and verification
+- `fe_jax` by **Keith Ballard** (Air Force Research Laboratory), the finite-element core of [fea-in-jax](https://github.com/KeithBallard/fea-in-jax)
+
+OpenSG 1.0 (FEniCSx, branch `opensg/fenicsx/v1`, tag `v1.0.0`): code and mechanics: Akshat Bagla; repository, packaging and release engineering: Kirk Bonney (Sandia National Laboratories); with Ernesto Camarena and Wenbin Yu.
+
+Cite OpenSG with the "Cite this repository" button (from `CITATION.cff`).
 
 ## Public Release Information
 

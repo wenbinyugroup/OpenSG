@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+message: "If you use OpenSG, please cite it as below."
+title: "OpenSG: multiscale structural mechanics by the Mechanics of Structure Genome"
+type: software
+version: 2.1.0
+date-released: "2026-10-09"
+repository-code: "https://github.com/wenbinyugroup/OpenSG"
+license: Apache-2.0
+keywords:
+  - mechanics of structure genome
+  - multiscale modeling
+  - homogenization
+  - dehomogenization
+  - composite structures
+  - wind turbine blades
+  - finite element analysis
+  - JAX
+authors:
+  - family-names: Bagla
+    given-names: Akshat
+    affiliation: Purdue University
+  - family-names: Yu
+    given-names: Wenbin
+    affiliation: Purdue University
+  - family-names: Camarena
+    given-names: Ernesto
+    affiliation: Sandia National Laboratories
+preferred-citation:
+  type: conference-paper
+  title: "OpenSG: An Open-Source Multiscale Constitutive Modeling Code for Composite Structures and Materials"
+  authors:
+    - family-names: Bagla
+      given-names: Akshat
+    - family-names: Yu
+      given-names: Wenbin
+    - family-names: Camarena
+      given-names: Ernesto
+  collection-title: "Proceedings of the American Society for Composites, 38th Technical Conference"
+  year: 2023
+  doi: "10.12783/asc38/36715"
