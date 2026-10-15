@@ -34,7 +34,7 @@ conda env create -f environment.yml
 conda activate opensg
 ```
 
-`environment.yml` installs the conda-forge scientific stack (including the FEniCSx `basix` basis and quadrature library and PETSc), the JAX stack, and the repository itself in editable mode, so the three commands below are on the `PATH`. Pinned versions, the GPU and CPU-only variants, and a plain `pip` route are described in [docs/installation.md](docs/installation.md).
+`environment.yml` installs the conda-forge scientific stack (including the FEniCSx `basix` basis and quadrature library and PETSc), the JAX stack, and the repository itself in editable mode, so the three commands below are on the `PATH`. Pinned versions, the GPU and CPU-only variants, and a plain `pip` route are described in [docs/getting_started/installation.md](docs/getting_started/installation.md).
 
 ## Running OpenSG
 
@@ -88,7 +88,7 @@ materials:          # by id
 </pre></td></tr>
 </table>
 
-The SG dimension (1-D, 2-D or 3-D) is read from the mesh. Every header key is defaulted. The key-by-key reference is [docs/input_format.md](docs/input_format.md).
+The SG dimension (1-D, 2-D or 3-D) is read from the mesh. Every header key is defaulted. The key-by-key reference is the [user guide](docs/user_guide/index.md).
 
 ## Examples
 
@@ -100,7 +100,7 @@ Every example folder holds its input yaml, a short driver script and the `.out` 
 
 ## Documentation
 
-The Sphinx documentation of this line is in `docs/`, starting at [docs/index.md](docs/index.md): installation, the input format, the constitutive models, the architecture, one tutorial per capability, and the formulation rules under `docs/rules/`. It is hosted at [wenbinyugroup.github.io/OpenSG/OpenSG_v2_0](https://wenbinyugroup.github.io/OpenSG/OpenSG_v2_0/), beside the documentation of OpenSG 1.0 at [wenbinyugroup.github.io/OpenSG](https://wenbinyugroup.github.io/OpenSG/); `.github/workflows/docs.yml` rebuilds the site on every push to `docs/`. Build it locally with
+The Sphinx documentation of this line is in `docs/`, starting at [docs/index.md](docs/index.md): getting started (installation, running OpenSG, a tutorial on a blade cross-section), the user guide for preparing input files, one page per example, and the theory and reference part (constitutive relations, architecture, formulation rules, benchmarks). It is hosted at [wenbinyugroup.github.io/OpenSG/OpenSG_v2_0](https://wenbinyugroup.github.io/OpenSG/OpenSG_v2_0/), beside the documentation of OpenSG 1.0 at [wenbinyugroup.github.io/OpenSG](https://wenbinyugroup.github.io/OpenSG/); `.github/workflows/docs.yml` rebuilds the site on every push to `docs/`. Build it locally with
 
 ```bash
 pip install -r docs/requirements.txt

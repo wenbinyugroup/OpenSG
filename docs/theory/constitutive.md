@@ -226,7 +226,7 @@ $D_{11} = 3.0005\times10^{6}$ N·m, $G_{11} = 7.7010\times10^{6}$ N/m and
 $G_{22} = 7.5424\times10^{6}$ N/m — the thin stiff faces carry the membrane and bending
 channels while the thick compliant core sets the transverse shear.
 
-![Through-thickness 1-D structure gene of the sandwich laminate, faces in blue and foam core in orange, with the mid-surface reference marked](_static/plate_1dsg.png)
+![Through-thickness 1-D structure gene of the sandwich laminate, faces in blue and foam core in orange, with the mid-surface reference marked](../_static/plate_1dsg.png)
 
 **2-D / 3-D SG route** — `plate_homo_2d(..., n_model=2, shear_refined=True)` runs
 `plate_shear_ladder` on the general SG assembly after the classical solve. It adds
@@ -449,7 +449,7 @@ The recovered in-plane stress over the full section looks like this — the spar
 compression above and tension below under the flapwise moment, with the shear flow visible in
 $\sigma_{12}$ around the leading edge and trailing-edge panels.
 
-![Recovered sigma_11 and sigma_12 over the IEA-22 blade cross-section at r over R equal 0.20, plotted at the recovery points around the contour and webs](_static/shell_dehom_stress.png)
+![Recovered sigma_11 and sigma_12 over the IEA-22 blade cross-section at r over R equal 0.20, plotted at the recovery points around the contour and webs](../_static/shell_dehom_stress.png)
 
 ### The solid chain
 
