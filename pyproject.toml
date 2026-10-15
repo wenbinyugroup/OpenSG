@@ -4,12 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opensg"
-version = "2.1.0"
+version = "2.2.0"
 description = "OpenSG: multiscale structural mechanics by the Mechanics of Structure Genome (MSG), in JAX"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "Akshat Bagla" }]
+authors = [
+    { name = "Akshat Bagla" },
+    { name = "Wenbin Yu" },
+    { name = "Ernesto Camarena" },
+]
 keywords = ["homogenization", "mechanics of structure genome", "composites", "finite elements", "jax"]
 classifiers = [
     "Programming Language :: Python :: 3",

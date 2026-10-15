@@ -1,0 +1,46 @@
+# The test suite on a CPU-only environment (environment-cpu.yml).  The two TPMS
+# SwiftComp-parity cases are marked slow (about two minutes on a workstation) and
+# are left to local runs: pytest tests -m slow.
+name: tests
+
+on:
+  push:
+    branches: [main, akshat/opensg]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpu:
+    name: pytest on the CPU environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash -l {0}
+    env:
+      JAX_PLATFORMS: cpu
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+    steps:
+      - name: Check out the sources
+        uses: actions/checkout@v4
+
+      - name: Create the CPU environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment-cpu.yml
+          environment-name: opensg
+          cache-environment: true
+
+      - name: Import check
+        run: |
+          python -c "import struct; assert struct.calcsize('P') == 8; import opensg, opensg_shell, opensg_solid, fe_jax; print('imports ok')"
+          opensg --help
+
+      - name: Test suite
+        run: python -m pytest tests -q -p no:cacheprovider -m "not slow" --durations=15
