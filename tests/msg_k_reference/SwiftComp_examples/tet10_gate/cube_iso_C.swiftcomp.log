@@ -1,0 +1,39 @@
+ ****************************************************************
+ *                      SwiftComp  2.1                          *
+ *                                                              *
+ *         Multiscale Constitutive Modeling of Composites       *
+ *                                                              *
+ *            School of Aeronautics and Astronautics            *
+ *                       Purdue University                      *
+ *                                                              *
+ *                       Copyright Notice                       *
+ *                     ====================                     *
+ *                                                              *
+ * Copyright (2015-) by Purdue Research Foundation, West        *
+ * Lafayette, IN  47906.  Unless permission is granted, this    *
+ * material may not be copied, reproduced or coded for          *
+ * reproduction by any electrical, mechanical or chemical       *
+ * process or combination thereof, now known or later developed.*
+ *                                                              *
+ * These commodities, technology or software were exported from *
+ * the United States in accordance with the Export              *
+ * Administration Regulations. Diversion contrary to U.S. law   *
+ * prohibited.                                                  *
+ ****************************************************************
+ You can run SwiftComp for   0 days....
+
+ SwiftComp begins at  142442.061  
+ Inputs echoed in file cube_iso_C.sc.ech!
+
+ Constitutive modeling for a 3D model!
+
+ Homogenization will be carried out!
+
+ You are running SwiftComp with full integration!
+
+ Finished reading/processing model file!
+
+ Effective properties can be found in file cube_iso_C.sc.k!
+
+  determinant of Jacobian matrix less than 0 for element           1. The first several nodes of distorted  element are:          42   0.0000000000000000        0.0000000000000000        0.0000000000000000          67  0.50000000000000000        0.000000000
+

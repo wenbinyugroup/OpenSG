@@ -27,6 +27,7 @@ prof/
 *.log
 !docs/images/*.png
 !docs/_static/*.png
+!tests/msg_k_reference/SwiftComp_examples/tet10_gate/*.swiftcomp.log
 tests/output/
 
 # regenerable dehomogenization output of the example scripts
