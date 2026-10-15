@@ -1,0 +1,12 @@
+
+
+gamma\_e
+========
+
+.. rubric:: *module* :mod:`opensg.utils.shell`
+
+.. currentmodule:: opensg.utils.shell
+
+
+
+.. autofunction:: opensg.utils.shell::gamma_e

@@ -1,0 +1,12 @@
+
+
+write\_yaml
+===========
+
+.. rubric:: *module* :mod:`opensg.io.io`
+
+.. currentmodule:: opensg.io.io
+
+
+
+.. autofunction:: opensg.io.io::write_yaml

@@ -1,0 +1,12 @@
+
+
+trsf\_sixbysix
+==============
+
+.. rubric:: *module* :mod:`opensg.utils.beamdyn_trans`
+
+.. currentmodule:: opensg.utils.beamdyn_trans
+
+
+
+.. autofunction:: opensg.utils.beamdyn_trans::trsf_sixbysix

@@ -1,0 +1,12 @@
+
+
+print0
+======
+
+.. rubric:: *module* :mod:`opensg.utils.eigenvalue_solver`
+
+.. currentmodule:: opensg.utils.eigenvalue_solver
+
+
+
+.. autofunction:: opensg.utils.eigenvalue_solver::print0

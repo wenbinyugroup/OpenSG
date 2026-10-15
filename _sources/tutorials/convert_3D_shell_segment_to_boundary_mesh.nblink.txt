@@ -1,0 +1,3 @@
+{
+    "path": "../../examples/ipynb_examples/convert_3D_shell_segment_to_boundary_mesh.ipynb"
+}

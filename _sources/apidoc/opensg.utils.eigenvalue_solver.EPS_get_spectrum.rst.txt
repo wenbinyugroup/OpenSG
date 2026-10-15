@@ -1,0 +1,12 @@
+
+
+EPS\_get\_spectrum
+==================
+
+.. rubric:: *module* :mod:`opensg.utils.eigenvalue_solver`
+
+.. currentmodule:: opensg.utils.eigenvalue_solver
+
+
+
+.. autofunction:: opensg.utils.eigenvalue_solver::EPS_get_spectrum

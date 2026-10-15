@@ -1,0 +1,12 @@
+
+
+solve\_ksp
+==========
+
+.. rubric:: *module* :mod:`opensg.utils.shared`
+
+.. currentmodule:: opensg.utils.shared
+
+
+
+.. autofunction:: opensg.utils.shared::solve_ksp

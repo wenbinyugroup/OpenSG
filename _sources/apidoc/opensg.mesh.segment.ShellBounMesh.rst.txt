@@ -1,0 +1,25 @@
+ShellBounMesh
+=============
+
+.. rubric:: *module* :mod:`opensg.mesh.segment`
+
+.. currentmodule:: opensg.mesh.segment
+
+.. autoclass:: ShellBounMesh
+
+
+
+   .. HACK -- the point here is that we don't want this to appear in the output, but the autosummary should still generate the pages.
+      .. autosummary::
+
+      
+         ShellBounMesh.compute_ABD
+         ShellBounMesh.compute_timo
+         ShellBounMesh.generate_mesh_file
+
+
+
+
+
+
+

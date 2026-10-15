@@ -1,0 +1,36 @@
+opensg.mesh.segment
+===================
+
+.. automodule:: opensg.mesh.segment
+   :exclude-members: ShellBounMesh, ShellSegmentMesh, SolidBounMesh, SolidSegmentMesh, 
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/class.rst
+   
+      ShellBounMesh
+      ShellSegmentMesh
+      SolidBounMesh
+      SolidSegmentMesh
+   
+   
+
+   
+   
+   
+
+
+

@@ -1,0 +1,33 @@
+﻿opensg.mesh
+===========
+
+.. automodule:: opensg.mesh
+   :exclude-members: 
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+
+.. rubric:: Modules
+
+.. autosummary::
+   :toctree:
+   :recursive:
+   :template: autosummary/module.rst
+
+   segment
+

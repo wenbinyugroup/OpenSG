@@ -1,0 +1,12 @@
+
+
+local\_strain
+=============
+
+.. rubric:: *module* :mod:`opensg.core.stress_recov`
+
+.. currentmodule:: opensg.core.stress_recov
+
+
+
+.. autofunction:: opensg.core.stress_recov::local_strain

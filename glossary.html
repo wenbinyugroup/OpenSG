@@ -1,0 +1,485 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Glossary &mdash; opensg 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=8d563738"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Release Notes" href="release-notes.html" />
+    <link rel="prev" title="MIT License" href="license.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            opensg
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Home</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/solid_cross_section.html">Solid Cross Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/shell_cross_section.html">Shell Cross Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/3D_solid_segment.html">3D Solid Segment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/convert_3D_solid_segment_to_boundary_mesh.html">Convert 3D Shell Segment to Boundary Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/convert_3D_shell_segment_to_boundary_mesh.html">Convert 3D Shell Segment to Boundary Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/write_beamdyn_input_from_shell_cross_sections.html">Write Beamdyn Inputs from Shell Cross Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/write_beamdyn_input_from_solid_cross_sections.html">Write Beamdyn Input from Solid Cross Sections</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Usage</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="framework.html">Software framework and limitations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input.html">Mesh Input Format Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api-doc.html">API documentation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="apidoc/opensg.core.html">opensg.core</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.core.shell.html">opensg.core.shell</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.shell.compute_ABD_CLT.html">compute_ABD_CLT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.shell.compute_ABD_matrix.html">compute_ABD_matrix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.shell.compute_stiffness.html">compute_stiffness</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.shell.compute_timo_boun.html">compute_timo_boun</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.core.solid.html">opensg.core.solid</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.solid.compute_stiffness.html">compute_stiffness</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.solid.compute_timo_boun.html">compute_timo_boun</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.core.stress_recov.html">opensg.core.stress_recov</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.stress_recov.eigen_solve.html">eigen_solve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.stress_recov.local_strain.html">local_strain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.stress_recov.stress_eval.html">stress_eval</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="apidoc/opensg.io.html">opensg.io</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.io.io.html">opensg.io.io</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.io.io.load_yaml.html">load_yaml</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.io.io.validate_mesh_data.html">validate_mesh_data</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.io.io.write_yaml.html">write_yaml</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.io.util.html">opensg.io.util</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.io.util.generate_segment_shell_mesh_files.html">generate_segment_shell_mesh_files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="apidoc/opensg.mesh.html">opensg.mesh</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.mesh.segment.html">opensg.mesh.segment</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.mesh.segment.ShellBounMesh.html">ShellBounMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.mesh.segment.ShellSegmentMesh.html">ShellSegmentMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.mesh.segment.SolidBounMesh.html">SolidBounMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.mesh.segment.SolidSegmentMesh.html">SolidSegmentMesh</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="apidoc/opensg.utils.html">opensg.utils</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.html">opensg.utils.beamdyn_trans</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.beam_reaction.html">beam_reaction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.tension_center.html">tension_center</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.transformMatrixToBeamDyn.html">transformMatrixToBeamDyn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.transform_beam_matrices.html">transform_beam_matrices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.trsf_sixbysix.html">trsf_sixbysix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.write_beamdyn_prop.html">write_beamdyn_prop</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.html">opensg.utils.eigenvalue_solver</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.EPS_get_spectrum.html">EPS_get_spectrum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.EPS_print_results.html">EPS_print_results</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.monitor_EPS_short.html">monitor_EPS_short</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.print0.html">print0</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.solve_GEP_shiftinvert.html">solve_GEP_shiftinvert</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.shared.html">opensg.utils.shared</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.beam_reaction.html">beam_reaction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.compute_nullspace.html">compute_nullspace</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.local_frame_1D.html">local_frame_1D</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.solve_ksp.html">solve_ksp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.tension_center.html">tension_center</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.transformMatrixToBeamDyn.html">transformMatrixToBeamDyn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.transform_beam_matrices.html">transform_beam_matrices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.trsf_sixbysix.html">trsf_sixbysix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.write_beamdyn_files.html">write_beamdyn_files</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.write_beamdyn_prop.html">write_beamdyn_prop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.xmdf_convert.html">xmdf_convert</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.shell.html">opensg.utils.shell</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.ddot.html">ddot</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.deri.html">deri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.deri_constraint.html">deri_constraint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.dof_mapping_quad.html">dof_mapping_quad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.eps.html">eps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.gamma_e.html">gamma_e</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.gamma_h.html">gamma_h</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.gamma_l.html">gamma_l</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.generate_boundary_markers.html">generate_boundary_markers</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.get_mass_shell.html">get_mass_shell</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.initialize_array.html">initialize_array</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.local_1D_manual.html">local_1D_manual</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.local_boun.html">local_boun</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.local_frame.html">local_frame</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.local_grad.html">local_grad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.tangential_projection.html">tangential_projection</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.solid.html">opensg.utils.solid</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.C.html">C</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.CC.html">CC</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.EPS_get_spectrum.html">EPS_get_spectrum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.Rsig.html">Rsig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.dof_mapping_quad.html">dof_mapping_quad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.eigen_eps.html">eigen_eps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.gamma_e.html">gamma_e</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.gamma_h.html">gamma_h</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.gamma_l.html">gamma_l</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.generate_boundary_markers.html">generate_boundary_markers</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.get_mass_solid.html">get_mass_solid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.initialize_array.html">initialize_array</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.local_boun.html">local_boun</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.recov.html">recov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.solve_GEP_shiftinvert.html">solve_GEP_shiftinvert</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.stress_output.html">stress_output</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Backmatter</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="citing_opensg.html">Citing OpenSG</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">MIT License</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Glossary</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release-notes.html">Release Notes</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">opensg</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Glossary</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/glossary.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="glossary">
+<span id="id1"></span><h1>Glossary<a class="headerlink" href="#glossary" title="Link to this heading"></a></h1>
+<p>This page contains definitions for various terminology and abbreviations
+used throughout opensg documentation and code.</p>
+<section id="terminology">
+<h2>Terminology<a class="headerlink" href="#terminology" title="Link to this heading"></a></h2>
+<p>ABD Matrix: A 6x6 matrix used in classical lamination theory to relate generalized forces and moments to generalized strains and curvatures. The matrix has the structure [[A, B], [B, D]] where A is the 3x3 membrane stiffness, B is the 3x3 coupling stiffness, and D is the 3x3 bending stiffness.</p>
+<p>Boundary Condition: A condition imposed on facets or boundaries of a mesh,
+such as Dirichlet boundary conditions (specifying function values on the boundary)
+or Neumann boundary conditions (specifying derivative values).</p>
+<p>Cell: A fundamental element of a mesh (e.g., a triangle in 2D, tetrahedron in 3D)
+that divides the domain into discrete parts for FEA computations.</p>
+<p>Composite Laminate: A structural material made up of multiple layers (plies) of fiber-reinforced material, each potentially having different fiber orientations and material properties.</p>
+<p>Composite Layup: See Composite Laminate.</p>
+<p>Connectivity: The relationship between different entities in a mesh
+(e.g., between vertices and cells, cells and facets).
+Connectivity maps define how entities are connected within a mesh.</p>
+<p>Dehomogenization: The process of recovering local stress and strain fields from homogenized beam properties using fluctuating functions. This allows analysis of detailed stress distributions within the original 3D structure.</p>
+<p>Eigenvalue Analysis: Mathematical technique used to determine natural frequencies, buckling loads, or other critical values by solving generalized eigenvalue problems of the form Ax = λBx.</p>
+<p>Euler-Bernoulli Beam Theory: A classical beam theory that assumes plane sections remain plane and perpendicular to the neutral axis after deformation. Neglects shear deformation effects.</p>
+<p>Facet: A boundary entity of a cell that is one dimension lower than the cell itself.</p>
+<p>Fluctuating Functions: Mathematical functions that represent the deviation from average behavior in homogenization theory. Used to capture local effects within the Structure Genome.</p>
+<p>Frame: Local coordinate system defined at each point in the mesh, typically consisting of orthogonal unit vectors (e1, e2, e3) that define material orientations.</p>
+<p>Gamma Functions: Mathematical operators (gamma_h, gamma_e, gamma_l, gamma_d) used in MSG formulations to relate displacement fields to strain measures for different beam theories.</p>
+<p>Homogenization: The process of computing effective structural properties (stiffness matrices, mass properties) from either 1D, 2D, or 3D SGs.</p>
+<p>Layup: The sequence and orientation of composite layers (plies) that make up a laminated structure, including thickness, material, and fiber angle for each layer.</p>
+<p>Local Frame: A coordinate system attached to specific geometric entities (edges, faces) that defines the orientation of materials and the direction of structural axes.</p>
+<p>Mesh: A collection of cells (e.g., triangles, quadrilaterals in 2D, or tetrahedrons,
+hexahedrons in 3D) representing a discretized computational domain.
+A dolfinx.mesh.Mesh object encapsulates both the geometry and topology of this mesh.</p>
+<p>Nullspace: In finite element analysis, the mathematical space containing rigid body motions that must be constrained to ensure a unique solution to the structural problem.</p>
+<p>Segment: A portion of a blade mesh that is analyzed as a separate entity. Wind turbine blades are typically divided into multiple segments along their span for analysis.</p>
+<p>Shell Element: A finite element type used for modeling thin-walled structures like wind turbine blade skins.</p>
+<p>Solid Element: A finite element type used for modeling three-dimensional volumetric structures.</p>
+<p>Stiffness Matrix: A matrix that relates applied forces to resulting displacements in a structural system. Can be 4x4 for Euler-Bernoulli beams or 6x6 for Timoshenko beams.</p>
+<p>Structure Gene (SG): The fundamental building block in MSG theory - a representative cross-section of the structure that captures all geometric and material complexity in 1D, 2D, or 3D form.</p>
+<p>Timoshenko Beam Theory: An enhanced beam theory that includes the effects of shear deformation and rotary inertia, providing more accurate results for thick beams or shells.</p>
+<p>Topology: In dolfinx, refers to the structural organization of the mesh, including
+the number and types of entities (vertices, edges, faces, cells) and their connectivity.</p>
+</section>
+<section id="abbreviations">
+<h2>Abbreviations<a class="headerlink" href="#abbreviations" title="Link to this heading"></a></h2>
+<p>ABD: A-B-D matrix (membrane-bending-coupling stiffness matrix)</p>
+<p>BECAS: BEam Cross section Analysis Software (alternative cross-sectional analysis tool)</p>
+<p>DOF: Degrees of Freedom</p>
+<p>DOLFINx: The next-generation finite element library (part of FEniCS)</p>
+<p>EB: Euler-Bernoulli (beam theory)</p>
+<p>EPS: Eigenvalue Problem Solver (from SLEPc library)</p>
+<p>FEA: Finite Element Analysis</p>
+<p>FEniCS: Open-source finite element computing platform</p>
+<p>GEP: Generalized Eigenvalue Problem</p>
+<p>GMSH: 3D finite element mesh generator</p>
+<p>MPI: Message Passing Interface (for parallel computing)</p>
+<p>MSG: Mechanics of Structure Genome</p>
+<p>MSH: GMSH mesh file format</p>
+<p>PETSc: Portable Extensible Toolkit for Scientific Computation</p>
+<p>SG: Structure Gene</p>
+<p>SLEPc: Scalable Library for Eigenvalue Problem Computations</p>
+<p>UFL: Unified Form Language (part of FEniCS for expressing finite element forms)</p>
+<p>VABS: Variational Asymptotic Beam Sectional Analysis (beam cross-section analysis tool)</p>
+<p>YAML: Yet Another Markup Language (data serialization format used for input files)</p>
+</section>
+<section id="variable-name-conventions">
+<h2>Variable Name Conventions<a class="headerlink" href="#variable-name-conventions" title="Link to this heading"></a></h2>
+<p><strong>Timoshenko Beam Model (Tapered Shell Wind Blade Segment)</strong></p>
+<p><strong>Input:</strong> .yaml File</p>
+<p><strong>Output:</strong> Timoshenko Stiffness Matrix:</p>
+<ul class="simple">
+<li><p>Boundary Timoshenko Stiffness (Deff_l/Deff_r)</p></li>
+<li><p>Entire Blade Segment Timoshenko Stiffness (Deff_srt)</p></li>
+</ul>
+<p><strong>Byproduct and intermediate step of computation:</strong></p>
+<ul class="simple">
+<li><p>Boundary Euler-Bernoulli Stiffness (D_effEB_l/D_effEB_r)</p></li>
+<li><p>Entire Blade Segment Euler-Bernoulli Stiffness (D_eff)</p></li>
+</ul>
+<p><strong>Input Variables/Data:</strong></p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">section_id</span></code></dt><dd><p>Constant - Segment_id of wind blade to be computed</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">mesh</span></code></dt><dd><p>mesh data of entire wind blade (WB) segment</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">subdomains</span></code></dt><dd><p>layup id of mesh elements (a.k.a. physical domain of mesh)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">boundaries</span></code></dt><dd><p>facet id of boundary elements of WB mesh (Not useful in computation)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">x_min,</span> <span class="pre">x_max</span></code></dt><dd><p>minimum/maximum x (beam axis) coordinate to define boundary mesh</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">tdim,</span> <span class="pre">fdim</span></code></dt><dd><p>mesh topology/facet dimension (For quad mesh: tdim=2, fdim=1)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">facets_left/right</span></code></dt><dd><p>Left/Right boundary facet id of WB mesh (In WB numbering) - useful in generating boundary mesh</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">mesh_r/mesh_l</span></code></dt><dd><p>left and right boundary mesh (Generated in dolfinx as submesh)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">entity_mapl/mapr</span></code></dt><dd><p>facet id of left/right boundary (In boundary mesh numbering)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">num_cells</span></code></dt><dd><p>number of quadrilateral mesh elements</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">o_cell_idx</span></code></dt><dd><p>Original mesh element connectivity (SG_Shell.msh). Note: dolfinx does the renumbering of vertex and mesh connectivity</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">VV</span></code></dt><dd><p>functionspace (Discontinuous galerkin) to store orientation data</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">frame</span> <span class="pre">([EE1,EE2,N])</span></code></dt><dd><p>Local Orientation frame (from .yaml) stored as ufl function</p>
+<ul class="simple">
+<li><p>[EE1,EE2,N]: EE1-&gt; curvilinear tangent direction (along beam axis), EE2-&gt; Circumferential tangent Direction (CCW about +x (beam) axis), N -&gt; Inward normal direction</p></li>
+</ul>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">material_parameters</span></code></dt><dd><p>Stores anisotropic material properties of layups (Same for all WB Segments)</p>
+</dd>
+</dl>
+<p><strong>Layup and Material Data:</strong></p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">nphases</span></code></dt><dd><p>number of layups in the WB segment</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">nlay</span></code></dt><dd><p>[nphases,1] - number of layers in each layup of WB segment</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">matid</span></code></dt><dd><p>[nphases,nlay,1] - Contains thickness data of layup id- nlay</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">thick</span></code></dt><dd><p>[nphases,nlay,1]</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">conn3</span></code></dt><dd><p>[num_cells,4] - facet connectivity matrix for each element</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">subdomains_l</span></code></dt><dd><p>layup id of left boundary mesh (Output for subdomains.values[:] arranged in boundary dofs)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">frame_l</span></code></dt><dd><p>Local orientation frame (orthogonal) for each left boundary element</p>
+<ul class="simple">
+<li><p>[E1l,E2l,Nl]: E1l-&gt; beam axis (+x dir), E2l-&gt; Circumferential tangent Direction (CCW about +x (beam) axis), E3l -&gt; Inward normal direction</p></li>
+</ul>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">boundary_facets_left</span></code></dt><dd><p>[num_facets_left_boundary,1] - facet id connectivity of boundary mesh (In mesh_l based numbering)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">D_effEB_l/D_effEB_r</span></code></dt><dd><p>Euler-Bernoulli matrix of left/right boundary of WB Segment</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">Deff_l/Deff_r</span></code></dt><dd><p>Timoshenko Stiffness matrix of left/right boundary of WB Segment</p>
+</dd>
+</dl>
+<p><strong>Function Spaces and Solution Variables:</strong></p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">ndofs_WBmesh</span></code></dt><dd><p>[3*len(np.arange(*V.dofmap.index_map.local_range)),1] - total dofs of WB segment mesh (Note: V=&gt; functionspace of WB mesh)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">V0_l/V0_r</span></code></dt><dd><p>[ndofs_leftmesh,4] - Fluctuating function solution after solving 4 load cases (for EB Stiffness/a.k.a zeroth order)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">V1_l/V1_r</span></code></dt><dd><p>[ndofs_leftmesh,4] - Fluctuating function solution after solving 4 load cases (for Timo Stiffness/ a.k.a first order)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">e_l</span></code></dt><dd><p>Local orientation Frame for left boundary mesh interpolated in V_l (Serendipidity) functionspace</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">e_r</span></code></dt><dd><p>Local orientation Frame for right boundary mesh interpolated in V_r (Serendipidity) functionspace</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">e</span></code></dt><dd><p>Local orientation Frame for WB Segment mesh interpolated in V (Serendipidity) functionspace</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">V_l/V_r</span></code></dt><dd><p>functionspace of left/right boundary mesh (UFL)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">V</span></code></dt><dd><p>functionspace for defining WB segment mesh (UFL)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">dvl,</span> <span class="pre">v_l</span></code></dt><dd><p>Trial and Test Functions for left boundary (V_l) (UFL)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">dvr,</span> <span class="pre">v_r</span></code></dt><dd><p>Trial and Test Functions for right boundary (V_r) (UFL)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">dv,</span> <span class="pre">v_</span></code></dt><dd><p>Trial and Test Functions for WB mesh (V) (UFL)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">x_l,</span> <span class="pre">x_r</span></code></dt><dd><p>Spatial Coordinate Data for left/right boundary (UFL)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">dx_l</span></code></dt><dd><p>Measure for left boundary mesh with subdomains_l assigned</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">dx</span></code></dt><dd><p>Measure for WB mesh with subdomains assigned (Used in defining weak form *dx(i) mean integration over mesh elements with layup id i)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">nullspace_l</span></code></dt><dd><p>contain nullspace vector for used as constraint to block Rigid body motion when solving variation form (ksp solver) over left boundary mesh</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">ndofs_leftmesh</span></code></dt><dd><p>[3*len(np.arange(*V.dofmap.index_map.local_range)),1] - total dofs of left boundary mesh</p>
+</dd>
+</dl>
+<p><strong>Assembly Matrices and Weak Forms:</strong></p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">A_l</span></code></dt><dd><p>[ndofs_leftmesh,ndofs_leftmesh] - Global Assembly Coefficient matrix (in ufl form) for left boundary</p>
+<ul class="simple">
+<li><p>Can print matrix as array by A_l[:,:]</p></li>
+<li><p>Used in solving 4 load cases where A_l w_l = F_l (similar to Ax=b)</p></li>
+<li><p>Unknown w_l is stored in V0_l[:,p] for load case p</p></li>
+</ul>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">A</span></code></dt><dd><p>[ndofs_WBmesh,ndofs_WBmesh] - Global Assembly matrix for WB mesh</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">a</span></code></dt><dd><p>Bilinear weak form for WB mesh - a(dv,v_)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">F2</span></code></dt><dd><p>Linear weak form for WB mesh - <code class="docutils literal notranslate"><span class="pre">F2(v_)</span></code></p>
+<ul class="simple">
+<li><p>Can compare with weak form to solve as <code class="docutils literal notranslate"><span class="pre">a(dv,v_)</span> <span class="pre">w</span> <span class="pre">=</span> <span class="pre">F2(v_)</span></code>, where <code class="docutils literal notranslate"><span class="pre">w.vector[ndofs_WBmesh,1]</span></code> is unknown dofs value stored in <code class="docutils literal notranslate"><span class="pre">V0[ndofs_WBmesh,4]</span></code></p></li>
+</ul>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">F</span></code></dt><dd><p>[ndofs_WBmesh,1] - Global Assembled Right hand vector for EB case</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">b</span></code></dt><dd><p>[ndofs_WBmesh, 4] - Equivalent to Right hand vector F for Timo case</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">v0</span></code></dt><dd><p>Stores the solved V0[ndofs_WBmesh,p] in ufl function form for each load case</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">v2a</span></code></dt><dd><p>UFL function defined over V (functionspace_WB mesh) - Output by v2a.vector[:]</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">bc</span></code></dt><dd><p>Dirichlet bc (known ufl function storing boundary solutions, dofs of boundary need to be constrained)</p>
+</dd>
+</dl>
+<p><strong>Stiffness Matrix Components:</strong></p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">Dhe</span></code></dt><dd><p>[ndofs_WBmesh,4] - &lt; gamma_h.T ABD gamma_e&gt;</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">Dle</span></code></dt><dd><p>[ndofs_WBmesh,4] - &lt; gamma_l.T ABD gamma_e&gt;</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">Dll</span></code></dt><dd><p>[ndofs_WBmesh,ndofs_WBmesh] - &lt; gamma_l.T ABD gamma_l&gt;</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">Dhl</span></code></dt><dd><p>[ndofs_WBmesh,ndofs_WBmesh] - &lt; gamma_h.T ABD gamma_l&gt;</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">D_ee</span></code></dt><dd><p>[4,4] - &lt; gamma_e.T ABD gamma_e&gt;</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">D1</span></code></dt><dd><p>[4,4] - &lt; V0.T -Dhe&gt; Information matrix from fluctuating function data</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">V0</span></code></dt><dd><p>[ndofs_WBmesh, 4] - Solve [A w =F] Fluctuating function after solving 4 load cases on WB mesh (EB)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">V1s</span></code></dt><dd><p>[ndofs_WBmesh, 4] - Solve [A w =b] Fluctuating function after solving 4 load cases on WB mesh (Timo)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">D_eff</span></code></dt><dd><p>[4,4] - Euler-Bernoulli Stiffness matrix of entire WB segment</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">Deff_srt</span></code></dt><dd><p>[6,6] - Timoshenko Stiffness matrix of entire WB segment</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For Boundary Timo Solving, Dhe, Dle, Dll, Dhl, Dee use (dofs_leftmesh/dofs_rightmesh) in place of dofs_WBmesh</p>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="license.html" class="btn btn-neutral float-left" title="MIT License" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="release-notes.html" class="btn btn-neutral float-right" title="Release Notes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 National Technology &amp; Engineering Solutions of Sandia, LLC (NTESS).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

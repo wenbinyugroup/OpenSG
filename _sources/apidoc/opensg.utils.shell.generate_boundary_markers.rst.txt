@@ -1,0 +1,12 @@
+
+
+generate\_boundary\_markers
+===========================
+
+.. rubric:: *module* :mod:`opensg.utils.shell`
+
+.. currentmodule:: opensg.utils.shell
+
+
+
+.. autofunction:: opensg.utils.shell::generate_boundary_markers

@@ -1,0 +1,38 @@
+opensg.utils.beamdyn\_trans
+===========================
+
+.. automodule:: opensg.utils.beamdyn_trans
+   :exclude-members: beam_reaction, tension_center, transformMatrixToBeamDyn, transform_beam_matrices, trsf_sixbysix, write_beamdyn_prop, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      beam_reaction
+      tension_center
+      transformMatrixToBeamDyn
+      transform_beam_matrices
+      trsf_sixbysix
+      write_beamdyn_prop
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

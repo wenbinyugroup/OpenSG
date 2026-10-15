@@ -1,0 +1,12 @@
+
+
+compute\_stiffness
+==================
+
+.. rubric:: *module* :mod:`opensg.core.solid`
+
+.. currentmodule:: opensg.core.solid
+
+
+
+.. autofunction:: opensg.core.solid::compute_stiffness

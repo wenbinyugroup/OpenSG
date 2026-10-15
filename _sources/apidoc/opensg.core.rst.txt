@@ -1,0 +1,35 @@
+﻿opensg.core
+===========
+
+.. automodule:: opensg.core
+   :exclude-members: 
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+
+.. rubric:: Modules
+
+.. autosummary::
+   :toctree:
+   :recursive:
+   :template: autosummary/module.rst
+
+   shell
+   solid
+   stress_recov
+

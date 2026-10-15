@@ -1,0 +1,12 @@
+
+
+deri\_constraint
+================
+
+.. rubric:: *module* :mod:`opensg.utils.shell`
+
+.. currentmodule:: opensg.utils.shell
+
+
+
+.. autofunction:: opensg.utils.shell::deri_constraint

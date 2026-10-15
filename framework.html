@@ -1,0 +1,349 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Software framework and limitations &mdash; opensg 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=8d563738"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Mesh Input Format Guide" href="input.html" />
+    <link rel="prev" title="Write Beamdyn Input from Solid Cross Sections" href="tutorials/write_beamdyn_input_from_solid_cross_sections.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            opensg
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">Home</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/solid_cross_section.html">Solid Cross Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/shell_cross_section.html">Shell Cross Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/3D_solid_segment.html">3D Solid Segment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/convert_3D_solid_segment_to_boundary_mesh.html">Convert 3D Shell Segment to Boundary Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/convert_3D_shell_segment_to_boundary_mesh.html">Convert 3D Shell Segment to Boundary Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/write_beamdyn_input_from_shell_cross_sections.html">Write Beamdyn Inputs from Shell Cross Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/write_beamdyn_input_from_solid_cross_sections.html">Write Beamdyn Input from Solid Cross Sections</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Usage</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Software framework and limitations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="input.html">Mesh Input Format Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api-doc.html">API documentation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="apidoc/opensg.core.html">opensg.core</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.core.shell.html">opensg.core.shell</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.shell.compute_ABD_CLT.html">compute_ABD_CLT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.shell.compute_ABD_matrix.html">compute_ABD_matrix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.shell.compute_stiffness.html">compute_stiffness</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.shell.compute_timo_boun.html">compute_timo_boun</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.core.solid.html">opensg.core.solid</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.solid.compute_stiffness.html">compute_stiffness</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.solid.compute_timo_boun.html">compute_timo_boun</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.core.stress_recov.html">opensg.core.stress_recov</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.stress_recov.eigen_solve.html">eigen_solve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.stress_recov.local_strain.html">local_strain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.core.stress_recov.stress_eval.html">stress_eval</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="apidoc/opensg.io.html">opensg.io</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.io.io.html">opensg.io.io</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.io.io.load_yaml.html">load_yaml</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.io.io.validate_mesh_data.html">validate_mesh_data</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.io.io.write_yaml.html">write_yaml</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.io.util.html">opensg.io.util</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.io.util.generate_segment_shell_mesh_files.html">generate_segment_shell_mesh_files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="apidoc/opensg.mesh.html">opensg.mesh</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.mesh.segment.html">opensg.mesh.segment</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.mesh.segment.ShellBounMesh.html">ShellBounMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.mesh.segment.ShellSegmentMesh.html">ShellSegmentMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.mesh.segment.SolidBounMesh.html">SolidBounMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.mesh.segment.SolidSegmentMesh.html">SolidSegmentMesh</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="apidoc/opensg.utils.html">opensg.utils</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.html">opensg.utils.beamdyn_trans</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.beam_reaction.html">beam_reaction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.tension_center.html">tension_center</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.transformMatrixToBeamDyn.html">transformMatrixToBeamDyn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.transform_beam_matrices.html">transform_beam_matrices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.trsf_sixbysix.html">trsf_sixbysix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.beamdyn_trans.write_beamdyn_prop.html">write_beamdyn_prop</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.html">opensg.utils.eigenvalue_solver</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.EPS_get_spectrum.html">EPS_get_spectrum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.EPS_print_results.html">EPS_print_results</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.monitor_EPS_short.html">monitor_EPS_short</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.print0.html">print0</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.solve_GEP_shiftinvert.html">solve_GEP_shiftinvert</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.shared.html">opensg.utils.shared</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.beam_reaction.html">beam_reaction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.compute_nullspace.html">compute_nullspace</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.local_frame_1D.html">local_frame_1D</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.solve_ksp.html">solve_ksp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.tension_center.html">tension_center</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.transformMatrixToBeamDyn.html">transformMatrixToBeamDyn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.transform_beam_matrices.html">transform_beam_matrices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.trsf_sixbysix.html">trsf_sixbysix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.write_beamdyn_files.html">write_beamdyn_files</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.write_beamdyn_prop.html">write_beamdyn_prop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shared.xmdf_convert.html">xmdf_convert</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.shell.html">opensg.utils.shell</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.ddot.html">ddot</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.deri.html">deri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.deri_constraint.html">deri_constraint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.dof_mapping_quad.html">dof_mapping_quad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.eps.html">eps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.gamma_e.html">gamma_e</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.gamma_h.html">gamma_h</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.gamma_l.html">gamma_l</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.generate_boundary_markers.html">generate_boundary_markers</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.get_mass_shell.html">get_mass_shell</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.initialize_array.html">initialize_array</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.local_1D_manual.html">local_1D_manual</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.local_boun.html">local_boun</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.local_frame.html">local_frame</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.local_grad.html">local_grad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.shell.tangential_projection.html">tangential_projection</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="apidoc/opensg.utils.solid.html">opensg.utils.solid</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.C.html">C</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.CC.html">CC</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.EPS_get_spectrum.html">EPS_get_spectrum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.Rsig.html">Rsig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.dof_mapping_quad.html">dof_mapping_quad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.eigen_eps.html">eigen_eps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.gamma_e.html">gamma_e</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.gamma_h.html">gamma_h</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.gamma_l.html">gamma_l</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.generate_boundary_markers.html">generate_boundary_markers</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.get_mass_solid.html">get_mass_solid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.initialize_array.html">initialize_array</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.local_boun.html">local_boun</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.recov.html">recov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.solve_GEP_shiftinvert.html">solve_GEP_shiftinvert</a></li>
+<li class="toctree-l4"><a class="reference internal" href="apidoc/opensg.utils.solid.stress_output.html">stress_output</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Backmatter</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="citing_opensg.html">Citing OpenSG</a></li>
+<li class="toctree-l1"><a class="reference internal" href="contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">MIT License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="glossary.html">Glossary</a></li>
+<li class="toctree-l1"><a class="reference internal" href="release-notes.html">Release Notes</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">opensg</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Software framework and limitations</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/framework.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="software-framework-and-limitations">
+<span id="software-framework"></span><h1>Software framework and limitations<a class="headerlink" href="#software-framework-and-limitations" title="Link to this heading"></a></h1>
+<p>Before using OpenSG, it is helpful to understand the software framework.
+OpenSG is a Python package, which contains several subpackages, listed below:
+Each subpackage contains modules that contain classes, methods, and functions.
+The classes used to generate blade mesh models and
+run structural analysis are described in more detail below, followed by a list of software limitations.</p>
+<p>See <a class="reference internal" href="api-doc.html#api-documentation"><span class="std std-ref">API documentation</span></a> for more information on the code structure.</p>
+<p><strong>OpenSG Subpackages:</strong></p>
+<dl class="simple">
+<dt><a class="reference internal" href="apidoc/opensg.core.html#module-opensg.core" title="opensg.core"><code class="xref py py-mod docutils literal notranslate"><span class="pre">core</span></code></a></dt><dd><p>Contains classes and methods for core computational functions including ABD matrix computation, beam model implementations, and stress recovery.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.mesh.html#module-opensg.mesh" title="opensg.mesh"><code class="xref py py-mod docutils literal notranslate"><span class="pre">mesh</span></code></a></dt><dd><p>Contains classes and methods to define blade mesh models, segment meshes, and mesh data structures for both shell and solid element analyses.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.io.html#module-opensg.io" title="opensg.io"><code class="xref py py-mod docutils literal notranslate"><span class="pre">io</span></code></a></dt><dd><p>Contains classes and methods for input/output operations including YAML file handling, mesh file generation, and data serialization.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.utils.html#module-opensg.utils" title="opensg.utils"><code class="xref py py-mod docutils literal notranslate"><span class="pre">utils</span></code></a></dt><dd><p>Contains utility functions for mathematical operations, finite element computations, eigenvalue solving, and mesh utilities for both shell and solid analyses.</p>
+</dd>
+</dl>
+<section id="blade-mesh-model">
+<h2>Blade mesh model<a class="headerlink" href="#blade-mesh-model" title="Link to this heading"></a></h2>
+<p>The <a class="reference internal" href="apidoc/opensg.mesh.html#module-opensg.mesh" title="opensg.mesh"><code class="xref py py-class docutils literal notranslate"><span class="pre">mesh</span></code></a> subpackage contains classes to define blade mesh models, segment meshes, and their data structures.
+These classes are listed below:
+Blade mesh models can be built from YAML files or generated programmatically.
+The package supports both shell and solid element analyses for wind turbine blade structural analysis.</p>
+<p><strong>Mesh Classes:</strong></p>
+<dl class="simple">
+<dt><a class="reference internal" href="apidoc/opensg.mesh.segment.ShellSegmentMesh.html#opensg.mesh.segment.ShellSegmentMesh" title="opensg.mesh.segment.ShellSegmentMesh"><code class="xref py py-class docutils literal notranslate"><span class="pre">ShellSegmentMesh</span></code></a></dt><dd><p>Class to define individual shell-based blade segments for efficient segment-by-segment analysis without requiring the full blade mesh.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.mesh.segment.SolidSegmentMesh.html#opensg.mesh.segment.SolidSegmentMesh" title="opensg.mesh.segment.SolidSegmentMesh"><code class="xref py py-class docutils literal notranslate"><span class="pre">SolidSegmentMesh</span></code></a></dt><dd><p>Class to define individual solid-based blade segments for 3D structural analysis of blade segments.</p>
+</dd>
+</dl>
+</section>
+<section id="core-computational-modules">
+<h2>Core computational modules<a class="headerlink" href="#core-computational-modules" title="Link to this heading"></a></h2>
+<p>The <a class="reference internal" href="apidoc/opensg.core.html#module-opensg.core" title="opensg.core"><code class="xref py py-class docutils literal notranslate"><span class="pre">core</span></code></a> subpackage contains classes and functions for the core structural analysis computations.
+These are listed below:</p>
+<p><strong>Core Analysis Classes and Functions:</strong></p>
+<dl class="simple">
+<dt><a class="reference internal" href="apidoc/opensg.core.shell.compute_ABD_matrix.html#opensg.core.shell.compute_ABD_matrix" title="opensg.core.shell.compute_ABD_matrix"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_ABD_matrix()</span></code></a></dt><dd><p>Function to compute ABD matrices for composite laminates. Relates forces/moments to strains/curvatures in shell structures.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.core.shell.compute_timo_boun.html#opensg.core.shell.compute_timo_boun" title="opensg.core.shell.compute_timo_boun"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_timo_boun()</span></code></a></dt><dd><p>Function to compute boundary stiffness matrices for Euler-Bernoulli and Timoshenko beam theories on shell boundaries.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.core.shell.compute_stiffness.html#opensg.core.shell.compute_stiffness" title="opensg.core.shell.compute_stiffness"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_stiffness()</span></code></a></dt><dd><p>Function to compute segment stiffness matrices using shell element formulations.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.core.solid.compute_timo_boun.html#opensg.core.solid.compute_timo_boun" title="opensg.core.solid.compute_timo_boun"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_timo_boun()</span></code></a></dt><dd><p>Function to compute boundary stiffness matrices for solid element analyses.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.core.solid.compute_stiffness.html#opensg.core.solid.compute_stiffness" title="opensg.core.solid.compute_stiffness"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_stiffness()</span></code></a></dt><dd><p>Function to compute segment stiffness matrices using solid element formulations.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.core.stress_recov.html#module-opensg.core.stress_recov" title="opensg.core.stress_recov"><code class="xref py py-mod docutils literal notranslate"><span class="pre">stress_recov</span></code></a></dt><dd><p>Module containing functions for stress recovery and post-processing, including local strain computation and stress analysis.</p>
+</dd>
+</dl>
+</section>
+<section id="utility-functions">
+<h2>Utility functions<a class="headerlink" href="#utility-functions" title="Link to this heading"></a></h2>
+<p>The <a class="reference internal" href="apidoc/opensg.utils.html#module-opensg.utils" title="opensg.utils"><code class="xref py py-class docutils literal notranslate"><span class="pre">utils</span></code></a> subpackage contains utility functions that support the core analysis capabilities.
+These are organized by analysis type and listed below:</p>
+<p><strong>Utility Modules:</strong></p>
+<dl class="simple">
+<dt><a class="reference internal" href="apidoc/opensg.utils.shared.html#module-opensg.utils.shared" title="opensg.utils.shared"><code class="xref py py-mod docutils literal notranslate"><span class="pre">shared</span></code></a></dt><dd><p>Contains shared utility functions including nullspace computation, linear system solvers, and constraint handling used across both shell and solid analyses.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.utils.shell.html#module-opensg.utils.shell" title="opensg.utils.shell"><code class="xref py py-mod docutils literal notranslate"><span class="pre">shell</span></code></a></dt><dd><p>Contains shell-specific utilities including local frame computations, strain measures, boundary condition handling, and shell element operations.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.utils.solid.html#module-opensg.utils.solid" title="opensg.utils.solid"><code class="xref py py-mod docutils literal notranslate"><span class="pre">solid</span></code></a></dt><dd><p>Contains solid-specific utilities including 3D strain measures, stress computations, boundary markers, and solid element operations.</p>
+</dd>
+<dt><a class="reference internal" href="apidoc/opensg.utils.eigenvalue_solver.html#module-opensg.utils.eigenvalue_solver" title="opensg.utils.eigenvalue_solver"><code class="xref py py-mod docutils literal notranslate"><span class="pre">eigenvalue_solver</span></code></a></dt><dd><p>Contains eigenvalue solver utilities for advanced analysis including buckling and modal analysis capabilities.</p>
+</dd>
+</dl>
+</section>
+<section id="limitations">
+<span id="id1"></span><h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading"></a></h2>
+<p>Current OpenSG limitations include:</p>
+<ul class="simple">
+<li><p>Stiffness matrices are currently dense, which can be a memory and performance bottleneck for large or highly refined SGs.</p></li>
+<li><p>No iterative solver option is currently available, which limits scalability for very large problems.</p></li>
+<li><p>Dehomogenization is currently only implemented for solid element SGs via <a class="reference internal" href="apidoc/opensg.core.stress_recov.html#module-opensg.core.stress_recov" title="opensg.core.stress_recov"><code class="xref py py-mod docutils literal notranslate"><span class="pre">stress_recov</span></code></a>. Shell element stress recovery is not yet supported.</p></li>
+<li><p>Current framework focuses primarily on wind turbine blades.</p></li>
+<li><p>OpenSG requires dolfinx version 0.8.0 and is not compatible with newer versions of dolfinx.</p></li>
+</ul>
+</section>
+<section id="future-work">
+<span id="id2"></span><h2>Future work<a class="headerlink" href="#future-work" title="Link to this heading"></a></h2>
+<p>Potential improvements and extensions include:</p>
+<ul class="simple">
+<li><p>Transitio to sparse matrix representations to improve memory usage and speed for large SGs.</p></li>
+<li><p>Add iterative solver options as an alternative to direct solvers for large-scale problems.</p></li>
+<li><p>Extend dehomogenization to shell element SGs.</p></li>
+<li><p>Add examples that demonstrate piping OpenSG outputs into downstream codes such as OpenFAST.</p></li>
+<li><p>Extend OpenSG framework to other structures.</p></li>
+<li><p>Add support for GPU acceleration using the GPU capabilities of PETSc and FEniCSx as they mature.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="tutorials/write_beamdyn_input_from_solid_cross_sections.html" class="btn btn-neutral float-left" title="Write Beamdyn Input from Solid Cross Sections" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="input.html" class="btn btn-neutral float-right" title="Mesh Input Format Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 National Technology &amp; Engineering Solutions of Sandia, LLC (NTESS).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

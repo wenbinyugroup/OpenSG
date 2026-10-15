@@ -1,0 +1,12 @@
+
+
+EPS\_print\_results
+===================
+
+.. rubric:: *module* :mod:`opensg.utils.eigenvalue_solver`
+
+.. currentmodule:: opensg.utils.eigenvalue_solver
+
+
+
+.. autofunction:: opensg.utils.eigenvalue_solver::EPS_print_results

@@ -1,0 +1,48 @@
+opensg.utils.shell
+==================
+
+.. automodule:: opensg.utils.shell
+   :exclude-members: ddot, deri, deri_constraint, dof_mapping_quad, eps, gamma_e, gamma_h, gamma_l, generate_boundary_markers, get_mass_shell, initialize_array, local_1D_manual, local_boun, local_frame, local_grad, tangential_projection, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      ddot
+      deri
+      deri_constraint
+      dof_mapping_quad
+      eps
+      gamma_e
+      gamma_h
+      gamma_l
+      generate_boundary_markers
+      get_mass_shell
+      initialize_array
+      local_1D_manual
+      local_boun
+      local_frame
+      local_grad
+      tangential_projection
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

@@ -1,0 +1,12 @@
+
+
+beam\_reaction
+==============
+
+.. rubric:: *module* :mod:`opensg.utils.shared`
+
+.. currentmodule:: opensg.utils.shared
+
+
+
+.. autofunction:: opensg.utils.shared::beam_reaction

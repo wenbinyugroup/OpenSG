@@ -1,0 +1,12 @@
+
+
+beam\_reaction
+==============
+
+.. rubric:: *module* :mod:`opensg.utils.beamdyn_trans`
+
+.. currentmodule:: opensg.utils.beamdyn_trans
+
+
+
+.. autofunction:: opensg.utils.beamdyn_trans::beam_reaction

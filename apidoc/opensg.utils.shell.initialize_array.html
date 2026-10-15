@@ -1,0 +1,281 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>initialize_array &mdash; opensg 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="local_1D_manual" href="opensg.utils.shell.local_1D_manual.html" />
+    <link rel="prev" title="get_mass_shell" href="opensg.utils.shell.get_mass_shell.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            opensg
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../index.html">Home</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/solid_cross_section.html">Solid Cross Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/shell_cross_section.html">Shell Cross Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/3D_solid_segment.html">3D Solid Segment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/convert_3D_solid_segment_to_boundary_mesh.html">Convert 3D Shell Segment to Boundary Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/convert_3D_shell_segment_to_boundary_mesh.html">Convert 3D Shell Segment to Boundary Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/write_beamdyn_input_from_shell_cross_sections.html">Write Beamdyn Inputs from Shell Cross Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../tutorials/write_beamdyn_input_from_solid_cross_sections.html">Write Beamdyn Input from Solid Cross Sections</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Usage</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../framework.html">Software framework and limitations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input.html">Mesh Input Format Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">References</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../api-doc.html">API documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="opensg.core.html">opensg.core</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="opensg.core.shell.html">opensg.core.shell</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.shell.compute_ABD_CLT.html">compute_ABD_CLT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.shell.compute_ABD_matrix.html">compute_ABD_matrix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.shell.compute_stiffness.html">compute_stiffness</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.shell.compute_timo_boun.html">compute_timo_boun</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="opensg.core.solid.html">opensg.core.solid</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.solid.compute_stiffness.html">compute_stiffness</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.solid.compute_timo_boun.html">compute_timo_boun</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="opensg.core.stress_recov.html">opensg.core.stress_recov</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.stress_recov.eigen_solve.html">eigen_solve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.stress_recov.local_strain.html">local_strain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.core.stress_recov.stress_eval.html">stress_eval</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="opensg.io.html">opensg.io</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="opensg.io.io.html">opensg.io.io</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.io.io.load_yaml.html">load_yaml</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.io.io.validate_mesh_data.html">validate_mesh_data</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.io.io.write_yaml.html">write_yaml</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="opensg.io.util.html">opensg.io.util</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.io.util.generate_segment_shell_mesh_files.html">generate_segment_shell_mesh_files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="opensg.mesh.html">opensg.mesh</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="opensg.mesh.segment.html">opensg.mesh.segment</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.mesh.segment.ShellBounMesh.html">ShellBounMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.mesh.segment.ShellSegmentMesh.html">ShellSegmentMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.mesh.segment.SolidBounMesh.html">SolidBounMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.mesh.segment.SolidSegmentMesh.html">SolidSegmentMesh</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2 current"><a class="reference internal" href="opensg.utils.html">opensg.utils</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="opensg.utils.beamdyn_trans.html">opensg.utils.beamdyn_trans</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.beamdyn_trans.beam_reaction.html">beam_reaction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.beamdyn_trans.tension_center.html">tension_center</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.beamdyn_trans.transformMatrixToBeamDyn.html">transformMatrixToBeamDyn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.beamdyn_trans.transform_beam_matrices.html">transform_beam_matrices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.beamdyn_trans.trsf_sixbysix.html">trsf_sixbysix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.beamdyn_trans.write_beamdyn_prop.html">write_beamdyn_prop</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="opensg.utils.eigenvalue_solver.html">opensg.utils.eigenvalue_solver</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.eigenvalue_solver.EPS_get_spectrum.html">EPS_get_spectrum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.eigenvalue_solver.EPS_print_results.html">EPS_print_results</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.eigenvalue_solver.monitor_EPS_short.html">monitor_EPS_short</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.eigenvalue_solver.print0.html">print0</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.eigenvalue_solver.solve_GEP_shiftinvert.html">solve_GEP_shiftinvert</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="opensg.utils.shared.html">opensg.utils.shared</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.beam_reaction.html">beam_reaction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.compute_nullspace.html">compute_nullspace</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.local_frame_1D.html">local_frame_1D</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.solve_ksp.html">solve_ksp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.tension_center.html">tension_center</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.transformMatrixToBeamDyn.html">transformMatrixToBeamDyn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.transform_beam_matrices.html">transform_beam_matrices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.trsf_sixbysix.html">trsf_sixbysix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.write_beamdyn_files.html">write_beamdyn_files</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.write_beamdyn_prop.html">write_beamdyn_prop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shared.xmdf_convert.html">xmdf_convert</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="opensg.utils.shell.html">opensg.utils.shell</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.ddot.html">ddot</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.deri.html">deri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.deri_constraint.html">deri_constraint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.dof_mapping_quad.html">dof_mapping_quad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.eps.html">eps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.gamma_e.html">gamma_e</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.gamma_h.html">gamma_h</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.gamma_l.html">gamma_l</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.generate_boundary_markers.html">generate_boundary_markers</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.get_mass_shell.html">get_mass_shell</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">initialize_array</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.local_1D_manual.html">local_1D_manual</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.local_boun.html">local_boun</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.local_frame.html">local_frame</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.local_grad.html">local_grad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.shell.tangential_projection.html">tangential_projection</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="opensg.utils.solid.html">opensg.utils.solid</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.C.html">C</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.CC.html">CC</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.EPS_get_spectrum.html">EPS_get_spectrum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.Rsig.html">Rsig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.dof_mapping_quad.html">dof_mapping_quad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.eigen_eps.html">eigen_eps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.gamma_e.html">gamma_e</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.gamma_h.html">gamma_h</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.gamma_l.html">gamma_l</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.generate_boundary_markers.html">generate_boundary_markers</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.get_mass_solid.html">get_mass_solid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.initialize_array.html">initialize_array</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.local_boun.html">local_boun</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.recov.html">recov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.solve_GEP_shiftinvert.html">solve_GEP_shiftinvert</a></li>
+<li class="toctree-l4"><a class="reference internal" href="opensg.utils.solid.stress_output.html">stress_output</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Backmatter</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../citing_opensg.html">Citing OpenSG</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">MIT License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../glossary.html">Glossary</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release-notes.html">Release Notes</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">opensg</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../api-doc.html">API documentation</a></li>
+          <li class="breadcrumb-item"><a href="opensg.utils.html">opensg.utils</a></li>
+          <li class="breadcrumb-item"><a href="opensg.utils.shell.html">opensg.utils.shell</a></li>
+      <li class="breadcrumb-item active">initialize_array</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/apidoc/opensg.utils.shell.initialize_array.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="initialize-array">
+<h1>initialize_array<a class="headerlink" href="#initialize-array" title="Link to this heading"></a></h1>
+<p class="rubric"><em>module</em> <a class="reference internal" href="opensg.utils.shell.html#module-opensg.utils.shell" title="opensg.utils.shell"><code class="xref py py-mod docutils literal notranslate"><span class="pre">opensg.utils.shell</span></code></a></p>
+<dl class="py function">
+<dt class="sig sig-object py" id="opensg.utils.shell.initialize_array">
+<span class="sig-prename descclassname"><span class="pre">opensg.utils.shell.</span></span><span class="sig-name descname"><span class="pre">initialize_array</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#opensg.utils.shell.initialize_array" title="Link to this definition"></a></dt>
+<dd><p>Initialize arrays for storing computation results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>V</strong> (<em>dolfinx.fem.FunctionSpace</em>) – Function space determining the size of arrays</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>tuple</em> – Contains initialized numpy arrays for:
+- V0: fluctuation functions
+- Dle, Dhe: strain matrices
+- D_ee: stiffness matrix
+- V1s: additional fluctuation functions</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="opensg.utils.shell.get_mass_shell.html" class="btn btn-neutral float-left" title="get_mass_shell" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="opensg.utils.shell.local_1D_manual.html" class="btn btn-neutral float-right" title="local_1D_manual" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 National Technology &amp; Engineering Solutions of Sandia, LLC (NTESS).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

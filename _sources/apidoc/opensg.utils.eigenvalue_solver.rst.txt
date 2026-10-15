@@ -1,0 +1,37 @@
+opensg.utils.eigenvalue\_solver
+===============================
+
+.. automodule:: opensg.utils.eigenvalue_solver
+   :exclude-members: EPS_get_spectrum, EPS_print_results, monitor_EPS_short, print0, solve_GEP_shiftinvert, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      EPS_get_spectrum
+      EPS_print_results
+      monitor_EPS_short
+      print0
+      solve_GEP_shiftinvert
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

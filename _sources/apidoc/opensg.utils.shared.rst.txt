@@ -1,0 +1,43 @@
+opensg.utils.shared
+===================
+
+.. automodule:: opensg.utils.shared
+   :exclude-members: beam_reaction, compute_nullspace, local_frame_1D, solve_ksp, tension_center, transformMatrixToBeamDyn, transform_beam_matrices, trsf_sixbysix, write_beamdyn_files, write_beamdyn_prop, xmdf_convert, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      beam_reaction
+      compute_nullspace
+      local_frame_1D
+      solve_ksp
+      tension_center
+      transformMatrixToBeamDyn
+      transform_beam_matrices
+      trsf_sixbysix
+      write_beamdyn_files
+      write_beamdyn_prop
+      xmdf_convert
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

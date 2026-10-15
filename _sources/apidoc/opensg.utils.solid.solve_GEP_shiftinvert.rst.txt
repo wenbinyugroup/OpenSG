@@ -1,0 +1,12 @@
+
+
+solve\_GEP\_shiftinvert
+=======================
+
+.. rubric:: *module* :mod:`opensg.utils.solid`
+
+.. currentmodule:: opensg.utils.solid
+
+
+
+.. autofunction:: opensg.utils.solid::solve_GEP_shiftinvert

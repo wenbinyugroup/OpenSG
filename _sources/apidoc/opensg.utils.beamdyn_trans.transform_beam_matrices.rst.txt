@@ -1,0 +1,12 @@
+
+
+transform\_beam\_matrices
+=========================
+
+.. rubric:: *module* :mod:`opensg.utils.beamdyn_trans`
+
+.. currentmodule:: opensg.utils.beamdyn_trans
+
+
+
+.. autofunction:: opensg.utils.beamdyn_trans::transform_beam_matrices

@@ -1,0 +1,12 @@
+
+
+local\_frame\_1D
+================
+
+.. rubric:: *module* :mod:`opensg.utils.shared`
+
+.. currentmodule:: opensg.utils.shared
+
+
+
+.. autofunction:: opensg.utils.shared::local_frame_1D

@@ -1,0 +1,12 @@
+
+
+get\_mass\_shell
+================
+
+.. rubric:: *module* :mod:`opensg.utils.shell`
+
+.. currentmodule:: opensg.utils.shell
+
+
+
+.. autofunction:: opensg.utils.shell::get_mass_shell

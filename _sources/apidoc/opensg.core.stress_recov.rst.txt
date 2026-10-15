@@ -1,0 +1,35 @@
+opensg.core.stress\_recov
+=========================
+
+.. automodule:: opensg.core.stress_recov
+   :exclude-members: eigen_solve, local_strain, stress_eval, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      eigen_solve
+      local_strain
+      stress_eval
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

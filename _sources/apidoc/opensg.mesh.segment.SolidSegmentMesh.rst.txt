@@ -1,0 +1,23 @@
+SolidSegmentMesh
+================
+
+.. rubric:: *module* :mod:`opensg.mesh.segment`
+
+.. currentmodule:: opensg.mesh.segment
+
+.. autoclass:: SolidSegmentMesh
+
+
+
+   .. HACK -- the point here is that we don't want this to appear in the output, but the autosummary should still generate the pages.
+      .. autosummary::
+
+      
+         SolidSegmentMesh.generate_mesh_file
+
+
+
+
+
+
+

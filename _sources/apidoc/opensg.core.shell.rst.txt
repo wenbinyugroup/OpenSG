@@ -1,0 +1,36 @@
+opensg.core.shell
+=================
+
+.. automodule:: opensg.core.shell
+   :exclude-members: compute_ABD_CLT, compute_ABD_matrix, compute_stiffness, compute_timo_boun, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      compute_ABD_CLT
+      compute_ABD_matrix
+      compute_stiffness
+      compute_timo_boun
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

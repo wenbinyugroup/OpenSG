@@ -1,0 +1,12 @@
+
+
+compute\_ABD\_CLT
+=================
+
+.. rubric:: *module* :mod:`opensg.core.shell`
+
+.. currentmodule:: opensg.core.shell
+
+
+
+.. autofunction:: opensg.core.shell::compute_ABD_CLT

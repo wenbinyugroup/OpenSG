@@ -1,0 +1,48 @@
+opensg.utils.solid
+==================
+
+.. automodule:: opensg.utils.solid
+   :exclude-members: C, CC, EPS_get_spectrum, Rsig, dof_mapping_quad, eigen_eps, gamma_e, gamma_h, gamma_l, generate_boundary_markers, get_mass_solid, initialize_array, local_boun, recov, solve_GEP_shiftinvert, stress_output, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      C
+      CC
+      EPS_get_spectrum
+      Rsig
+      dof_mapping_quad
+      eigen_eps
+      gamma_e
+      gamma_h
+      gamma_l
+      generate_boundary_markers
+      get_mass_solid
+      initialize_array
+      local_boun
+      recov
+      solve_GEP_shiftinvert
+      stress_output
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

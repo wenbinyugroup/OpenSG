@@ -1,0 +1,12 @@
+
+
+validate\_mesh\_data
+====================
+
+.. rubric:: *module* :mod:`opensg.io.io`
+
+.. currentmodule:: opensg.io.io
+
+
+
+.. autofunction:: opensg.io.io::validate_mesh_data

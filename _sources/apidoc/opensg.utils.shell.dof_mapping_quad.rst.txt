@@ -1,0 +1,12 @@
+
+
+dof\_mapping\_quad
+==================
+
+.. rubric:: *module* :mod:`opensg.utils.shell`
+
+.. currentmodule:: opensg.utils.shell
+
+
+
+.. autofunction:: opensg.utils.shell::dof_mapping_quad

@@ -1,0 +1,33 @@
+opensg.io.util
+==============
+
+.. automodule:: opensg.io.util
+   :exclude-members: generate_segment_shell_mesh_files, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      generate_segment_shell_mesh_files
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

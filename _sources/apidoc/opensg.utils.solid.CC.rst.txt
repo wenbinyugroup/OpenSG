@@ -1,0 +1,12 @@
+
+
+CC
+==
+
+.. rubric:: *module* :mod:`opensg.utils.solid`
+
+.. currentmodule:: opensg.utils.solid
+
+
+
+.. autofunction:: opensg.utils.solid::CC

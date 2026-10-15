@@ -1,0 +1,3 @@
+{
+    "path": "../../examples/ipynb_examples/3D_solid_segment.ipynb"
+}

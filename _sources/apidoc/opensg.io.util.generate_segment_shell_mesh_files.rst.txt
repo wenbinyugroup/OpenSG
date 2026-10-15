@@ -1,0 +1,12 @@
+
+
+generate\_segment\_shell\_mesh\_files
+=====================================
+
+.. rubric:: *module* :mod:`opensg.io.util`
+
+.. currentmodule:: opensg.io.util
+
+
+
+.. autofunction:: opensg.io.util::generate_segment_shell_mesh_files

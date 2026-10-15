@@ -1,0 +1,12 @@
+
+
+compute\_timo\_boun
+===================
+
+.. rubric:: *module* :mod:`opensg.core.solid`
+
+.. currentmodule:: opensg.core.solid
+
+
+
+.. autofunction:: opensg.core.solid::compute_timo_boun

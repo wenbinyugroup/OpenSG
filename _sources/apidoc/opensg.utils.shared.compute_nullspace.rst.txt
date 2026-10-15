@@ -1,0 +1,12 @@
+
+
+compute\_nullspace
+==================
+
+.. rubric:: *module* :mod:`opensg.utils.shared`
+
+.. currentmodule:: opensg.utils.shared
+
+
+
+.. autofunction:: opensg.utils.shared::compute_nullspace

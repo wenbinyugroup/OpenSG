@@ -1,0 +1,12 @@
+
+
+transform\_beam\_matrices
+=========================
+
+.. rubric:: *module* :mod:`opensg.utils.shared`
+
+.. currentmodule:: opensg.utils.shared
+
+
+
+.. autofunction:: opensg.utils.shared::transform_beam_matrices

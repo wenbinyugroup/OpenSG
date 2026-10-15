@@ -1,0 +1,34 @@
+opensg.core.solid
+=================
+
+.. automodule:: opensg.core.solid
+   :exclude-members: compute_stiffness, compute_timo_boun, 
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :nosignatures:
+      :toctree:
+      :template: autosummary/base.rst
+   
+      compute_stiffness
+      compute_timo_boun
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+
