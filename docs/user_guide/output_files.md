@@ -216,18 +216,32 @@ A `D` run (see {doc}`recovery`) writes, besides the `.out`, the files below. It 
 | file | content |
 |---|---|
 | `<base>_dehom.txt` | one row per Gauss point: `GP_Index`, `Coord_X` (and `Coord_Y`, `Coord_Z` up to the SG dimension), `Eps_xx Eps_yy Eps_zz Eps_yz Eps_xz Eps_xy`, `Sig_xx Sig_yy Sig_zz Sig_yz Sig_xz Sig_xy` |
-| `<base>_dehom.vtk` | ASCII `UNSTRUCTURED_GRID` of the exploded SG mesh: each element with its own corner nodes, carrying the mean of its Gauss values (`Eps_*`, `Sig_*`, `mat_id`) as `CELL_DATA`, so the contour stays discontinuous across materials |
+| `<base>_dehom.vtk` | ASCII `UNSTRUCTURED_GRID` of the exploded SG mesh: each element with its own corner nodes, carrying the mean of its Gauss values as `CELL_DATA`, so the contour stays discontinuous across materials. The arrays, in file order: `Eps_xx Eps_yy Eps_zz Eps_yz Eps_xz Eps_xy` (shears engineering), `Sig_xx Sig_yy Sig_zz Sig_yz Sig_xz Sig_xy`, `mat_id`, then `U1 U2 U3` and the vector `U` |
 | `<base>_dehom.SM` | stress: `x y z`, then the components `11 22 33 12 13 23` |
-| `<base>_dehom.EM` | strain, the same layout |
+| `<base>_dehom.EM` | strain, the same layout; the shear columns are engineering, `2E12 2E13 2E23` |
 | `<base>_dehom.U` | displacement `U1 U2 U3` |
-| `<base>_dehom_elemental.SM`, `_elemental.U` | the per-element mean at the element centroid, for comparison with a centroidal 3-D finite element stress |
+| `<base>_dehom_elemental.SM`, `_elemental.EM`, `_elemental.U` | the per-element mean at the element centroid, for comparison with a centroidal 3-D finite element stress |
 
 Each `.SM`, `.EM` and `.U` file opens with two comment lines (the title, then the point set, the
 frame, and `z = 0 is the reference surface`) and a column header. With `--global` the stress and
-strain files are named `_global.SM`, `_global.EM` and `_elemental_global.SM`; `.U` keeps its
-name, since it is never rotated. From Python, `export_gauss` on the `dehom_fields` output (the SG
-axes) writes the `_global.SM`/`_global.EM` names too; after `material_frame_fields` (the ply axes),
-`frame_kind="material"` writes the bare `.SM`/`.EM` names.
+strain files are named `_global.SM`, `_global.EM`, `_elemental_global.SM` and
+`_elemental_global.EM`; `.U` keeps its name, since it is never rotated. From Python, `export_gauss`
+on the `dehom_fields` output (the SG axes) writes the `_global.SM`/`_global.EM` names too; after
+`material_frame_fields` (the ply axes), `frame_kind="material"` writes the bare `.SM`/`.EM` names.
+
+The displacement is always in the SG axes, on both frames. The `.vtk` arrays `U1 U2 U3` and `U`
+are the per-element mean of the `.U` rows, the same numbers as `_elemental.U`. `U` is a `VECTORS`
+array: ParaView warps the mesh by it after `Cell Data to Point Data`. `VECTORS U` is the
+displacement in the `.vtk` point axes. The points hold the SG coordinates in their first slots,
+so `U` is `(U2, U3, U1)` on a 2-D SG, `(U3, U1, U2)` on a 1-D SG and `(U1, U2, U3)` on a 3-D SG.
+With a `.ff`, the command
+line adds the macro rigid motion $u + (C - I)\,y$ of its `u`, `theta` and `C` keys to the
+fluctuation, $y$ being the `x y z` columns of the `.U`. The titles say which one a file holds:
+the `.U` title reads `TOTAL displacement` with a `.ff`, and `FLUCTUATION-ONLY` without one (the
+state then comes from `epsilon_bar:` in the yaml, and `export_gauss` from Python writes the
+fluctuation unless `u_rigid=True`). The `.vtk` title says the same before its `(frame)` group.
+An element type with no VTK cell map falls back to a point cloud: one vertex per Gauss point,
+the same arrays as `POINT_DATA`, without `mat_id`.
 
 **msg-shell**, prefix `<base>_dehom`:
 
@@ -235,8 +249,17 @@ axes) writes the `_global.SM`/`_global.EM` names too; after `material_frame_fiel
 | file | content |
 |---|---|
 | `<base>_dehom.txt` | one row per recovery point: `elem`, `zeta` (0 at the outer mold line, 1 at the inner), `y2`, `y3`, `z` from the reference surface, `S11 S22 S33 S23 S13 S12` (Pa), `E11 E22 E33 2E23 2E13 2E12`, `u1 u2 u3` (m), and, unless `junction: off`, the two extra columns `jflag`, `jdist` |
-| `<base>_dehom.vtk` | the exploded recovery mesh: one quad per element and depth band, each carrying its own point's stress as `CELL_DATA`, never node-averaged, plus `jflag` and `jdist` unless `junction: off` |
+| `<base>_dehom.vtk` | the exploded recovery mesh: one quad per element and depth band, each carrying its own point's values as `CELL_DATA`, never node-averaged: `S11 S22 S33 S23 S13 S12`, `jflag` and `jdist` unless `junction: off`, then `E11 E22 E33 2E23 2E13 2E12`, `U1 U2 U3` and `VECTORS U` |
 | `<base>_dehom.junc` | the junction sidecar: every junction's coordinates, topology, overlap area and per-wall ownership, headed by the census; not written with `junction: off` |
+
+The `.vtk` carries, per quad, the 15 fields of its recovery point as `CELL_DATA`, the values the
+`.txt` prints: `S11 S22 S33 S23 S13 S12`, `E11 E22 E33 2E23 2E13 2E12` (engineering shears) and
+`U1 U2 U3` (the `.txt`'s `u1 u2 u3`), plus `VECTORS U` for a warp in ParaView. The strain and
+displacement arrays follow `S11`-`S12`, `jflag` and `jdist`, so the older arrays keep their
+names, values and place, and `junction: exclude` puts NaN in the `.txt` only, never in the `.vtk`.
+The stresses and strains are in the frame of the run (the `.txt` header: material = ply axes,
+the default; plate = wall axes with `--global`). `U1 U2 U3` and `VECTORS U` are in the section
+axes `x1 x2 x3`, the axes of the `.vtk` points `(0, y2, y3)`.
 
 **Plate field** (`rm_dehom_ff.py`), named after the station table:
 

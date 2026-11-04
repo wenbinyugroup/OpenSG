@@ -414,8 +414,9 @@ before reading the stresses as failure indices.
 | `RHC_SW_2UC_45.out` | Timoshenko stiffness, compliance and mass matrix, timed; rewritten on every run |
 | `RHC_SW_2UC_45_beam_Timo.out` | the bare $6\times6$ written by `np.savetxt` with one header line, ready for `np.loadtxt` |
 | `RHC_SW_2UC_45_dehom.txt` | Gauss table: `GP_Index`, `Coord_X`, `Coord_Y`, six `Eps_*`, six `Sig_*`; 19 920 rows (6640 triangles, 3 points each) |
-| `RHC_SW_2UC_45_dehom.vtk` | the same points as an ASCII unstructured grid of vertex cells, one `SCALARS` field per component, for ParaView |
-| `RHC_SW_2UC_45_dehom_global.SM`, `_dehom_global.EM`, `_dehom.U` | stress and strain in the SG axes (the `_global` tag; the ply-axes files of `opensg <name>.yaml D` keep the bare `_dehom.SM`/`.EM` names) and the fluctuation displacement: `x y z` columns (the SG coordinates in the last `n_sg` of them), then components in the order 11 22 33 12 13 23 |
+| `RHC_SW_2UC_45_dehom.vtk` | the exploded SG mesh as an ASCII unstructured grid for ParaView: 6640 triangles, each with its own corners and the mean of its 3 Gauss values as `CELL_DATA`: six `Eps_*`, six `Sig_*`, `mat_id`, `U1 U2 U3` and the vector `U` (the displacement, in the SG axes) |
+| `RHC_SW_2UC_45_dehom_global.SM`, `_dehom_global.EM`, `_dehom.U` | stress and strain in the SG axes (the `_global` tag; the ply-axes files of `opensg <name>.yaml D` keep the bare `_dehom.SM`/`.EM` names) and the fluctuation displacement: `x y z` columns (the SG coordinates in the last `n_sg` of them), then components in the order 11 22 33 12 13 23 (strain shears engineering, `2E12 2E13 2E23`) |
+| `RHC_SW_2UC_45_dehom_elemental_global.SM`, `_elemental_global.EM`, `_elemental.U` | the per-element means of the same fields, one row per element at its centroid |
 | `RHC_SW_2UC_45_mesh.png` | the SG, elements coloured by material |
 
 The `.txt` and `.vtk` files use the SwiftComp component order `xx yy zz yz xz xy`; the `.SM`, `.EM`

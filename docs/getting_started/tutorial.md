@@ -775,7 +775,7 @@ and closes with `Local field files are computed and stored.` and one `Time taken
 * - `iea_s10_shell_dehom.txt`
   - 2790 rows, one per recovery point: `elem`, `zeta`, `y2`, `y3`, `z` from the reference surface, the six stresses `S11 S22 S33 S23 S13 S12` (Pa), the six strains `E11 E22 E33 2E23 2E13 2E12`, the displacements `u1 u2 u3` (m), and the junction columns `jflag` and `jdist`
 * - `iea_s10_shell_dehom.vtk`
-  - the recovery mesh, one quad per element and depth band, each carrying its own stress as cell data
+  - the recovery mesh, one quad per element and depth band, each carrying its own stresses, strains and displacements as cell data (the `.txt` values; the displacement as `U1 U2 U3` and `VECTORS U`)
 * - `iea_s10_shell_dehom.junc`
   - every junction with its coordinates, topology, overlap area and the wall that owns it
 ```

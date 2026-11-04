@@ -477,10 +477,13 @@ SwiftComp storage order $(xx, yy, zz, yz, xz, xy)$ — and the fluctuation-only 
 $(E, Q, 3)$. `plate_dehom_2d` is a two-output view of the same single pass, and `gauss_coords`
 returns the physical coordinates of the recovery points.
 
-`export_gauss` writes five files from one recovery: `<prefix>.txt` (the Gauss table),
-`<prefix>.vtk` (a point cloud for ParaView), and the OpenSG dehom files `<prefix>_global.SM`
-(stress), `<prefix>_global.EM` (strain) and `<prefix>.U` (fluctuation displacement). The
-`_global` tag says the clouds are in the SG axes, as `dehom_fields` returns them; after
+`export_gauss` writes from one recovery: `<prefix>.txt` (the Gauss table), `<prefix>.vtk` (the
+exploded SG mesh for ParaView, each element carrying the mean of its Gauss values: the six
+strains, the six stresses, `mat_id`, and `U1 U2 U3` with the vector `U`), the OpenSG dehom files
+`<prefix>_global.SM` (stress), `<prefix>_global.EM` (strain) and `<prefix>.U` (fluctuation
+displacement, or the total one with `u_rigid=True`), and their per-element means
+`<prefix>_elemental_global.SM`, `_elemental_global.EM` and `_elemental.U`. The displacement stays
+in the SG axes. The `_global` tag says the clouds are in the SG axes, as `dehom_fields` returns them; after
 `material_frame_fields` (the ply axes), `frame_kind="material"` writes the bare `<prefix>.SM` and
 `<prefix>.EM`. Note the printed component
 order in the `.SM`/`.EM`/`.U` files is $11\;22\;33\;12\;13\;23$ — the reorder happens on write

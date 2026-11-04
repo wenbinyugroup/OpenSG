@@ -84,7 +84,7 @@ a classical beam homogenization at the OML reference.
                         #   build_solid_bundle(..., cell_area=omega)
     junction: flag      # OPTIONAL, D only -- junction-aware recovery:
                         #   off     = no extra columns, no sidecar (the
-                        #             pre-junction behaviour, bit-identical)
+                        #             pre-junction .txt, bit-identical)
                         #   flag    = (default) NON-MUTATING: append jflag
                         #             and jdist to <base>_dehom.txt, add
                         #             them as .vtk CELL_DATA, write the
@@ -150,7 +150,9 @@ cross-section rings (beam refined: 1 and the n_model 3 equivalent solid) AND
 the 3-D shell SG -- also writes that step-1 record as <base>_ABDG.out
 (8x8 Reissner-Mindlin ABDG + compliance, one block per section).  D drives the
 RM two-step recovery from the `.ff` macro state next to the yaml and
-additionally writes <base>_dehom.txt/.vtk.
+additionally writes <base>_dehom.txt/.vtk.  The .vtk carries the 15 fields
+of every recovery station (6 stresses, 6 strains, 3 displacements) and the
+vector U.
 """
 import os
 import sys
@@ -794,8 +796,16 @@ def dehom_write(B, eps, out_base, state=None, n_depth=9, frame="material",
     plus, when a .ff macro state is given, the macro rigid motion
     u_i + (C_ij - d_ij) y_j  (VABS recovery form).
 
+    The .vtk holds one quad per (element, depth band).  Each quad carries the
+    15 fields of its station as CELL_DATA, the values the .txt prints:
+    S11 S22 S33 S23 S13 S12, E11 E22 E33 2E23 2E13 2E12 (engineering shears)
+    and U1 U2 U3 (the .txt's u1 u2 u3), plus VECTORS U = (U1, U2, U3) for a
+    warp.  No two quads share a point, so Cell Data to Point Data is exact.
+    The strain and displacement arrays follow the older arrays, so every
+    older array keeps its name, its values and its place in the file.
+
     ``junction`` is the yaml `junction:` tier (sg_dehom_junction): "off"
-    reproduces the pre-junction files byte for byte; "flag" (the default)
+    reproduces the pre-junction .txt byte for byte; "flag" (the default)
     appends the two junction columns jflag/jdist to the .txt, adds them as
     extra .vtk CELL_DATA scalars, writes the <out_base>.junc sidecar and
     prints the census, changing NO field value; "exclude" additionally puts
@@ -899,7 +909,8 @@ def dehom_write(B, eps, out_base, state=None, n_depth=9, frame="material",
     np.savetxt(out_base + ".txt", tab, fmt=fmt, header=head)
 
     # exploded-mesh VTK: one quad per (element, depth band), each carrying the
-    # stress of its own recovery station as CELL_DATA -- never node-averaged
+    # stress, strain and displacement of its own recovery station as
+    # CELL_DATA -- never node-averaged
     emid, nvec, h, frac = G["emid"], G["nvec"], G["h"], G["frac"]
     corners = np.asarray(B["corners"]); rc = np.asarray(B["red_cells"])
     edge = np.arange(n_depth + 1)/n_depth
@@ -939,3 +950,19 @@ def dehom_write(B, eps, out_base, state=None, n_depth=9, frame="material",
             f.write("SCALARS jdist float 1\nLOOKUP_TABLE default\n")
             f.write("".join("%.8e\n" % v for v in
                             np.where(np.isfinite(jdist), jdist, -1.0)))
+        # the strains and the displacement of the same stations, the .txt's
+        # E11 .. 2E12 and u1 u2 u3 columns.  They come after the arrays
+        # above, so the older arrays keep their place in the file.  The
+        # values are the recovered ones in every tier: `junction: exclude`
+        # puts NaN in the .txt only, never in the .vtk.
+        for j, nm in enumerate(("E11", "E22", "E33", "2E23", "2E13", "2E12")):
+            f.write("SCALARS %s float 1\nLOOKUP_TABLE default\n" % nm)
+            f.write("".join("%.8e\n" % v for v in R["strain"][:, j]))
+        for j, nm in enumerate(("U1", "U2", "U3")):
+            f.write("SCALARS %s float 1\nLOOKUP_TABLE default\n" % nm)
+            f.write("".join("%.8e\n" % v for v in U[:, j]))
+        # the same displacement as one vector, for ParaView's Warp By Vector
+        # (after Cell Data to Point Data, exact here: no two quads share a
+        # point)
+        f.write("VECTORS U float\n")
+        f.write("".join("%.8e %.8e %.8e\n" % (u[0], u[1], u[2]) for u in U))

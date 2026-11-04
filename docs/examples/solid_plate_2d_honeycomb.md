@@ -425,9 +425,11 @@ line (`np.savetxt` format), not the timed `.K` layout.
 * - `RHC_SW_2UC_45_dehom.txt`
   - one row per Gauss point: `GP_Index`, `Coord_X`, `Coord_Y`, then `Eps_xx Eps_yy Eps_zz Eps_yz Eps_xz Eps_xy` and `Sig_xx` through `Sig_xy`, in SwiftComp component order
 * - `RHC_SW_2UC_45_dehom.vtk`
-  - ASCII `UNSTRUCTURED_GRID` point cloud of the same 19 920 points, each strain and stress component as its own `SCALARS` array
+  - ASCII `UNSTRUCTURED_GRID` of the exploded SG mesh: the 6640 triangles, each with its own corners and the mean of its 3 Gauss values as `CELL_DATA`: six `Eps_*`, six `Sig_*`, `mat_id`, `U1 U2 U3` and the vector `U` (the displacement, in the SG axes)
 * - `RHC_SW_2UC_45_dehom_global.SM`, `_dehom_global.EM`, `_dehom.U`
-  - the same fields in the layout of {doc}`solid_plate_1d_recovery`: `x y z` then `S11 S22 S33 S12 S13 S23` (stress), `E11` through `E23` (strain), `U1 U2 U3` (displacement); the `_global` tag names the SG axes these clouds are in (the ply-axes files of `opensg <name>.yaml D` keep the bare `_dehom.SM`/`.EM` names)
+  - the same fields in the layout of {doc}`solid_plate_1d_recovery`: `x y z` then `S11 S22 S33 S12 S13 S23` (stress), `E11 E22 E33 2E12 2E13 2E23` (strain, engineering shears), `U1 U2 U3` (displacement); the `_global` tag names the SG axes these clouds are in (the ply-axes files of `opensg <name>.yaml D` keep the bare `_dehom.SM`/`.EM` names)
+* - `RHC_SW_2UC_45_dehom_elemental_global.SM`, `_elemental_global.EM`, `_elemental.U`
+  - the per-element means of the same fields, one row per element at its centroid
 * - `RHC_SW_2UC_45.out`, `RHC_SW_2UC_45_mesh.png`
   - the timed law and the mesh figure, from the `plate_homo_2d` call the script makes first
 ```

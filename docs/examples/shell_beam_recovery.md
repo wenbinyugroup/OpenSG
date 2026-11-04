@@ -341,7 +341,7 @@ $A_j = \sum t_i t_j / |\sin\theta_{ij}|$ and ownership decision.
 | `write_dehom_vtk.py` | driver | exploded-mesh VTK of the driver's recovery |
 | `iea_s10_shell_Timo.out`, `iea_s10_shell_ABDG.out` | output | the homogenization that precedes the recovery |
 | `iea_s10_shell_dehom.txt` | output (`D`) | 2790 rows: `elem`, `zeta`, `y2`, `y3`, `z`, six stresses (Pa), six strains, three displacements, then `jflag` and `jdist` |
-| `iea_s10_shell_dehom.vtk` | output (`D`) | one quad per element and depth band, each with its own station's stress as `CELL_DATA` (never node-averaged), plus `jflag` and `jdist` |
+| `iea_s10_shell_dehom.vtk` | output (`D`) | one quad per element and depth band, each with its own station's values as `CELL_DATA` (never node-averaged): `S11 S22 S33 S23 S13 S12`, `jflag` and `jdist`, then `E11 E22 E33 2E23 2E13 2E12`, `U1 U2 U3` and `VECTORS U` |
 | `iea_s10_shell_dehom.junc` | output (`D`) | junction census, coordinates, topology, overlap area and ownership |
 | `iea_s10_dehom_shell.txt` | output (driver) | 2790 rows: `elem`, `y2`, `y3`, `z`, `zeta`, ply angle (deg), six stresses (MPa); the header repeats frame, $\eta$ and `FF` |
 | `iea_s10_dehom_stress.png` | output (driver) | the section stress cloud, $\sigma_{11}$ and $\sigma_{12}$ |

@@ -501,13 +501,21 @@ def main(argv=None):
             # U_i = u_i + (C_ij - d_ij) y_j + w_i  (VABS recovery form)
             xy = np.asarray(gauss_coords(r))
             xy = xy.reshape(-1, xy.shape[-1])      # (N, n_sg), n_sg = 1..3
+            # y in the U components: the SG coordinates take the LAST
+            # n_sg slots, as in the x y z columns of the .U/.SM files (a
+            # beam section is (0, y2, y3), a 1-D plate SG (0, 0, z)).
+            # 2.1.0 put them in the first slots, wrong for theta or C.
+            n_sg = min(3, xy.shape[1])
             y = np.zeros((xy.shape[0], 3))
-            y[:, :min(3, xy.shape[1])] = xy[:, :3]
+            y[:, 3 - n_sg:] = xy[:, :n_sg]
             rig = state["u"] + y @ (state["C"] - np.eye(3)).T
             U = np.asarray(U).reshape(-1, 3) + rig
             U = U.reshape(np.asarray(Gam).shape[:-1] + (3,))
+        # u_rigid: the .U, _elemental.U and .vtk titles say whether U
+        # holds the .ff rigid motion added above
         export_gauss(r, Gam, Sig, base + "_dehom", U_eqd=U,
-                     frame=frame_note, frame_kind=frame)
+                     frame=frame_note, frame_kind=frame,
+                     u_rigid=state is not None)
         print("Local field files are computed and stored.")
         print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
         _print_gpu_peak()

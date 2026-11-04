@@ -1386,10 +1386,13 @@ def _write_field(path, name, unit, F, xyz, lattice_note, title):
     """The rm_plate_1D .SM/.EM/.U text layout (rm_dehom.write_field):
     rows x y z + components, printed order 11 22 33 12 13 23 (the SGIDX
     reorder happens HERE -- storage stays SwiftComp xx yy zz yz xz xy),
-    or U1 U2 U3 for a 3-column field."""
+    or U1 U2 U3 for a 3-column field.  Strain shears are engineering
+    (gamma = 2 eps), so the .EM labels them 2E12 2E13 2E23 (since
+    2.1.1; 2.1.0 wrote E12 E13 E23 for the same numbers)."""
     F = np.asarray(F).reshape(-1, F.shape[-1])
     if F.shape[-1] == 6:
-        cols = ["%s%s[%s]" % (name, c, unit) for c in ORDER]
+        cols = ["%s%s%s[%s]" % ("2" if name == "E" and c[0] != c[1]
+                                else "", name, c, unit) for c in ORDER]
         F = F[:, [SGIDX[c] for c in ORDER]]
     else:
         cols = ["U1[m]", "U2[m]", "U3[m]"]
@@ -1399,6 +1402,26 @@ def _write_field(path, name, unit, F, xyz, lattice_note, title):
         f.write("# %12s %14s %14s" % ("x[m]", "y[m]", "z[m]")
                 + "".join(" %14s" % c for c in cols) + "\n")
         np.savetxt(f, np.hstack([xyz, F]), fmt="%14.6e", delimiter=" ")
+
+
+def _write_u_vtk(f, U, n_sg):
+    """The displacement block of a legacy .vtk data section: SCALARS U1
+    U2 U3 and VECTORS U (for ParaView's warp), one row per cell (or per
+    point in the point-cloud fallback), %.6e like the other arrays.
+
+    U1 U2 U3 are in the SG axes.  VECTORS U is the same displacement in
+    the .vtk point axes: the points hold the n_sg SG coordinates in
+    their FIRST slots, so slot k of a point is SG axis (3 - n_sg + k) % 3.
+    A 2-D SG writes (U2, U3, U1), a 1-D SG (U3, U1, U2), a 3-D SG
+    (U1, U2, U3).
+
+    In:  f open text file; U (n, 3) displacement in the SG axes;
+         n_sg int SG dimension (1, 2 or 3)."""
+    for i in range(3):
+        f.write("SCALARS U%d float 1\nLOOKUP_TABLE default\n" % (i + 1))
+        np.savetxt(f, U[:, i], fmt='%.6e')
+    f.write("VECTORS U float\n")
+    np.savetxt(f, U[:, [(3 - n_sg + k) % 3 for k in range(3)]], fmt='%.6e')
 
 
 def _vtk_corner_cell(n_sg, N):
@@ -1459,11 +1482,10 @@ def _frame_kind(frame, frame_kind):
 
 
 def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
-                 U_eqd=None, frame=None, frame_kind=None):
+                 U_eqd=None, frame=None, frame_kind=None, u_rigid=False):
     """The .txt table + rendered .vtk of the recovered Gauss fields,
     PLUS the OpenSG dehom files <prefix>.SM (stress) / .EM (strain) and
-    -- when U_eqd from dehom_fields is given -- .U (fluctuation
-    displacement).
+    -- when U_eqd from dehom_fields is given -- .U (displacement).
 
     The .vtk is the EXPLODED parent-mesh rendering: every element is
     emitted with its OWN copy of its corner nodes and carries the
@@ -1492,7 +1514,22 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
     material-frame names (_frame_kind).  Since 2.1.1: 2.1.0 wrote the
     bare names unless the note contained 'global', so a frameless 2.1.0
     call's <prefix>.SM is now <prefix>_global.SM; a file of the other
-    frame's name found next to the prefix is reported, never removed."""
+    frame's name found next to the prefix is reported, never removed.
+
+    Displacement (since 2.1.1): with U_eqd the .vtk also carries U1 U2
+    U3 (SCALARS) and VECTORS U, after the strain, stress and mat_id
+    arrays.  They are the same per-element Gauss mean (per Gauss point
+    in the point-cloud fallback) and always in the SG axes: U is never
+    rotated, whatever the frame of the strain and stress.  VECTORS U is
+    the displacement in the .vtk point axes (the points hold the SG
+    coordinates in their first slots): (U2, U3, U1) on a 2-D SG,
+    (U3, U1, U2) on a 1-D SG, (U1, U2, U3) on a 3-D SG.  U_eqd is the
+    fluctuation that dehom_fields returns unless the caller added the
+    macro rigid motion u + (C - I) y of a .ff (the command line does
+    when a .ff is given): u_rigid=True says so.  The .vtk title, the .U
+    and the _elemental.U titles state which one the file holds.  The
+    per-element strain is written too, <prefix>_elemental.EM (with the
+    _global tag for SG-axes clouds), next to the _elemental.SM."""
     kind = _frame_kind(frame, frame_kind)
     if frame is None:
         frame = ("global (SG axes)" if kind == "global"
@@ -1502,6 +1539,21 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
     stresses = np.asarray(Sigma_eqs).reshape(-1, 6)
     d = coords.shape[1]
     num_pts = strains.shape[0]
+    # the displacement rows, in the same flat Gauss order as the strains
+    Uf = None if U_eqd is None else np.asarray(U_eqd, float).reshape(-1, 3)
+    if Uf is not None and Uf.shape[0] != num_pts:
+        raise ValueError("export_gauss: U_eqd has %d Gauss rows, the strain"
+                         " %d" % (Uf.shape[0], num_pts))
+    # the .vtk title states what U holds; no parenthesis here, so the
+    # title still ends with the one '(frame)' group readers look for
+    if Uf is None:
+        u_tag = ""
+    elif u_rigid:
+        u_tag = (", U1-U3 in the SG axes = fluctuation + the .ff macro"
+                 " rigid motion u + [C - I] y")
+    else:
+        u_tag = (", U1-U3 in the SG axes = fluctuation only, no macro"
+                 " rigid motion")
 
     gp = np.arange(1, num_pts + 1).reshape(-1, 1)
     combined = np.hstack((gp, coords, strains, stresses))
@@ -1522,8 +1574,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
             if d < 3 else coords
         with open(prefix + ".vtk", "w") as f:
             f.write("# vtk DataFile Version 3.0\nGauss Point Voigt Data"
-                    " (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
-                    % (frame or "frame unspecified"))
+                    "%s (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
+                    % (u_tag, frame or "frame unspecified"))
             f.write("POINTS %d float\n" % num_pts)
             np.savetxt(f, coords3, fmt='%.6e')
             f.write("\nCELLS %d %d\n" % (num_pts, num_pts * 2))
@@ -1541,6 +1593,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
                 f.write("SCALARS Sig_%s float 1\nLOOKUP_TABLE default\n"
                         % nm)
                 np.savetxt(f, stresses[:, i], fmt='%.6e')
+            if Uf is not None:
+                _write_u_vtk(f, Uf, d)         # the points: SG coords first
 
     # ---- the exploded parent-mesh .vtk (per-batch: a mixed SG's flat
     # clouds are consumed in the same batch order dehom_fields wrote)
@@ -1560,7 +1614,7 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
             mids = np.asarray(r["sc"]["mat_id"], int)
             mat_e = ([mids[np.asarray(i)] for i in r["batch_idx"]]
                      if "batch_idx" in r else [mids])
-        pts, conn, ctyp, e_val, e_mat = [], [], [], [], []
+        pts, conn, ctyp, e_val, e_mat, e_u = [], [], [], [], [], []
         off = row = 0
         for bi, (x_b, Q, (vt, corner)) in enumerate(zip(xbs, Qs, maps)):
             Eb, _N, dd = x_b.shape
@@ -1577,6 +1631,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
                 stresses[row:row + Eb * Q].reshape(Eb, Q, 6).mean(1)]))
             if mat_e is not None:
                 e_mat.append(mat_e[bi].astype(float))
+            if Uf is not None:
+                e_u.append(Uf[row:row + Eb * Q].reshape(Eb, Q, 3).mean(1))
             off += Eb * k
             row += Eb * Q
         pts = np.vstack(pts)
@@ -1585,8 +1641,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
         with open(prefix + ".vtk", "w") as f:
             f.write("# vtk DataFile Version 3.0\n"
                     "OpenSG dehom, exploded SG mesh, per-element Gauss"
-                    " mean (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
-                    % (frame or "frame unspecified"))
+                    " mean%s (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
+                    % (u_tag, frame or "frame unspecified"))
             f.write("POINTS %d float\n" % len(pts))
             np.savetxt(f, pts, fmt='%.8e')
             sz = sum(c.size for c in conn)
@@ -1607,6 +1663,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
             if mat_e is not None:
                 f.write("SCALARS mat_id float 1\nLOOKUP_TABLE default\n")
                 np.savetxt(f, np.concatenate(e_mat), fmt='%.1f')
+            if Uf is not None:
+                _write_u_vtk(f, np.vstack(e_u), r["n_sg"])
 
     # the OpenSG dehom files: SG coords into the LAST n_sg of (x, y, z)
     xyz = np.zeros((num_pts, 3))
@@ -1638,11 +1696,18 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
                  "%s %s dehom strain" % (prefix, model))
     wrote_u = ""
     if U_eqd is not None:
-        _write_field(prefix + ".U", "U", "m", np.asarray(U_eqd), xyz,
-                     note, "%s %s dehom FLUCTUATION-ONLY displacement "
-                     "(no macro contribution at a unit-state SG "
-                     "recovery; beam = w0 + w1s warping)"
-                     % (prefix, model))
+        # the title says what U holds: 2.1.0 called it FLUCTUATION-ONLY
+        # also when the command line had added the .ff rigid motion
+        if u_rigid:
+            u_title = ("%s %s dehom TOTAL displacement = fluctuation (beam"
+                       " = w0 + w1s warping) + the .ff macro rigid motion"
+                       " u + (C - I) y, SG axes" % (prefix, model))
+        else:
+            u_title = ("%s %s dehom FLUCTUATION-ONLY displacement "
+                       "(no macro contribution at a unit-state SG "
+                       "recovery; beam = w0 + w1s warping)"
+                       % (prefix, model))
+        _write_field(prefix + ".U", "U", "m", Uf, xyz, note, u_title)
         wrote_u = " / .U"
 
     # ---- per-ELEMENT export: the Gauss mean at the element centroid.
@@ -1658,11 +1723,13 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
         return out
 
     row = 0
-    Sc, Uc, Xc = [], [], []
+    Sc, Ec, Uc, Xc = [], [], [], []
     ub = (_batches(U_eqd, 3) if U_eqd is not None else None)
+    gb = _batches(Gamma_eqs, 6)
     for bi, Sb in enumerate(_batches(Sigma_eqs, 6)):
         Eb, Qb = Sb.shape[:2]
         Sc.append(Sb.mean(axis=1))
+        Ec.append(gb[bi].mean(axis=1))
         Xc.append(xyz[row:row + Eb * Qb].reshape(Eb, Qb, 3).mean(axis=1))
         if ub is not None:
             Uc.append(ub[bi].mean(axis=1))
@@ -1673,13 +1740,23 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
     _write_field(prefix + "_elemental" + ftag + ".SM", "S", "Pa",
                  np.vstack(Sc), np.vstack(Xc), note_e,
                  "%s %s dehom stress, per-element mean" % (prefix, model))
+    _write_field(prefix + "_elemental" + ftag + ".EM", "E", "-",
+                 np.vstack(Ec), np.vstack(Xc), note_e,
+                 "%s %s dehom strain, per-element mean" % (prefix, model))
     if ub is not None:
         _write_field(prefix + "_elemental.U", "U", "m", np.vstack(Uc),
                      np.vstack(Xc), note_e,
-                     "%s %s dehom displacement, per-element mean"
-                     % (prefix, model))
+                     "%s %s dehom displacement, per-element mean, %s"
+                     % (prefix, model,
+                        "fluctuation + the .ff macro rigid motion"
+                        if u_rigid else "fluctuation only"))
     # every name after the first is a suffix of the prefix
     print("export_gauss: %d points -> %s.txt / .vtk / %s.SM / %s.EM%s"
           " / _elemental%s.SM%s (%s frame)"
           % (num_pts, prefix, ftag, ftag, wrote_u, ftag,
              "" if ub is None else " / _elemental.U", kind))
+    print("export_gauss: also _elemental%s.EM; .vtk displacement: %s"
+          % (ftag, "none (no U_eqd)" if Uf is None else
+             "U1-U3 + VECTORS U, SG axes, %s"
+             % ("fluctuation + the .ff macro rigid motion" if u_rigid
+                else "fluctuation only")))
