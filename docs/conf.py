@@ -6,7 +6,7 @@ checkout without the JAX or basix runtime (pip install -r docs/requirements.txt)
 project = "OpenSG"
 author = "Akshat Bagla"
 copyright = "2026, Akshat Bagla"
-release = "2.2.0"
+release = "2.1.1"
 
 extensions = [
     "myst_parser",

@@ -1489,7 +1489,7 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
     decides (or, for a free-text note, its words when they name one
     frame); with neither the clouds are SG-global (the dehom_fields
     output), so an API call never writes SG-global stresses under the
-    material-frame names (_frame_kind).  Since 2.2.0: 2.1.0 wrote the
+    material-frame names (_frame_kind).  Since 2.1.1: 2.1.0 wrote the
     bare names unless the note contained 'global', so a frameless 2.1.0
     call's <prefix>.SM is now <prefix>_global.SM; a file of the other
     frame's name found next to the prefix is reported, never removed."""

@@ -85,7 +85,7 @@ is given as it appears there.
 {numref}`tab-ref-versions` lists the released versions. The current line, OpenSG 2.x, runs on JAX
 and replaces the 1.0 code, which was written on FEniCSx.
 
-% source: README.md (Versions, Documentation); CITATION.cff (version, date-released); pyproject.toml (version); CHANGELOG.md (2.2.0); annotations of the release tags (`git tag -n v2.0.0 v2.1.0` in the repository)
+% source: README.md (Versions, Documentation); CITATION.cff (version, date-released); pyproject.toml (version); CHANGELOG.md (2.1.1); annotations of the release tags (`git tag -n v2.0.0 v2.1.0` in the repository)
 ```{list-table} Versions of OpenSG
 :header-rows: 1
 :name: tab-ref-versions
@@ -93,9 +93,9 @@ and replaces the 1.0 code, which was written on FEniCSx.
 * - Version
   - Branch and tag
   - Content
-* - 2.2.0
+* - 2.1.1
   - `akshat/opensg`, no tag yet
-  - `opensg` 2.2.0, unreleased: the per-element frame block `orientation:` (the legacy name `elementOrientations` still read), the solid beam D route with the transverse-shear recovery, and the `_dehom_global` names of the SG-axes recovery files; see `CHANGELOG.md`. This documentation describes this version.
+  - `opensg` 2.1.1, unreleased: the per-element frame block `orientation:` (the legacy name `elementOrientations` still read), the solid beam D route with the transverse-shear recovery, and the `_dehom_global` names of the SG-axes recovery files; see `CHANGELOG.md`. This documentation describes this version.
 * - 2.1.0
   - `main`, tag `v2.1.0`
   - `opensg` 2.1.0, released 2026-10-09: the per-element frames (`elementOrientations`, the legacy spelling of `orientation`) applied on every homogenization route (command line included); `pypardiso` declared.
