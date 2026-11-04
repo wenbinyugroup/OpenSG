@@ -327,6 +327,10 @@
 <li class="toctree-l2"><a class="reference internal" href="tutorials/02-beam-dehomogenization.html">02 Beam dehomogenization: an aluminium bar</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorials/03-plate-homogenization.html">03 Plate homogenization: a corrugated steel sheet</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorials/04-plate-dehomogenization.html">04 Plate dehomogenization: a corrugated steel sheet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/05-airfoil-homogenization.html">05 Airfoil homogenization: a NACA 4418 section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/06-airfoil-dehomogenization.html">06 Airfoil dehomogenization: a NACA 4418 section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/07-blade-homogenization.html">07 Blade homogenization: the IEA-22 blade at r = 0.2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/08-blade-dehomogenization.html">08 Blade dehomogenization: the IEA-22 blade at r = 0.2</a></li>
 </ul>
 </details></li>
 </ul>
@@ -425,7 +429,7 @@ gives the homogenized properties and, when you give a load, the local stress and
 <td><p>a laminate or a sandwich layup: the 1-D layup SG and its layup picture</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-shell-beam</span></code></p></td>
-<td><p>a thin-walled section as a ring of shell walls: the Timoshenko 6x6, the classical 4x4 and the mass matrix, a layup swap on the same ring, and every ply's stresses under the six beam loads</p></td>
+<td><p>a thin-walled section as a ring of shell walls: the Timoshenko 6x6, the classical 4x4 and the mass matrix, a layup swap on the same ring, and every ply's in-plane stresses S11, S22 and S12 under the six beam loads. The transverse stresses S13, S23 and S33 and the stress peaks at web junctions are not recovered reliably.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-solid-beam</span></code></p></td>
 <td><p>a cross-section of solid elements: the Timoshenko 6x6, the Euler-Bernoulli 4x4, the mass matrix and the section centres, and the local stresses under the axial force, the torque and the bending moments (F1, M1, M2, M3). The shear forces F2 and F3 are not recovered.</p></td>
@@ -452,7 +456,7 @@ filled in with its usual values. Every assumed value is listed in the reply.</p>
 <h2>How to read a tutorial<a class="headerlink" href="#how-to-read-a-tutorial" title="Link to this heading">#</a></h2>
 <p>Each step is a prompt, then CompositesAI's response.</p>
 <p>To try one, open a chat at <a class="reference external" href="https://compositesai.com">compositesai.com</a> and send each prompt in turn.
-Tutorials 02 and 04 continue the chats of 01 and 03, so send their prompts in the same chat.</p>
+Tutorials 02, 04, 06 and 08 continue the chats of 01, 03, 05 and 07, so send their prompts in the same chat.</p>
 </section>
 <section id="tutorials">
 <h2>Tutorials<a class="headerlink" href="#tutorials" title="Link to this heading">#</a></h2>

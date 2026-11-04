@@ -323,6 +323,10 @@
 <li class="toctree-l2"><a class="reference internal" href="02-beam-dehomogenization.html">02 Beam dehomogenization: an aluminium bar</a></li>
 <li class="toctree-l2"><a class="reference internal" href="03-plate-homogenization.html">03 Plate homogenization: a corrugated steel sheet</a></li>
 <li class="toctree-l2"><a class="reference internal" href="04-plate-dehomogenization.html">04 Plate dehomogenization: a corrugated steel sheet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05-airfoil-homogenization.html">05 Airfoil homogenization: a NACA 4418 section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="06-airfoil-dehomogenization.html">06 Airfoil dehomogenization: a NACA 4418 section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="07-blade-homogenization.html">07 Blade homogenization: the IEA-22 blade at r = 0.2</a></li>
+<li class="toctree-l2"><a class="reference internal" href="08-blade-dehomogenization.html">08 Blade dehomogenization: the IEA-22 blade at r = 0.2</a></li>
 </ul>
 </details></li>
 </ul>
@@ -387,10 +391,12 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="tutorials">
 <h1>Tutorials<a class="headerlink" href="#tutorials" title="Link to this heading">#</a></h1>
-<p>The tutorials come from two conversations with CompositesAI. The prompts are what the user typed, and the responses
+<p>The tutorials come from four conversations with CompositesAI. The prompts are what the user typed, and the responses
 are CompositesAI's replies as they came. Tutorials 01 and 02 follow an aluminium bar as a beam, and 02 continues 01.
-Tutorials 03 and 04 follow a corrugated steel sheet as a plate, and 04 continues 03. Tutorial 02 carries one editor
-note, set apart in a box, on a unit label in CompositesAI's reply.</p>
+Tutorials 03 and 04 follow a corrugated steel sheet as a plate, and 04 continues 03. Tutorials 05 and 06 follow the
+shell section of a NACA 4418 airfoil as a beam, and 06 continues 05. Tutorials 07 and 08 follow the shell section of
+the IEA-22 blade at r = 0.2 as a beam, and 08 continues 07. Tutorial 02 carries one editor note, set apart in a box,
+on a unit label in CompositesAI's reply.</p>
 <div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
 <div class="sd-row sd-row-cols-1 sd-row-cols-xs-1 sd-row-cols-sm-1 sd-row-cols-md-2 sd-row-cols-lg-2 sd-g-3 sd-g-xs-3 sd-g-sm-3 sd-g-md-3 sd-g-lg-3 docutils">
 <div class="sd-col sd-d-flex-row docutils">
@@ -430,6 +436,45 @@ under a beam load.</p>
 plate load.</p>
 </div>
 <a class="sd-stretched-link sd-hide-link-text reference internal" href="04-plate-dehomogenization.html"><span class="doc">04 Plate dehomogenization: a corrugated steel sheet</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+05 Airfoil homogenization: a NACA 4418 section</div>
+<p class="sd-card-text">CompositesAI builds the shell cross-section of a NACA 4418 airfoil with spar caps and two shear webs and computes its
+beam properties with OpenSG.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="05-airfoil-homogenization.html"><span class="doc">05 Airfoil homogenization: a NACA 4418 section</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+06 Airfoil dehomogenization: a NACA 4418 section</div>
+<p class="sd-card-text">This tutorial continues tutorial 05. CompositesAI recovers the local stresses in the NACA 4418 section under a shear
+force, a torque and two bending moments.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="06-airfoil-dehomogenization.html"><span class="doc">06 Airfoil dehomogenization: a NACA 4418 section</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+07 Blade homogenization: the IEA-22 blade at r = 0.2</div>
+<p class="sd-card-text">CompositesAI builds the shell section of the IEA-22 blade at r = 0.2 and computes its beam properties with OpenSG.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="07-blade-homogenization.html"><span class="doc">07 Blade homogenization: the IEA-22 blade at r = 0.2</span></a></div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+08 Blade dehomogenization: the IEA-22 blade at r = 0.2</div>
+<p class="sd-card-text">This tutorial continues tutorial 07. CompositesAI recovers the local stresses in the shell section of the IEA-22 blade
+under a bending moment.</p>
+</div>
+<a class="sd-stretched-link sd-hide-link-text reference internal" href="08-blade-dehomogenization.html"><span class="doc">08 Blade dehomogenization: the IEA-22 blade at r = 0.2</span></a></div>
 </div>
 </div>
 </div>
