@@ -469,15 +469,20 @@ export_gauss(r, Gamma, Sigma, "RHC_SW_2UC_45_dehom", U_eqd=U)
 `epsilon_bar` is whichever macro state matches the model that was homogenized: the six plate
 strains $[\varepsilon_{11}\;\varepsilon_{22}\;2\varepsilon_{12}\;\kappa_{11}\;\kappa_{22}\;
 2\kappa_{12}]$ for `n_model=2`, the six macro strains of section 3 for `n_model=3`, or the six
-Timoshenko beam strains of section 1 for `n_model=1`. The call returns, at every element Gauss
+Timoshenko beam strains of section 1 for `n_model=1` — where a beam force goes in instead as
+`dehom_fields(r, beam_force=[F1, F2, F3, M1, M2, M3])`, the transverse shear included (a
+`refined: 0` beam refuses $F_2$/$F_3$). The call returns, at every element Gauss
 point, the local strain `Gamma` $(E, Q, 6)$, the local stress `Sigma` $(E, Q, 6)$ — both in
 SwiftComp storage order $(xx, yy, zz, yz, xz, xy)$ — and the fluctuation-only displacement `U`
 $(E, Q, 3)$. `plate_dehom_2d` is a two-output view of the same single pass, and `gauss_coords`
 returns the physical coordinates of the recovery points.
 
 `export_gauss` writes five files from one recovery: `<prefix>.txt` (the Gauss table),
-`<prefix>.vtk` (a point cloud for ParaView), and the OpenSG dehom files `<prefix>.SM` (stress),
-`<prefix>.EM` (strain) and `<prefix>.U` (fluctuation displacement). Note the printed component
+`<prefix>.vtk` (a point cloud for ParaView), and the OpenSG dehom files `<prefix>_global.SM`
+(stress), `<prefix>_global.EM` (strain) and `<prefix>.U` (fluctuation displacement). The
+`_global` tag says the clouds are in the SG axes, as `dehom_fields` returns them; after
+`material_frame_fields` (the ply axes), `frame_kind="material"` writes the bare `<prefix>.SM` and
+`<prefix>.EM`. Note the printed component
 order in the `.SM`/`.EM`/`.U` files is $11\;22\;33\;12\;13\;23$ — the reorder happens on write
 only; storage stays SwiftComp order. Runnable drivers are
 `examples/OpenSG-solid/4_get_plate_dehom_from_2DSG/plate_dehom_2dsg.py` for the plate model and

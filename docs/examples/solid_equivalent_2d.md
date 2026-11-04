@@ -105,7 +105,7 @@ nodes:
 elements:
 - [5 161 65]
 # ... 1536 triangles, 1-based node numbers
-elementOrientations:
+orientation:
 - [0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
 # ... one row per element
 materials:
@@ -275,7 +275,7 @@ so $G_{23}$ has to be homogenized rather than inferred from $E_2$ and $\nu_{23}$
 The subfolder `square_section/` homogenizes a square tube cross-section (wall midline side
 $a = 1.0$, wall thickness $t = 0.03$, one orthotropic ply at $-45^\circ$) to the equivalent 3-D
 solid. The SG `square_tube_2Dsolid.yaml` has 3228 nodes and 5384 linear triangles, with
-`elementOrientations` that put $e_1$ out of plane. The material, in Pa, is
+`orientation` that put $e_1$ out of plane. The material, in Pa, is
 E = [142.0e9, 9.8e9, 9.8e9], G = [6.0e9, 6.0e9, 4.8e9], nu = [0.30, 0.30, 0.42], rho = 1600. Here
 $\omega$ is the material area, 0.12. `python solid_props_new_architecture.py` runs `plate_homo_2d`
 with `n_model = 3`. `solid_props_old_architecture.py` is an independent single-script driver that

@@ -20,11 +20,12 @@ _EMITTED = set()   # process cache of (shell_abs, solid_abs) already plotted -> 
 
 
 def _load(path):
-    d = yaml.safe_load(open(path))
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
+    d = normalize_orientation_key(yaml.safe_load(open(path)), path)
     nodes = np.array([[float(v) for v in str(r[0]).split()][:2] for r in d["nodes"]])
     elems = [[int(v) - 1 for v in str(r[0]).split()] for r in d["elements"]]
     oris = np.array([[float(v) for v in (r if isinstance(r, (list, tuple)) else [r])]
-                     for r in d["elementOrientations"]])
+                     for r in d["orientation"]])
     return nodes, elems, oris
 
 

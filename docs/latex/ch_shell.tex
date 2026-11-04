@@ -51,7 +51,7 @@ The whole capability is the chain below: one YAML in, one ring solve, four
 files out.
 
 \captree{
-  \node[inputnode] (y) {shell yaml\\ \texttt{iea\_s10\_shell.yaml}\\ nodes, elements, sections,\\ elementOrientations, \texttt{reference}};
+  \node[inputnode] (y) {shell yaml\\ \texttt{iea\_s10\_shell.yaml}\\ nodes, elements, sections,\\ orientation, \texttt{reference}};
   \node[funcnode, right=of y] (lr) {\texttt{sg\_mesh.load\_ring\_ref}\\ contour, connectivity, wall\\ normals, \texttt{k22}, laminate \texttt{D\_by};\\ \texttt{reference} $\to$ \texttt{frac}};
   \node[funcnode, below=of lr] (gm) {\texttt{msg\_rm\_plate.rm\_plate\_msg}\\ MSG wall shear block \texttt{G}\\ ($2\times2$), one per layup};
   \node[outnode, right=of gm] (abdg) {\texttt{iea\_s10\_shell\_ABDG.out}\\ $8\times8$ wall law per layup\\ (\texttt{sg\_homo.write\_abdg\_out})};
@@ -102,7 +102,8 @@ block & content & this station \\
 \texttt{sets: element} & named element sets, one per wall region & 6 sets \\
 \texttt{sections} & per set: \texttt{elementSet} plus \texttt{layup} as & 6 sections \\
                   & \texttt{[material, thickness, angle]} triples, outer ply first & \\
-\texttt{elementOrientations} & per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$ & 310 rows \\
+\texttt{orientation} & per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$ & 310 rows \\
+                    & (the OpenSG 1.x spelling \texttt{elementOrientations} is still read) & \\
 \texttt{materials} & \texttt{name}, \texttt{density}, \texttt{elastic: \{E, G, nu\}} as 3-vectors & 6 materials \\
 \texttt{reference} & the reference surface the whole run is referred to & \texttt{center} \\
 \bottomrule
@@ -166,7 +167,7 @@ frame of the recovery coincides with the wall frame here.
 
 \subsection{Orientation frames}
 
-A wrong \texttt{elementOrientations} block is the most common way to get a
+A wrong \texttt{orientation} block is the most common way to get a
 plausible-looking but wrong answer, so the example driver calls
 \texttt{auto\_emit} explicitly after the homogenization and writes an orientation
 figure. Note that \texttt{auto\_emit} is called \emph{by the driver}, not from

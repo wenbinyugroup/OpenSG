@@ -104,7 +104,7 @@ msg: shell      # the ENGINE this SG belongs to (opensg_shell); `opensg <yaml>` 
 aperiodic: 1    # the two end cross-sections carry their own V0/V1 as Dirichlet data (no axial periodicity)
 ```
 
-The blocks `nodes`, `elements` (quads), `sets`, `sections`, `elementOrientations` and `materials`
+The blocks `nodes`, `elements` (quads), `sets`, `sections`, `orientation` and `materials`
 follow. No boundary file is prepared by hand: the ends are found from the mesh topology. The tube
 yamls are written by `make_cylinder_segment.py`, whose geometry parameters are:
 

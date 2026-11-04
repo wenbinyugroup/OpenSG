@@ -48,7 +48,7 @@ opensg <sg.yaml> --mesh     also draw <base>_mesh.png
 opensg --help               every flag, the solver menu and the conversion sub-commands
 ```
 
-`opensg` reads the yaml's `msg:` key (`shell` or `solid`) and hands the file to the engine that owns it; `opensg_solid <sg.yaml>` and `opensg_shell <sg.yaml>` call the engines directly. A homogenization writes `<base>.out` with the effective stiffness and compliance matrices of the macro model in the SwiftComp `.K` layout. A dehomogenization also writes the local stress, strain and displacement in the material frame as `<base>.SM`, `<base>.EM` and `<base>.U`, and `<base>.vtk` to visualize them.
+`opensg` reads the yaml's `msg:` key (`shell` or `solid`) and hands the file to the engine that owns it; `opensg_solid <sg.yaml>` and `opensg_shell <sg.yaml>` call the engines directly. A homogenization writes `<base>.out` with the effective stiffness and compliance matrices of the macro model in the SwiftComp `.K` layout. A solid dehomogenization also writes the local stress, strain and displacement in the material frame as `<base>_dehom.SM`, `<base>_dehom.EM` and `<base>_dehom.U` (with `--global`, the stress and strain in the SG axes as `<base>_dehom_global.SM` and `<base>_dehom_global.EM`), and `<base>_dehom.vtk` to visualize them.
 
 Meshes from other tools convert to the yaml with `opensg inp_to_yaml <file.inp> --n_model {1,2,3}` (Abaqus), `opensg msh_to_yaml <file.msh> --mat1 NAME --n_model {1,2,3}` (gmsh) and `opensg sc_to_yaml <file.sc>` (SwiftComp).
 
@@ -70,7 +70,7 @@ sections:           # one per element set
     layup:          # [material, thickness, angle] per ply
       - [glass_triax, 0.003, 0.0]
       - [glass_uniax, 0.026, 0.0]
-elementOrientations:  # material frame per element
+orientation:        # material frame per element
 materials:          # engineering constants by name
 </pre></td>
 <td><pre>

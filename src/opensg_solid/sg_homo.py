@@ -22,7 +22,7 @@ the LAST SG coordinate; the plate law rows are
 #   material_param      (n_mat, 9) engineering override or None
 #   angles              (n_mat,) deg per material or None
 #   n_model             1 beam (Timo/KKT), 2 plate, 3 solid
-#   elem_rotation       (E, 9) per-element DCs or None (beam only)
+#   elem_rotation       (E, 9) per-element DCs or None (every model)
 # working (both paths)
 #   sc, n_sg, base      parsed SG dict, its dimension, the output basename
 #   points              (V, d) nodes;  cells (E, N);  cell_domain_ids (E,)
@@ -50,7 +50,9 @@ the LAST SG coordinate; the plate law rows are
 #   V0_matrix           (n_unique, H) fluctuations;  D1, D_bar (H, H)
 # working (beam KKT path, n_model 1)
 #   reduced_cells, num_unique, x_unique, N_primal   compressed periodics
-#   C_asm, C_stress     (E, 6, 6) assembly / recovery stiffness
+#   C_asm, C_stress     (E, 6, 6) assembly stiffness (frame applied; the
+#                       beam D route's sigma = C_asm Gamma) / pre-frame
+#                       stiffness (kept in r, unused by the D route)
 #   Dhh..Dle, Dee, omega, dehomo_data   sg_assembly.assemble_system_matrices
 #   Psi, Dc             (N_primal, 4) rigid-body ops
 #   RHS_V0, V0, D1_V0, A_augmented      the KKT V0 solve
@@ -64,7 +66,11 @@ the LAST SG coordinate; the plate law rows are
 #   C_eff               (6, 6) macro law (Timo 6x6 for beam); C_eff_EB (4, 4)
 #   C_timo / Deff_srt   (6, 6) [eps11 gam12 gam13 kap1 kap2 kap3]
 #   r                   the result dict -- everything sg_dehom needs rides
-#                       along (V0/V1s, dehomo_data, C_*, connectivity)
+#                       along (V0/V1s, dehomo_data, C_*, connectivity;
+#                       beam: B_tim (4, 4) and refined; every model:
+#                       elem_rotation, the resolved frames or None, and
+#                       ply_angles {mat id: deg} / ply_angles_as_given,
+#                       sg_materials.ply_angles_used)
 # ----------------------------------------------------------------------------
 """
 import os
@@ -94,7 +100,8 @@ from opensg_solid.sg_assembly import (
     ebe_jacobian_product_periodic, estimate_max_eigenvalue,
     plate_ladder_element_blocks, solve_fluctuation_field)
 from opensg_solid.sg_materials import (build_material_C,
-                                       get_heterogeneous_C_matrix)
+                                       get_heterogeneous_C_matrix,
+                                       ply_angles_used)
 from opensg_solid.sg_mesh import _cell_basis, load_sg_input, plot_sg_mesh
 from opensg_solid import sg_progress
 
@@ -1070,7 +1077,10 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
          engineering override or None; angles (n_mat,) deg or None;
          elem_rotation (E, 9) per-element DCs or None; solver str
     Out: the plate_homo_2d r dict -- C_eff (6, 6) Timoshenko, C_eff_EB
-         (4, 4) classical, V0/V1s, dehomo_data, C_ess/C_stress,
+         (4, 4) classical, B_tim (4, 4) the coupling block of the
+         Timoshenko reduction (finalize_v1_and_compute_deff; the D
+         route's exact resultant identity under F2/F3 needs it, the law
+         does not change), V0/V1s, dehomo_data, C_ess/C_stress,
          elem_rotation (identity tile when None), connectivity, omega,
          sc; everything the beam dehom needs rides along."""
     V = points.shape[0]
@@ -1127,6 +1137,7 @@ def _beam_homo_kkt(sc, n_sg, points, cells, x_end, phi_qn, dphi_dxi_qnp,
         er = jnp.asarray(elem_rotation, float).reshape(E, 9)
 
     return {"C_eff": np.asarray(C_timo), "C_eff_EB": np.asarray(C_eb),
+            "B_tim": np.asarray(_B_tim),
             "V0": V0, "V1s": V1s, "dehomo_data": dehomo_data,
             "reduced_periodic_cells": reduced_cells,
             "C_ess": C_asm, "C_stress": C_stress, "elem_rotation": er,
@@ -1468,7 +1479,7 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
     sc = load_sg_input(sc_path, base)
     if elem_rotation is None and sc.get("orientation") is not None:
         # v2.1: the per-element frames stored in the SG file
-        # (`elementOrientations`, yaml component order) are applied on
+        # (the `orientation` block, yaml component order) are applied on
         # EVERY route, the command line included -- before v2.1 only an
         # explicit elem_rotation= reached the solver and `opensg x.yaml`
         # silently ran every element in the global frame.  The global
@@ -1596,6 +1607,13 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
                            dphi_dxi_qnp, W_q, dof_map_np,
                            material_param, angles, elem_rotation,
                            solver=solver)
+        # the D route reads the macro model from here: refined 0 runs the
+        # classical (V0) recovery only and refuses F2/F3 (sg_dehom)
+        r["refined"] = int(refined)
+        # the ply angle each material's C was rotated by (the angles=
+        # argument or the blocks), so --material undoes exactly that
+        r["ply_angles"], r["ply_angles_as_given"] = ply_angles_used(
+            sc, material_param, angles)
         r["solve_time"] = _time.perf_counter() - _t0
         # 6x6 mass matrix (VABS .K style): rho per material from `density`,
         # falling back to the material blocks' own `density:` key (the
@@ -1743,6 +1761,16 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
              "boundary": boundary,
              "n_boundary_nodes": 0 if bdofs is None else len(bdofs)//3,
              "sc": sc}
+    # the frames C_ess was built with (solver order, global element
+    # order), or None -- from the file or from the elem_rotation=
+    # argument, so the D route's --material rotates into the SAME frames
+    # (sg_dehom.material_frame_fields); the beam dict carries its own
+    r["elem_rotation"] = (None if elem_rotation is None else
+                          np.asarray(elem_rotation, float).reshape(-1, 9))
+    # and the ply angle each material's C was rotated by (the angles=
+    # argument or the blocks; the beam branch above stores the same)
+    r["ply_angles"], r["ply_angles_as_given"] = ply_angles_used(
+        sc, material_param, angles)
 
     if shear_refined:
         # (the model/shear_refined guard lives at the top of the function)

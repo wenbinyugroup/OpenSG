@@ -43,7 +43,7 @@ GEOMETRY / CONVENTIONS
                          [45/-45] coupling shows up as a genuine B16/B26).
   * Wall thickness      = t = hR * R.
   * NC quads around the hoop, NL quads along the axis over length L.
-  * Per-element frame stored in `elementOrientations` as the 9-component
+  * Per-element frame stored in `orientation` as the 9-component
     row-major triad  [e1(3), e2(3), e3(3)]  with
         e1 = axial       = ( 1,  0,        0      )
         e2 = hoop tangent = ( 0, -sin th,  cos th )
@@ -53,7 +53,7 @@ GEOMETRY / CONVENTIONS
 
 OUTPUT: one self-contained msg-shell SG YAML per case -- the header
 (n_model / refined / aperiodic) followed by nodes / elements(quad) /
-sections / sets / materials / elementOrientations.  Nothing about the case
+sections / sets / materials / orientation.  Nothing about the case
 is left in code, so each file runs on its own:
 
     opensg_shell meshes/seg_iso_hR0.1.yaml
@@ -147,7 +147,7 @@ def build_segment(material, layup_of_t, tag, hR):
         "sets": {"element": [{"name": "tube", "labels": list(range(1, ne + 1))}]},
         "materials": [{"name": material["name"], "density": material["density"],
                        "elastic": {"E": material["E"], "G": material["G"], "nu": material["nu"]}}],
-        "elementOrientations": oris,
+        "orientation": oris,
     }
     fn = os.path.join(OUT, "seg_%s_hR%s.yaml" % (tag, hR))
     with open(fn, "w") as f:

@@ -495,9 +495,9 @@ def sg_to_yaml(sg_path, out_path=None):
     The port of the VALIDATED OpenSG_io converter
     (scripts/convert_sg_to_yaml.py -- mh104: solid vs VABS to ~1e-5): the
     .sg PreVABS writes (e.g. from the pynumad `--xml` route) becomes the
-    nodes/elements/sets/elementOrientations/materials yaml the solid
+    nodes/elements/sets/orientation/materials yaml the solid
     engine reads.  Per-element theta1 (contour angle) and per-layup-group
-    theta3 (fiber angle) compose into the elementOrientations frames --
+    theta3 (fiber angle) compose into the `orientation` frames --
     theta3 is NOT baked into the materials.  Material names come from the
     `<stem>.sg.mat` sidecar when PreVABS wrote one.
 
@@ -580,8 +580,8 @@ def sg_to_yaml(sg_path, out_path=None):
                 "labels": _Flow([e + 1 for e, s in enumerate(sub)
                                  if s == mi])}
                for mi in sorted(set(sub))]},
-           "elementOrientations": [_Flow(_sg_frame(a, b))
-                                   for a, b in zip(th1, th3)],
+           "orientation": [_Flow(_sg_frame(a, b))
+                           for a, b in zip(th1, th3)],
            "materials": [{"name": name_of(m),
                           "E": _Flow(mat_par[m][0:3]),
                           "G": _Flow(mat_par[m][3:6]),

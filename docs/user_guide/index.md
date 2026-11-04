@@ -16,8 +16,8 @@ carries a layup. The solid dialect describes a meshed domain: every element is s
 
 | dialect | engine | SG | mesh blocks | example input |
 |---|---|---|---|---|
-| shell | `opensg_shell` | 1-D shell SG (a cross-section contour of 2-node lines) or 3-D shell SG (a surface of 3-node triangles and 4-node quads) | `nodes`, `elements`, `sets`, `sections`, `elementOrientations`, `materials` | `examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section/iea_s10_shell.yaml` |
-| solid | `opensg_solid` | 1-D, 2-D or 3-D SG of solid elements | `nodes`, `cells`, `mat_id`, `materials`; or `nodes`, `elements`, `sets`, `elementOrientations`, `materials`; or, for the generated 1-D plate SG, `nodes`, `elements`, `sets`, `sections`, `materials` without `elementOrientations` | `examples/OpenSG-solid/3_get_plate_props_from_2D_SG/RHC_SW_2UC_45.yaml` |
+| shell | `opensg_shell` | 1-D shell SG (a cross-section contour of 2-node lines) or 3-D shell SG (a surface of 3-node triangles and 4-node quads) | `nodes`, `elements`, `sets`, `sections`, `orientation`, `materials` | `examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section/iea_s10_shell.yaml` |
+| solid | `opensg_solid` | 1-D, 2-D or 3-D SG of solid elements | `nodes`, `cells`, `mat_id`, `materials`; or `nodes`, `elements`, `sets`, `orientation`, `materials`; or, for the generated 1-D plate SG, `nodes`, `elements`, `sets`, `sections`, `materials` without `orientation` | `examples/OpenSG-solid/3_get_plate_props_from_2D_SG/RHC_SW_2UC_45.yaml` |
 ```
 
 ## Anatomy of an SG yaml
@@ -57,7 +57,7 @@ sections:
   - - gelcoat
     - 0.0005
     - 0.0
-elementOrientations:
+orientation:
 - [0.0, 0.0, 1.0, -0.9721541292349604, 0.2343423756204075, 0.0, -0.2343423756204075,
   -0.9721541292349604, 0.0]
 materials:
@@ -111,7 +111,7 @@ materials:
 
 The `msg:` header key names the engine: `msg: shell` sends the file to `opensg_shell`, `msg: solid` to
 `opensg_solid`. Without the key, the mesh blocks decide: a file with `cells` or `mat_id` is solid, a file with
-`elements`, `sections` and `elementOrientations` together is shell, and any other file with `elements` is solid. A
+`elements`, `sections` and `orientation` together is shell, and any other file with `elements` is solid. A
 `msg:` that contradicts the mesh blocks is an error, and so is a file that has neither the key nor a recognizable mesh
 block. The three commands below run the same solid SG; `opensg` reads `msg: solid` from the header and forwards the
 file to the solid engine.
@@ -132,7 +132,7 @@ classical beam homogenization with the node contour taken as the outer mold line
 
 - Header keys (`msg`, `n_model`, `refined`, `analysis`, `epsilon_bar`, `omega`, `aperiodic`, the `junction` keys) and
   the `--center` run flag: {doc}`analysis_settings`.
-- Node coordinates, the material frame in `elementOrientations`, the ply angle, and the order of strains and stiffness
+- Node coordinates, the material frame in `orientation`, the ply angle, and the order of strains and stiffness
   entries in every law: {doc}`coordinate_systems`.
 - `nodes`, `elements`, `cells`, `sets`, the SG dimension and the finite elements of each route: {doc}`mesh_and_elements`.
 - `materials`, `sections`, `mat_id`, the material library and the through-thickness `layup_db.yaml`:

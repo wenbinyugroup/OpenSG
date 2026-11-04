@@ -2,7 +2,7 @@
 
 **Applies to:** every OpenSG structure-gene yaml, both dialects —
 the 1-D shell SG (`elements` = 2-node lines) and the 2-D solid SG
-(`elements` = triangles/quads). Both carry `elementOrientations`, one
+(`elements` = triangles/quads). Both carry an `orientation` block, one
 9-component row per element, read as three stacked unit vectors:
 
 ```
@@ -67,7 +67,9 @@ canonical.
 ## Check before using any yaml
 
 ```python
-ori = np.array(d["elementOrientations"], float)
+from opensg_solid.io.sg_keys import normalize_orientation_key
+d = normalize_orientation_key(d)            # a legacy `elementOrientations:` file too
+ori = np.array(d["orientation"], float)
 e1, e3 = ori[:, 0:3], ori[:, 6:9]
 assert np.allclose(np.abs(e1[:, 2]), 1.0)   # e1 out of plane
 assert np.allclose(e3[:, 2], 0.0)           # e3 in plane

@@ -58,9 +58,11 @@ a classical beam homogenization at the OML reference.
     msg: shell          # which ENGINE owns this file: `shell` = this one,
                         #   `solid` = opensg_solid.  Omit it and the mesh
                         #   dialect decides (nodes/elements/sets/sections/
-                        #   elementOrientations/materials = shell), so older
+                        #   orientation/materials = shell), so older
                         #   files keep working; the unified `opensg`
-                        #   command dispatches on exactly this.
+                        #   command dispatches on exactly this.  The frame
+                        #   block's OpenSG 1.x spelling is still read, as
+                        #   `orientation`.
     n_model: 1          # 1 = beam, 2 = plate, 3 = 3-D solid
                         #   2 is the opensg_solid route: opensg_shell has NO
                         #   plate macro model (the shell WALL is the plate;

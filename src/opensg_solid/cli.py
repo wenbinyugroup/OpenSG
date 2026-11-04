@@ -54,14 +54,30 @@ recovers a whole FIELD from a `.ff` station table found next to the
 yaml (or named by `ff:` in the header) -- see the 1-D dehom example.
 
 D output frame: --material (the DEFAULT) rotates every element's
-stress/strain into its own PLY axes (theta = +angle about the thickness
-axis, the unified VABS-sign Abaqus equivalence `3, angle` -- what an
-Abaqus odb shows UNTRANSFORMED when the section carries
-*Orientation); --global keeps
-the SG axes, the frame the recovery computes in and the one every .SM
-written before this flag existed carries.  The .SM/.EM header names the
-frame; .U is never rotated.  Block-angle yamls only -- per-element
-frames (elementOrientations) refuse --material.
+stress/strain into its own PLY axes: into the element frame of the
+yaml's `orientation` rows first (when the file carries them), then by
+theta = +angle about the element's 3-axis (the thickness axis of a
+frameless file; the unified VABS-sign Abaqus equivalence `3, angle` --
+what an Abaqus odb shows UNTRANSFORMED when the section carries
+*Orientation); --global keeps the SG axes, the frame the recovery
+computes in.  --material writes <base>_dehom.SM/.EM, --global
+<base>_dehom_global.SM/.EM; the header names the frame; .U is never
+rotated.  D refuses frames that are not proper rotations (orthonormal,
+right-handed) to the precision of rows written with 6 decimals: max |M
+M^T - I| up to 1.7321e-6 is accepted.  A type-2 material (a stored 6x6)
+with no `angle` keeps its stored C under --material: its ply axes are
+the element frame (a note names such materials).
+
+A beam (n_model 1, refined: 1) recovers by the generalized-Timoshenko
+chain of the msg-shell route: the `1:` force seeds it directly, F2/F3
+included (zeroth-order V0 part + first-order V1 correction, F' = R1 F;
+prismatic, untwisted, no distributed load).  The log prints the
+resultants the field integrates to: the applied [F2 F3], and [F1 M1 M2
+M3] plus Delta F_cl, the classical excess of this recovery (VABS 4.1
+has the same; it depends on the section origin).  A refined: 0 beam
+runs the classical recovery (V0, the 4x4 law) and refuses F2/F3 or a
+shear strain.  A refused input ends the run with its one-line reason
+(exit 1).
 
 H writes the timed <base>.out (SwiftComp .K layout) + <base>_mesh.png
 (redrawn whenever the PNG is older than the yaml, so a re-converted SG
@@ -300,10 +316,15 @@ def main(argv=None):
     q_react = None if state is None else state.get("q_reaction")
     has_d2 = state is not None and any(
         state.get(k) is not None for k in ("dE11", "dE12", "dE22"))
-    r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)),
-                      q_reaction=q_react,
-                      solver=solver or "auto",
-                      recovery=(analysis == "D"))
+    try:
+        r = plate_homo_2d(path, refined=int(hdr.get("refined", 0)),
+                          q_reaction=q_react,
+                          solver=solver or "auto",
+                          recovery=(analysis == "D"))
+    except ValueError as _e:
+        # an input the engine refuses (both frame-block spellings, ...):
+        # its one-line reason, like the refusals above, not a traceback
+        raise SystemExit("refused: %s" % _e)
     print(r["law_title"] + ":")
     print(r["law"])
     if analysis == "H":
@@ -317,11 +338,23 @@ def main(argv=None):
         from .sg_dehom import dehom_fields, export_gauss, gauss_coords
 
         # state was already read above (its q_reaction fed the ladder)
+        is_beam = int(r["n_model"]) == 1
+        bforce = None
         if state is not None and state.get("EPS") is not None:
             # 0: strain identifier -- consumed DIRECTLY, the law never
             # enters the loading side
             eps = np.asarray(state["EPS"], float)
             print("macro state: 0: (global strain, used directly)")
+        elif state is not None and is_beam:
+            # the beam FORCE seeds the recovery chain itself (F' = R1 F
+            # exact; sg_dehom.dehom_fields' beam_force driver)
+            eps, bforce = None, np.asarray(state["FF"], float)
+            if int(r.get("refined", 1)) == 0:
+                print("macro state: 1:/FF (beam force; refined: 0 --"
+                      " [F1 M1 M2 M3] through the 4x4 law, F2 = F3 = 0)")
+            else:
+                print("macro state: 1:/FF (beam force, seeds the recovery"
+                      " chain directly)")
         elif state is not None:
             eps = np.linalg.solve(np.asarray(r["C_eff"], float),
                                   state["FF"])
@@ -394,19 +427,59 @@ def main(argv=None):
                 print("Eq. 50 driver conversion: %d higher-derivative"
                       " families present (%s)"
                       % (len(dEhi), " ".join(sorted(dEhi))))
-        Gam, Sig, U = dehom_fields(r, eps, dE1=dE1, dE2=dE2, Q=Qff,
-                                   qt6=qt6, qb6=qb6,
-                                   dE11=dE11, dE12=dE12, dE22=dE22,
-                                   dEhi=(dEhi or None))
-        # recovery computes in the SG-global frame (angle baked into C);
-        # the default output rotates each element into its PLY frame
+        if is_beam:
+            if int(r.get("refined", 1)) == 0:
+                print("recovery  : classical (refined: 0) -- zeroth-order"
+                      " V0 warping, the 4x4 law; F2/F3 refused")
+            else:
+                print("recovery  : generalized Timoshenko, F' = R1 F --"
+                      " zeroth-order V0 + first-order V1 warping"
+                      " (prismatic, no distributed load)")
+        try:
+            Gam, Sig, U = dehom_fields(r, eps, dE1=dE1, dE2=dE2, Q=Qff,
+                                       qt6=qt6, qb6=qb6,
+                                       dE11=dE11, dE12=dE12, dE22=dE22,
+                                       dEhi=(dEhi or None),
+                                       beam_force=bforce)
+        except ValueError as _e:
+            # a refused macro state or frame (refined: 0 with F2/F3, a
+            # frame that is not a rotation): its one-line reason
+            raise SystemExit("refused: %s" % _e)
+        if is_beam:
+            # the resultants the field integrates to, from the law: what
+            # a reader of the files gates the recovered field against
+            from .sg_dehom import beam_expected_resultants
+            _ex = beam_expected_resultants(
+                r, epsilon_bar=(eps if bforce is None else None),
+                beam_force=bforce)
+            _f = lambda a: " ".join("%.10g" % x for x in a)  # noqa: E731
+            print("expected resultants [F1 F2 F3 M1 M2 M3] = [%s]"
+                  % _f(_ex["expected"]))
+            if int(r.get("refined", 1)) != 0:
+                print("  = applied [%s] + Delta F_cl on [F1 M1 M2 M3] ="
+                      " [%s] (the classical excess of the generalized-"
+                      "Timoshenko recovery, as in VABS 4.1; it depends on"
+                      " the section origin)" % (_f(_ex["F"]),
+                                                _f(_ex["dF_cl"])))
+        # recovery computes in the SG-global frame (per-element frame
+        # and block angle baked into C_ess); the default output rotates
+        # each element into its PLY frame
         if frame == "material":
             from .sg_dehom import material_frame_fields
             Gam, Sig = material_frame_fields(Gam, Sig, r)
-            frame_note = ("material (ply axes, theta = +angle about the"
-                          " thickness axis; U stays SG-global)")
+            frame_note = ("material (ply axes: the element frame, then"
+                          " theta = +angle about its 3-axis; U stays"
+                          " SG-global)")
             print("output frame: MATERIAL (ply) -- pass --global for the"
                   " SG axes")
+            if r.get("ply_angles_as_given"):
+                print("note: material%s %s: a stored 6x6 (type 2) with no"
+                      " `angle` -- its C is used as written, so its ply"
+                      " axes here are the element frame (right only if"
+                      " that C is not pre-rotated)"
+                      % ("s" if len(r["ply_angles_as_given"]) > 1 else "",
+                         ", ".join(str(m) for m in
+                                   r["ply_angles_as_given"])))
         else:
             frame_note = "global (SG axes)"
             print("output frame: GLOBAL (SG axes)")
@@ -421,7 +494,7 @@ def main(argv=None):
             U = np.asarray(U).reshape(-1, 3) + rig
             U = U.reshape(np.asarray(Gam).shape[:-1] + (3,))
         export_gauss(r, Gam, Sig, base + "_dehom", U_eqd=U,
-                     frame=frame_note)
+                     frame=frame_note, frame_kind=frame)
         print("Local field files are computed and stored.")
         print("Time taken: %.2f sec" % (_time.perf_counter() - _t0))
         _print_gpu_peak()

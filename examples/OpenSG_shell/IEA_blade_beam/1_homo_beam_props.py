@@ -10,7 +10,7 @@ production OpenSG-TW route, now running on the OpenSG 2.x stack.
 # ALL VARIABLES USED IN THIS SCRIPT
 # ----------------------------------------------------------------------------
 #   name            reads <name>_shell.yaml (1-D shell SG: nodes, elements,
-#                   elementOrientations, sections/layups, materials, sets)
+#                   orientation, sections/layups, materials, sets)
 #   B               build_rm_bundle result: Timo 6x6 + the RM warping V0/V1,
 #                   strip geometry, layup/material dbs (consumed by step 2)
 #   C6              (6,6) Timoshenko [eps11 gam12 gam13 kap1 kap2 kap3]

@@ -106,7 +106,7 @@ usage: opensg msh_to_yaml [-h] [--out-base BASE] [--n_model {1,2,3}]
 | `--out-base BASE` | basename of the emitted yaml (single input only) | the `.msh` stem |
 | `--force` | re-emit even when `<base>.yaml` is newer than the `.msh` | off |
 
-The mesh side (`nodes`, 1-based `elements`, `elementOrientations`, one `sets: element:` entry
+The mesh side (`nodes`, 1-based `elements`, `orientation`, one `sets: element:` entry
 per physical tag named from `$PhysicalNames`) is always complete. A `.msh` carries no material and
 no orientation: every element gets the constant frame with $e_1$ out of plane, and the materials
 come from the `--mat<K>` flags (see {doc}`materials_and_layups`). Tags without a flag, and

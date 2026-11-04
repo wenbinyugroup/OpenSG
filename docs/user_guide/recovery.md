@@ -73,8 +73,11 @@ center-referenced, which is why the run carries `--center`.
 ### Which state is used
 
 - **msg-solid:** `0:` first (`macro state: 0: (global strain, used directly)`), then `1:` or
-  `FF:`, inverted through the effective stiffness
-  (`macro state: 1:/FF (force, inverted through C_eff)`), then `epsilon_bar:`.
+  `FF:`. A beam (`n_model: 1`) takes the force itself as the seed of the recovery chain
+  (`macro state: 1:/FF (beam force, seeds the recovery chain directly)`); a `refined: 0` beam
+  takes $[F_1, M_1, M_2, M_3]$ through the $4\times4$ law and refuses a nonzero $F_2$ or $F_3$.
+  A plate or 3-D solid inverts the force through the effective stiffness
+  (`macro state: 1:/FF (force, inverted through C_eff)`). Then `epsilon_bar:`.
 - **msg-shell:** the force, giving the macro beam strain $C_6^{-1}\,FF$ through the Timoshenko law,
   then `epsilon_bar:`. The shell recovery does not read `0:`.
 - With none of them, the run stops with the message below.
@@ -135,14 +138,14 @@ stress and strain:
 % source: src/opensg_solid/cli.py; src/opensg_shell/cli.py
 | flag | msg-solid | msg-shell |
 |---|---|---|
-| `--material` (default) | each element's ply axes, $\theta = +$`angle` about the thickness axis | each element's ply axes |
+| `--material` (default) | each element's ply axes: its `orientation` frame, then $\theta = +$`angle` about the thickness axis | each element's ply axes |
 | `--global` | the SG axes; the files are named `<base>_dehom_global.SM` and `_global.EM` | the wall (plate) axes |
 
 The file headers name the frame. The displacement file `.U` is never rotated. On the solid
-engine the material frame is defined for block-angle yamls only (`angle:` on the material
-blocks). Recover a yaml whose elements carry their own frames (`elementOrientations`) with
-`--global`: `--material` rotates by the block angle alone and does not compose it with the
-element frame.
+engine `--material` rotates by each element's `orientation` frame first, then by the block angle
+(`angle:` on the material blocks); a type-2 material (a stored 6x6) with no `angle` keeps its stored
+C, its ply axes being the element frame. The recovery refuses `orientation` rows that are not proper
+rotations (orthonormal, right-handed) to the precision of rows written with 6 decimals.
 
 ## Recovered fields
 

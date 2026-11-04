@@ -28,14 +28,14 @@ clean engineering constants and the layup angle stays visible in the
 file.  Under orientation="bake" (real per-element frames) the angle is
 folded with the frame into pre-rotated type-2 blocks instead, which is
 also what the vendor +-45 decks themselves carry.  Per-element frames
-(`elementOrientations`) need an explicit `orientation=` choice ("bake" |
+(the `orientation:` block) need an explicit `orientation=` choice ("bake" |
 "ignore") -- unless they are all the no-op identity (io.msh_to_yaml's
 constant default), which write_sc drops automatically because there is
 nothing to state; the sg_input error text explains the options when a
 real choice is missing.
 
 In:  the canonical SG yaml (nodes/cells/mat_id/materials) or the 2-D
-     solid mesh dialect (elements/sets/elementOrientations)
+     solid mesh dialect (elements/sets/orientation)
 Out: <stem>.sc, runnable as `SwiftComp <stem>.sc 2D H` (n_model 2) or
      `SwiftComp <stem>.sc 3D H` (n_model 3)
 """

@@ -1,8 +1,10 @@
 """Local strain/stress inside the 2-D honeycomb SG under a MACRO beam
-state (Timoshenko recovery chain of the merged Beam_solid KKT engine)
--> _dehom.txt/.vtk + the OpenSG dehom files _dehom.SM/.EM/.U + the
-beam Timoshenko 6x6.  Valid drivers = classical-channel states
-(ext/twist/bend + combinations; see sg_dehom.compute_fluctuations_gpu).
+state (the generalized-Timoshenko recovery chain of the msg-shell route,
+sg_dehom.compute_fluctuations_gpu: zeroth-order V0 + first-order V1
+warping) -> _dehom.txt/.vtk + the OpenSG dehom files _dehom_global.SM/.EM
+(SG axes) and _dehom.U + the beam Timoshenko 6x6.  Every beam state is a
+valid driver, the transverse shear included; a FORCE [F1 F2 F3 M1 M2 M3]
+goes in as dehom_fields(r, beam_force=...) instead of epsilon_bar.
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS SCRIPT
@@ -13,8 +15,8 @@ beam Timoshenko 6x6.  Valid drivers = classical-channel states
 #                       kap3] (old EB 4-vector maps to slots 0, 3, 4, 5)
 #   r                   sg_homo.plate_homo_2d result dict; C_eff (6, 6) Timo
 #   Gam, Sig, U         (E, Q, 6/6/3) Gauss strain/stress/fluct. disp
-#   <name>_beam_Timo.out, <name>_dehom.txt/.vtk/.SM/.EM/.U,
-#   <name>_mesh.png     outputs
+#   <name>_beam_Timo.out, <name>_dehom.txt/.vtk, <name>_dehom_global.SM/.EM,
+#   <name>_dehom.U, <name>_mesh.png     outputs
 # ----------------------------------------------------------------------------
 """
 import numpy as np
@@ -49,6 +51,8 @@ np.savetxt(name + "_beam_Timo.out", r["C_eff"], fmt="%16.8e",
 print("beam 6x6 diag:", np.array2string(np.diag(r["C_eff"]), precision=4))
 
 Gam, Sig, U = dehom_fields(r, epsilon_bar)
-export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U)
+# the clouds are SG-global: <name>_dehom_global.SM/.EM (the bare .SM/.EM
+# names are the ply-axes files of `opensg <name>.yaml D --material`)
+export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U, frame_kind="global")
 for i, nm in enumerate(("xx", "yy", "zz", "yz", "xz", "xy")):
     print("  max|Sig_%s| = %.5e" % (nm, np.abs(Sig[..., i]).max()))

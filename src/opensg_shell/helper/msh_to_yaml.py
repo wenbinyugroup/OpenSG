@@ -10,7 +10,7 @@ msg-shell dialect completely --
     materials:                    one entry per material the layups name
     nodes:                        - [y1 y2 y3]                 (one per node)
     elements:                     - [n1 n2 n3(( n4))]          (1-based)
-    elementOrientations:          - [e1(3), e2(3), e3(3)]      (per facet)
+    orientation:                  - [e1(3), e2(3), e3(3)]      (per facet)
     sets: element:                one `layup_<k>` set per gmsh physical tag
 
 The CONSTITUTIVE blocks are written FIRST, right under the header and ahead
@@ -529,7 +529,7 @@ def check_filled(path, max_show=12):
     more = ("\n  ... and %d more" % (len(hits) - max_show)
             if len(hits) > max_show else "")
     return ("%s is an UNFILLED msh_to_yaml TEMPLATE.\n"
-            "The mesh blocks (nodes / elements / elementOrientations / sets)"
+            "The mesh blocks (nodes / elements / orientation / sets)"
             " are complete,\nbut `sections:` and `materials:` are still"
             " placeholders -- opensg_shell will not\ninvent a layup or"
             " material properties.  Fill in these %d %s field(s):\n%s%s\n\n"
@@ -575,7 +575,7 @@ def convert(msh_path, thickness=None, material=None, angle=0.0, out_path=None,
               to paper over a mesh whose geometry is actually wrong.
          weld_tol float | None -- weld radius (m) for `weld`; None takes
               weld_nodes' default of 1e-12 x the bounding-box diagonal
-    Out: dict of the yaml blocks (nodes, elements, elementOrientations, sets,
+    Out: dict of the yaml blocks (nodes, elements, orientation, sets,
          sections, materials, header keys) plus `out_path`, `surface_area`,
          `n_skipped` and `weld` (the weld_nodes COUNTS, None when off);
          writes out_path."""
@@ -657,7 +657,7 @@ def convert(msh_path, thickness=None, material=None, angle=0.0, out_path=None,
     o += ["- [%.12f %.12f %.12f]" % tuple(p) for p in nd]
     o.append("elements:")
     o += ["- [" + " ".join("%d" % v for v in e) + "]" for e in el]
-    o.append("elementOrientations:")
+    o.append("orientation:")
     o += ["- [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f]"
           % tuple(r) for r in ori]
     o += ["sets:", "  element:"]
@@ -692,7 +692,7 @@ def convert(msh_path, thickness=None, material=None, angle=0.0, out_path=None,
     d = {"n_model": int(n_model), "refined": int(refined),
          "nodes": [[float(v) for v in p] for p in nd],
          "elements": [list(e) for e in el],
-         "elementOrientations": [[float(v) for v in r] for r in ori],
+         "orientation": [[float(v) for v in r] for r in ori],
          "sets": {"element": [{"name": s, "labels": labels[s]}
                               for s in set_names]},
          "sections": ([{"type": "shell", "elementSet": s,

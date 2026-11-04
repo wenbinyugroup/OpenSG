@@ -77,7 +77,7 @@ epsilon_bar: [0.001, 0.0, 0.0, 0.0, 0.01, 0.0]   # macro beam strain for opensg_
 
 :::{warning}
 The header ends at the first mesh block key (`nodes`, `cells`, `mat_id`, `materials`, `elements`, `sets`, `sections`
-or `elementOrientations`). A header key written below that line is not read. Keep the header at the top of the file.
+or `orientation`). A header key written below that line is not read. Keep the header at the top of the file.
 :::
 
 ## What the header selects

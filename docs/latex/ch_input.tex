@@ -109,7 +109,7 @@ key & content \\
   \texttt{labels} are 1-based element indices \\
 \texttt{sections} & one entry per layup, tied to a set through
   \texttt{elementSet}, carrying the \texttt{layup} ply table \\
-\texttt{elementOrientations} & one row of nine direction cosines per element,
+\texttt{orientation} & one row of nine direction cosines per element,
   a genuine YAML list of floats \\
 \texttt{materials} & named orthotropic materials with \texttt{density} and an
   \texttt{elastic} block of \texttt{E}, \texttt{G}, \texttt{nu} triples \\
@@ -160,7 +160,7 @@ elements:
 The loader detects the base with \texttt{if cells.min() == 1: cells = cells - 1},
 so a 0-based mesh is also accepted, but every generator in the repository writes
 1-based. Element $k$ in this list is element label $k$ in \texttt{sets}, and
-row $k$ of \texttt{elementOrientations} belongs to it. The contour need not be a
+row $k$ of \texttt{orientation} belongs to it. The contour need not be a
 single loop: the last element of the IEA station is \texttt{- [307 65]}, which
 closes a shear web back onto a skin node.
 
@@ -217,19 +217,28 @@ thicknesses is the wall thickness used for the reference shift; for
 0.03260055$~m, which is the \texttt{thickness} the cached ABD file reports for
 that layup.
 
-\subsection{\texttt{elementOrientations}}
+\subsection{\texttt{orientation}}
 
 One row of nine direction cosines per element, $[e_1(3)\;e_2(3)\;e_3(3)]$, in the
 same component order as the node rows. Unlike \texttt{nodes} and
 \texttt{elements}, these rows are true YAML lists of floats:
 
 \begin{lstlisting}[style=shellst,caption={One orientation row: e1 = [0,0,1] out of plane, then the in-plane e2 and e3.},basicstyle=\ttfamily\footnotesize]
-elementOrientations:
+orientation:
 - [0.0, 0.0, 1.0, -0.9721541292349604, 0.2343423756204075, 0.0, -0.2343423756204075,
   -0.9721541292349604, 0.0]
 \end{lstlisting}
 
 The meaning of the triad is covered in Section~\ref{sec:input-orientation}.
+
+\texttt{orientation} is PreVABS' word for the material frame and the one name
+OpenSG writes, in both dialects. \texttt{elementOrientations}, the OpenSG 1.x
+spelling of the same block, is still read: the loader renames it and prints a
+one-line note, once per file in a run. A file that carries both spellings is
+refused. OpenSG 2.2 is the first release that reads \texttt{orientation:}.
+OpenSG 2.1 and earlier do not know the new name and ignore an
+\texttt{orientation:} block, so the solid route there runs without the frames;
+keep files meant for those releases in the old spelling.
 
 \subsection{\texttt{materials}}
 
@@ -420,7 +429,7 @@ o = ["nodes:"]
 o += ["- [%.12f %.12f %.12f]" % tuple(p) for p in nd]
 o.append("elements:")
 o += ["- [%d %d %d]" % tuple(e) for e in el]
-o.append("elementOrientations:")
+o.append("orientation:")
 for k in range(ne):
     e1 = np.cross(e2[k], e3[k])
     o.append("- [%.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f]"
@@ -438,7 +447,7 @@ open("schwarz_p_3Dshell.yaml", "w").write("\n".join(o) + "\n")
 
 Note the asymmetry the loop makes explicit and that trips up hand-written files:
 \texttt{nodes} and \texttt{elements} rows are space-separated inside brackets,
-\texttt{elementOrientations} rows are comma-separated, and the \texttt{sets}
+\texttt{orientation} rows are comma-separated, and the \texttt{sets}
 labels are 1-based. The generator prints the surface area and the relative
 density $\text{area} \times T$ so the shell idealisation can be checked against
 the solid cell it replaces.
@@ -756,7 +765,7 @@ The shell twin of the \texttt{.sc} converter is
 \texttt{.msh} (format 2.2 or 4.1) \emph{surface} mesh into an msg-shell SG
 YAML. A gmsh mesh knows the geometry and nothing else, so the converter writes
 the whole mesh side and never invents the constitutive side. It emits the
-header, \texttt{nodes}, \texttt{elements}, one \texttt{elementOrientations}
+header, \texttt{nodes}, \texttt{elements}, one \texttt{orientation}
 row per facet, and one \texttt{layup\_<k>} element set per gmsh physical tag.
 The per-facet frame is the one \texttt{make\_schwarz\_yaml.py} established:
 $e_3$ is the facet normal, $e_2$ the first edge, and $e_1 = e_2 \times e_3$,
@@ -1133,7 +1142,7 @@ $\mathbf{G}$ untouched.
 \section{Material orientation}
 \label{sec:input-orientation}
 
-Each row of \texttt{elementOrientations} is nine direction cosines forming three
+Each row of \texttt{orientation} is nine direction cosines forming three
 stacked unit vectors,
 
 \begin{lstlisting}[style=shellst]
@@ -1174,6 +1183,18 @@ the mean of $e_3 \cdot (-\hat{r})$, i.e.\ how nearly $e_3$ is the inward radial
 normal, but that value is \textbf{reported and not gated}: it appears in the text
 so you can read it, and a poor value alone will not turn an \texttt{OK} into a
 \texttt{CHECK}.
+
+The solid dehomogenization (\texttt{opensg <yaml> D},
+\texttt{sg\_dehom.dehom\_fields}) checks every frame itself and refuses one that
+is not a proper rotation: $\det M \le 0$, or
+\[
+\max\bigl|M M^{\mathsf T} - I\bigr| > 2\sqrt{3}\cdot 5\times10^{-7}
++ 3\,(5\times10^{-7})^2 = 1.7321\times10^{-6},
+\]
+the largest deviation of a rotation whose rows are written with 6 decimals (an
+error of at most $5\times10^{-7}$ per entry). Write the rows with at least 6
+decimals; the homogenization itself runs on any frame and never changes its law
+for this check.
 
 Because any mesh handling can renumber nodes and cells, an orientation PNG is a
 compulsory deliverable of every OpenSG run. It is emitted by the \emph{example
@@ -1235,7 +1256,9 @@ $|e_{1z}| < 1$) is a \emph{fibre} frame, and combining it with a non-zero
 worth running on any YAML you did not write yourself:
 
 \begin{lstlisting}[style=opensg,caption={The orientation precheck from Rules/orientation\_e1\_out\_of\_plane.md.}]
-ori = np.array(d["elementOrientations"], float)
+from opensg_solid.io.sg_keys import normalize_orientation_key
+d = normalize_orientation_key(d)            # a legacy elementOrientations: file too
+ori = np.array(d["orientation"], float)
 e1, e3 = ori[:, 0:3], ori[:, 6:9]
 assert np.allclose(np.abs(e1[:, 2]), 1.0)   # e1 out of plane
 assert np.allclose(e3[:, 2], 0.0)           # e3 in plane

@@ -383,7 +383,8 @@ the mid-surface, which is why the recovery runs with `--center`.
 
 :::{note}
 The recovered stress and strain are written in each element's ply axes by default. Add `--global` for the SG axes
-(solid) or the wall axes (shell). A solid SG with per-element frames (`elementOrientations`) refuses `--material`.
+(solid) or the wall axes (shell). On a solid SG with per-element frames (`orientation`), `--material` applies each
+element's frame first, then the block angle.
 The displacement is never rotated.
 :::
 
