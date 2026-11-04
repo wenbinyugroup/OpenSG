@@ -1,7 +1,7 @@
 """T10, shell part: the one frame-block name `orientation` in opensg_shell.
 
 Every msg-shell loader of the per-element frame block reads `orientation:`
-and its OpenSG 1.x spelling `elementOrientations:` alike
+and its legacy spelling `elementOrientations:` alike
 (opensg_solid.io.sg_keys.normalize_orientation_key, called right after the
 yaml load), refuses a file that carries both, and every shell writer writes
 `orientation:` only.  The key name is a spelling, not data, so every gate

@@ -8,16 +8,16 @@ block is named `orientation:`.  It is PreVABS' own word
 OpenSG reader already stores the frames under in memory
 (sg_mesh.load_sg_input, io.sg_input.read_opensg_yaml, the npz sidecar).
 
-`elementOrientations:` -- the OpenSG 1.x (FEniCS ShellSegmentMesh /
-SolidSegmentMesh) spelling -- is still READ.  Every loader calls
-normalize_orientation_key on the parsed mapping right after yaml.load; it
-renames the legacy key to `orientation` with a one-line note, printed once
-per file in a process (the solid command line parses its yaml twice, for
-the mesh-size line and for the homogenization).  A file that carries BOTH
-spellings is refused: which block holds the frames would be a guess.
-Every writer writes `orientation:` only, and the rows themselves are
-unchanged.  This module is the one place in src/ that names the legacy
-spelling (tests/unit/test_orientation_key.py guards it).
+`elementOrientations:` -- the legacy spelling of OpenSG 2.1 and earlier
+(and of the 1.x FEniCS ShellSegmentMesh / SolidSegmentMesh) -- is still
+READ.  Every loader calls normalize_orientation_key on the parsed mapping
+right after yaml.load; it renames the legacy key to `orientation` with a
+one-line note, printed once per file in a process (the solid command line
+parses its yaml twice, for the mesh-size line and for the homogenization).
+A file that carries BOTH spellings is refused: which block holds the frames
+would be a guess.  Every writer writes `orientation:` only, and the rows
+themselves are unchanged.  This module is the one place in src/ that names
+the legacy spelling (tests/unit/test_orientation_key.py guards it).
 
 The module itself is stdlib-only: opensg_shell's loaders import it too, and
 the detectors that only scan a file's top-level keys (sg_mesh.block_keys,
@@ -85,8 +85,9 @@ def normalize_orientation_key(d, path="<SG yaml>"):
         d[ORIENTATION_KEY] = d.pop(found[0])
         f = os.path.abspath(path) if os.path.isfile(str(path)) else None
         if f not in _NOTED:
-            print(" NOTE: %s spells the frame block `%s:` (the OpenSG 1.x "
-                  "name); it is read as `%s:`, the one name OpenSG writes"
+            print(" NOTE: %s spells the frame block `%s:` (the legacy name, "
+                  "OpenSG 2.1 and earlier); it is read as `%s:`, the one "
+                  "name OpenSG writes"
                   % (path, found[0], ORIENTATION_KEY))
             if f is not None:
                 _NOTED.add(f)

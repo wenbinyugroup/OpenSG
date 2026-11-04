@@ -331,7 +331,7 @@ blocks, listed in {numref}`tab-tutorial-blocks` in the order they appear in `iea
   - per set: `elementSet` plus `layup` as `[material, thickness, angle]` rows, outer ply first
   - 6 sections
 * - `orientation`
-  - per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$; the OpenSG 1.x spelling `elementOrientations` is still read
+  - per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$; the legacy spelling `elementOrientations` (OpenSG 2.1 and earlier) is still read
   - 310 rows
 * - `materials`
   - `name`, `density`, `elastic: {E, G, nu}` as 3-vectors

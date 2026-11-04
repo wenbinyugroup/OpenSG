@@ -50,12 +50,12 @@ order as the node rows:
 ```
 
 `orientation` is PreVABS' word for the material frame and the one name OpenSG writes, in
-both dialects (shell and solid). `elementOrientations`, the OpenSG 1.x spelling of the same
-block, is still read: the loader renames it and prints a one-line note, once per file in a
-run. A file that carries both spellings is refused. OpenSG 2.2 is the first release that reads
-`orientation:`. OpenSG 2.1 and earlier do not know the new name and ignore an `orientation:`
-block, so the solid route there runs without the frames; keep files meant for those releases in
-the old spelling.
+both dialects (shell and solid). `elementOrientations`, the legacy spelling of the same
+block in OpenSG 2.1 and earlier, is still read: the loader renames it and prints a one-line
+note, once per file in a run. A file that carries both spellings is refused. OpenSG 2.2 is
+the first release that reads `orientation:`. OpenSG 2.1 and earlier do not know the new name
+and ignore an `orientation:` block, so the solid route there runs without the frames; keep
+files meant for those releases in the old spelling.
 
 On a cross-section SG, shell or solid, the roles are fixed:
 

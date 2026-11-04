@@ -1,6 +1,6 @@
 """The ONE name of the per-element frame block, `orientation` (io.sg_keys), on the solid side.
 
-`elementOrientations` -- the OpenSG 1.x spelling -- is still read: every solid loader renames it to `orientation`
+`elementOrientations` -- the legacy spelling of OpenSG 2.1 and earlier -- is still read: every solid loader renames it to `orientation`
 with a one-line note, and a file or SG dict that carries both spellings is refused.  The dialect detectors accept
 either spelling, every solid writer writes `orientation:` only, and the shipped solid examples use the one name.
 Gates: the law of a framed cell is the same in both spellings and equals its block `angle: 45` twin to 1e-12 of
@@ -29,7 +29,7 @@ SQ_SG = os.path.join(ROOT, "tests", "msg_k_reference", "fixtures", "prevabs", "s
 IEA_RING = os.path.join(ROOT, "examples", "OpenSG_shell", "IEA_blade_beam", "iea_s10_shell.yaml")
 
 NEW = "orientation"
-LEGACY = "elementOrientations"           # the OpenSG 1.x spelling: read, never written
+LEGACY = "elementOrientations"           # the legacy spelling: read, never written
 KEY_LINE = re.compile(r"^(?:orientation|elementOrientations):", re.M)
 
 # the canonical +45 two-quad cell of test_yaml_frames_applied.py (cells / mat_id / materials mapping)
@@ -285,7 +285,7 @@ def test_the_shipped_solid_examples_use_the_one_name(path):
 LEGACY_READ_TESTS = ("tests/unit/test_orientation_key.py", "tests/unit/test_yaml_frames_applied.py",
                      "tests/msg_k_reference/test_sg_input_writer.py",
                      "tests/msg_shell_windio/test_orientation_key_shell.py")
-NOTE = re.compile(r"1\.x|legacy")        # a docs line names the legacy spelling only as the note that it is read
+NOTE = re.compile(r"legacy")        # a docs line names the legacy spelling only as the note that it is read
 
 
 def _repo_files(top):
@@ -320,7 +320,7 @@ def test_the_legacy_name_lives_only_in_sg_keys():
 def test_outside_src_the_legacy_name_is_only_in_legacy_read_tests_and_the_note():
     """examples/ never names the legacy spelling (every shipped yaml and generator writes `orientation`); a test
     names it only when its job is to read it (LEGACY_READ_TESTS); docs/ and README.md name it only in the note
-    that it is the OpenSG 1.x spelling, still read."""
+    that it is the legacy spelling, still read."""
     bad = []
     for top in ("examples", "tests", "docs", "README.md"):
         for rel in _repo_files(top):
