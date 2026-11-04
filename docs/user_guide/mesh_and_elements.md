@@ -61,7 +61,7 @@ element $k$ everywhere else in the file: label $k$ in `sets`, entry $k$ of `mat_
 | `cells` | solid, canonical spelling | the node ids of one element | 0-based node ids | required, or `elements` |
 | `mat_id` | solid, canonical spelling | one material id per cell | 1-based material ids | required with `cells` |
 | `sets: element:` | both | `name` and `labels` of one element group | 1-based element labels; `labels: all` (solid) is the whole SG | shell: required; solid: optional for one material |
-| `orientation` | both | nine direction cosines, `[e1 e2 e3]`; the legacy spelling `elementOrientations` (OpenSG 2.1 and earlier) is still read | row $k$ is element $k$ | shell: required; solid: no frame, material `angle:` only |
+| `orientation` | both | nine direction cosines, `[e1 e2 e3]`; the legacy spelling `elementOrientations` (OpenSG 2.1.0 and earlier) is still read | row $k$ is element $k$ | shell: required; solid: no frame, material `angle:` only |
 ```
 
 A row is written in one of two flow styles: the bracketed, space-separated row `- [4.70852238 0.09722431 0.00000000]`

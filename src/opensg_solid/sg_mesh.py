@@ -168,7 +168,7 @@ def sg_dialect(path):
               `orientation` frames (NO `sections`)
 
     The frame block counts in either spelling (io.sg_keys.
-    has_orientation_block): the legacy name (OpenSG 2.1 and earlier) is
+    has_orientation_block): the legacy name (OpenSG 2.1.0 and earlier) is
     the same block.
 
     In:  path str -- an SG yaml

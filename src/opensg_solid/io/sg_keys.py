@@ -8,7 +8,7 @@ block is named `orientation:`.  It is PreVABS' own word
 OpenSG reader already stores the frames under in memory
 (sg_mesh.load_sg_input, io.sg_input.read_opensg_yaml, the npz sidecar).
 
-`elementOrientations:` -- the legacy spelling of OpenSG 2.1 and earlier
+`elementOrientations:` -- the legacy spelling of OpenSG 2.1.0 and earlier
 (and of the 1.x FEniCS ShellSegmentMesh / SolidSegmentMesh) -- is still
 READ.  Every loader calls normalize_orientation_key on the parsed mapping
 right after yaml.load; it renames the legacy key to `orientation` with a
@@ -86,7 +86,7 @@ def normalize_orientation_key(d, path="<SG yaml>"):
         f = os.path.abspath(path) if os.path.isfile(str(path)) else None
         if f not in _NOTED:
             print(" NOTE: %s spells the frame block `%s:` (the legacy name, "
-                  "OpenSG 2.1 and earlier); it is read as `%s:`, the one "
+                  "OpenSG 2.1.0 and earlier); it is read as `%s:`, the one "
                   "name OpenSG writes"
                   % (path, found[0], ORIENTATION_KEY))
             if f is not None:

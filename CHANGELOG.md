@@ -23,7 +23,7 @@
 - The per-element frame block is `orientation:` (PreVABS' word), the one name OpenSG writes.
   The shipped example yamls use it, and their laws are unchanged. `elementOrientations:` is
   still read, with a one-line note printed once per file in a run. A file or SG dict that
-  carries both names is refused. OpenSG 2.1 and earlier ignore an `orientation:` block.
+  carries both names is refused. OpenSG 2.1.0 and earlier ignore an `orientation:` block.
 - `opensg <yaml> D` writes `<base>_dehom.SM/.EM` for `--material` (the default) and
   `<base>_dehom_global.SM/.EM` for `--global`. `export_gauss` without a frame writes the
   SG-axes names `<prefix>_global.SM/.EM`, where 2.1.0 wrote `<prefix>.SM/.EM`. A free-text

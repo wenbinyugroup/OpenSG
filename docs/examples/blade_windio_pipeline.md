@@ -148,7 +148,7 @@ in file order:
 | `elements` | two-node line segments along the contour and the webs |
 | `sets` | `element` sets `layup_k`, one per laminate, holding the element labels |
 | `sections` | `type: shell`, `elementSet: layup_k`, and the `layup` as `[material, thickness (m), angle (deg)]` triples, outermost ply first |
-| `orientation` | one $3\times3$ frame per element, flattened; the first row is $e_1$ = `[0, 0, 1]`, the beam axis; the legacy spelling `elementOrientations` (OpenSG 2.1 and earlier) is still read |
+| `orientation` | one $3\times3$ frame per element, flattened; the first row is $e_1$ = `[0, 0, 1]`, the beam axis; the legacy spelling `elementOrientations` (OpenSG 2.1.0 and earlier) is still read |
 | `materials` | `density` (kg/m³) and the `elastic` constants, in Pa |
 
 The surface the contour was generated on is recorded only as a leading comment, never as a key:

@@ -40,9 +40,9 @@ repository" button of the GitHub repository formats the citation from the same f
 * - Authors
   - Akshat Bagla (Purdue University), Wenbin Yu (Purdue University), Ernesto Camarena (Sandia National Laboratories)
 * - Version
-  - 2.1.0
+  - 2.1.1
 * - Released
-  - 2026-10-09
+  - unreleased
 * - Repository
   - <https://github.com/wenbinyugroup/OpenSG>
 * - License

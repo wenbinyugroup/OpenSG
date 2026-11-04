@@ -1,10 +1,10 @@
 """The ONE name of the per-element frame block, `orientation` (io.sg_keys), on the solid side.
 
-`elementOrientations` -- the legacy spelling of OpenSG 2.1 and earlier -- is still read: every solid loader renames it to `orientation`
+`elementOrientations` -- the legacy spelling of OpenSG 2.1.0 and earlier -- is still read: every solid loader renames it to `orientation`
 with a one-line note, and a file or SG dict that carries both spellings is refused.  The dialect detectors accept
 either spelling, every solid writer writes `orientation:` only, and the shipped solid examples use the one name.
 Gates: the law of a framed cell is the same in both spellings and equals its block `angle: 45` twin to 1e-12 of
-max|K| (OpenSG <= 2.2 given the new key drops the frames: 2.228 relative); the frames read in the two spellings are
+max|K| (OpenSG <= 2.1.0 given the new key drops the frames: 2.228 relative); the frames read in the two spellings are
 the same arrays (==); the msg-shell ring is `shell` and is refused by the solid SG-input reader in both spellings.
 The shell loaders have their own test (tests/msg_shell_windio/test_orientation_key_shell.py).  The guard: in src/
 only io/sg_keys.py names the legacy spelling; outside src/ only the legacy-read tests and the docs' note do."""
