@@ -166,28 +166,57 @@ both arguments to use the file's own blocks unchanged.
 
 The recovery driver `beam_dehom_sg.py` repeats this block and adds the macro beam strain
 $\bar{\epsilon} = [\epsilon_{11},\ \gamma_{12},\ \gamma_{13},\ \kappa_1,\ \kappa_2,\ \kappa_3]$, a
-strain 6-vector, not a load. The shipped state is $\epsilon_{11} = 0.001$ with
-$\kappa_2 = 0.01$ mm⁻¹:
+strain 6-vector, not a load. A load vector goes in through the other driver,
+`dehom_fields(r, beam_force=[F1, F2, F3, M1, M2, M3])`; give exactly one of the two. The shipped
+state is $\epsilon_{11} = 0.001$ with $\kappa_2 = 0.01$ mm⁻¹:
 
 % source: examples/OpenSG-solid/8_get_beam_dehom_from_SG/beam_dehom_sg.py
 ```python
 epsilon_bar = jnp.array([0.001, 0.0, 0.0, 0.0, 0.01, 0.0])
 ...
 Gam, Sig, U = dehom_fields(r, epsilon_bar)
-export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U)
+export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U, frame_kind="global")
 ```
 
-% source: docs/tutorials/msg_solid_beam_and_solid.md ("What it computes", section 2)
-Nothing from the homogenization is recomputed: the result dict `r` carries the warping modes, the
+% source: src/opensg_solid/sg_dehom.py (compute_fluctuations_gpu, dehom_fields)
+For `n_model=1` (`refined: 1`) the recovery is the generalized-Timoshenko recovery of the msg-shell
+route (`sg_dehom.compute_fluctuations_gpu`). The chain is seeded with the beam force $F$ itself (the
+force you give, or $F = C_{\rm eff}\,\bar{\epsilon}$ for a strain), and the 1-D equilibrium of a
+prismatic beam without distributed load gives its axial derivative exactly, $F' = R_1 F$ with
+the fixed operator $R_1$ ($M_2' = F_3$, $M_3' = -F_2$, $F'' = 0$). The recovered field is the
+zeroth-order (classical) part, the warping $V_0\,\epsilon$, plus the first-order correction, the
+warping $V_1\,\epsilon'$ and the axial derivative $V_0\,\epsilon'$ of the zeroth-order one; the
+correction carries the transverse shear, $\int\sigma_{12}\,dA = F_2$ and
+$\int\sigma_{13}\,dA = F_3$. Nothing from the homogenization is recomputed: the result dict `r` carries the warping modes, the
 material tables and the quadrature data, so you homogenize once and recover as often as you like.
 
-% source: docs/tutorials/msg_solid_beam_and_solid.md (warning in section 2)
-:::{warning}
-Only classical-channel states are valid drivers: extension, twist, bending and their combinations.
-The recovery chain is seeded with the compliance-scaled state $C_{\rm eff}^{-1}\bar{\epsilon}$,
-which makes the two transverse shear entries `epsilon_bar[1]` and `epsilon_bar[2]`
-recovery-inert: a shear-only driver recovers essentially zero stress. This is a deviation from the
-refined theory, not a setting.
+% source: src/opensg_solid/sg_dehom.py (beam_expected_resultants); tests/unit/test_beam_dehom_timoshenko.py
+:::{note}
+Every beam state is a valid driver, the transverse shear included, and the recovery is linear
+in the load: a pure $F_1$, $M_1$, $M_2$ or $M_3$ gives $F' = 0$ and the classical field exactly,
+while $F_2$ and $F_3$ drive the first-order fields. On a section whose classical and shear
+channels couple, the recovered $[F_1, M_1, M_2, M_3]$ under a shear force are the applied values
+plus the coupling term of the Timoshenko reduction,
+$\Delta F_{cl} = -A\,(I - QQ^{\mathsf T})\,A^{-1} B\,A^{-1} Q\,F_s$, with $A$ = `r["C_eff_EB"]`,
+$B$ = `r["B_tim"]`, $F_s = [F_2, F_3]$ and $Q = [[0, 0], [0, 0], [0, -1], [1, 0]]$, so that
+$Q F_s = [0, 0, -F_3, F_2]$. `sg_dehom.beam_expected_resultants(r, beam_force=F)` returns
+$F + \Delta F_{cl}$, and `opensg <name>.yaml D` prints it.
+$\Delta F_{cl}$ belongs to the recovery procedure, not to the section. VABS 4.1 recovers the same
+field and the same excess on the same mesh, and the msg-shell ring recovery carries the same
+term. It changes with the section origin: the same physical load on the same section meshed
+about another origin gives another $\Delta F_{cl}$ and another field. A 3-D solution of the
+prismatic beam closes every resultant at every section. The term is zero when the shear does
+not couple to the classical channels, as on a doubly symmetric section. On the 0.4 m x 0.2 m
+glass-epoxy test section of `tests/unit/test_beam_dehom_timoshenko.py` (+30 and -45 degree
+halves, origin 0.148 m from the centre), a pure $F_3 = 1000$ N recovers $F_1 = -1218.6$ N.
+The same load about the centre ($M_1 = 130$ N m there) recovers $F_1$ = 0 to round-off, and the
+two stress fields differ by 37.9 % of max $|\sigma|$ (0.36 % under $F_2$). VABS 4.1, run on the
+same section about the two origins, changes the same way: 36.3 % on its 3 x 3 Gauss points, equal
+to OpenSG's change on the same points to $5\times10^{-11}$ of it, with the same
+$F_1 = -1.21864\,F_3$ about the offset origin.
+A `refined: 0` beam has no shear law: it recovers the classical field only and refuses a
+nonzero $F_2$, $F_3$ or shear strain. The scope is a prismatic, untwisted beam without
+distributed load.
 :::
 
 ## Run
@@ -226,8 +255,8 @@ opensg RHC_SW_2UC_45.yaml D
 ```
 
 `D` homogenizes, then recovers. The macro state comes from a `<name>.ff` next to the yaml when there
-is one (its generalized forces `FF` are inverted through $C_{\rm eff}$), otherwise from
-`epsilon_bar:` in the header. Example 8 ships both, for the same state:
+is one (a `0:` strain is used as given; a `1:`/`FF` beam force seeds the recovery chain directly,
+$F' = R_1 F$), otherwise from `epsilon_bar:` in the header. Example 8 ships both, for the same state:
 
 % source: examples/OpenSG-solid/8_get_beam_dehom_from_SG/RHC_SW_2UC_45.yaml; RHC_SW_2UC_45.ff
 ```yaml
@@ -342,20 +371,24 @@ Recovered $\sigma_{xx}$ (MPa) at the Gauss points of the honeycomb SG under $\ep
   - $2.33938\times10^{-1}$
 * - $yy$
   - $3.46016\times10^{3}$
-  - $2.26520\times10^{-1}$
+  - $2.26517\times10^{-1}$
 * - $zz$
-  - $5.53998\times10^{2}$
+  - $5.54000\times10^{2}$
   - $8.78725\times10^{-2}$
 * - $yz$
-  - $6.03408\times10^{2}$
+  - $6.03413\times10^{2}$
   - $1.34434\times10^{-1}$
 * - $xz$
   - $1.17652\times10^{3}$
-  - $1.70443\times10^{-1}$
+  - $1.70442\times10^{-1}$
 * - $xy$
-  - $2.95941\times10^{3}$
+  - $2.95939\times10^{3}$
   - $1.02868\times10^{-1}$
 ```
+
+The strain state carries a small shear force through the law's couplings
+($C_{\rm eff}\,\bar{\epsilon}$ has $F_2 = -6.98$ N and $F_3 = -3.3\times10^{-3}$ N), and its
+first-order shear part is in these maxima.
 
 % source: docs/tutorials/msg_solid_beam_and_solid.md ("What the numbers mean", section 2)
 Check the axial field first, because beam kinematics predict it:
@@ -375,16 +408,22 @@ before reading the stresses as failure indices.
 | `RHC_SW_2UC_45.yaml` | the 2-D SG (example 8 adds `epsilon_bar:` to the header) |
 | `RHC_SW_2UC_45.sc`, `RHC_SW_2UC_45.msh` | the same mesh as a SwiftComp deck and as a gmsh mesh |
 | `mat_override.yaml` | the engineering constants and angles the drivers use |
-| `RHC_SW_2UC_45.ff` | a macro state for `opensg RHC_SW_2UC_45.yaml D` |
+| `RHC_SW_2UC_45.ff` | a macro state for `opensg RHC_SW_2UC_45.yaml D`: a `0:` strain, or a `1:` force that seeds the chain directly |
 | `beam_homo_sg.py` | example 7 driver: Timoshenko and Euler-Bernoulli stiffness, mass matrix |
 | `beam_dehom_sg.py` | example 8 driver: homogenization, then recovery under `epsilon_bar` |
 | `RHC_SW_2UC_45.out` | Timoshenko stiffness, compliance and mass matrix, timed; rewritten on every run |
 | `RHC_SW_2UC_45_beam_Timo.out` | the bare $6\times6$ written by `np.savetxt` with one header line, ready for `np.loadtxt` |
 | `RHC_SW_2UC_45_dehom.txt` | Gauss table: `GP_Index`, `Coord_X`, `Coord_Y`, six `Eps_*`, six `Sig_*`; 19 920 rows (6640 triangles, 3 points each) |
 | `RHC_SW_2UC_45_dehom.vtk` | the same points as an ASCII unstructured grid of vertex cells, one `SCALARS` field per component, for ParaView |
-| `RHC_SW_2UC_45_dehom.SM`, `.EM`, `.U` | stress, strain and fluctuation displacement: `x y z` columns (the SG coordinates in the last `n_sg` of them), then components in the order 11 22 33 12 13 23 |
+| `RHC_SW_2UC_45_dehom_global.SM`, `_dehom_global.EM`, `_dehom.U` | stress and strain in the SG axes (the `_global` tag; the ply-axes files of `opensg <name>.yaml D` keep the bare `_dehom.SM`/`.EM` names) and the fluctuation displacement: `x y z` columns (the SG coordinates in the last `n_sg` of them), then components in the order 11 22 33 12 13 23 |
 | `RHC_SW_2UC_45_mesh.png` | the SG, elements coloured by material |
 
 The `.txt` and `.vtk` files use the SwiftComp component order `xx yy zz yz xz xy`; the `.SM`, `.EM`
 and `.U` files reorder to `11 22 33 12 13 23` on write. The recovery files are written by each run
 and are not shipped. {doc}`../user_guide/output_files` describes every format.
+
+`opensg RHC_SW_2UC_45.yaml D` runs the same recovery from the command line. It writes the ply-axes
+fields by default (`--material`: each element's `orientation` frame first, then the block angle) as
+`<name>_dehom.SM`/`.EM`, and the SG-axes fields with `--global` as `<name>_dehom_global.SM`/`.EM`;
+it refuses `orientation` rows that are not proper rotations (orthonormal, right-handed) to the
+precision of rows written with 6 decimals, and it ends a refused run with the one-line reason.

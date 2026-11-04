@@ -24,7 +24,7 @@ its printed one-liner; new code should call
 `opensg_solid.io.sg_input.convert(path, dialect="sc" | "sg")`.
 
 NOTE for callers of the legacy signature: the new writer REFUSES rather than guesses.
-Those yamls carry `elementOrientations` and a nonzero density, so the
+Those yamls carry per-element `orientation` frames and a nonzero density, so the
 call now needs `orientation="bake"` (or "ignore") and
 `drop_density=True`; see VALIDATED / NOT VALIDATED in the sg_input module
 docstring for why each is a refusal and not a default.

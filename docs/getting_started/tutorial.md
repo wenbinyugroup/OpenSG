@@ -330,8 +330,8 @@ blocks, listed in {numref}`tab-tutorial-blocks` in the order they appear in `iea
 * - `sections`
   - per set: `elementSet` plus `layup` as `[material, thickness, angle]` rows, outer ply first
   - 6 sections
-* - `elementOrientations`
-  - per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$
+* - `orientation`
+  - per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$; the legacy spelling `elementOrientations` (OpenSG 2.1 and earlier) is still read
   - 310 rows
 * - `materials`
   - `name`, `density`, `elastic: {E, G, nu}` as 3-vectors
@@ -385,7 +385,7 @@ elements:
 ```
 
 Each row lists the two node ids of a line element, 1-based. Element $k$ in this list is element label $k$ in the
-sets, and row $k$ of `elementOrientations` belongs to it. Walls meet by sharing a node: the last element, `[307 65]`,
+sets, and row $k$ of `orientation` belongs to it. Walls meet by sharing a node: the last element, `[307 65]`,
 is the end of a shear web and closes on node 65 of the upper spar cap.
 
 ### Element sets and sections
@@ -425,9 +425,9 @@ is in no set falls silently to the first section.
 
 ### Element orientations
 
-% source: examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section/iea_s10_shell.yaml (elementOrientations block)
+% source: examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section/iea_s10_shell.yaml (orientation block)
 ```yaml
-elementOrientations:
+orientation:
 - [0.0, 0.0, 1.0, -0.9721541292349604, 0.2343423756204075, 0.0, -0.2343423756204075,
   -0.9721541292349604, 0.0]
 ```

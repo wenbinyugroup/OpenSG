@@ -170,7 +170,7 @@ _bake_frames folds the angle in before the frame.  Neither rejects it.
 WHAT A `.sc` CANNOT SAY, AND WHAT write_sc DOES ABOUT IT.  With
 trans_flag = 0 and nlayer = 0 -- the only shape io.sc_to_yaml.read_sc
 can read back -- a `.sc` carries ONE material id per element and no frame.
-An SG yaml's per-element `elementOrientations` therefore has no slot, and
+An SG yaml's per-element `orientation` block therefore has no slot, and
 write_sc refuses to guess: `orientation=` must be stated as
 
     "bake"   fold each distinct element frame into its own PRE-ROTATED
@@ -331,6 +331,8 @@ import os
 import numpy as np
 import yaml
 
+from opensg_solid.io.sg_keys import ORIENTATION_KEY, normalize_orientation_key
+
 #: connectivity slots in ONE SwiftComp element record -- 20, whatever the SG
 #: dimension.  NOT the per-dimension node maxima (1-D 5, 2-D 9, 3-D 20): those
 #: are element-TYPE capacities, not the width of the record, and using them
@@ -362,8 +364,10 @@ _NO_COMMENTS = (
     "it is swallowed as data and shears every field after it.  Write the "
     "file without comments.")
 
-# the shell SG yaml dialect -- a different engine's file, not a solid SG
-_SHELL_KEYS = ("sections", "elementOrientations", "elements")
+# the shell SG yaml dialect -- a different engine's file, not a solid SG.
+# The frame block is named here only by `orientation`: _load_yaml has
+# renamed a legacy spelling before this test runs (io.sg_keys)
+_SHELL_KEYS = ("sections", ORIENTATION_KEY, "elements")
 
 
 # ---------------------------------------------------------------- yaml input
@@ -406,6 +410,10 @@ def _num(v):
 def _load_yaml(path):
     """The whole SG yaml, parsed fast (libyaml, untyped).
 
+    The per-element frame block comes back under `orientation`: a legacy
+    spelling is renamed with a one-line note, and a file with both
+    spellings is refused (io.sg_keys.normalize_orientation_key).
+
     In:  path str
     Out: dict (raises ValueError when the file is not a yaml mapping)."""
     try:
@@ -417,7 +425,7 @@ def _load_yaml(path):
     if not isinstance(raw, dict):
         raise ValueError("%s is not an SG yaml (top level is %s, not a "
                          "mapping)" % (path, type(raw).__name__))
-    return raw
+    return normalize_orientation_key(raw, path)
 
 
 def _material_from_list_entry(m):
@@ -543,16 +551,21 @@ def read_opensg_yaml(path, dim=None):
                   `materials` (a MAPPING id -> block) -- what
                   io.sc_to_yaml emits and sg_mesh.load_sg_input reads.
       2-D solid   `nodes` / `elements` (1-based) / `sets: element:` /
-                  `elementOrientations` / `materials` (a LIST) -- what
+                  `orientation` / `materials` (a LIST) -- what
                   io.msh_to_yaml and the opensg_io mesh pipelines emit.
 
-    The msg-SHELL dialect (`sections` + `elementOrientations` + `elements`,
-    i.e. a contour with a LAYUP) is refused: a layup is not a mesh, so
-    there is no SG input to write from it -- build the 2-D solid section
-    with PreVABS (the OpenSG_io XML route) instead.
+    The frame block is `orientation:`; its legacy spelling is read with a
+    one-line note, and a file or dict with both is refused
+    (io.sg_keys.normalize_orientation_key).
+
+    The msg-SHELL dialect (`sections` + `orientation` + `elements`, i.e. a
+    contour with a LAYUP) is refused: a layup is not a mesh, so there is
+    no SG input to write from it -- build the 2-D solid section with
+    PreVABS (the OpenSG_io XML route) instead.
 
     In:  path str -- the SG yaml (or an already-parsed SG dict, returned
-         unchanged); dim int | None -- the SG dimension, None = inferred
+         as a copy with its frame key normalized and the missing header
+         keys defaulted); dim int | None -- the SG dimension, None = inferred
          from the node columns that actually vary (load_sg_input's rule)
     Out: dict {dim int, nodes (N, 3) float, cells list of 0-based lists,
          mat_id (E,) int 1-based, materials {int: block}, orientation
@@ -562,8 +575,10 @@ def read_opensg_yaml(path, dim=None):
          that is the macro model being written, and re-measures
          otherwise), scale float}."""
     if isinstance(path, dict) and "cells" in path:
-        sg = dict(path)
-        sg.setdefault("orientation", None)
+        # a copy: the caller's dict keeps its own keys.  A dict that uses
+        # the legacy file spelling keeps its frames (renamed, not dropped)
+        sg = normalize_orientation_key(dict(path), "<SG dict>")
+        sg.setdefault(ORIENTATION_KEY, None)
         sg.setdefault("n_model", None)
         sg.setdefault("refined", None)
         sg.setdefault("omega", None)
@@ -574,7 +589,7 @@ def read_opensg_yaml(path, dim=None):
     if all(k in keys for k in _SHELL_KEYS):
         raise ValueError(
             "%s is the msg-SHELL SG yaml dialect (sections + "
-            "elementOrientations + elements): its `sections` carry a LAYUP,"
+            "orientation + elements): its `sections` carry a LAYUP,"
             " not a solid mesh, so there is no VABS/SwiftComp SG input to"
             " write from it directly.  Build the 2-D section first --"
             " PreVABS (the OpenSG_io XML route) --"
@@ -626,13 +641,13 @@ def read_opensg_yaml(path, dim=None):
             " sets, so no element can be given a material"
             % (path, len(materials)))
 
-    ori = raw.get("elementOrientations")
+    ori = raw.get(ORIENTATION_KEY)
     if ori is not None:
         ori = np.asarray([[float(v) for v in _tokens(r)] for r in ori],
                          float)
         if ori.shape != (n_elem, 9):
             raise ValueError(
-                "%s: elementOrientations is %s, expected (%d, 9)"
+                "%s: orientation is %s, expected (%d, 9)"
                 % (path, (ori.shape,), n_elem))
 
     if dim is None:
@@ -654,7 +669,7 @@ def read_opensg_yaml(path, dim=None):
 
 # ------------------------------------------------- the VABS layup decomposition
 def yaml_frames_to_beam(ori):
-    """(E, 9) yaml `elementOrientations` -> (E, 3, 3) rows [e1; e2; e3] with
+    """(E, 9) yaml `orientation` rows -> (E, 3, 3) rows [e1; e2; e3] with
     components in BEAM order (x1 axial, x2, x3).
 
     The same component cycle sg_materials.elem_rotation_from_yaml applies:
@@ -1347,7 +1362,7 @@ def write_sc(sg, path, n_model=None, refined=None, analysis=0, elem_flag=0,
             orientation = "identity"
         elif orientation not in _ORIENTATION_MODES:
             raise ValueError(
-                "this SG carries per-element `elementOrientations` that are "
+                "this SG carries per-element `orientation` frames that are "
                 "NOT all the no-op identity, and a trans_flag=0 `.sc` has "
                 "no slot for them.  State what to do: orientation='bake' "
                 "(fold each frame into its own pre-rotated type-2 material "

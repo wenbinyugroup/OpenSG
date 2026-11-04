@@ -954,13 +954,15 @@ def test_write_sg_refuses_to_rotate_a_prerotated_C(tmp_path):
         write_sg(sg, str(tmp_path / "x.sg"))
 
 
-def test_shell_dialect_is_refused_with_the_prevabs_route_named(tmp_path):
+@pytest.mark.parametrize("key", ["orientation", "elementOrientations"])
+def test_shell_dialect_is_refused_with_the_prevabs_route_named(tmp_path, key):
+    """In both spellings of the frame block (the legacy one is read too)."""
     from opensg_solid.io.sg_input import read_opensg_yaml
 
     y = tmp_path / "shell.yaml"
     y.write_text("nodes:\n- [0.0, 0.0, 0.0]\nelements:\n- [1, 1, 1, 1]\n"
-                 "sections: []\nelementOrientations:\n- [1,0,0,0,1,0,0,0,1]\n"
-                 "materials: []\n")
+                 "sections: []\n%s:\n- [1,0,0,0,1,0,0,0,1]\n"
+                 "materials: []\n" % key)
     with pytest.raises(ValueError, match="msg-SHELL"):
         read_opensg_yaml(str(y))
 

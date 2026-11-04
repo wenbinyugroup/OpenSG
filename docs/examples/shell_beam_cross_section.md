@@ -201,8 +201,8 @@ The rest of the file is a set of blocks, listed in {numref}`tab-sbc-blocks`.
 * - `sections`
   - per set: `elementSet` plus `layup` as `[material, thickness, angle]` triples, outer ply first
   - 6 sections
-* - `elementOrientations`
-  - per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$
+* - `orientation`
+  - per element, the flattened $3\times3$ frame $[e_1\;e_2\;e_3]$; the legacy spelling `elementOrientations` (OpenSG 2.1 and earlier) is still read
   - 310 rows
 * - `materials`
   - `name`, `density`, `elastic: {E, G, nu}` as 3-vectors, with `G` = $[G_{12}, G_{13}, G_{23}]$ and `nu` = $[\nu_{12}, \nu_{13}, \nu_{23}]$
@@ -230,14 +230,14 @@ A section ties a layup to an element set. The upper spar cap reads:
     - 0.0
 ```
 
-Each row of `elementOrientations` holds $e_1$, $e_2$ and $e_3$ of one element. $e_1$ is the beam
+Each row of `orientation` holds $e_1$, $e_2$ and $e_3$ of one element. $e_1$ is the beam
 axis (out of the page), $e_2$ (blue in {numref}`fig-sbc-orient`) runs along the contour, and $e_3$
 (green) is the wall normal, which sets the outer mold line (OML) to inner mold line (IML) sense used
 by the recovery. The first element reads:
 
 % source: examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section/iea_s10_shell.yaml (lines 1035 to 1037)
 ```yaml
-elementOrientations:
+orientation:
 - [0.0, 0.0, 1.0, -0.9721541292349604, 0.2343423756204075, 0.0, -0.2343423756204075,
   -0.9721541292349604, 0.0]
 ```
@@ -251,7 +251,7 @@ Per-element material axes on the contour: $e_2$ in blue, $e_3$ in green.
 
 :::{tip}
 Check that the green arrows point consistently into the section on the skin and consistently to
-one side on each web before trusting any number. A wrong `elementOrientations` block is the most
+one side on each web before trusting any number. A wrong `orientation` block is the most
 common way to get a plausible-looking but wrong answer.
 :::
 

@@ -29,6 +29,7 @@ import numpy as np
 import jax.numpy as jnp
 import yaml as _yaml
 
+from opensg_solid.io.sg_keys import normalize_orientation_key
 from opensg_solid.sg_homo import plate_homo_2d
 from opensg_solid.sg_materials import elem_rotation_from_yaml
 
@@ -42,12 +43,13 @@ USE_ORIENTATIONS = False       # True: per-element frames + the -45 deg ply
 OUT = "square_solid_new_architecture.out"
 ############################################################
 
-d = _yaml.safe_load(open(YAML))
+# the frame block is `orientation:`; a yaml in the legacy spelling is read too
+d = normalize_orientation_key(_yaml.safe_load(open(YAML)), YAML)
 row = lambda r: [float(v) for v in
                  " ".join(str(x) for x in (r if isinstance(r, list) else [r])).split()]
 nd = np.array([row(r) for r in d["nodes"]], float)
 tri = np.array([[int(v) for v in row(r)] for r in d["elements"]], int) - 1
-ori = np.array(d["elementOrientations"], float)
+ori = np.array(d["orientation"], float)
 ne = len(tri)
 mat_id = np.ones(ne, int)          # sc["mat_id"] is 1-BASED
 for k, s in enumerate(d["sets"]["element"]):

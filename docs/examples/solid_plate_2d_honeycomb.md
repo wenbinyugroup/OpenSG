@@ -197,7 +197,7 @@ The shipped state combines a transverse extension $\varepsilon_{22} = 0.1$ with 
 curvature $\kappa_{11} = 0.1$. This vector comes from your plate solution at the station of
 interest; there is no meaningful default. The `RHC_SW_2UC_45.yaml` of example 4 carries the same
 mesh in the named-material dialect (`Al69`, `HC_ply`, `HC_ply_3`) with element sets and
-per-element frames (`elementOrientations`). The script's `material_param` and `angles` replace
+per-element frames (`orientation`). The script's `material_param` and `angles` replace
 its material blocks, row by row in the order of the yaml's material list.
 
 :::{warning}
@@ -271,9 +271,9 @@ It writes `RHC_SW_2UC_45_dehom.txt`, `.vtk`, `.SM`, `.EM` and `.U`, and closes w
 
 :::{note}
 The command-line recovery writes stress and strain in each element's ply axes by default
-(`--material`); `--global` keeps the SG axes. A yaml with per-element frames
-(`elementOrientations`) refuses `--material`: pass `--global`.
-`plate_dehom_2dsg.py` writes its fields in the SG axes.
+(`--material`: each element's `orientation` frame first, then the block angle); `--global` keeps
+the SG axes and names the stress and strain files `_dehom_global.SM`/`.EM`.
+`plate_dehom_2dsg.py` writes its fields in the SG axes (`_dehom_global.SM`/`.EM`).
 :::
 
 ## Result
@@ -426,8 +426,8 @@ line (`np.savetxt` format), not the timed `.K` layout.
   - one row per Gauss point: `GP_Index`, `Coord_X`, `Coord_Y`, then `Eps_xx Eps_yy Eps_zz Eps_yz Eps_xz Eps_xy` and `Sig_xx` through `Sig_xy`, in SwiftComp component order
 * - `RHC_SW_2UC_45_dehom.vtk`
   - ASCII `UNSTRUCTURED_GRID` point cloud of the same 19 920 points, each strain and stress component as its own `SCALARS` array
-* - `RHC_SW_2UC_45_dehom.SM`, `.EM`, `.U`
-  - the same fields in the layout of {doc}`solid_plate_1d_recovery`: `x y z` then `S11 S22 S33 S12 S13 S23` (stress), `E11` through `E23` (strain), `U1 U2 U3` (displacement)
+* - `RHC_SW_2UC_45_dehom_global.SM`, `_dehom_global.EM`, `_dehom.U`
+  - the same fields in the layout of {doc}`solid_plate_1d_recovery`: `x y z` then `S11 S22 S33 S12 S13 S23` (stress), `E11` through `E23` (strain), `U1 U2 U3` (displacement); the `_global` tag names the SG axes these clouds are in (the ply-axes files of `opensg <name>.yaml D` keep the bare `_dehom.SM`/`.EM` names)
 * - `RHC_SW_2UC_45.out`, `RHC_SW_2UC_45_mesh.png`
   - the timed law and the mesh figure, from the `plate_homo_2d` call the script makes first
 ```
@@ -500,7 +500,7 @@ from the dehomogenization point cloud.
   - driver script with the `epsilon_bar` input
 * - `4_.../RHC_SW_2UC_45_plate_ABD.out`
   - output: the plain-text $6\times6$ ABD
-* - `4_.../RHC_SW_2UC_45_dehom.txt`, `.vtk`, `.SM`, `.EM`, `.U`
+* - `4_.../RHC_SW_2UC_45_dehom.txt`, `.vtk`, `.U`, `_dehom_global.SM`, `_dehom_global.EM`
   - written by the script: the recovered fields
 ```
 

@@ -60,7 +60,7 @@ for th_deg in (15.0, -15.0):
     o.append("elements:")
     for a, b in cells:
         o.append("- [%d %d]" % (a+1, b+1))
-    o.append("elementOrientations:")
+    o.append("orientation:")
     for tv in tans:
         e3 = np.cross([0, 0, 1.0], [tv[0], tv[1], 0])
         o.append("- [0.0, 0.0, 1.0, %.9f, %.9f, 0.0, %.9f, %.9f, 0.0]"

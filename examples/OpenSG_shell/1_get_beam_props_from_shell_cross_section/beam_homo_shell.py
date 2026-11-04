@@ -10,7 +10,7 @@ in the yaml's `reference` field.
 # ALL VARIABLES USED IN THIS SCRIPT
 # ----------------------------------------------------------------------------
 #   name                reads <name>_shell.yaml (1-D shell SG: nodes, elements,
-#                       elementOrientations, sections/layups, materials, sets)
+#                       orientation, sections/layups, materials, sets)
 #   B                   build_rm_bundle result: B["Timo"] (6,6) + the RM warping
 #                       V0/V1, strip geometry, layup dbs (consumed by example 2)
 #   C6                  (6, 6) Timoshenko [eps11 gam12 gam13 kap1 kap2 kap3]

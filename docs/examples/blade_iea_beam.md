@@ -59,7 +59,7 @@ from a BeamDyn run; {doc}`blade_windio_pipeline` describes both hand-offs.
 
 ## Input
 
-`iea_s10_shell.yaml` holds `nodes`, `elements`, `sets`, `sections`, `elementOrientations` and
+`iea_s10_shell.yaml` holds `nodes`, `elements`, `sets`, `sections`, `orientation` and
 `materials` (the format is explained in {doc}`../getting_started/tutorial`). Its last line,
 `reference: center`, records that the contour is the laminate mid-surface.
 

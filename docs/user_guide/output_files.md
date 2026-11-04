@@ -225,7 +225,9 @@ A `D` run (see {doc}`recovery`) writes, besides the `.out`, the files below. It 
 Each `.SM`, `.EM` and `.U` file opens with two comment lines (the title, then the point set, the
 frame, and `z = 0 is the reference surface`) and a column header. With `--global` the stress and
 strain files are named `_global.SM`, `_global.EM` and `_elemental_global.SM`; `.U` keeps its
-name, since it is never rotated.
+name, since it is never rotated. From Python, `export_gauss` on the `dehom_fields` output (the SG
+axes) writes the `_global.SM`/`_global.EM` names too; after `material_frame_fields` (the ply axes),
+`frame_kind="material"` writes the bare `.SM`/`.EM` names.
 
 **msg-shell**, prefix `<base>_dehom`:
 

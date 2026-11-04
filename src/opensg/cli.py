@@ -121,7 +121,7 @@
                        [--n_model {1,2,3}] [--refined {0,1}]
                        [--materials PATH] [--p_refine]
                             gmsh 2.2 solid mesh -> <base>.yaml.  The mesh
-                            side (nodes / elements / elementOrientations /
+                            side (nodes / elements / orientation /
                             sets, one set per gmsh physical tag, named
                             from $PhysicalNames) is complete either way;
                             with one --mat<K> flag per physical tag K the
@@ -309,7 +309,13 @@ def main(argv=None):
                              " reference of a shell contour); %s is a solid"
                              " SG -- drop the flag" % os.path.basename(argv[0]))
         from opensg_solid.cli import main as _engine
-    return _engine(argv)
+    from opensg_solid.io.sg_keys import FrameBlockError
+    try:
+        return _engine(argv)
+    except FrameBlockError as _e:
+        # a yaml carrying the frame block under both names (io.sg_keys):
+        # its one-line reason on every engine and route, not a traceback
+        raise SystemExit("refused: %s" % _e)
 
 
 def _yaml_header_matches(yml, n_model, refined):
@@ -440,7 +446,7 @@ def yaml_to_sc(argv):
     In:  argv (list[str]) -- everything after the `yaml_to_sc` keyword:
          yaml paths/globs, plus --out-base BASE (single input only),
          --orientation {bake,ignore} (required only when the yaml carries
-         per-element elementOrientations), --drop-density
+         per-element `orientation` frames), --drop-density
     Out: int exit code (0 ok, 1 any file failed, 2 usage)."""
     import argparse
     import glob
@@ -460,7 +466,7 @@ def yaml_to_sc(argv):
                         "default: the yaml stem)")
     p.add_argument("--orientation", default=None,
                    choices=("bake", "ignore"),
-                   help="what to do with per-element elementOrientations "
+                   help="what to do with per-element `orientation` "
                         "frames, which a trans_flag=0 .sc has no slot "
                         "for: 'bake' folds each distinct frame into its "
                         "own pre-rotated type-2 material (exact), "

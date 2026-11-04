@@ -41,12 +41,13 @@ Method: a mesh edge used by exactly ONE quad is a FREE edge; the connected
 components of the free-edge graph are the segment's END CROSS-SECTIONS.  Web
 junctions are simply degree>2 nodes -- no special treatment (RM is C0).
 
-Each end is written as a 1-D cross-section YAML matching OpenSG's FEniCS
-ShellSegmentMesh._create_1Dyaml:
+Each end is written as a 1-D cross-section YAML in the layout of OpenSG's FEniCS
+ShellSegmentMesh._create_1Dyaml, the frame block named `orientation` (the one
+name, opensg_solid.io.sg_keys; the FEniCS spelling is still read):
   nodes  = [cross1, cross2, axial]     (the two in-plane coords + the axial coord)
   elements = 1-indexed line pairs
   sections/sets = all layups, edges grouped by subdomain
-  elementOrientations = the PARENT quad's full 9-component orientation per edge
+  orientation = the PARENT quad's full 9-component orientation per edge
   materials
 plus the e1/e2/e3 orientation PNG precheck and an .npz bundle (same schema the
 solver consumes) with node2seg = the boundary node's own segment id (identity).
@@ -121,12 +122,13 @@ def load_ring(path, center_ref=False):
     """1-D contour shell YAML -> ring arrays (rx, cells, rsub, re3, D_by, G_by, k22, ax, cross).
     center_ref=True references the plate ABD to the laminate MID-surface (default, for a mid-surface
     contour); center_ref=False references it to the OML (use with an OML contour, fraction=0.0)."""
-    d = yaml.safe_load(open(path))
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
+    d = normalize_orientation_key(yaml.safe_load(open(path)), path)
     rx = np.array([_row(r)[:3] for r in d["nodes"]], dtype=float)
     cells = np.array([[int(v) for v in _row(e)] for e in d["elements"]], dtype=int)
     if cells.min() == 1:
         cells = cells - 1
-    ori = np.array([_row(o) for o in d["elementOrientations"]], dtype=float)
+    ori = np.array([_row(o) for o in d["orientation"]], dtype=float)
     re2, re3 = ori[:, 3:6], ori[:, 6:9]
     sections = d["sections"]; materials = _norm_materials(d["materials"])
     setname_to_sec = {s["elementSet"]: i for i, s in enumerate(sections)}
@@ -182,12 +184,13 @@ def show(name, S, So, C6, C5):
 # ----------------------------------------------------------------------
 
 def load_ring_ref(path, ref="oml"):
-    d = yaml.load(open(path), Loader=_YLoader)
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
+    d = normalize_orientation_key(yaml.load(open(path), Loader=_YLoader), path)
     rx = np.array([_row(r)[:3] for r in d["nodes"]], dtype=float)
     cells = np.array([[int(v) for v in _row(e)] for e in d["elements"]], dtype=int)
     if cells.min() == 1:
         cells = cells - 1
-    ori = np.array([_row(o) for o in d["elementOrientations"]], dtype=float)
+    ori = np.array([_row(o) for o in d["orientation"]], dtype=float)
     re3 = ori[:, 6:9]
     sections = d["sections"]; materials = _norm_materials(d["materials"])
     setname_to_sec = {s["elementSet"]: i for i, s in enumerate(sections)}
@@ -231,12 +234,17 @@ def load_segment_yaml(path):
         path: str -- path to the segment YAML file.
     Out:
         dict -- parsed YAML (nodes, elements, sets, sections,
-        elementOrientations, materials).
+        orientation, materials); the frame block is read in either
+        spelling and returned under "orientation" (opensg_solid.io.sg_keys).
+    Raises:
+        ValueError -- the file carries the frame block in both spellings.
     """
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
     try:
-        return yaml.load(open(path), Loader=yaml.CLoader)
+        d = yaml.load(open(path), Loader=yaml.CLoader)
     except AttributeError:
-        return yaml.safe_load(open(path))
+        d = yaml.safe_load(open(path))
+    return normalize_orientation_key(d, path)
 
 
 def subdomain_ids(seg):
@@ -338,7 +346,7 @@ def _write_boundary_yaml(comp, oedges, oq, nodes, ori, subdom, sections, ax_idx,
         "elements": d_elems,
         "sets": {"element": sets},
         "sections": sections,
-        "elementOrientations": edge_ori,
+        "orientation": edge_ori,
         "materials": materials,
     }
     with open(path, "w") as f:
@@ -382,7 +390,7 @@ def extract(seg_yaml, out_npz, write_yaml=False, plot="auto"):
     require_quad_mesh(quads, "sg_mesh.extract")
     if min(min(q) for q in quads) == 1:                    # 1-indexed YAML (our cylinder) -> 0-indexed (OpenSG)
         quads = [[n - 1 for n in q] for q in quads]
-    ori = np.array(seg["elementOrientations"], dtype=float)     # (Ne,9)
+    ori = np.array(seg["orientation"], dtype=float)     # (Ne,9)
     e1s, e2s, e3s = ori[:, 0:3], ori[:, 3:6], ori[:, 6:9]
     subdom = subdomain_ids(seg)
     sections = seg["sections"]; materials = seg["materials"]

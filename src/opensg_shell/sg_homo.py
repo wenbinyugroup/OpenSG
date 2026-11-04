@@ -1476,7 +1476,9 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
         from yaml import CSafeLoader as _YL3  # of a big 3-D SG mesh costs ~25 s alone
     except ImportError:
         from yaml import SafeLoader as _YL3
-    d = _yaml.load(open(yaml_path), Loader=_YL3)
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
+    d = normalize_orientation_key(_yaml.load(open(yaml_path), Loader=_YL3),
+                                  yaml_path)
     if boundary is None:                     # yaml header: `aperiodic: 1` is
         _ap = d.get("aperiodic")             # the opt-out, absent = periodic
         boundary = "aperiodic" if _ap is not None and int(_ap) else "periodic"
@@ -1508,7 +1510,7 @@ def shell_sg3d(yaml_path, omega=None, drill_pen=None, g_source=None,
     # the guard that makes the silent-NaN collapsed-quad path unreachable
     check_element_edges(nd, el3, tag="triangle", ids=itri)
     check_element_edges(nd, el4, tag="quad", ids=iquad)
-    ori = np.array(d["elementOrientations"], float)
+    ori = np.array(d["orientation"], float)
     e33, e34 = ori[itri, 6:9], ori[iquad, 6:9]
     nn, ne, ne3, ne4 = len(nd), len(el), len(el3), len(el4)
 
@@ -1900,8 +1902,12 @@ def segment_timo_from_3dyaml(seg_yaml, workdir=None, lam_space="elem",
         base = os.path.join(workdir, os.path.basename(base))
     npz = base + "_boundaries.npz"
     # 1. boundary extraction: free-edge components -> 1-D yamls + node2seg
-    with contextlib.redirect_stdout(io.StringIO()):
+    _log = io.StringIO()
+    with contextlib.redirect_stdout(_log):
         extract(seg_yaml, npz, write_yaml=write_boundary_yamls)
+    for _ln in _log.getvalue().splitlines():   # the loader's one-line NOTE (a
+        if _ln.lstrip().startswith("NOTE:"):   # legacy frame-block spelling,
+            print(_ln)                         # io.sg_keys) stays visible
     b = np.load(npz, allow_pickle=True)
     ax = int(b["axis"])
     cross = tuple(j for j in range(3) if j != ax)

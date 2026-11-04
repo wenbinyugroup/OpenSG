@@ -45,7 +45,7 @@ There is no `dim:` key. The dimension is read from the mesh, differently in the 
 
 {numref}`tab-mesh-keys` lists the blocks that carry the geometry and topology. Row $k$ of `elements` (or `cells`) is
 element $k$ everywhere else in the file: label $k$ in `sets`, entry $k$ of `mat_id` and row $k$ of
-`elementOrientations`.
+`orientation`.
 
 % source: src/opensg_shell/sg_mesh.py (_row, load_ring_ref, subdomain_ids, extract); src/opensg_shell/sg_homo.py
 % (shell_sg3d); src/opensg_solid/io/sg_input.py (_tokens, read_opensg_yaml, _mat_id_from_sets);
@@ -61,7 +61,7 @@ element $k$ everywhere else in the file: label $k$ in `sets`, entry $k$ of `mat_
 | `cells` | solid, canonical spelling | the node ids of one element | 0-based node ids | required, or `elements` |
 | `mat_id` | solid, canonical spelling | one material id per cell | 1-based material ids | required with `cells` |
 | `sets: element:` | both | `name` and `labels` of one element group | 1-based element labels; `labels: all` (solid) is the whole SG | shell: required; solid: optional for one material |
-| `elementOrientations` | both | nine direction cosines, `[e1 e2 e3]` | row $k$ is element $k$ | shell: required; solid: no frame, material `angle:` only |
+| `orientation` | both | nine direction cosines, `[e1 e2 e3]`; the legacy spelling `elementOrientations` (OpenSG 2.1 and earlier) is still read | row $k$ is element $k$ | shell: required; solid: no frame, material `angle:` only |
 ```
 
 A row is written in one of two flow styles: the bracketed, space-separated row `- [4.70852238 0.09722431 0.00000000]`

@@ -213,7 +213,7 @@ A type 2 `C` is normally an already rotated ply, so give it no `angle`. The sign
 
 ### Material list with element sets
 
-The mesh spelling written by `opensg msh_to_yaml` (`nodes`, `elements`, `elementOrientations`,
+The mesh spelling written by `opensg msh_to_yaml` (`nodes`, `elements`, `orientation`,
 `sets`, `materials`) lists the materials by name, each with `density` and an `elastic` block of
 the three triples, and binds them to the `sets: element:` entries:
 
@@ -248,7 +248,7 @@ The binding rules:
 - `labels: all` assigns the whole SG to one material.
 - Every element must belong to a set; an element without a material is an error.
 - An optional `angle:` (degrees about $y_3$) is applied first and then composed with the
-  element frame of `elementOrientations`.
+  element frame of `orientation`.
 - A single value in `E`, `G` or `nu` is repeated for all three components.
 - The constants may also sit flat on the entry (`name`, `E`, `G`, `nu`, `rho`) instead of under
   `elastic:`; both forms are read as a type 1 block.

@@ -115,7 +115,7 @@ nothing of its own. It resolves the engine with
 \texttt{opensg\_solid.sg\_mesh.resolve\_msg} --- the YAML's \texttt{msg:} key
 (\texttt{shell} or \texttt{solid}) or, when that key is absent, the mesh
 \emph{dialect} (\texttt{nodes}/\texttt{cells}/\texttt{mat\_id} is solid,
-\texttt{nodes}/\texttt{elements}/\texttt{sets}/\texttt{sections}/\texttt{elementOrientations}
+\texttt{nodes}/\texttt{elements}/\texttt{sets}/\texttt{sections}/\texttt{orientation}
 is shell) --- and hands the untouched argument list to
 \texttt{opensg\_shell.cli.main} or \texttt{opensg\_solid.cli.main}. A
 \texttt{msg:} that contradicts the dialect is an error, not a silent
@@ -536,7 +536,7 @@ one input file, one entry function, one \texttt{.out} file per branch.
 
 This is the composite blade cross-section route. The input is a 1-D shell SG
 YAML: nodes and two-node elements tracing the wall contour,
-\texttt{elementOrientations}, \texttt{sections} carrying a layup per element set,
+\texttt{orientation}, \texttt{sections} carrying a layup per element set,
 and \texttt{materials}. The entry function is
 \texttt{build\_rm\_bundle(shell\_yaml, ref=None, shear="mitc4\_g23",
 g\_source=None)}, and it proceeds as follows.
@@ -701,7 +701,7 @@ optional \texttt{aperiodic: 1} key is the opt-out --- the same key
 header contract; an explicit argument always wins.
 
 \begin{enumerate}
-\item The YAML's nodes, elements and \texttt{elementOrientations} are read; the
+\item The YAML's nodes, elements and \texttt{orientation} are read; the
       element normal $e_3$ is columns 7 through 9 of the orientation rows.
       Triangles and quads may be mixed: they are assembled as two separate
       element batches (MITC3 and MITC4) scattered into the same global

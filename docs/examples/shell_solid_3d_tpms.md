@@ -43,7 +43,7 @@ The cell is a unit cube, so the ply thickness is a fraction of the cell edge. In
 ## Input
 
 The header and the two blocks a user edits, verbatim; the mesh blocks `nodes`, `elements`,
-`elementOrientations` and `sets` follow them in the file.
+`orientation` and `sets` follow them in the file.
 
 % source: examples/OpenSG_shell/4_get_solid_props_from_shell_3D_SG/schwarz_p_3Dshell.yaml
 ```yaml

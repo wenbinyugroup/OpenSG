@@ -1,7 +1,7 @@
 # Coordinate systems and conventions
 
 Three frames meet in a structure gene (SG) yaml. The SG coordinates are the node coordinates written in `nodes`. The material frame of
-each element is a triad of unit vectors $e_1, e_2, e_3$, written row by row in `elementOrientations`. The ply frame
+each element is a triad of unit vectors $e_1, e_2, e_3$, written row by row in `orientation`. The ply frame
 follows from the material frame by the ply angle, a rotation about $e_3$ that the layup (shell dialect) or the material
 block (solid dialect) carries. On top of these, every macro law has a fixed order of strains and stiffness entries.
 
@@ -42,12 +42,20 @@ column that varies. A 1-D SG varies in column 0 only, a 2-D SG in columns 0 and 
 
 ## Material frame of an element
 
-Each row of `elementOrientations` is nine direction cosines forming three stacked unit vectors, in the same component
+Each row of `orientation` is nine direction cosines forming three stacked unit vectors, in the same component
 order as the node rows:
 
 ```text
 [ e1x e1y e1z | e2x e2y e2z | e3x e3y e3z ]
 ```
+
+`orientation` is PreVABS' word for the material frame and the one name OpenSG writes, in
+both dialects (shell and solid). `elementOrientations`, the legacy spelling of the same
+block in OpenSG 2.1 and earlier, is still read: the loader renames it and prints a one-line
+note, once per file in a run. A file that carries both spellings is refused. OpenSG 2.2 is
+the first release that reads `orientation:`. OpenSG 2.1 and earlier do not know the new name
+and ignore an `orientation:` block, so the solid route there runs without the frames; keep
+files meant for those releases in the old spelling.
 
 On a cross-section SG, shell or solid, the roles are fixed:
 
@@ -61,20 +69,20 @@ The first element of the IEA-22 cross-section shows the pattern: $e_1$ out of pl
 
 % source: examples/OpenSG_shell/1_get_beam_props_from_shell_cross_section/iea_s10_shell.yaml
 ```yaml
-elementOrientations:
+orientation:
 - [0.0, 0.0, 1.0, -0.9721541292349604, 0.2343423756204075, 0.0, -0.2343423756204075,
   -0.9721541292349604, 0.0]
 ```
 
 On a 3-D shell SG the triad follows each facet: $e_3$ is the facet normal (right-hand rule on the node order), $e_2$
 the first edge and $e_1 = e_2 \times e_3$, which is how the gmsh converter of {doc}`converters` writes it. A solid SG
-may omit `elementOrientations`; the gmsh converter writes every element with the constant default frame, $e_1$ out of
+may omit `orientation`; the gmsh converter writes every element with the constant default frame, $e_1$ out of
 plane:
 
 % source: examples/OpenSG-solid/4_get_plate_dehom_from_2DSG/RHC_SW_2UC_45.yaml; src/opensg/cli.py (msh_to_yaml); src/opensg_solid/io/sg_input.py
 % (frames_are_noop)
 ```yaml
-elementOrientations:
+orientation:
 - [0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
 ```
 
@@ -93,11 +101,20 @@ directly:
 
 % source: docs/theory/rules/orientation_e1_out_of_plane.md
 ```python
-ori = np.array(d["elementOrientations"], float)
+from opensg_solid.io.sg_keys import normalize_orientation_key
+d = normalize_orientation_key(d)            # a legacy `elementOrientations:` file too
+ori = np.array(d["orientation"], float)
 e1, e3 = ori[:, 0:3], ori[:, 6:9]
 assert np.allclose(np.abs(e1[:, 2]), 1.0)   # e1 out of plane
 assert np.allclose(e3[:, 2], 0.0)           # e3 in plane
 ```
+
+The solid dehomogenization (`opensg <yaml> D`, `sg_dehom.dehom_fields`) checks every frame
+itself and refuses one that is not a proper rotation: $\det M \le 0$, or
+$\max|M M^{\mathsf T} - I|$ above $2\sqrt{3}\cdot 5\times10^{-7} + 3\,(5\times10^{-7})^2
+= 1.7321\times10^{-6}$, the largest deviation of a rotation whose rows are written with 6
+decimals (an error of at most $5\times10^{-7}$ per entry). Write the rows with at least 6
+decimals; the homogenization itself runs on any frame and never changes its law for this check.
 
 ### The orientation figure
 

@@ -28,6 +28,10 @@ def load_yaml(yaml_path):
     rather than ``[1, 2]``.  ``yaml.safe_load`` returns these as a single
     string inside a list, so a ``_parse_row`` helper is applied.
 
+    The frame block is not read here, but its name is checked as on every
+    other shell route (opensg_solid.io.sg_keys): a legacy spelling gets the
+    one-line note, a file carrying both spellings is refused (ValueError).
+
     Parameters
     ----------
     yaml_path : str — path to .yaml file
@@ -40,8 +44,9 @@ def load_yaml(yaml_path):
     layup_db     : dict {layup_name: {mat_names, thick, angles}}
     elem_to_layup: dict {elem_id_1based: layup_name}
     """
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
     with open(yaml_path, 'r') as f:
-        data = yaml.load(f, Loader=_YLoader)
+        data = normalize_orientation_key(yaml.load(f, Loader=_YLoader), yaml_path)
 
     def _parse_row(row):
         if isinstance(row, str):
@@ -117,7 +122,8 @@ def read_mesh(nodes_3d, elements_1b, elem_to_layup):
 
 def element_e3_from_yaml(yaml_path):
     """(E,2) cross-section components of the material e3 (through-thickness, ply
-    stacking normal) per element, from the YAML ``elementOrientations``.
+    stacking normal) per element, from the YAML ``orientation`` block (read in
+    either spelling, opensg_solid.io.sg_keys).
 
     Each orientation row is 9 numbers; the OpenSG convention stores e3 such that
     its cross-section (y2, y3) components are ``(o[6], o[7])`` (o[8] ~ beam ~ 0).
@@ -125,8 +131,9 @@ def element_e3_from_yaml(yaml_path):
     uses, so it is the ground-truth inward normal for the IML offset.
     """
     import yaml as _yaml
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
     with open(yaml_path) as f:
-        d = _yaml.safe_load(f)
+        d = normalize_orientation_key(_yaml.safe_load(f), yaml_path)
 
     def _row(r):
         if isinstance(r, str):
@@ -134,7 +141,7 @@ def element_e3_from_yaml(yaml_path):
         if isinstance(r, (list, tuple)) and len(r) == 1 and isinstance(r[0], str):
             return r[0].strip('[]').split()
         return [str(v) for v in r]
-    ori = np.array([[float(v) for v in _row(o)] for o in d['elementOrientations']])
+    ori = np.array([[float(v) for v in _row(o)] for o in d['orientation']])
     e3 = ori[:, [6, 7]]
     return e3 / (np.linalg.norm(e3, axis=1, keepdims=True) + 1e-30)
 

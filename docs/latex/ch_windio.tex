@@ -214,8 +214,9 @@ Key & Content \\
 \texttt{sets} & \texttt{element} sets, one per layup, holding the element labels \\
 \texttt{sections} & \texttt{type: shell}, \texttt{elementSet: layup\_k}, and the \texttt{layup} as \\
   & \texttt{[material, thickness (m), angle (deg)]} triples, outermost ply first \\
-\texttt{elementOrientations} & one $3\times3$ frame per element, flattened; the first row is $\mathbf{e}_1$, \\
+\texttt{orientation} & one $3\times3$ frame per element, flattened; the first row is $\mathbf{e}_1$, \\
   & out of the section plane, along the beam axis \\
+  & (the legacy spelling \texttt{elementOrientations} of OpenSG 2.1 and earlier is still read) \\
 \texttt{materials} & \texttt{density} in kg/m$^3$ and orthotropic \texttt{elastic: \{E, G, nu\}} triples in Pa \\
 (leading comment) & which surface the contour was generated on --- the run passes \texttt{--center} for a mid-surface contour \\
 \bottomrule

@@ -980,7 +980,7 @@ table and the quadrature data straight into the recovery.
     \texttt{sg\_dehom.gauss\_coords},
     \texttt{\_write\_field}};
   \node[outnode, below=of f4] (o2) {\texttt{RHC\_SW\_2UC\_45\_dehom.txt}\\
-    \texttt{.vtk}, \texttt{.SM}, \texttt{.EM}, \texttt{.U}};
+    \texttt{.vtk}, \texttt{\_global.SM}, \texttt{\_global.EM}, \texttt{.U}};
   \draw[capedge] (i1) -- (f1);
   \draw[capedge] (f1) -- (f2);
   \draw[capedge] (f2) -- (o1);
@@ -1048,10 +1048,13 @@ file & content \\
 \texttt{RHC\_SW\_2UC\_45\_dehom.vtk} & ASCII \texttt{UNSTRUCTURED\_GRID} point
   cloud of the same 19\,920 points, each strain and stress component as its own
   \texttt{SCALARS} array, ready for ParaView \\
-\texttt{RHC\_SW\_2UC\_45\_dehom.SM} / \texttt{.EM} / \texttt{.U} & the same
-  fields in the \texttt{rm\_plate\_1D} layout: \texttt{x y z} then
-  \texttt{S11 S22 S33 S12 S13 S23}, \texttt{E11} through \texttt{E23}, and
-  \texttt{U1 U2 U3} \\
+\begin{tabular}[t]{@{}l@{}}\texttt{RHC\_SW\_2UC\_45\_dehom\_global.SM} /\\
+  \texttt{\_dehom\_global.EM} / \texttt{\_dehom.U}\end{tabular}
+  & the same fields in the \texttt{rm\_plate\_1D} layout:
+  \texttt{x y z} then \texttt{S11 S22 S33 S12 S13 S23}, \texttt{E11} through
+  \texttt{E23}, and \texttt{U1 U2 U3}; the \texttt{\_global} tag names the SG
+  axes these clouds are in (the ply-axes files of \texttt{opensg <name>.yaml D}
+  keep the bare \texttt{\_dehom.SM}/\texttt{.EM} names) \\
 \texttt{RHC\_SW\_2UC\_45\_mesh.png} & the mesh figure, from the
   \texttt{plate\_homo\_2d} call the script makes first \\
 \bottomrule
@@ -1172,7 +1175,7 @@ engine path on the right is the same macro model reached through
     naming the matrix and fibre};
   \node[funcnode, below=of i1] (f1) {\texttt{make\_udcomp\_yaml.py}\\
     nodes, 1-based triangles, a constant\\
-    \texttt{elementOrientations} frame, the two\\
+    \texttt{orientation} frame, the two\\
     materials in MPa, \texttt{sets.element}};
   \node[outnode, below=of f1] (o1) {\texttt{UDcomp\_2D.yaml}};
   \node[funcnode, below=of o1] (f2) {\texttt{solid\_homo\_2dsg.C\_from\_eng}\\
@@ -1242,7 +1245,7 @@ the SG coordinates labelled $y_2$ and $y_3$.}
 \texttt{make\_udcomp\_yaml.py} is a one-time converter from
 \texttt{UDcomp\_2D.msh} (gmsh 2.2 format) to \texttt{UDcomp\_2D.yaml}. It writes
 the nodes as \texttt{- [x y z]} rows, the triangles as 1-based
-\texttt{- [n1 n2 n3]} rows, a constant \texttt{elementOrientations} frame
+\texttt{- [n1 n2 n3]} rows, a constant \texttt{orientation} frame
 ($e_1$ = axial $z$, $e_2$ = $+x$, $e_3$ = $+y$), the two materials as
 engineering constants in MPa, and \texttt{sets.element} splitting the mesh into
 the matrix and fibre phases by gmsh physical tag. The yaml is already checked
@@ -1276,7 +1279,7 @@ passes of \texttt{master = master[master]}) and the three pinned rigid
 translations in plain NumPy, so the entire \texttt{n\_model=3} algebra is
 readable in one file. It therefore writes its own \texttt{\_Deff.out} through
 \texttt{np.savetxt} rather than the SwiftComp-layout report, and it consumes the
-\texttt{nodes}/\texttt{elements}/\texttt{elementOrientations}/\texttt{materials}/\texttt{sets}
+\texttt{nodes}/\texttt{elements}/\texttt{orientation}/\texttt{materials}/\texttt{sets}
 yaml dialect that \texttt{make\_udcomp\_yaml.py} emits, not the
 \texttt{nodes}/\texttt{cells}/\texttt{mat\_id}/\texttt{materials}
 dialect that \texttt{opensg\_solid.sg\_mesh.load\_sg\_input} parses. The engine
@@ -1884,14 +1887,21 @@ in the Timoshenko $6\times6$; that is the entire reason to run
 
 Dehomogenization takes a macro beam state and recovers the pointwise 3-D strain
 and stress inside the SG, at every element Gauss point. For \texttt{n\_model=1}
-this runs the generalized-Timoshenko recovery ladder
-(\texttt{sg\_dehom.compute\_fluctuations\_gpu}): a successive-derivative
-product-rule chain $\mathbf{F}' = \mathbf{R}\,\mathbf{F}$ seeded with
-$\mathbf{F}_{1d} = \mathbf{C}_{\rm eff}^{-1}\bar{\boldsymbol{\epsilon}}$, which
-builds the shear-corrected states and the zeroth- and first-order warping
-displacement fields. Nothing from the homogenization is recomputed: the result
-dictionary \texttt{r} carries the warping modes, the material tables and the
-quadrature data, so you homogenize once and recover as often as you like.
+(\texttt{refined: 1}) this runs the generalized-Timoshenko recovery of the
+msg-shell route (\texttt{sg\_dehom.compute\_fluctuations\_gpu}). The chain is
+seeded with the beam force $\mathbf{F}$ itself (the force you give, or
+$\mathbf{F} = \mathbf{C}_{\rm eff}\bar{\boldsymbol{\epsilon}}$ for a strain),
+and the 1-D equilibrium of a prismatic beam without distributed load gives its
+axial derivative exactly, $\mathbf{F}' = \mathbf{R}_1\mathbf{F}$ with the fixed
+operator $\mathbf{R}_1$ ($M_2' = F_3$, $M_3' = -F_2$, $\mathbf{F}'' = 0$). The
+recovered field is the zeroth-order (classical) part, the warping
+$\mathbf{V}_0\boldsymbol{\epsilon}$, plus the first-order correction, the warping
+$\mathbf{V}_1\boldsymbol{\epsilon}'$ and the axial derivative
+$\mathbf{V}_0\boldsymbol{\epsilon}'$ of the zeroth-order one; the correction
+carries the transverse shear, $\int\sigma_{12}\,dA = F_2$ and
+$\int\sigma_{13}\,dA = F_3$. Nothing from the homogenization is recomputed: the
+result dictionary \texttt{r} carries the warping modes, the material tables and
+the quadrature data, so you homogenize once and recover as often as you like.
 
 The tree shows exactly what rides along. Everything below the dashed data node
 is a contraction of quantities that already exist.
@@ -1906,19 +1916,19 @@ is a contraction of quantities that already exist.
     \texttt{np.savetxt} in the runner};
   \node[datanode, below=of f1] (d1) {\texttt{r["C\_eff"]}, \texttt{r["V0"]},
     \texttt{r["V1s"]},\\ \texttt{r["dehomo\_data"]},
-    \texttt{r["C\_stress"]},\\ \texttt{r["reduced\_periodic\_cells"]},\\
+    \texttt{r["C\_ess"]},\\ \texttt{r["reduced\_periodic\_cells"]},\\
     \texttt{r["elem\_rotation"]}, \texttt{r["phi\_qn"]}};
   \node[outnode, right=of d1] (o1) {\texttt{RHC\_SW\_2UC\_45.out}\\
     \texttt{RHC\_SW\_2UC\_45\_beam\_Timo.out}\\
     \texttt{RHC\_SW\_2UC\_45\_mesh.png}};
   \node[funcnode, below=of d1] (f2) {\texttt{sg\_dehom.dehom\_fields}\\
     $\rightarrow$ \texttt{sg\_dehom.compute\_fluctuations\_gpu}\\
-    seeded with \texttt{C\_eff} inverse times
-    \texttt{epsilon\_bar}\\ $\rightarrow$ \texttt{w\_1}, \texttt{w1s\_1},
+    seeded with the force \texttt{C\_eff} times
+    \texttt{epsilon\_bar},\\ $F' = R_1 F$ $\rightarrow$ \texttt{w\_1}, \texttt{w1s\_1},
     \texttt{w1s\_2}, \texttt{w\_2}, \texttt{st\_m\_final}};
   \node[inputnode, right=of f2] (i2) {\texttt{epsilon\_bar}\\
     \texttt{[eps11 gam12 gam13}\\ \texttt{kappa1 kappa2 kappa3]}\\
-    in \texttt{beam\_dehom\_sg.py}};
+    in \texttt{beam\_dehom\_sg.py}\\ (or \texttt{beam\_force=})};
   \node[funcnode, below=of f2] (f3)
     {\texttt{sg\_dehom.recover\_gauss\_point\_fields}\\
      and \texttt{sg\_dehom.\_u\_at\_gauss} $\rightarrow$\\
@@ -1927,7 +1937,7 @@ is a contraction of quantities that already exist.
     \texttt{sg\_dehom.gauss\_coords},
     \texttt{\_write\_field}};
   \node[outnode, below=of f4] (o2) {\texttt{RHC\_SW\_2UC\_45\_dehom.txt}\\
-    \texttt{.vtk}, \texttt{.SM}, \texttt{.EM}, \texttt{.U}};
+    \texttt{.vtk}, \texttt{\_global.SM}, \texttt{\_global.EM}, \texttt{.U}};
   \draw[capedge] (i1) -- (f1);
   \draw[capedge] (f1) -- (fw);
   \draw[capedge] (fw) -- (o1);
@@ -1945,7 +1955,9 @@ is a contraction of quantities that already exist.
 honeycomb SG. Beyond the material block, the one new user input is
 \texttt{epsilon\_bar}, the \textbf{macro beam strain}
 $[\epsilon_{11},\gamma_{12},\gamma_{13},\kappa_1,\kappa_2,\kappa_3]$ --- a
-strain six-vector, not a load vector. The shipped driver is
+strain six-vector, not a load vector. A load vector goes in through the other
+driver, \texttt{dehom\_fields(r, beam\_force=[F1, F2, F3, M1, M2, M3])}; give
+exactly one of the two. The shipped driver is
 $\epsilon_{11} = 0.001$ combined with $\kappa_2 = 0.01$~mm$^{-1}$.
 
 \begin{lstlisting}[style=opensg,caption={The body of beam\_dehom\_sg.py after the shared material block.}]
@@ -1963,19 +1975,47 @@ np.savetxt(name + "_beam_Timo.out", r["C_eff"], fmt="%16.8e",
                   % (r["n_sg"], name))
 
 Gam, Sig, U = dehom_fields(r, epsilon_bar)
-export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U)
+export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U, frame_kind="global")
 for i, nm in enumerate(("xx", "yy", "zz", "yz", "xz", "xy")):
     print("  max|Sig_%s| = %.5e" % (nm, np.abs(Sig[..., i]).max()))
 \end{lstlisting}
 
-Only \textbf{classical-channel} states are valid drivers: extension, twist,
-bending and their combinations. The recovery chain is kept verbatim from its
-validated reference, and its seed is the compliance-scaled state
-$\mathbf{C}_{\rm eff}^{-1}\bar{\boldsymbol{\epsilon}}$, which makes the two
-transverse shear entries \texttt{epsilon\_bar[1]} and \texttt{epsilon\_bar[2]}
-\textbf{recovery-inert} --- a shear-only driver recovers essentially zero
-stress. This is a documented deviation from the refined theory stated in the
-docstring of \texttt{compute\_fluctuations\_gpu}, not a switch to flip.
+Every beam state is a valid driver, the transverse shear included, and the
+recovery is linear in the load: a pure $F_1$, $M_1$, $M_2$ or $M_3$ gives
+$\mathbf{F}' = 0$ and the classical field exactly, while $F_2$ and $F_3$ drive
+the first-order fields. On a section whose classical and shear channels couple,
+the recovered $[F_1, M_1, M_2, M_3]$ under a shear force are the applied values
+plus the coupling term of the Timoshenko reduction,
+$\Delta\mathbf{F}_{cl} = -\mathbf{A}(\mathbf{I} - \mathbf{Q}\mathbf{Q}^{\mathsf T})
+\mathbf{A}^{-1}\mathbf{B}\mathbf{A}^{-1}\mathbf{Q}\,\mathbf{F}_s$, with
+$\mathbf{A}$ = \texttt{r["C\_eff\_EB"]}, $\mathbf{B}$ = \texttt{r["B\_tim"]},
+$\mathbf{F}_s = [F_2, F_3]$ and $\mathbf{Q}$ the $4\times2$ matrix with
+$\mathbf{Q}\mathbf{F}_s = [0, 0, -F_3, F_2]$.
+\texttt{sg\_dehom.beam\_expected\_resultants(r, beam\_force=F)} returns
+$\mathbf{F} + \Delta\mathbf{F}_{cl}$, and \texttt{opensg <name>.yaml D} prints it.
+
+$\Delta\mathbf{F}_{cl}$ belongs to the recovery procedure, not to the section.
+VABS~4.1 recovers the same field and the same excess on the same mesh, and the
+msg-shell ring recovery carries the same term. It changes with the section
+origin: the same physical load on the same section meshed about another origin
+gives another $\Delta\mathbf{F}_{cl}$ and another field. A 3-D solution of the
+prismatic beam closes every resultant at every section. The term is zero when
+the shear does not couple to the classical channels, as on a doubly symmetric
+section. On the $0.4\times0.2$~m glass-epoxy test section of
+\texttt{tests/unit/test\_beam\_dehom\_timoshenko.py} ($+30^\circ$ and
+$-45^\circ$ halves, origin 0.148~m from the centre), a pure $F_3 = 1000$~N
+recovers $F_1 = -1218.6$~N. The same load about the centre ($M_1 = 130$~N\,m
+there) recovers $F_1 = 0$ to round-off, and the two stress fields differ by
+37.9\,\% of $\max|\sigma|$ (0.36\,\% under $F_2$). VABS~4.1, run on the same
+section about the two origins, changes the same way: 36.3\,\% on its
+$3\times3$ Gauss points, equal to OpenSG's change on the same points to
+$5\times10^{-11}$ of it, with the same $F_1 = -1.21864\,F_3$ about the offset
+origin.
+
+A \texttt{refined: 0} beam has no
+shear law: it recovers the classical field only and refuses a nonzero $F_2$,
+$F_3$ or shear strain. The scope is a prismatic, untwisted beam without
+distributed load.
 
 \subsection{Run it}
 
@@ -1987,6 +2027,16 @@ recover --- is one command with the \texttt{D} argument:
 cd examples/OpenSG-solid/8_get_beam_dehom_from_SG
 opensg RHC_SW_2UC_45.yaml D
 \end{lstlisting}
+
+A \texttt{<name>.ff} next to the yaml supersedes the header key: a \texttt{0:}
+strain, or a \texttt{1:} force that seeds the chain directly. The command
+writes the ply-axes fields by default (\texttt{--material}: each element's
+\texttt{orientation} frame first, then the block angle) as
+\texttt{<name>\_dehom.SM}/\texttt{.EM}, and the SG-axes fields with
+\texttt{--global} as \texttt{<name>\_dehom\_global.SM}/\texttt{.EM}; it refuses
+\texttt{orientation} rows that are not proper rotations (orthonormal,
+right-handed) to the precision of rows written with 6 decimals, and it ends a
+refused run with the one-line reason.
 
 \texttt{python beam\_dehom\_sg.py} is the same chain through the Python API,
 and additionally writes the bare $6\times6$
@@ -2021,10 +2071,14 @@ file & content \\
 \texttt{RHC\_SW\_2UC\_45\_dehom.vtk} & the same cloud as an ASCII unstructured
   grid of vertex cells, each strain and stress component a \texttt{SCALARS}
   field --- open in ParaView \\
-\texttt{RHC\_SW\_2UC\_45\_dehom.SM} / \texttt{.EM} / \texttt{.U} & the OpenSG
-  dehom files: stress, strain and fluctuation displacement in the
-  \texttt{rm\_plate\_1D} layout, \texttt{x y z} columns then components printed
-  in the order \texttt{11 22 33 12 13 23}, with the SG coordinates in the last
+\begin{tabular}[t]{@{}l@{}}\texttt{RHC\_SW\_2UC\_45\_dehom\_global.SM} /\\
+  \texttt{\_dehom\_global.EM} / \texttt{\_dehom.U}\end{tabular}
+  & the OpenSG dehom files: stress and strain in the SG
+  axes (the \texttt{\_global} tag; the ply-axes files of
+  \texttt{opensg <name>.yaml D} keep the bare \texttt{\_dehom.SM}/\texttt{.EM}
+  names) and the fluctuation displacement, in the \texttt{rm\_plate\_1D}
+  layout, \texttt{x y z} columns then components printed in the order
+  \texttt{11 22 33 12 13 23}, with the SG coordinates in the last
   \texttt{n\_sg} of the \texttt{x, y, z} slots; regenerated on each run \\
 \texttt{RHC\_SW\_2UC\_45\_mesh.png} & the mesh figure \\
 \bottomrule
@@ -2049,18 +2103,23 @@ The shipped table is the run of the driver above. Its component maxima are:
 \toprule
 component & $\max\lvert\sigma\rvert$ (MPa) & $\max\lvert\varepsilon\rvert$ \\
 \midrule
-$xx$ & $1.529334\times10^{4}$ & $2.339375\times10^{-1}$ \\
-$yy$ & $3.460157\times10^{3}$ & $2.265195\times10^{-1}$ \\
-$zz$ & $5.539976\times10^{2}$ & $8.787251\times10^{-2}$ \\
-$yz$ & $6.034080\times10^{2}$ & $1.344338\times10^{-1}$ \\
-$xz$ & $1.176515\times10^{3}$ & $1.704428\times10^{-1}$ \\
-$xy$ & $2.959409\times10^{3}$ & $1.028684\times10^{-1}$ \\
+$xx$ & $1.529335\times10^{4}$ & $2.339375\times10^{-1}$ \\
+$yy$ & $3.460160\times10^{3}$ & $2.265173\times10^{-1}$ \\
+$zz$ & $5.539996\times10^{2}$ & $8.787253\times10^{-2}$ \\
+$yz$ & $6.034133\times10^{2}$ & $1.344338\times10^{-1}$ \\
+$xz$ & $1.176519\times10^{3}$ & $1.704425\times10^{-1}$ \\
+$xy$ & $2.959388\times10^{3}$ & $1.028684\times10^{-1}$ \\
 \bottomrule
 \end{tabular}
 \caption{Component maxima over the 19\,920 Gauss points of the shipped beam
 recovery.}
 \label{tab:solid-ex8max}
 \end{table}
+
+The strain state carries a small shear force through the law's couplings
+($\mathbf{C}_{\rm eff}\bar{\boldsymbol{\epsilon}}$ has $F_2 = -6.98$~N and
+$F_3 = -3.3\times10^{-3}$~N), and its first-order shear part is in these
+maxima.
 
 The axial field is the one to sanity-check first, because beam kinematics
 predict it directly: $\epsilon_{xx} \approx \bar{\epsilon}_{11}
