@@ -36,6 +36,13 @@
                             --gpu is shorthand for the iter default.
                             msg-shell yamls run direct regardless (the
                             drilling saddle point) and say so
+    opensg <segment.yaml>   the solid segment route: a 3-D solid beam
+                            segment (`msg: solid`, `n_model: 1`,
+                            `aperiodic: 1`, mesh z = the beam axis) with
+                            aperiodic ends, prismatic or tapered, gives
+                            its Timoshenko 6x6 and mass matrix per unit
+                            length in <base>.out and each end section's
+                            6x6 in <base>_ends.out.  Homogenization only
 
     opensg gen_windio_cs <windio.yaml>
                             every blade station -> VABS-layout .out records

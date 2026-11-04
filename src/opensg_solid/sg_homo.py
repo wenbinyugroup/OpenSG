@@ -1510,6 +1510,27 @@ def plate_homo_2d(sc_path: str,                         # the .sc/.yaml input
         if stale:
             plot_sg_mesh(sc, png, msh_path=base + ".msh")
 
+    if n_model == 1 and boundary == "aperiodic":
+        # the solid segment route (sg_segment): a 3-D beam segment with
+        # aperiodic ends.  A 2-D beam SG is a cross-section and stays
+        # periodic.
+        if n_sg != 3:
+            raise ValueError(
+                "boundary='aperiodic' with n_model 1 is the solid segment "
+                "route: it needs a 3-D segment mesh (mesh z is the beam "
+                "axis, the end sections lie in the planes z = z_min and "
+                "z = z_max). This %d-D beam SG is a cross-section: drop "
+                "`aperiodic: 1` to run it" % n_sg)
+        if solver not in ("auto", "direct"):
+            raise ValueError(
+                "the solid segment route runs direct SuperLU solves only, "
+                "got solver=%r" % solver)
+        from .sg_segment import segment_homo
+        return segment_homo(sc, base, elem_rotation=elem_rotation,
+                            material_param=material_param, angles=angles,
+                            refined=refined, density=density, t0=_t0,
+                            emit_plot=_emit_plot)
+
     nn = sorted({len(c) for c in sc["cells"]})
     mixed = len(nn) != 1
     # solver == "auto" resolves LATER (resolve_auto_solver), once the

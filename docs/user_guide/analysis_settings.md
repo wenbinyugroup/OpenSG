@@ -98,12 +98,15 @@ combination and the file the homogenization writes; the file layout is described
 | shell | 3 | ignored | contour (2-node lines) | Cauchy continuum $6\times6$, `[11 22 33 23 13 12]` | `<base>_C3D.out`, `<base>_ABDG.out` |
 | shell | 3 | ignored | surface (3-node triangles, 4-node quads) | Cauchy continuum $6\times6$, `[11 22 33 23 13 12]` | `<base>_C3D.out`, `<base>_ABDG.out` |
 | solid | 1 | 0 / 1 | 2-D or 3-D SG | Euler-Bernoulli beam $4\times4$ / Timoshenko beam $6\times6$ | `<base>.out` |
+| solid | 1, `aperiodic: 1` | 0 / 1 | 3-D segment (hex8, tet4, mixed, tet10) | Euler-Bernoulli beam $4\times4$ / Timoshenko beam $6\times6$ and the mass matrix of a prismatic or tapered segment, see {doc}`solid_segment` | `<base>.out`, `<base>_ends.out` |
 | solid | 2 | 0 / 1 | 1-D, 2-D or 3-D SG | classical plate $6\times6$ `[N11 N22 N12 M11 M22 M12]` / Reissner-Mindlin $8\times8$ `[N11 N22 N12 M11 M22 M12 Q1 Q2]` | `<base>.out` |
 | solid | 3 | ignored | 1-D, 2-D or 3-D SG | Cauchy continuum $6\times6$ and the engineering constants | `<base>.out` |
 ```
 
 `<base>_ABDG.out` is the wall plate law of every section, the halfway point of the two-step shell reduction. The
-segment route returns the Timoshenko $6\times6$ only, so a shell segment needs `refined: 1`. A dehomogenization (`D`)
+segment route returns the Timoshenko $6\times6$ only, so a shell segment needs `refined: 1`. The solid segment route
+({doc}`solid_segment`) takes a 3-D solid mesh of a beam segment with `n_model: 1` and `aperiodic: 1`, and writes each
+end section's $6\times6$ to `<base>_ends.out`. A dehomogenization (`D`)
 is available for the shell cross-section ring with `n_model: 1` and `refined: 1`, and for the solid engine; see
 {doc}`recovery`.
 

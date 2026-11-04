@@ -141,11 +141,13 @@ classical beam homogenization with the node contour taken as the outer mold line
 - Building an SG yaml from a gmsh `.msh`, an Abaqus `.inp` or a SwiftComp `.sc`, and writing a `.sc` back:
   {doc}`converters`.
 - The `.out` files and the other files a run writes: {doc}`output_files`.
+- The beam properties of a 3-D solid beam segment with aperiodic ends: {doc}`solid_segment`.
 
 ```{toctree}
 :maxdepth: 1
 
 analysis_settings
+solid_segment
 coordinate_systems
 mesh_and_elements
 materials_and_layups

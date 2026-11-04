@@ -35,6 +35,12 @@ leading scalar keys above the mesh blocks), and every key has a default
                         #   bounding-box-face node.  Periodic is the
                         #   default at every SG dimension -- omit the
                         #   key entirely for a periodic SG.
+                        #   With n_model: 1 on a 3-D mesh it selects the
+                        #   solid segment route: a beam segment (mesh z =
+                        #   the beam axis) with aperiodic ends gives its
+                        #   Timoshenko 6x6 and mass matrix in <base>.out
+                        #   and each end section's 6x6 in <base>_ends.out
+                        #   (H only).
     omega: 1.0          # OPTIONAL user SG measure (3-D solid only).
                         #   The measure is normally taken from the mesh:
                         #   a 3-D SG is a periodic unit cell, so it is the
@@ -234,6 +240,13 @@ def main(argv=None):
     if analysis not in ("H", "D"):
         raise SystemExit("the analysis argument must be H (homogenization)"
                          " or D (dehomogenization), got %r" % argv[1])
+    if (analysis == "D" and str(hdr.get("n_model", "")) == "1"
+            and str(hdr.get("aperiodic", "0")) not in ("0", "")
+            and node_span_dim(path) == 3):
+        raise SystemExit("refused: %s is a solid segment (n_model 1,"
+                         " aperiodic 1, a 3-D mesh), and the segment route"
+                         " has no recovery yet: run it without D"
+                         % os.path.basename(path))
     if want_mesh:
         # --mesh does not replace the analysis, it GUARANTEES the figure:
         # drop the old PNG so the run's own plot step redraws it

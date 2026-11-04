@@ -2,6 +2,20 @@
 
 ## 2.1.1 (unreleased)
 
+### Solid segment route
+
+- A 3-D solid beam segment with aperiodic ends gives its beam properties. A solid yaml with `n_model: 1` and
+  `aperiodic: 1` on a 3-D mesh (mesh `z` = the beam axis) runs the new `opensg_solid/sg_segment.py`. It writes the
+  Timoshenko 6x6 (or the 4x4 for `refined: 0`) and the mass matrix per unit length to `<base>.out`, and each end
+  section's 6x6 to `<base>_ends.out`. The law is referred to the line `x = y = 0` of the mesh. Elements: hex8, tet4,
+  mixed hex8 and tet4, and tet10. The solves use SuperLU.
+- The algorithm is FEniCS OpenSG v1.2's tapered solid segment, through its JAX port in OpenSG-TW-claude
+  (`opensg_jax/fe_jax/solid_taper.py`). The end warping is pinned by its area means, as in FEniCS v1.2 and the 2-D
+  beam route (the port pins it to the nodal rigid modes). Tapered tubes match FEniCS v1.2 to 6e-14 at the same
+  quadrature, and a prismatic segment matches OpenSG's 2-D beam route.
+- A 2-D beam SG with `aperiodic: 1` is refused with a message that names the route. `opensg <segment.yaml> D` and the
+  iterative solvers are refused too. See `docs/user_guide/solid_segment.md`.
+
 ### Fixed
 
 - Solid beam dehomogenization (`n_model: 1`, `refined: 1`) under a shear force. The recovery
