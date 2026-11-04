@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.2.0 (unreleased)
+## 2.1.1 (unreleased)
 
 ### Fixed
 
@@ -48,7 +48,7 @@
   `get_Rsig_matrix` is gone. `sg_mesh.load_sg_input(dict)` returns a renamed copy and leaves
   the caller's dict as it was.
 
-### Also in 2.2.0 (since 2.1.0)
+### Also in 2.1.1 (since 2.1.0)
 
 - `msh_to_yaml` reads gmsh meshes as gmsh writes them, order-2 `tet10` included.
 - The repository holds the OpenSG packages only. The tests moved out of `src`, and the
