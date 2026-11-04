@@ -1,0 +1,345 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shell Cross Section &mdash; opensg 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/nbsphinx-code-cells.css?v=2aa19091" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="3D Solid Segment" href="3D_solid_segment.html" />
+    <link rel="prev" title="Solid Cross Section" href="solid_cross_section.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            opensg
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../index.html">Home</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples.html">Examples</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../tutorials.html">Tutorials</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="solid_cross_section.html">Solid Cross Section</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Shell Cross Section</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3D_solid_segment.html">3D Solid Segment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="convert_3D_solid_segment_to_boundary_mesh.html">Convert 3D Shell Segment to Boundary Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="convert_3D_shell_segment_to_boundary_mesh.html">Convert 3D Shell Segment to Boundary Mesh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="write_beamdyn_input_from_shell_cross_sections.html">Write Beamdyn Inputs from Shell Cross Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="write_beamdyn_input_from_solid_cross_sections.html">Write Beamdyn Input from Solid Cross Sections</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Usage</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../framework.html">Software framework and limitations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../input.html">Mesh Input Format Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../theory.html">Theory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference.html">References</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api-doc.html">API documentation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../apidoc/opensg.core.html">opensg.core</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.core.shell.html">opensg.core.shell</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.shell.compute_ABD_CLT.html">compute_ABD_CLT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.shell.compute_ABD_matrix.html">compute_ABD_matrix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.shell.compute_stiffness.html">compute_stiffness</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.shell.compute_timo_boun.html">compute_timo_boun</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.core.solid.html">opensg.core.solid</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.solid.compute_stiffness.html">compute_stiffness</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.solid.compute_timo_boun.html">compute_timo_boun</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.core.stress_recov.html">opensg.core.stress_recov</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.stress_recov.eigen_solve.html">eigen_solve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.stress_recov.local_strain.html">local_strain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.core.stress_recov.stress_eval.html">stress_eval</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../apidoc/opensg.io.html">opensg.io</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.io.io.html">opensg.io.io</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.io.io.load_yaml.html">load_yaml</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.io.io.validate_mesh_data.html">validate_mesh_data</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.io.io.write_yaml.html">write_yaml</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.io.util.html">opensg.io.util</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.io.util.generate_segment_shell_mesh_files.html">generate_segment_shell_mesh_files</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../apidoc/opensg.mesh.html">opensg.mesh</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.mesh.segment.html">opensg.mesh.segment</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.mesh.segment.ShellBounMesh.html">ShellBounMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.mesh.segment.ShellSegmentMesh.html">ShellSegmentMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.mesh.segment.SolidBounMesh.html">SolidBounMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.mesh.segment.SolidSegmentMesh.html">SolidSegmentMesh</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../apidoc/opensg.utils.html">opensg.utils</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.utils.beamdyn_trans.html">opensg.utils.beamdyn_trans</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.beamdyn_trans.beam_reaction.html">beam_reaction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.beamdyn_trans.tension_center.html">tension_center</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.beamdyn_trans.transformMatrixToBeamDyn.html">transformMatrixToBeamDyn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.beamdyn_trans.transform_beam_matrices.html">transform_beam_matrices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.beamdyn_trans.trsf_sixbysix.html">trsf_sixbysix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.beamdyn_trans.write_beamdyn_prop.html">write_beamdyn_prop</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.utils.eigenvalue_solver.html">opensg.utils.eigenvalue_solver</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.eigenvalue_solver.EPS_get_spectrum.html">EPS_get_spectrum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.eigenvalue_solver.EPS_print_results.html">EPS_print_results</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.eigenvalue_solver.monitor_EPS_short.html">monitor_EPS_short</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.eigenvalue_solver.print0.html">print0</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.eigenvalue_solver.solve_GEP_shiftinvert.html">solve_GEP_shiftinvert</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.utils.shared.html">opensg.utils.shared</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.beam_reaction.html">beam_reaction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.compute_nullspace.html">compute_nullspace</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.local_frame_1D.html">local_frame_1D</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.solve_ksp.html">solve_ksp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.tension_center.html">tension_center</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.transformMatrixToBeamDyn.html">transformMatrixToBeamDyn</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.transform_beam_matrices.html">transform_beam_matrices</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.trsf_sixbysix.html">trsf_sixbysix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.write_beamdyn_files.html">write_beamdyn_files</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.write_beamdyn_prop.html">write_beamdyn_prop</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shared.xmdf_convert.html">xmdf_convert</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.utils.shell.html">opensg.utils.shell</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.ddot.html">ddot</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.deri.html">deri</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.deri_constraint.html">deri_constraint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.dof_mapping_quad.html">dof_mapping_quad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.eps.html">eps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.gamma_e.html">gamma_e</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.gamma_h.html">gamma_h</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.gamma_l.html">gamma_l</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.generate_boundary_markers.html">generate_boundary_markers</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.get_mass_shell.html">get_mass_shell</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.initialize_array.html">initialize_array</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.local_1D_manual.html">local_1D_manual</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.local_boun.html">local_boun</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.local_frame.html">local_frame</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.local_grad.html">local_grad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.shell.tangential_projection.html">tangential_projection</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../apidoc/opensg.utils.solid.html">opensg.utils.solid</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.C.html">C</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.CC.html">CC</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.EPS_get_spectrum.html">EPS_get_spectrum</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.Rsig.html">Rsig</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.dof_mapping_quad.html">dof_mapping_quad</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.eigen_eps.html">eigen_eps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.gamma_e.html">gamma_e</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.gamma_h.html">gamma_h</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.gamma_l.html">gamma_l</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.generate_boundary_markers.html">generate_boundary_markers</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.get_mass_solid.html">get_mass_solid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.initialize_array.html">initialize_array</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.local_boun.html">local_boun</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.recov.html">recov</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.solve_GEP_shiftinvert.html">solve_GEP_shiftinvert</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../apidoc/opensg.utils.solid.stress_output.html">stress_output</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Backmatter</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../citing_opensg.html">Citing OpenSG</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../license.html">MIT License</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../glossary.html">Glossary</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../release-notes.html">Release Notes</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">opensg</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../tutorials.html">Tutorials</a></li>
+      <li class="breadcrumb-item active">Shell Cross Section</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/tutorials/shell_cross_section.nblink.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="Shell-Cross-Section">
+<h1>Shell Cross Section<a class="headerlink" href="#Shell-Cross-Section" title="Link to this heading"></a></h1>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">opensg.mesh.segment</span><span class="w"> </span><span class="kn">import</span>  <span class="n">ShellBounMesh</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">opensg.utils.shell</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">utils</span>
+
+<span class="n">tic</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<span class="n">segid</span><span class="o">=</span><span class="mi">9</span>
+<span class="n">mesh_yaml</span> <span class="o">=</span> <span class="s1">&#39;../data/Shell_1DSG/1D_v8/1Dshell_&#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">segid</span><span class="p">)</span><span class="o">+</span><span class="s1">&#39;.yaml&#39;</span>
+<span class="n">segment_mesh</span> <span class="o">=</span> <span class="n">ShellBounMesh</span><span class="p">(</span><span class="n">mesh_yaml</span><span class="p">)</span>
+<span class="n">meshdata</span><span class="o">=</span><span class="n">segment_mesh</span><span class="o">.</span><span class="n">meshdata</span>
+
+<span class="n">ABD</span><span class="p">,</span> <span class="n">mass</span> <span class="o">=</span> <span class="n">segment_mesh</span><span class="o">.</span><span class="n">compute_ABD</span><span class="p">()</span> <span class="c1"># MSG based ABD matrix</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;ABD time&#39;</span><span class="p">,</span><span class="nb">str</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="n">tic</span><span class="p">))</span>
+
+<span class="c1"># Timoshenko stiffness and mass amtrix</span>
+<span class="n">Deff_srt</span><span class="o">=</span> <span class="n">segment_mesh</span><span class="o">.</span><span class="n">compute_timo</span><span class="p">(</span><span class="n">ABD</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">mass</span><span class="o">=</span><span class="n">utils</span><span class="o">.</span><span class="n">get_mass_shell</span><span class="p">(</span><span class="n">meshdata</span><span class="p">,</span> <span class="n">mass</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Origin:&#39;</span><span class="p">,</span> <span class="n">meshdata</span><span class="p">[</span><span class="s1">&#39;origin&#39;</span><span class="p">],</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1"> 1D Mass matrix</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">mass</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1"> 1D Timo matrix</span><span class="se">\n</span><span class="s1"> &#39;</span><span class="p">,</span> <span class="n">Deff_srt</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1"> Time Taken:&#39;</span><span class="p">,</span><span class="nb">str</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span><span class="o">-</span><span class="n">tic</span><span class="p">),</span><span class="s1">&#39;sec&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+ABD time 7.205617427825928
+Origin: 31.034482759
+
+
+ 1D Mass matrix
+ [[394.0573   0.       0.       0.      24.8557 -19.7935]
+ [  0.     394.0573   0.     -24.8557   0.       0.    ]
+ [  0.       0.     394.0573  19.7935   0.       0.    ]
+ [  0.     -24.8557  19.7935 690.7359   0.       0.    ]
+ [ 24.8557   0.       0.       0.      76.5729  64.7656]
+ [-19.7935   0.       0.       0.      64.7656 614.1631]]
+
+ 1D Timo matrix
+  [[ 1.4025e+10 -7.5568e+04  4.3110e+03 -6.9500e+02 -1.0160e+07 -4.5859e+09]
+ [-7.5568e+04  6.9557e+08 -6.5978e+07 -4.6634e+07 -2.0600e+03 -7.4709e+04]
+ [ 4.3110e+03 -6.5978e+07  2.0434e+08  1.4338e+08  7.7519e+05 -4.3910e+03]
+ [-6.9600e+02 -4.6634e+07  1.4338e+08  4.9196e+08  4.3743e+05 -6.8760e+03]
+ [-1.0160e+07 -2.0600e+03  7.7519e+05  4.3743e+05  3.4497e+09  1.0578e+09]
+ [-4.5859e+09 -7.4709e+04 -4.3910e+03 -6.8790e+03  1.0578e+09  1.1981e+10]]
+
+ Time Taken: 11.195585489273071 sec
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span><span class="c1"># Visualize plot</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dolfinx</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyvista</span>
+<span class="n">pyvista</span><span class="o">.</span><span class="n">start_xvfb</span><span class="p">()</span>
+<span class="n">u_topology</span><span class="p">,</span> <span class="n">u_cell_types</span><span class="p">,</span> <span class="n">u_geometry</span><span class="o">=</span><span class="n">dolfinx</span><span class="o">.</span><span class="n">plot</span><span class="o">.</span><span class="n">vtk_mesh</span><span class="p">(</span><span class="n">meshdata</span><span class="p">[</span><span class="s1">&#39;mesh&#39;</span><span class="p">],</span><span class="n">meshdata</span><span class="p">[</span><span class="s1">&#39;mesh&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
+<span class="n">grid</span> <span class="o">=</span> <span class="n">pyvista</span><span class="o">.</span><span class="n">UnstructuredGrid</span><span class="p">(</span><span class="n">u_topology</span><span class="p">,</span> <span class="n">u_cell_types</span><span class="p">,</span> <span class="n">u_geometry</span><span class="p">)</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">cell_data</span><span class="p">[</span><span class="s2">&quot;Marker&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">meshdata</span><span class="p">[</span><span class="s1">&#39;subdomains&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">[:]</span>
+<span class="n">grid</span><span class="o">.</span><span class="n">set_active_scalars</span><span class="p">(</span><span class="s2">&quot;Marker&quot;</span><span class="p">)</span>
+<span class="n">u_plotter</span> <span class="o">=</span> <span class="n">pyvista</span><span class="o">.</span><span class="n">Plotter</span><span class="p">()</span>
+<span class="n">u_plotter</span><span class="o">.</span><span class="n">add_mesh</span><span class="p">(</span><span class="n">grid</span><span class="p">)</span>
+<span class="n">u_plotter</span><span class="o">.</span><span class="n">view_yz</span><span class="p">()</span> <span class="c1"># x is beam axis</span>
+<span class="n">u_plotter</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<img alt="../_images/tutorials_shell_cross_section_2_0.png" src="../_images/tutorials_shell_cross_section_2_0.png" />
+</div>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="solid_cross_section.html" class="btn btn-neutral float-left" title="Solid Cross Section" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="3D_solid_segment.html" class="btn btn-neutral float-right" title="3D Solid Segment" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2023 National Technology &amp; Engineering Solutions of Sandia, LLC (NTESS).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

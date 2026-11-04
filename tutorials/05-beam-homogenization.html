@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" data-theme="auto">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>05 Beam cross-section homogenization &#8212; OpenSG</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "auto";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "auto";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=a72a19db" />
+    <link rel="stylesheet" type="text/css" href="../_static/chat.css?v=1f408ad9" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=75c7c72ae941e8b558d8"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8" />
+
+    <script src="../_static/documentation_options.js?v=7f41d439"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/05-beam-homogenization';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = true;</script>
+    <link rel="canonical" href="https://wenbinyugroup.github.io/OpenSG/tutorials/05-beam-homogenization.html" />
+    <link rel="icon" href="../_static/rotor-mark-auto.svg"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="06 3-D solid homogenization" href="06-solid-homogenization.html" />
+    <link rel="prev" title="04 Plate dehomogenization" href="04-plate-dehomogenization.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light dark"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+    <meta name="docbuild:last-update" content="Nov 04, 2026"/>
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="auto">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button type="button" class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation" aria-expanded="false" aria-controls="pst-primary-sidebar-modal">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/rotor-mark-light.svg" class="logo__image only-light" alt=""/>
+    <img src="../_static/rotor-mark-dark.svg" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">OpenSG</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../getting-started/index.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../theory/index.html">
+    Theory
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../benchmarks/index.html">
+    Benchmarks
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../compositesai/index.html">
+    CompositesAI
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/wenbinyugroup/OpenSG" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button type="button" class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page" aria-expanded="false" aria-controls="pst-secondary-sidebar-modal">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal" tabindex="-1"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../getting-started/index.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="index.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../theory/index.html">
+    Theory
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../benchmarks/index.html">
+    Benchmarks
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../compositesai/index.html">
+    CompositesAI
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/wenbinyugroup/OpenSG" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button type="button" id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="01-install.html">01 Install OpenSG</a></li>
+<li class="toctree-l1"><a class="reference internal" href="02-sg-yaml.html">02 The SG yaml</a></li>
+<li class="toctree-l1"><a class="reference internal" href="03-plate-homogenization.html">03 Plate homogenization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="04-plate-dehomogenization.html">04 Plate dehomogenization</a></li>
+<li class="toctree-l1 current active"><a aria-current="page" class="current reference internal" href="#">05 Beam cross-section homogenization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="06-solid-homogenization.html">06 3-D solid homogenization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="07-shell-beam-homogenization.html">07 Shell beam cross-section</a></li>
+<li class="toctree-l1"><a class="reference internal" href="08-beam-dehomogenization.html">08 Beam dehomogenization</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-house"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Tutorials</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">05 Beam cross-section homogenization</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="beam-cross-section-homogenization">
+<span id="cli-05-beam-homogenization"></span><h1>05 Beam cross-section homogenization<a class="headerlink" href="#beam-cross-section-homogenization" title="Link to this heading">#</a></h1>
+<p>The cell of the plate tutorials can also be read as the cross-section of a beam. This tutorial computes the
+Timoshenko law of that beam.</p>
+<section id="the-sg">
+<h2>The SG<a class="headerlink" href="#the-sg" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">examples/OpenSG-solid/7_get_beam_props_from_SG/RHC_SW_2UC_45.yaml</span></code> holds the mesh of the
+<a class="reference internal" href="03-plate-homogenization.html"><span class="doc">plate tutorial</span></a>: 4251 nodes and 6640 triangles, in mm. The run draws the same
+mesh picture. The header asks for a shear-refined beam. The materials are in MPa:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">n_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">      </span><span class="c1"># 1 = beam, 2 = plate, 3 = solid -- the macro model this SG homogenizes to</span>
+<span class="nt">refined</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">      </span><span class="c1"># 0 = classical (plate ABD / beam EB); 1 = shear-refined (plate ABDG / beam Timoshenko)</span>
+<span class="nt">msg</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solid</span><span class="w">      </span><span class="c1"># the ENGINE this SG belongs to (opensg_solid); `opensg &lt;yaml&gt;` dispatches on it</span>
+<span class="nn">...</span>
+<span class="nt">materials</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">1</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">aux</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">C</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">35696.6</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">27696.6</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3251.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-25368.7</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">27696.6</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">35696.6</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3251.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-25368.7</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">3251.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3251.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">8917.8</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-487.1</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3500.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-500.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-500.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3500.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">-25368.7</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-25368.7</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-487.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">27958.5</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">2</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">aux</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">C</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">35696.6</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">27696.6</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3251.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">25368.7</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">27696.6</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">35696.6</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3251.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">25368.7</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">3251.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3251.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">8917.8</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">487.1</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3500.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">500.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">500.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3500.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">25368.7</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">25368.7</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">487.1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">27958.5</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">3</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">    </span><span class="nt">aux</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">E</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">69000.0</span>
+<span class="w">    </span><span class="nt">nu</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.3</span>
+</pre></div>
+</div>
+<p>Materials 1 and 2 are the two face plies, stored as rotated 6x6 stiffness matrices (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">2</span></code>). They differ in the
+sign of their coupling terms. Material 3 is isotropic with E = 69000 MPa and nu = 0.3.</p>
+<a class="reference internal image-reference" href="../_images/RHC_SW_2UC_45_mesh.png"><img alt="The cross-section, elements coloured by material" src="../_images/RHC_SW_2UC_45_mesh.png" style="width: 560px;" />
+</a>
+<p>Axis 1, the beam axis, is normal to the mesh picture. Axis 2 runs along y2, the horizontal axis of the picture,
+and axis 3 along y3, its vertical axis. OpenSG labels them y1 and y2, after the first and the second node
+coordinate.</p>
+</section>
+<section id="run-it">
+<h2>Run it<a class="headerlink" href="#run-it" title="Link to this heading">#</a></h2>
+<p>Run it in the example folder. From the root of the repository:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>examples/OpenSG-solid/7_get_beam_props_from_SG
+opensg<span class="w"> </span>RHC_SW_2UC_45.yaml
+</pre></div>
+</div>
+<div class="opensg-out highlight-text notranslate"><div class="highlight"><pre><span></span> ============================================================================
+ OpenSG -- a multiscale structural analysis tool based on the Mechanics of
+ Structure Genome (MSG), developed by the Multiscale Structural Mechanics
+ Group led by Prof. Wenbin Yu at Purdue University
+ ============================================================================
+
+ input     : .../7_get_beam_props_from_SG/RHC_SW_2UC_45.yaml
+ msg       : solid (2D SG)
+ dofs      : 12753
+ analysis  : homo
+ macro     : beam, shear-refined
+
+ frames    : none in the file (material angle only)
+ solver    : direct
+Timoshenko Beam Stiffness Matrix  [eps11 gam12 gam13 kappa1 kappa2 kappa3]:
+[[ 9.89929e+06  6.99702e+03  1.25764e+01 -7.70653e-01  2.27402e+00
+  -8.67148e-01]
+ [ 6.99702e+03  1.90737e+06  5.93202e+01 -3.40415e+01 -1.62972e+00
+  -6.06680e-02]
+ [ 1.25764e+01  5.93202e+01  9.36137e+05 -8.47824e+01 -9.32482e-01
+   8.59438e-01]
+ [-7.70653e-01 -3.40415e+01 -8.47824e+01  2.97730e+08 -3.18615e+06
+  -7.30578e+03]
+ [ 2.27403e+00 -1.62972e+00 -9.32482e-01 -3.18615e+06  2.18957e+09
+  -9.59638e+04]
+ [-8.67149e-01 -6.06680e-02  8.59438e-01 -7.30578e+03 -9.59638e+04
+   9.28993e+08]]
+Homogenization stored in RHC_SW_2UC_45.out
+Time taken: 2.62 sec
+</pre></div>
+</div>
+<p>The run writes <code class="docutils literal notranslate"><span class="pre">RHC_SW_2UC_45.out</span></code> and <code class="docutils literal notranslate"><span class="pre">RHC_SW_2UC_45_mesh.png</span></code> next to the yaml.</p>
+</section>
+<section id="read-the-out">
+<h2>Read the .out<a class="headerlink" href="#read-the-out" title="Link to this heading">#</a></h2>
+<p>The run replaces the <code class="docutils literal notranslate"><span class="pre">RHC_SW_2UC_45.out</span></code> that ships in the folder. The shipped file also holds a mass matrix, and
+its stiffness terms differ from the new ones by less than 0.01 %. This is the new one,
+<a class="reference download internal" download="" href="../_downloads/1a8e5c1535dca4a9705f50f1c4ec38e9/RHC_SW_2UC_45.out"><code class="xref download docutils literal notranslate"><span class="pre">RHC_SW_2UC_45.out</span></code></a>:</p>
+<div class="opensg-out highlight-text notranslate"><div class="highlight"><pre><span></span> OpenSG msg-solid beam model, omega 1
+
+ The Effective Timoshenko Beam Stiffness Matrix
+ --------------------------------------------
+     9.8992859E+006     6.9970245E+003     1.2576393E+001    -7.7065279E-001     2.2740242E+000    -8.6714848E-001
+     6.9970245E+003     1.9073684E+006     5.9320231E+001    -3.4041475E+001    -1.6297211E+000    -6.0667953E-002
+     1.2576393E+001     5.9320231E+001     9.3613658E+005    -8.4782399E+001    -9.3248173E-001     8.5943841E-001
+    -7.7065349E-001    -3.4041475E+001    -8.4782399E+001     2.9772996E+008    -3.1861510E+006    -7.3057827E+003
+     2.2740258E+000    -1.6297211E+000    -9.3248173E-001    -3.1861510E+006     2.1895742E+009    -9.5963821E+004
+    -8.6714899E-001    -6.0667953E-002     8.5943841E-001    -7.3057827E+003    -9.5963821E+004     9.2899264E+008
+
+ The Effective Timoshenko Beam Compliance Matrix
+ --------------------------------------------
+     1.0101765E-007    -3.7057492E-010    -1.3336249E-012     2.1760694E-016    -1.0486942E-016     9.4260694E-017
+    -3.7057492E-010     5.2428393E-007    -3.3217352E-011     5.9939613E-014     4.7782270E-016     3.4443973E-017
+    -1.3336249E-012    -3.3217352E-011     1.0682202E-006     3.0419508E-013     8.9750856E-016    -9.8576037E-016
+     2.1760718E-016     5.9939613E-014     3.0419508E-013     3.3588006E-009     4.8875477E-012     2.6919153E-014
+    -1.0486950E-016     4.7782270E-016     8.9750856E-016     4.8875477E-012     4.5671692E-010     4.7216744E-014
+     9.4260750E-017     3.4443972E-017    -9.8576037E-016     2.6919153E-014     4.7216744E-014     1.0764348E-009
+
+ Time taken: 2.62 sec
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">omega</span> <span class="pre">1</span></code>: the law is the stiffness of the whole section, per unit length of the beam.</p></li>
+<li><p>The rows and the columns are <code class="docutils literal notranslate"><span class="pre">[eps11</span> <span class="pre">gam12</span> <span class="pre">gam13</span> <span class="pre">kappa1</span> <span class="pre">kappa2</span> <span class="pre">kappa3]</span></code>, the order the run prints: extension,
+the two transverse shears, twist and the two bending curvatures.</p></li>
+<li><p>The compliance is the inverse of the stiffness.</p></li>
+</ul>
+<p>With N and mm, the block of rows and columns 1-3 is in N, the block 4-6 in N mm^2 and the coupling blocks in N mm.
+The diagonal:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>entry</p></th>
+<th class="head"><p>stiffness</p></th>
+<th class="head"><p>value</p></th>
+<th class="head"><p>unit</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>C11</p></td>
+<td><p>EA, extension</p></td>
+<td><p>9.8992859E+006</p></td>
+<td><p>N</p></td>
+</tr>
+<tr class="row-odd"><td><p>C22</p></td>
+<td><p>GA2, shear along axis 2</p></td>
+<td><p>1.9073684E+006</p></td>
+<td><p>N</p></td>
+</tr>
+<tr class="row-even"><td><p>C33</p></td>
+<td><p>GA3, shear along axis 3</p></td>
+<td><p>9.3613658E+005</p></td>
+<td><p>N</p></td>
+</tr>
+<tr class="row-odd"><td><p>C44</p></td>
+<td><p>GJ, torsion</p></td>
+<td><p>2.9772996E+008</p></td>
+<td><p>N mm^2</p></td>
+</tr>
+<tr class="row-even"><td><p>C55</p></td>
+<td><p>EI2, bending about axis 2</p></td>
+<td><p>2.1895742E+009</p></td>
+<td><p>N mm^2</p></td>
+</tr>
+<tr class="row-odd"><td><p>C66</p></td>
+<td><p>EI3, bending about axis 3</p></td>
+<td><p>9.2899264E+008</p></td>
+<td><p>N mm^2</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>What the numbers say:</p>
+<ul class="simple">
+<li><p>EI2 is more than twice EI3. Bending about axis 2 strains the face plies, which sit about 23 mm from that axis.</p></li>
+<li><p>The largest coupling is C45 = -3.1861510E+006 N mm^2, between twist and bending about axis 2.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">.out</span></code> has no mass matrix because no material block has a density. A <code class="docutils literal notranslate"><span class="pre">density:</span></code> key in the material blocks
+adds <code class="docutils literal notranslate"><span class="pre">The</span> <span class="pre">6X6</span> <span class="pre">Mass</span> <span class="pre">Matrix</span></code> to the file.</p></li>
+</ul>
+<p>Set <code class="docutils literal notranslate"><span class="pre">refined:</span> <span class="pre">0</span></code> in the header to get the classical 4x4 law instead. The <code class="docutils literal notranslate"><span class="pre">.out</span></code> then holds
+<code class="docutils literal notranslate"><span class="pre">The</span> <span class="pre">Effective</span> <span class="pre">Euler-Bernoulli</span> <span class="pre">Beam</span> <span class="pre">Stiffness</span> <span class="pre">Matrix</span></code>, for extension, twist and the two bending curvatures.</p>
+<p>Go back to the root of the repository before the next tutorial:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">cd</span><span class="w"> </span>../../..
+</pre></div>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="04-plate-dehomogenization.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">04 Plate dehomogenization</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="06-solid-homogenization.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">06 3-D solid homogenization</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal" tabindex="-1"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-sg">The SG</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#run-it">Run it</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#read-the-out">Read the .out</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Akshat Bagla.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.24.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

@@ -1,0 +1,157 @@
+/* OpenSG website: small additions to pydata-sphinx-theme. The tutorials' chat styles live in chat.css. */
+
+/* OpenSG has no logo file, so the logo is its name, set as a wordmark. */
+.navbar-brand .logo__title {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* Home page: OpenSG's overview picture, centred and never wider than the page (a click opens the file at full size).
+   Its lines are dark on a transparent ground, so dark mode puts it on a light plate. */
+img.opensg-overview {
+  display: block;
+  margin: 0.5rem auto 1.5rem;
+  width: 600px;
+  max-width: 100%;
+  height: auto;
+}
+
+html[data-theme="dark"] img.opensg-overview {
+  background-color: #ffffff;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+
+/* Dark mode: the theme dims every picture (brightness 0.8, contrast 1.2), which turns a figure's white ground grey
+   and shifts the colours of a contour plot. The pictures of the pages keep their own colours, on the theme's white
+   plate. This selector outranks the theme's rule. chat.css does the same for the CompositesAI pictures. */
+html[data-theme="dark"] .bd-content .bd-article img {
+  filter: none;
+}
+
+/* Tutorial cards: a bolder title. */
+.sd-card .sd-card-title {
+  font-weight: 600;
+}
+
+/* Titles never run out of their column: a word too long for the line breaks inside it. */
+.bd-article :is(h1, h2, h3, h4, h5, h6),
+.prev-next-area a p.prev-next-title {
+  overflow-wrap: anywhere;
+}
+
+/* Inline code: Sphinx keeps every word of it on one line (span.pre), so a long file path ran out of a phone's column
+   and was cut. Such a word now breaks where the line ends. */
+.bd-article code.literal span.pre {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* Phones: smaller titles, so that a long word such as "dehomogenization" fits on one line, and the previous and
+   next links one under the other at full width (the theme puts them side by side, at most 45% wide each, and cuts a
+   long title). */
+@media (max-width: 575.98px) {
+  .bd-article h1 {
+    font-size: 1.75rem;
+  }
+
+  .bd-article h2 {
+    font-size: 1.4rem;
+  }
+
+  .bd-article h3 {
+    font-size: 1.2rem;
+  }
+
+  .prev-next-area a.left-prev,
+  .prev-next-area a.right-next {
+    float: none;
+    max-width: 100%;
+  }
+
+  .prev-next-area a.right-next {
+    justify-content: flex-end;
+  }
+
+  .prev-next-area a .prev-next-info {
+    min-width: 0;
+  }
+}
+
+/* Phones: tables fit the column. A table is as wide as its longest word, often a file name or a key in inline code,
+   and such a word made some tables wider than a phone's column. Inline code in a table may now break anywhere.
+   A first column that holds inline code keeps at least 7rem, so that a key such as "epsilon_bar" or
+   "opensg_solid" stays whole and only a longer name, such as a file name, breaks. Any other first column takes
+   only the room it needs. A browser without :has() keeps 4.5rem for every first column, which still keeps a short
+   key such as "theta" whole. The text and the cell padding are a little smaller. */
+@media (max-width: 575.98px) {
+  .bd-article table code.literal span.pre {
+    overflow-wrap: anywhere;
+  }
+
+  .bd-article table :is(td, th):first-child {
+    min-width: 4.5rem;
+  }
+
+  .bd-article table :is(td, th):first-child:has(code.literal) {
+    min-width: 7rem;
+  }
+
+  .bd-article table :is(td, th):first-child:not(:has(code.literal)) {
+    min-width: 0;
+  }
+
+  .bd-article table {
+    font-size: 0.9rem;
+  }
+
+  .bd-article table :is(td, th) {
+    padding: 0.25rem 0.2rem;
+  }
+}
+
+/* The force tables of command-line tutorial 08 ({.force-table}): every number stays on one line. The browser broke
+   a number in e-notation at the minus sign of its exponent. */
+.bd-article table.force-table td {
+  white-space: nowrap;
+}
+
+/* Narrow phones, below 375 px (a 360 px screen): the text of every table, CompositesAI's tables included, a little
+   smaller again, so that the tables still fit the column. */
+@media (max-width: 374.98px) {
+  .bd-article table,
+  .bd-article .chat-response table {
+    font-size: 0.875rem;
+  }
+}
+
+/* Phones: the breadcrumb leaves out its last item, the title of the page itself. It was cut with an ellipsis, and the
+   page's heading just below repeats it whole. */
+@media (max-width: 575.98px) {
+  .bd-breadcrumbs li.breadcrumb-item.active {
+    display: none;
+  }
+}
+
+/* The Ctrl+K hint of the search form: the theme draws it in its border colour, which is too faint to read (contrast
+   1.47 in light mode, 2.39 in dark mode). The theme's muted text colour reads in both (contrast 7.45 and 7.08). */
+form.bd-search .search-button__kbd-shortcut {
+  color: var(--pst-color-text-muted);
+}
+
+/* Output files and console output of the command-line tutorials (a literalinclude with :class: opensg-out): a
+   smaller monospace size on a wide screen, where the page has side columns, so that more of each line is in view.
+   Below 992 px the blocks keep the theme's size and scroll sideways as before. */
+@media (min-width: 992px) {
+  .bd-article div.opensg-out pre {
+    font-size: 0.72rem;
+  }
+}
+
+/* Display math wider than its column is scaled down to fit (MathJax's displayOverflow "scale", conf.py). MathJax
+   measures the column with a test element that it puts in the math's box for a moment. The theme lays that box out
+   as a flex row, which squeezes the test element to nothing: MathJax then measures 0 px and scales the equation to
+   0%. Keeping the test element at its full width gives MathJax the true width of the column. */
+div.math > mjx-test {
+  flex: none;
+}

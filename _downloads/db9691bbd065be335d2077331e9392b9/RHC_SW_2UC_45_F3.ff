@@ -1,0 +1,8 @@
+# OpenSG dehomogenization macro state: the shear force F3 alone
+u:     [0.0, 0.0, 0.0]      # macro displacement u1 u2 u3
+theta: [0.0, 0.0, 0.0]      # macro rotation t1 t2 t3 [rad] (about y1 y2 y3)
+C:     [[1.0, 0.0, 0.0],       # direction cosines of the macro frame
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0]]
+# beam forces [F1 F2 F3 M1 M2 M3], in N and N mm
+1:     [0.0, 0.0, 1000.0, 0.0, 0.0, 0.0]

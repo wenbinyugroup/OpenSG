@@ -1,0 +1,237 @@
+/* Prompt-and-response blocks of the CompositesAI tutorials (pydata-sphinx-theme, light and dark mode, print).
+ *
+ * The blocks are written by _tools/chat_to_tutorial.py and sketched in _templates/tutorial_page.md; a tutorial page
+ * holds only these, under one heading per step:
+ *   .chat-prompt      the prompt, a copyable code block (sphinx-copybutton)
+ *   .chat-response    CompositesAI's reply, every word kept
+ *   .chat-label       the small label at the top of a block ("Prompt", "CompositesAI")
+ *   .chat-heading     a heading of the reply, shown as a rubric (.chat-h1 ... .chat-h6)
+ *   figure.chat-figure  a picture of the reply, full content width, one per line
+ *   .chat-tool-trace  a collapsed tool-call trace (sphinx-design dropdown); only on a page written with the
+ *                     converter's --tool-calls, which the tutorials do not use
+ */
+
+html[data-theme="light"],
+:root {
+  --chat-prompt-accent: #1f5fa8;
+  --chat-prompt-bg: #f1f6fc;
+  --chat-response-accent: #2a7a4b;
+  --chat-response-bg: #f7fbf8;
+  --chat-figure-bg: #ffffff;
+}
+
+html[data-theme="dark"] {
+  --chat-prompt-accent: #7cb7f2;
+  --chat-prompt-bg: #18212d;
+  --chat-response-accent: #6fd39b;
+  --chat-response-bg: #16201a;
+  --chat-figure-bg: #ffffff;
+}
+
+/* -- the blocks ------------------------------------------------------------------------------------------------- */
+
+.chat-prompt,
+.chat-response {
+  margin: 1rem 0 1.5rem;
+  padding: 0.75rem 1rem 0.25rem;
+  border: 1px solid var(--pst-color-border);
+  border-left: 0.3rem solid var(--chat-prompt-accent);
+  border-radius: 0.4rem;
+  background-color: var(--chat-prompt-bg);
+  color: var(--pst-color-text-base);
+}
+
+.chat-response {
+  border-left-color: var(--chat-response-accent);
+  background-color: var(--chat-response-bg);
+}
+
+/* The blocks are docutils containers, and the theme's .docutils.container rule (two classes) unsets the side
+   padding of every container. These selectors outrank it, so the text keeps its distance from the borders: 1rem,
+   0.5rem on phones. */
+.chat-prompt.docutils.container,
+.chat-response.docutils.container {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (max-width: 575.98px) {
+  .chat-prompt.docutils.container,
+  .chat-response.docutils.container {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
+
+/* the small label at the top of each block */
+p.rubric.chat-label {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--chat-prompt-accent);
+}
+
+.chat-response > p.rubric.chat-label {
+  color: var(--chat-response-accent);
+}
+
+/* CompositesAI's logo before the response label: the hook for _static/compositesai-logo.png. The picture is the
+   label's list marker, so the browser draws it only when the file loads; without the file the marker falls back to
+   list-style-type none: nothing is drawn and no space is kept. 3.6x draws the 72 px file at 20 px; a file of
+   another size needs (its height in px)/20 here. */
+.chat-response > p.rubric.chat-label {
+  display: list-item;
+  list-style: none inside;
+  list-style-image: image-set(url("compositesai-logo.png") 3.6x);
+}
+
+/* the prompt: wrap long lines, keep the copy button */
+.chat-prompt div.highlight {
+  margin-bottom: 0.75rem;
+}
+
+.chat-prompt div.highlight pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.95em;
+  line-height: 1.5;
+  background-color: var(--pst-color-surface);
+  color: var(--pst-color-text-base);
+}
+
+/* the reply's own headings, shown as rubrics inside the response block */
+p.rubric.chat-heading {
+  margin: 1.25rem 0 0.5rem;
+  padding: 0;
+  border: none;
+  font-weight: 700;
+  color: var(--pst-color-heading-color, var(--pst-color-text-base));
+}
+
+p.rubric.chat-h1,
+p.rubric.chat-h2 {
+  font-size: 1.3rem;
+}
+
+p.rubric.chat-h3 {
+  font-size: 1.12rem;
+}
+
+p.rubric.chat-h4,
+p.rubric.chat-h5,
+p.rubric.chat-h6 {
+  font-size: 1rem;
+}
+
+.chat-response > p.rubric.chat-heading:first-of-type {
+  margin-top: 0.25rem;
+}
+
+/* tables of a reply scroll inside the block instead of widening the page. Display math is scaled down to fit its
+   column (conf.py); the scroll stays for an equation that is still too wide (a window made narrower later). */
+.chat-response .table-wrapper,
+.chat-response div.math,
+.chat-response mjx-container[display="true"] {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.chat-response table {
+  font-size: 0.92em;
+}
+
+hr.chat-rule {
+  border-color: var(--pst-color-border);
+}
+
+/* -- pictures: full content width, one per line ------------------------------------------------------------------ */
+
+figure.chat-figure {
+  display: block;
+  width: 100%;
+  margin: 1.25rem 0;
+}
+
+figure.chat-figure img {
+  display: block;
+  width: 100% !important;
+  max-width: 100%;
+  height: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--pst-color-border);
+  border-radius: 0.3rem;
+  background-color: var(--chat-figure-bg);
+}
+
+/* a click on a picture opens its file at full size (the link Sphinx puts around a picture shown smaller than its
+   file, conf.py html_scaled_image_link) */
+figure.chat-figure a.image-reference img {
+  cursor: zoom-in;
+}
+
+/* pydata-sphinx-theme dims every content image in dark mode (brightness .8, contrast 1.2); a contour plot's colours
+   must stay exact, so CompositesAI's pictures keep theirs on the white mat. */
+html[data-theme="dark"] .bd-content figure.chat-figure img {
+  filter: none !important;
+}
+
+figure.chat-figure figcaption {
+  margin-top: 0.4rem;
+  text-align: center;
+  font-size: 0.92em;
+  color: var(--pst-color-text-muted);
+}
+
+/* -- tool traces: collapsed, scroll inside --------------------------------------------------------------------- */
+
+.chat-tool-trace {
+  margin: 1rem 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.chat-tool-trace pre {
+  max-height: 32rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* -- print: no tinted backgrounds, pictures kept whole --------------------------------------------------------- */
+
+@media print {
+  .chat-prompt,
+  .chat-response {
+    background: none !important;
+    border-color: #777 !important;
+    color: #000 !important;
+  }
+
+  p.rubric.chat-label,
+  p.rubric.chat-heading {
+    color: #000 !important;
+  }
+
+  .chat-prompt div.highlight pre {
+    background: none !important;
+    border: 1px solid #aaa;
+  }
+
+  figure.chat-figure {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  figure.chat-figure img {
+    border: none;
+    padding: 0;
+  }
+
+  .chat-tool-trace pre {
+    max-height: none;
+    overflow: visible;
+  }
+}

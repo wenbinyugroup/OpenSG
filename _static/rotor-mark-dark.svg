@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="OpenSG">
+<title>OpenSG</title>
+<!-- Concept C "Genome rotor": three blades drawn as laminated airfoil sections (two ply lines and a web inside a
+     solid airfoil), one per macro model OpenSG homogenizes to (beam, plate/shell, solid), around a
+     structure-genome unit cell (matrix square, fiber disc). CSS keyframes only: two turns with ease-in-out, then
+     a rest; blades 2 and 3 start 0.1 s / 0.2 s later, so the rotor flexes while it spins and settles back to
+     120 deg spacing. Static under prefers-reduced-motion. -->
+<style>
+svg{--ink:#ced6dd;--pri:#3fb1c5;--sec:#9c5ffd;--acc:#f0954a;--soft:#1e3a41;--eff:#2d7482;--lite:#14181e}
+.p{fill:var(--pri)}.bf{fill:var(--bc)}.pl{fill:none;stroke:var(--lite);stroke-width:.6;stroke-opacity:.8}
+.wb{fill:var(--lite);fill-opacity:.9}
+.c{fill:var(--soft);stroke:var(--ink);stroke-width:1.5}
+.tw{fill:var(--ink)}.tp{fill:var(--pri)}
+.u1{--bc:var(--pri)}.u2{--bc:var(--sec)}.u3{--bc:var(--acc)}
+.r{transform-origin:32px 32px;animation:spin 7s cubic-bezier(.6,0,.4,1) infinite}
+.r2{animation-delay:.1s}.r3{animation-delay:.2s}
+@keyframes spin{0%{transform:rotate(0deg)}75%,100%{transform:rotate(720deg)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+<defs>
+<g id="b" transform="translate(32 32) rotate(-90) translate(-1.5 0)">
+<path class="bf" d="M7.5 0C7.5-4.8 14.5-6.8 20.5-4.8C25-3.3 28.5-1.4 30.5 0C26.5.8 20 1.8 14 2.4C10 2.8 7.5 2.4 7.5 0Z"/>
+<path class="pl" d="M8.7-.1C8.7-4.1 14.6-5.85 20.2-4.1C24.2-2.85 27.3-1.25 28.9-.1C25.2.6 19.5 1.45 14.2 1.85C10.9 2.15 8.7 1.85 8.7-.1Z"/>
+<path class="pl" d="M10-.2C10-3.3 14.9-4.8 20-3.45C23.4-2.4 26-1.1 27.2-.2C23.8.4 19 1.05 14.4 1.25C11.6 1.45 10 1.25 10-.2Z"/>
+<path class="wb" d="M15.7-4.5h.9v5.8h-.9z"/>
+</g>
+</defs>
+<g class="r"><use class="u1" xlink:href="#b"/></g>
+<g transform="rotate(120 32 32)"><g class="r r2"><use class="u2" xlink:href="#b"/></g></g>
+<g transform="rotate(240 32 32)"><g class="r r3"><use class="u3" xlink:href="#b"/></g></g>
+<rect class="c" x="26.5" y="26.5" width="11" height="11" rx="1.6"/>
+<circle class="p" cx="32" cy="32" r="3.3"/>
+</svg>

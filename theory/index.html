@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" data-theme="auto">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Theory &#8212; OpenSG</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "auto";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "auto";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=a72a19db" />
+    <link rel="stylesheet" type="text/css" href="../_static/chat.css?v=1f408ad9" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=75c7c72ae941e8b558d8"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8" />
+
+    <script src="../_static/documentation_options.js?v=7f41d439"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>window.MathJax = {"output": {"displayOverflow": "scale"}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'theory/index';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = true;</script>
+    <link rel="canonical" href="https://wenbinyugroup.github.io/OpenSG/theory/index.html" />
+    <link rel="icon" href="../_static/rotor-mark-auto.svg"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Benchmarks" href="../benchmarks/index.html" />
+    <link rel="prev" title="08 Beam dehomogenization" href="../tutorials/08-beam-dehomogenization.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light dark"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+    <meta name="docbuild:last-update" content="Nov 04, 2026"/>
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="auto">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button type="button" class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation" aria-expanded="false" aria-controls="pst-primary-sidebar-modal">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/rotor-mark-light.svg" class="logo__image only-light" alt=""/>
+    <img src="../_static/rotor-mark-dark.svg" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">OpenSG</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../getting-started/index.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../tutorials/index.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#" aria-current="page">
+    Theory
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../benchmarks/index.html">
+    Benchmarks
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../compositesai/index.html">
+    CompositesAI
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/wenbinyugroup/OpenSG" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button type="button" class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page" aria-expanded="false" aria-controls="pst-secondary-sidebar-modal">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal" tabindex="-1"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../getting-started/index.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../tutorials/index.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#" aria-current="page">
+    Theory
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../benchmarks/index.html">
+    Benchmarks
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../compositesai/index.html">
+    CompositesAI
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/wenbinyugroup/OpenSG" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-house"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Theory</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="theory">
+<h1>Theory<a class="headerlink" href="#theory" title="Link to this heading">#</a></h1>
+<p>OpenSG implements the linear elastic form of the Mechanics of Structure Genome (MSG). Its solid engine and shell
+engine share the theory below. The <a class="reference internal" href="../tutorials/index.html"><span class="std std-doc">tutorials</span></a> show the input files. The
+<a href="../OpenSG_v2_0/index.html">OpenSG 2.x documentation</a> describes the code.</p>
+<p>Notation: <span class="math notranslate nohighlight">\(\epsilon\)</span> is the small parameter and <span class="math notranslate nohighlight">\(\varepsilon\)</span> a strain. <span class="math notranslate nohighlight">\(\langle\cdot\rangle\)</span> is the average and
+<span class="math notranslate nohighlight">\(\langle\langle\cdot\rangle\rangle\)</span> the integral over the SG.</p>
+<section id="structure-gene-and-macroscopic-model">
+<h2>Structure gene and macroscopic model<a class="headerlink" href="#structure-gene-and-macroscopic-model" title="Link to this heading">#</a></h2>
+<p>MSG builds the constitutive law of a macroscopic model out of the original heterogeneous structure (Yu 2025,
+Sec. 1.11). In the solid engine the original model is 3-D linear elasticity (Bagla et al. 2026, Sec. 1), and in the
+shell engine a shell model of the walls (Deo and Yu 2020, and Bagla et al. 2025a).</p>
+<p>The Structure Gene (SG) is the smallest mathematical building block of the structure, and its dimension follows the
+heterogeneity and the macroscopic model (Yu 2025, Sec. 1.11):</p>
+<ul class="simple">
+<li><p>1-D: a line through the thickness of a laminate, for a plate or a 3-D solid,</p></li>
+<li><p>2-D: a beam cross-section, a plate cell heterogeneous in one in-plane direction, or a fiber composite modeled as a
+3-D solid,</p></li>
+<li><p>3-D: a block or unit cell, for a beam heterogeneous along its span, a plate heterogeneous in both in-plane
+directions, or a 3-D solid.</p></li>
+</ul>
+<p>The unknown fields of the SG follow from the principle of minimum information loss: the energies of the original and
+the macroscopic model should differ as little as possible (Yu 2025, Sec. 1.11). The variational asymptotic method
+(VAM) drops the small terms of that energy, because the SG is much smaller than the wavelength of the macroscopic
+deformation (Yu 2025, Secs. 1.11 and 7.2). Homogenization solves the problem over the SG for the effective law of the
+macroscopic model. Dehomogenization turns the macroscopic response into the local displacement, strain and stress
+inside the SG (Yu 2025, Sec. 7.3).</p>
+</section>
+<section id="macroscopic-models-and-their-laws">
+<h2>Macroscopic models and their laws<a class="headerlink" href="#macroscopic-models-and-their-laws" title="Link to this heading">#</a></h2>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>macroscopic model</p></th>
+<th class="head"><p>law</p></th>
+<th class="head"><p>SG dimension</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>3-D solid (Cauchy continuum)</p></td>
+<td><p><span class="math notranslate nohighlight">\(6\times6\)</span> stiffness</p></td>
+<td><p>1, 2 or 3</p></td>
+</tr>
+<tr class="row-odd"><td><p>Kirchhoff-Love plate</p></td>
+<td><p><span class="math notranslate nohighlight">\(6\times6\)</span>, the <span class="math notranslate nohighlight">\(A\)</span>, <span class="math notranslate nohighlight">\(B\)</span> and <span class="math notranslate nohighlight">\(D\)</span> blocks</p></td>
+<td><p>1, 2 or 3</p></td>
+</tr>
+<tr class="row-even"><td><p>Reissner-Mindlin plate</p></td>
+<td><p><span class="math notranslate nohighlight">\(8\times8\)</span>, the <span class="math notranslate nohighlight">\(6\times6\)</span> and the <span class="math notranslate nohighlight">\(2\times2\)</span> shear block <span class="math notranslate nohighlight">\(G\)</span></p></td>
+<td><p>1, 2 or 3</p></td>
+</tr>
+<tr class="row-odd"><td><p>Euler-Bernoulli beam</p></td>
+<td><p><span class="math notranslate nohighlight">\(4\times4\)</span></p></td>
+<td><p>2 or 3</p></td>
+</tr>
+<tr class="row-even"><td><p>Timoshenko beam</p></td>
+<td><p><span class="math notranslate nohighlight">\(6\times6\)</span></p></td>
+<td><p>2 or 3</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The macro strains <span class="math notranslate nohighlight">\(\bar\varepsilon\)</span> carry engineering shears, with the factor 2:</p>
+<ul class="simple">
+<li><p>3-D solid: <span class="math notranslate nohighlight">\([\varepsilon_{11}\ \varepsilon_{22}\ \varepsilon_{33}\ 2\varepsilon_{23}\ 2\varepsilon_{13}\ 2\varepsilon_{12}]^T\)</span>
+(Yu 2025, Sec. 7.4).</p></li>
+<li><p>Kirchhoff-Love plate: the in-plane strains and the curvatures,
+<span class="math notranslate nohighlight">\([\varepsilon_{11}\ \varepsilon_{22}\ 2\varepsilon_{12}\ \kappa_{11}\ \kappa_{22}\ 2\kappa_{12}]^T\)</span> (Yu 2025,
+Sec. 7.4). The Reissner-Mindlin plate adds the transverse shear strains <span class="math notranslate nohighlight">\(\gamma = [2\gamma_{13}\ 2\gamma_{23}]^T\)</span>
+(Yu et al. 2003).</p></li>
+<li><p>Euler-Bernoulli beam: <span class="math notranslate nohighlight">\([\gamma_{11}\ \kappa_1\ \kappa_2\ \kappa_3]^T\)</span> (Bagla et al. 2025a, Eq. 15).</p></li>
+<li><p>Timoshenko beam: <span class="math notranslate nohighlight">\([\gamma_{11}\ 2\gamma_{12}\ 2\gamma_{13}\ \kappa_1\ \kappa_2\ \kappa_3]^T\)</span> (Yu et al. 2012,
+Eq. 113).</p></li>
+</ul>
+<p>The beam order is 1 extension, 2 and 3 transverse shear, 4 twist, 5 and 6 bending, and it pairs with the forces
+<span class="math notranslate nohighlight">\([F_1\ F_2\ F_3\ M_1\ M_2\ M_3]\)</span> (Yu et al. 2012, Eq. 113). The 3-D solid, the Kirchhoff-Love plate and the
+Euler-Bernoulli beam are the classical models, the Reissner-Mindlin plate and the Timoshenko beam the refined ones
+(Yu 2025, Sec. 7.3).</p>
+</section>
+<section id="kinematics-of-the-sg">
+<h2>Kinematics of the SG<a class="headerlink" href="#kinematics-of-the-sg" title="Link to this heading">#</a></h2>
+<p>A beam keeps the macro coordinate <span class="math notranslate nohighlight">\(x_1\)</span> along its reference line, with <span class="math notranslate nohighlight">\(x_2, x_3\)</span> in the cross-section. A plate keeps
+<span class="math notranslate nohighlight">\(x_1, x_2\)</span>, and a 3-D solid all three. The SG uses the micro coordinates <span class="math notranslate nohighlight">\(y_i = x_i/\epsilon\)</span> (Yu 2025, Sec. 7.2):
+<span class="math notranslate nohighlight">\(y_3\)</span> for a 1-D SG, <span class="math notranslate nohighlight">\(y_2, y_3\)</span> for a 2-D SG and all three for a 3-D SG.</p>
+<p>The displacement inside the SG is that of the macroscopic model plus a fluctuation <span class="math notranslate nohighlight">\(\epsilon w_i\)</span>. For the 3-D solid
+(Yu 2025, Sec. 7.4)</p>
+<div class="math notranslate nohighlight">
+\[
+u_i(x, y) = \bar u_i(x) + \epsilon\, w_i(x, y),
+\]</div>
+<p>and the plate and the beam add the rotations of their reference surface or line (Yu 2025, Sec. 7.4). The local strain
+<span class="math notranslate nohighlight">\(\Gamma = [\Gamma_{11}\ \Gamma_{22}\ \Gamma_{33}\ 2\Gamma_{23}\ 2\Gamma_{13}\ 2\Gamma_{12}]^T\)</span> splits into a
+fluctuation part, with <span class="math notranslate nohighlight">\(w = [w_1\ w_2\ w_3]^T\)</span>, and a macroscopic part. For a prismatic beam, a plate or a 3-D solid,
+which carry no initial twist or curvature (Yu 2025, Sec. 7.2),</p>
+<div class="math notranslate nohighlight">
+\[
+\Gamma = \Gamma_h w + \Gamma_\varepsilon \bar\varepsilon + \epsilon\, \Gamma_l w' .
+\]</div>
+<p>For a 3-D SG, <span class="math notranslate nohighlight">\(\Gamma_h\)</span> holds the derivatives with respect to <span class="math notranslate nohighlight">\(y_i\)</span> (Yu 2025, Sec. 7.2):</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\Gamma_h =
+\begin{bmatrix}
+\partial_1 &amp; 0 &amp; 0 \\
+0 &amp; \partial_2 &amp; 0 \\
+0 &amp; 0 &amp; \partial_3 \\
+0 &amp; \partial_3 &amp; \partial_2 \\
+\partial_3 &amp; 0 &amp; \partial_1 \\
+\partial_2 &amp; \partial_1 &amp; 0
+\end{bmatrix},
+\qquad \partial_i = \frac{\partial}{\partial y_i} .
+\end{split}\]</div>
+<p>A 2-D SG drops the <span class="math notranslate nohighlight">\(\partial_1\)</span> terms, and a 1-D SG also drops the <span class="math notranslate nohighlight">\(\partial_2\)</span> terms. <span class="math notranslate nohighlight">\(\Gamma_\varepsilon\)</span> places the
+macro strains in the SG and is the identity for the 3-D solid. For the beam, with <span class="math notranslate nohighlight">\(x_\alpha = \epsilon y_\alpha\)</span> and
+<span class="math notranslate nohighlight">\(\alpha = 2, 3\)</span>, it gives <span class="math notranslate nohighlight">\(\Gamma_{11} = \gamma_{11} + x_3\kappa_2 - x_2\kappa_3\)</span>, <span class="math notranslate nohighlight">\(2\Gamma_{12} = -x_3\kappa_1\)</span> and
+<span class="math notranslate nohighlight">\(2\Gamma_{13} = x_2\kappa_1\)</span> (Yu 2025, Sec. 7.2). The last term holds the derivatives along the macro coordinates,
+<span class="math notranslate nohighlight">\(w' = \partial w/\partial x_1\)</span> for a beam, and enters only the first-order step of the refined models.</p>
+<p>The fluctuations are constrained so that the macroscopic displacement is the average displacement of the SG, and a
+beam adds a fourth constraint, which defines its twist (Yu 2025, Sec. 7.2):</p>
+<div class="math notranslate nohighlight">
+\[
+\langle w_i \rangle = 0, \qquad \langle w_{2|3} - w_{3|2} \rangle = 0 ,
+\]</div>
+<p>where <span class="math notranslate nohighlight">\((\cdot)_{|j}\)</span> is the derivative with respect to <span class="math notranslate nohighlight">\(y_j\)</span>. When the SG is periodic in a direction, <span class="math notranslate nohighlight">\(w\)</span> takes equal
+values on the matching boundaries (Yu 2025, Sec. 7.4, and Bagla et al. 2026, Sec. 3.3).</p>
+</section>
+<section id="homogenization">
+<h2>Homogenization<a class="headerlink" href="#homogenization" title="Link to this heading">#</a></h2>
+<p>The strain energy density of the macroscopic model is (Yu 2025, Sec. 7.3)</p>
+<div class="math notranslate nohighlight">
+\[
+\frac{1}{2\omega} \left\langle\!\left\langle \Gamma^T C\, \Gamma \right\rangle\!\right\rangle ,
+\]</div>
+<p>with <span class="math notranslate nohighlight">\(C\)</span> the <span class="math notranslate nohighlight">\(6\times6\)</span> stiffness of the material at each point. <span class="math notranslate nohighlight">\(\omega\)</span> is the size of the SG along the macro
+coordinates that the model keeps, and 1 when the SG has none of them (Yu 2025, Sec. 7.3), as for a beam
+cross-section or a laminate under a plate. For a 3-D solid it is the length, area or volume that the SG spans, voids
+included.</p>
+<p>VAM keeps the leading terms of this energy, and the fluctuation solves the zeroth-order problem (Yu 2025, Sec. 7.3)</p>
+<div class="math notranslate nohighlight">
+\[
+\min_{w} \ \left\langle\!\left\langle \left(\Gamma_h w + \Gamma_\varepsilon \bar\varepsilon\right)^T C
+\left(\Gamma_h w + \Gamma_\varepsilon \bar\varepsilon\right) \right\rangle\!\right\rangle
+\]</div>
+<p>under the constraints, with <span class="math notranslate nohighlight">\(\bar\varepsilon\)</span> held fixed. OpenSG solves it with finite elements over the SG mesh,
+<span class="math notranslate nohighlight">\(w = S V\)</span> with the shape functions <span class="math notranslate nohighlight">\(S\)</span> and the nodal values <span class="math notranslate nohighlight">\(V\)</span>. Twice the strain energy <span class="math notranslate nohighlight">\(U\)</span> stored in the SG,
+<span class="math notranslate nohighlight">\(\omega\)</span> times the density above, is (Yu 2025, Sec. 7.3)</p>
+<div class="math notranslate nohighlight">
+\[
+2U = V^T E\, V + 2 V^T D_{h\varepsilon} \bar\varepsilon + \bar\varepsilon^T D_{\varepsilon\varepsilon} \bar\varepsilon,
+\]</div>
+<p>with</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\begin{aligned}
+E &amp;= \left\langle\!\left\langle (\Gamma_h S)^T C\, (\Gamma_h S) \right\rangle\!\right\rangle, \\
+D_{h\varepsilon} &amp;= \left\langle\!\left\langle (\Gamma_h S)^T C\, \Gamma_\varepsilon \right\rangle\!\right\rangle, \\
+D_{\varepsilon\varepsilon} &amp;= \left\langle\!\left\langle \Gamma_\varepsilon^T C\, \Gamma_\varepsilon
+\right\rangle\!\right\rangle .
+\end{aligned}
+\end{split}\]</div>
+<p>The minimum under the constraints is one linear system with one right-hand side per macro strain (Yu 2025,
+Sec. 7.3):</p>
+<div class="math notranslate nohighlight">
+\[
+E\, V_0 = -D_{h\varepsilon}, \qquad V = V_0\, \bar\varepsilon .
+\]</div>
+<p>Substituting <span class="math notranslate nohighlight">\(V\)</span> back gives the effective stiffness of the macroscopic model (Yu 2025, Sec. 7.3):</p>
+<div class="math notranslate nohighlight">
+\[
+\bar C = \frac{1}{\omega} \left( D_{\varepsilon\varepsilon} + V_0^T D_{h\varepsilon} \right).
+\]</div>
+<p>The classical laws come from this zeroth-order problem (Yu 2025, Sec. 7.3).</p>
+</section>
+<section id="refined-models">
+<h2>Refined models<a class="headerlink" href="#refined-models" title="Link to this heading">#</a></h2>
+<p>The refined laws need one more order.</p>
+<p><strong>Timoshenko beam.</strong> The fluctuation gets a first-order part,
+<span class="math notranslate nohighlight">\(V = V_0\bar\varepsilon + V_{1S}\,\bar\varepsilon'\)</span>, where <span class="math notranslate nohighlight">\(\bar\varepsilon = [\gamma_{11}\ \kappa_1\ \kappa_2\
+\kappa_3]^T\)</span> are the classical strains, <span class="math notranslate nohighlight">\(\bar\varepsilon'\)</span> their derivative along <span class="math notranslate nohighlight">\(x_1\)</span>, and <span class="math notranslate nohighlight">\(V_{1S}\)</span> solves a second
+system with the same matrix <span class="math notranslate nohighlight">\(E\)</span> (Yu 2025, Sec. 6.3). The Timoshenko strains enter through
+<span class="math notranslate nohighlight">\(\bar\varepsilon = \bar\varepsilon_t + Q\gamma'\)</span>, with <span class="math notranslate nohighlight">\(Q\)</span> a constant <span class="math notranslate nohighlight">\(4\times2\)</span> matrix (Yu 2025, Sec. 6.3). Here
+<span class="math notranslate nohighlight">\(\bar\varepsilon_t\)</span> holds the extension, twist and bending strains measured in the Timoshenko model, and
+<span class="math notranslate nohighlight">\(\gamma = [2\gamma_{12}\ 2\gamma_{13}]^T\)</span> the transverse shear strains (Yu et al. 2012, Eq. 113). The beam
+equilibrium equations remove the derivatives from the energy, now correct to the second order (Yu 2025, Sec. 6.3):</p>
+<div class="math notranslate nohighlight">
+\[
+2U = \bar\varepsilon_t^T X\, \bar\varepsilon_t + 2\, \bar\varepsilon_t^T Y \gamma + \gamma^T G_s\, \gamma ,
+\]</div>
+<p>where <span class="math notranslate nohighlight">\(X\)</span>, <span class="math notranslate nohighlight">\(Y\)</span> and <span class="math notranslate nohighlight">\(G_s\)</span> are the <span class="math notranslate nohighlight">\(4\times4\)</span>, <span class="math notranslate nohighlight">\(4\times2\)</span> and <span class="math notranslate nohighlight">\(2\times2\)</span> blocks of the Timoshenko <span class="math notranslate nohighlight">\(6\times6\)</span>, reordered
+into the beam order.</p>
+<p><strong>Reissner-Mindlin plate.</strong> The energy correct to the second order is brought to the Reissner-Mindlin form with the
+least loss of energy, so no shear correction factor is used (Yu 2005, and Yu 2025, Sec. 5.6). OpenSG fits the shear
+block <span class="math notranslate nohighlight">\(G\)</span> by the least-squares construction of Yu et al. (2002, 2003). Yu (2005) later refined this fit. The
+least-squares construction is for a laminate, a 1-D SG. OpenSG also applies it to 2-D and 3-D SGs, a route not yet
+validated for SGs heterogeneous in plane.</p>
+</section>
+<section id="the-two-engines">
+<h2>The two engines<a class="headerlink" href="#the-two-engines" title="Link to this heading">#</a></h2>
+<section id="solid-engine">
+<h3>Solid engine<a class="headerlink" href="#solid-engine" title="Link to this heading">#</a></h3>
+<p>The solid engine meshes the SG with solid elements: line, area or volume elements for a 1-D, 2-D or 3-D SG. Its SG
+problem keeps one form for every macroscopic model (Bagla et al. 2025b, Sec. 4). <span class="math notranslate nohighlight">\(\Gamma_\varepsilon\)</span>, <span class="math notranslate nohighlight">\(\omega\)</span> and
+the constraints change with the model (Yu 2025, Secs. 7.2 and 7.3). The engine returns every law of the table and,
+for a beam cross-section (2-D SG), a <span class="math notranslate nohighlight">\(6\times6\)</span> mass matrix built from the density <span class="math notranslate nohighlight">\(\rho\)</span> (Bagla et al. 2025b,
+Eq. 21):</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+M =
+\begin{bmatrix}
+\mu &amp; 0 &amp; 0 &amp; 0 &amp; \mu x_{M3} &amp; -\mu x_{M2} \\
+0 &amp; \mu &amp; 0 &amp; -\mu x_{M3} &amp; 0 &amp; 0 \\
+0 &amp; 0 &amp; \mu &amp; \mu x_{M2} &amp; 0 &amp; 0 \\
+0 &amp; -\mu x_{M3} &amp; \mu x_{M2} &amp; i_{22} + i_{33} &amp; 0 &amp; 0 \\
+\mu x_{M3} &amp; 0 &amp; 0 &amp; 0 &amp; i_{22} &amp; -i_{23} \\
+-\mu x_{M2} &amp; 0 &amp; 0 &amp; 0 &amp; -i_{23} &amp; i_{33}
+\end{bmatrix},
+\end{split}\]</div>
+<p>with <span class="math notranslate nohighlight">\(\mu = \langle\langle \rho \rangle\rangle\)</span> the mass per unit length, <span class="math notranslate nohighlight">\(x_{M\alpha} = \langle\langle \rho\, x_\alpha
+\rangle\rangle / \mu\)</span> the mass center, <span class="math notranslate nohighlight">\(i_{22} = \langle\langle \rho\, x_3^2 \rangle\rangle\)</span>, <span class="math notranslate nohighlight">\(i_{33} = \langle\langle
+\rho\, x_2^2 \rangle\rangle\)</span> and <span class="math notranslate nohighlight">\(i_{23} = \langle\langle \rho\, x_2 x_3 \rangle\rangle\)</span>.</p>
+</section>
+<section id="shell-engine">
+<h3>Shell engine<a class="headerlink" href="#shell-engine" title="Link to this heading">#</a></h3>
+<p>The shell engine models a thin-walled beam by its cross-section contour. Its SG is a chain of line elements along the
+walls. Each wall segment is a plate model, and the beam law is homogenized over the contour, as in the thin-walled MSG
+model of Deo and Yu (2020). The layup of each wall is a 1-D SG through its thickness, whose homogenization gives the
+plate law of the wall: the <span class="math notranslate nohighlight">\(A\)</span>, <span class="math notranslate nohighlight">\(B\)</span> and <span class="math notranslate nohighlight">\(D\)</span> blocks and, for the refined route, the shear block <span class="math notranslate nohighlight">\(G\)</span> of Yu et al. (2003).</p>
+<p>The classical route gives the Euler-Bernoulli <span class="math notranslate nohighlight">\(4\times4\)</span> with Kirchhoff-Love walls and <span class="math notranslate nohighlight">\(C^1\)</span> Hermite elements, as in
+Deo and Yu (2020). The refined route uses the Reissner-Mindlin <span class="math notranslate nohighlight">\(8\times8\)</span> of each wall and Reissner-Mindlin shell
+elements (Bagla et al. 2025a). Its shell strains <span class="math notranslate nohighlight">\(\Gamma_s\)</span>, the six plate strains and the two transverse shear strains
+of the wall, are written in terms of the beam strains and the shell fluctuations
+<span class="math notranslate nohighlight">\(w_s = [w_1\ w_2\ w_3\ \omega_1\ \omega_2]^T\)</span> (Bagla et al. 2025a, Eqs. 14 and 15):</p>
+<div class="math notranslate nohighlight">
+\[
+\Gamma_s = \Gamma_\varepsilon \bar\varepsilon + \Gamma_h w_s + \Gamma_l w_s' ,
+\]</div>
+<p>with shell forms of the three operators and <span class="math notranslate nohighlight">\(\omega_1, \omega_2\)</span> the fluctuations of the shell rotations (not the SG
+size <span class="math notranslate nohighlight">\(\omega\)</span>). The first-order beam step of Yu (2025, Sec. 6.3), applied to the contour, then gives the Timoshenko
+<span class="math notranslate nohighlight">\(6\times6\)</span>.</p>
+</section>
+</section>
+<section id="dehomogenization">
+<h2>Dehomogenization<a class="headerlink" href="#dehomogenization" title="Link to this heading">#</a></h2>
+<p>The macroscopic analysis gives the macro strains <span class="math notranslate nohighlight">\(\bar\varepsilon\)</span>, or the forces, which the compliance
+<span class="math notranslate nohighlight">\(\bar C^{-1}\)</span> turns into strains. Then (Yu 2025, Sec. 7.3)</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}
+\begin{aligned}
+w &amp;= S V_0\, \bar\varepsilon, \\
+\Gamma &amp;= \left(\Gamma_h S V_0 + \Gamma_\varepsilon\right) \bar\varepsilon, \\
+\sigma &amp;= C\, \Gamma ,
+\end{aligned}
+\end{split}\]</div>
+<p>and the local displacement is that of the macroscopic model, with its rotations, plus <span class="math notranslate nohighlight">\(\epsilon w_i\)</span>.</p>
+<p>For the Timoshenko beam, the six Timoshenko strains give <span class="math notranslate nohighlight">\(\bar\varepsilon\)</span> and <span class="math notranslate nohighlight">\(\bar\varepsilon'\)</span> through
+<span class="math notranslate nohighlight">\(\bar\varepsilon = \bar\varepsilon_t + Q\gamma'\)</span> and the beam equilibrium equations (Yu et al. 2012, Eqs. 112 to
+116). The fluctuation keeps its first-order term, for a prismatic beam without distributed loads (Yu et al. 2012,
+Eq. 111)</p>
+<div class="math notranslate nohighlight">
+\[
+w = S \left( V_0\, \bar\varepsilon + V_{1S}\, \bar\varepsilon' \right),
+\]</div>
+<p>and the strain split with <span class="math notranslate nohighlight">\(w\)</span> and <span class="math notranslate nohighlight">\(w'\)</span> gives the local strain.</p>
+<p>The shell engine recovers on its refined route in two steps. The beam strains and the contour fluctuations give the
+six shell strains and the two transverse shear strains of every wall element. The 1-D SG of each wall then turns the
+six strains and their gradients along the span and the contour into the in-plane 3-D strains and stresses at any
+depth (Yu et al. 2003, Eq. 63). At first order <span class="math notranslate nohighlight">\(\sigma_{33}\)</span> is not available (Yu 2005, Sec. 5), and the shell engine
+does not recover the transverse shear stresses.</p>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>Bagla, A., Ballard, M. K., and Yu, W. (2026). Multiscale modeling of composites with AI/ML framework using JAX. In
+<em>Proceedings of the ASME 2026 Aerospace Structures, Structural Dynamics, and Materials Conference (SSDM2026)</em>,
+Long Beach, CA, Paper SSDM2026-183233. <a class="reference external" href="https://doi.org/10.1115/SSDM2026-183233">https://doi.org/10.1115/SSDM2026-183233</a></p></li>
+<li><p>Bagla, A., Camarena, E., and Yu, W. (2025a). Theory of arbitrary shaped thin-walled composite beams. In
+<em>Proceedings of the American Society for Composites, 40th Technical Conference</em>, Dayton, OH.</p></li>
+<li><p>Bagla, A., Camarena, E., and Yu, W. (2025b). Timoshenko beam modeling of realistic wind turbine blades using
+mechanics of structure genome. In <em>Proceedings of the ASME 2025 International Mechanical Engineering Congress and
+Exposition (IMECE2025)</em>, Memphis, TN, Paper IMECE2025-167634. <a class="reference external" href="https://doi.org/10.1115/IMECE2025-167634">https://doi.org/10.1115/IMECE2025-167634</a></p></li>
+<li><p>Deo, A., and Yu, W. (2020). Thin-walled composite beam cross-sectional analysis using the mechanics of structure
+genome. <em>Thin-Walled Structures</em>, 152, 106663. <a class="reference external" href="https://doi.org/10.1016/j.tws.2020.106663">https://doi.org/10.1016/j.tws.2020.106663</a></p></li>
+<li><p>Yu, W. (2005). Mathematical construction of a Reissner-Mindlin plate theory for composite laminates.
+<em>International Journal of Solids and Structures</em>, 42(26), 6680–6699.
+<a class="reference external" href="https://doi.org/10.1016/j.ijsolstr.2005.02.049">https://doi.org/10.1016/j.ijsolstr.2005.02.049</a></p></li>
+<li><p>Yu, W. (2025). <em>Multiscale structural mechanics: Top-down modeling of composite structures using mechanics of
+structure genome</em>. John Wiley &amp; Sons, Hoboken, NJ. <a class="reference external" href="https://doi.org/10.1002/9781119092704">https://doi.org/10.1002/9781119092704</a></p></li>
+<li><p>Yu, W., Hodges, D. H., and Ho, J. C. (2012). Variational asymptotic beam sectional analysis – an updated version.
+<em>International Journal of Engineering Science</em>, 59, 40–64. <a class="reference external" href="https://doi.org/10.1016/j.ijengsci.2012.03.006">https://doi.org/10.1016/j.ijengsci.2012.03.006</a></p></li>
+<li><p>Yu, W., Hodges, D. H., and Volovoi, V. V. (2002). Asymptotic construction of Reissner-like composite plate theory
+with accurate strain recovery. <em>International Journal of Solids and Structures</em>, 39(20), 5185–5203.
+<a class="reference external" href="https://doi.org/10.1016/S0020-7683(02)00410-9">https://doi.org/10.1016/S0020-7683(02)00410-9</a></p></li>
+<li><p>Yu, W., Hodges, D. H., and Volovoi, V. V. (2003). Asymptotically accurate 3-D recovery from Reissner-like
+composite plate finite elements. <em>Computers &amp; Structures</em>, 81(7), 439–454.
+<a class="reference external" href="https://doi.org/10.1016/S0045-7949(03)00011-7">https://doi.org/10.1016/S0045-7949(03)00011-7</a></p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="../tutorials/08-beam-dehomogenization.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">08 Beam dehomogenization</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../benchmarks/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Benchmarks</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal" tabindex="-1"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#structure-gene-and-macroscopic-model">Structure gene and macroscopic model</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#macroscopic-models-and-their-laws">Macroscopic models and their laws</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#kinematics-of-the-sg">Kinematics of the SG</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#homogenization">Homogenization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#refined-models">Refined models</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-two-engines">The two engines</a><ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#solid-engine">Solid engine</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shell-engine">Shell engine</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dehomogenization">Dehomogenization</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#references">References</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Akshat Bagla.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.24.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
