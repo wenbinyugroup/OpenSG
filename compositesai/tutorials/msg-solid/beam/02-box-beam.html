@@ -334,8 +334,8 @@
 </ul>
 </details></li>
 <li class="toctree-l3 has-children"><a class="reference internal" href="../plate/index.html">Plate</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l4"><a class="reference internal" href="../plate/01-corrugated-sheet-face-sheets.html">01 Corrugated steel sheet with face sheets</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../plate/02-udfrc-laminate.html">02 UDFRC cross-ply laminate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../plate/01-udfrc-laminate.html">01 UDFRC cross-ply laminate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../plate/02-corrugated-sheet-face-sheets.html">02 Corrugated steel sheet with face sheets</a></li>
 </ul>
 </details></li>
 <li class="toctree-l3"><a class="reference internal" href="../solid/index.html">Solid</a></li>
@@ -450,8 +450,8 @@
 <li><p>Model: OpenSG solid beam (<code class="docutils literal notranslate"><span class="pre">n_model:</span> <span class="pre">1</span></code>), validated with no reversed or degenerate elements.</p></li>
 </ul>
 <p>The mesh preview and OpenSG/YAML and Gmsh mesh exports are attached.</p>
-<p><a class="reference download internal" download="" href="../../../../_downloads/c8278961ff43447af1b37b0e231266ab/al6061_tube.yaml"><code class="xref download docutils literal notranslate"><span class="pre">OpenSG</span> <span class="pre">tube</span> <span class="pre">section</span> <span class="pre">(YAML)</span></code></a><br />
-<a class="reference download internal" download="" href="../../../../_downloads/ea15cbe0b15aae5bbc05effd3ad95e32/al6061_tube.msh"><code class="xref download docutils literal notranslate"><span class="pre">Gmsh</span> <span class="pre">tube</span> <span class="pre">mesh</span></code></a></p>
+<p>OpenSG tube section (YAML)<br />
+Gmsh tube mesh</p>
 </div>
 </section>
 <section id="step-2-beam-properties-of-the-tube">
@@ -546,8 +546,8 @@
 <li><p>The study meets the <strong>1% convergence criterion</strong>.</p></li>
 </ul>
 <p>Attached: <strong>Timoshenko tube mesh</strong>, <code class="docutils literal notranslate"><span class="pre">al6061_tube_properties.md</span></code> (full stiffness, compliance, and mass matrices), and <code class="docutils literal notranslate"><span class="pre">convergence.md</span></code> (mesh study).</p>
-<p><a class="reference download internal" download="" href="../../../../_downloads/a27ebbfba16ae67c9925a630fc8d66fc/al6061_tube_properties.md"><code class="xref download docutils literal notranslate"><span class="pre">Full</span> <span class="pre">stiffness,</span> <span class="pre">compliance,</span> <span class="pre">and</span> <span class="pre">mass</span> <span class="pre">matrices</span></code></a><br />
-<a class="reference download internal" download="" href="../../../../_downloads/7b49b0eb4c9b9dbdaaddb394577f1329/convergence.md"><code class="xref download docutils literal notranslate"><span class="pre">Mesh-convergence</span> <span class="pre">results</span></code></a></p>
+<p>Full stiffness, compliance, and mass matrices<br />
+Mesh-convergence results</p>
 </div>
 </section>
 <section id="step-3-stresses-under-a-tip-torque">
@@ -591,7 +591,7 @@
 =0.06278\ \text{rad}=3.597^\circ.\]</div>
 <p>The thin-wall value is <strong>0.06359 rad (3.643°)</strong>, so the OpenSG twist is <strong>1.27% lower</strong>.</p>
 <p>Attached: <code class="docutils literal notranslate"><span class="pre">al6061_tube_torsion_stress_components.png</span></code> with all six global stress contours, plus <code class="docutils literal notranslate"><span class="pre">al6061_tube_torsion_dehom.vtk</span></code> containing the recovered fields.</p>
-<p><a class="reference download internal" download="" href="../../../../_downloads/07acb3fb52e541d53a93ea9492094db4/al6061_tube_torsion_dehom.vtk"><code class="xref download docutils literal notranslate"><span class="pre">Recovered</span> <span class="pre">stress</span> <span class="pre">field</span> <span class="pre">data</span> <span class="pre">(VTK)</span></code></a></p>
+<p>Recovered stress field data (VTK)</p>
 </div>
 </section>
 <section id="step-4-stresses-under-a-tip-bending-moment">
@@ -638,7 +638,7 @@
 =\mathbf{9.348\ \text{mm}}.\]</div>
 <p>This equals the textbook <span class="math notranslate nohighlight">\(M L^2/(2 E I_{22})\)</span> result to displayed precision.</p>
 <p>Attached: <code class="docutils literal notranslate"><span class="pre">al6061_tube_deep_bending_stress_components.png</span></code> with all six stress contours, and <code class="docutils literal notranslate"><span class="pre">al6061_tube_deep_bending_dehom.vtk</span></code> with the recovered field data.</p>
-<p><a class="reference download internal" download="" href="../../../../_downloads/ec1195483d8298a1e1620613442d49bd/al6061_tube_deep_bending_dehom.vtk"><code class="xref download docutils literal notranslate"><span class="pre">Deep-plane</span> <span class="pre">bending</span> <span class="pre">field</span> <span class="pre">data</span> <span class="pre">(VTK)</span></code></a></p>
+<p>Deep-plane bending field data (VTK)</p>
 </div>
 </section>
 <section id="step-5-the-composite-box-beam-and-its-ply-mesh">
@@ -698,7 +698,7 @@
 <li><p>Validation passed: no reversed or zero-area elements.</p></li>
 </ul>
 <p>Attached: <code class="docutils literal notranslate"><span class="pre">composite_box_solid_mesh.png</span></code>, <code class="docutils literal notranslate"><span class="pre">composite_box_ply_mesh_detail.png</span></code> (ply interfaces in red), and <code class="docutils literal notranslate"><span class="pre">composite_box_solid.yaml</span></code>.</p>
-<p><a class="reference download internal" download="" href="../../../../_downloads/726c66b04625bc78180570ca28dede5e/composite_box_solid.yaml"><code class="xref download docutils literal notranslate"><span class="pre">OpenSG</span> <span class="pre">composite</span> <span class="pre">box</span> <span class="pre">section</span> <span class="pre">(YAML)</span></code></a></p>
+<p>OpenSG composite box section (YAML)</p>
 </div>
 </section>
 <section id="step-6-the-box-mesh-at-true-scale">
@@ -820,7 +820,7 @@
 <li><p>Aluminium centres were effectively at the origin.</p></li>
 </ul>
 <p>The composite mass per length is <strong>0.9344 kg/m</strong> versus <strong>1.5768 kg/m</strong> for aluminium. The full stiffness, compliance, and mass matrices are in <code class="docutils literal notranslate"><span class="pre">composite_box_properties.md</span></code>.</p>
-<p><a class="reference download internal" download="" href="../../../../_downloads/2359522288f09f876e35c5847b0216c1/composite_box_properties.md"><code class="xref download docutils literal notranslate"><span class="pre">Full</span> <span class="pre">stiffness,</span> <span class="pre">compliance,</span> <span class="pre">and</span> <span class="pre">mass</span> <span class="pre">matrices</span></code></a></p>
+<p>Full stiffness, compliance, and mass matrices</p>
 </div>
 </section>
 <section id="step-8-the-box-under-the-tip-torque">
