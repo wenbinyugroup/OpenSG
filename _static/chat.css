@@ -6,7 +6,8 @@
  *   .chat-response    CompositesAI's reply, every word kept
  *   .chat-label       the small label at the top of a block ("Prompt", "CompositesAI")
  *   .chat-heading     a heading of the reply, shown as a rubric (.chat-h1 ... .chat-h6)
- *   figure.chat-figure  a picture of the reply, full content width, one per line
+ *   figure.chat-figure  a picture of the reply, full content width, one per line, enlarged on a click
+ *   .chat-zoom        the overlay that shows a clicked picture enlarged on the page (_static/chat-figure.js)
  *   .chat-tool-trace  a collapsed tool-call trace (sphinx-design dropdown); only on a page written with the
  *                     converter's --tool-calls, which the tutorials do not use
  */
@@ -167,10 +168,53 @@ figure.chat-figure img {
   background-color: var(--chat-figure-bg);
 }
 
-/* a click on a picture opens its file at full size (the link Sphinx puts around a picture shown smaller than its
-   file, conf.py html_scaled_image_link) */
+/* a click on a picture shows its file enlarged in an overlay on the page (_static/chat-figure.js, through the link
+   Sphinx puts around a picture shown smaller than its file, conf.py html_scaled_image_link). A click on the
+   overlay, its close button or the Escape key closes it, and the reader stays on the tutorial. */
 figure.chat-figure a.image-reference img {
   cursor: zoom-in;
+}
+
+.chat-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem 1rem;
+  background-color: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+
+.chat-zoom[hidden] {
+  display: none;
+}
+
+.chat-zoom-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  padding: 0.5rem;
+  border-radius: 0.3rem;
+  background-color: var(--chat-figure-bg);
+}
+
+.chat-zoom-close {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.75rem;
+  padding: 0 0.25rem;
+  border: none;
+  background: none;
+  color: #ffffff;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+html.chat-zoom-open {
+  overflow: hidden;
 }
 
 /* pydata-sphinx-theme dims every content image in dark mode (brightness .8, contrast 1.2); a contour plot's colours
@@ -233,5 +277,9 @@ figure.chat-figure figcaption {
   .chat-tool-trace pre {
     max-height: none;
     overflow: visible;
+  }
+
+  .chat-zoom {
+    display: none !important;
   }
 }

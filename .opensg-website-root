@@ -48,6 +48,12 @@ site _images/all_stresses_Sig_zz.png
 site _images/bar_mesh.png
 site _images/clark_coarse_mesh.png
 site _images/clark_y_stiffness_convergence.png
+site _images/clarky_root_Eps_xx.png
+site _images/clarky_root_Eps_xy.png
+site _images/clarky_root_Eps_xz.png
+site _images/clarky_root_Eps_yy.png
+site _images/clarky_root_Eps_yz.png
+site _images/clarky_root_Eps_zz.png
 site _images/clarky_root_Sig_xx.png
 site _images/clarky_root_Sig_xy.png
 site _images/clarky_root_Sig_xz.png
@@ -78,6 +84,12 @@ site _images/laminate_section_h1_mesh.png
 site _images/laminate_section_h2_mesh.png
 site _images/laminate_section_h3_mesh.png
 site _images/laminate_section_mesh.png
+site _images/naca0012_root_Eps_xx.png
+site _images/naca0012_root_Eps_xy.png
+site _images/naca0012_root_Eps_xz.png
+site _images/naca0012_root_Eps_yy.png
+site _images/naca0012_root_Eps_yz.png
+site _images/naca0012_root_Eps_zz.png
 site _images/naca0012_root_Sig_xx.png
 site _images/naca0012_root_Sig_xy.png
 site _images/naca0012_root_Sig_xz.png
@@ -104,6 +116,7 @@ site _sphinx_design_static/design-tabs.js
 site _sphinx_design_static/sphinx-design.min.css
 site _static/base-stemmer.js
 site _static/basic.css
+site _static/chat-figure.js
 site _static/chat.css
 site _static/check-solid.svg
 site _static/clipboard.min.js

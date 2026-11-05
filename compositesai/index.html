@@ -34,7 +34,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
     <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=a72a19db" />
-    <link rel="stylesheet" type="text/css" href="../_static/chat.css?v=1f408ad9" />
+    <link rel="stylesheet" type="text/css" href="../_static/chat.css?v=34cf3d06" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=75c7c72ae941e8b558d8"></script>
@@ -50,6 +50,7 @@
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'compositesai/index';</script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = true;</script>
+    <script src="../_static/chat-figure.js?v=78b6fbc1"></script>
     <link rel="canonical" href="https://wenbinyugroup.github.io/OpenSG/compositesai/index.html" />
     <link rel="icon" href="../_static/rotor-mark-auto.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
@@ -409,71 +410,40 @@
   <section class="tex2jax_ignore mathjax_ignore" id="compositesai">
 <h1>CompositesAI<a class="headerlink" href="#compositesai" title="Link to this heading">#</a></h1>
 <p><a class="reference external" href="https://compositesai.com">CompositesAI</a> is a chat assistant for the analysis of composite materials and structures.
-You ask in plain words. Its chat model asks for the inputs it needs, calls analysis tools, hands longer jobs to an agent
-that runs analysis skills, and explains the results with a search of its composites knowledge base. For beam
-cross-sections, plates and laminates, unit cells and meshes it runs OpenSG, unless you name another solver.</p>
-<section id="opensg-inside-compositesai">
-<h2>OpenSG inside CompositesAI<a class="headerlink" href="#opensg-inside-compositesai" title="Link to this heading">#</a></h2>
-<p>OpenSG reaches CompositesAI in two ways.</p>
+You describe the problem in plain words, and CompositesAI runs OpenSG for beam cross-sections, plates and laminates,
+unit cells and microstructures.</p>
+<section id="why-run-opensg-through-compositesai">
+<h2>Why run OpenSG through CompositesAI<a class="headerlink" href="#why-run-opensg-through-compositesai" title="Link to this heading">#</a></h2>
 <dl class="simple myst">
-<dt>Chat tools</dt><dd><p>Five functions that the chat model calls directly, for OpenSG's solid-element engine. <code class="docutils literal notranslate"><span class="pre">laminate_sg_yaml</span></code> writes the
-SG yaml of a laminate. <code class="docutils literal notranslate"><span class="pre">sg_yaml_from_msh</span></code> converts a gmsh mesh, and <code class="docutils literal notranslate"><span class="pre">sg_yaml_from_sgio</span></code> converts the SG file of
-another code (SwiftComp, VABS, Abaqus or gmsh). <code class="docutils literal notranslate"><span class="pre">homogenize_sg</span></code> runs the homogenization, and <code class="docutils literal notranslate"><span class="pre">read_sg_out</span></code> reads an
-OpenSG or VABS result file. The tools suit small SGs and return numbers only, no pictures.</p>
+<dt>Features</dt><dd><p>The beam, plate and 3-D solid properties OpenSG computes, from the Timoshenko 6x6 and the mass matrix of a section
+to the ABD of a laminate and the engineering constants of a unit cell, and the local stresses, strains and
+displacements under a load as contour plots. Every matrix comes back in full, in your units.</p>
 </dd>
-<dt>Agent skills</dt><dd><p>Seven OpenSG skills run in an agent task, with files, larger meshes and pictures. The agent works on the files of
-the task in its own workspace, runs OpenSG there and sends its pictures back with the reply. Only the skills reach
-OpenSG's shell engine and dehomogenization.</p>
+<dt>Rigorous and critical analysis</dt><dd><p>CompositesAI asks for any missing input and never invents a material constant, a dimension or a load. Every assumed
+value is stated in the reply, and each result comes with how far it can be trusted, such as the terms that depend on
+the mesh.</p>
+</dd>
+<dt>Verification checks</dt><dd><p>The mesh and the material orientations are checked before OpenSG runs, the homogenized law is checked for symmetry
+and positive definiteness after it, and the local fields are integrated back to the applied load. A mesh
+convergence study runs on request.</p>
+</dd>
+<dt>Input and output processing</dt><dd><p>Airfoil names or coordinates, layups, gmsh meshes and the files of SwiftComp, VABS or Abaqus become OpenSG inputs.
+OpenSG's output files come back as tables, matrices and pictures.</p>
+</dd>
+<dt>Planning optimization studies</dt><dd><p>CompositesAI helps you plan a design study, such as a layup sweep on a fixed cross-section. It says what can change,
+what responds and what each run costs, and compares each design with the baseline term by term.</p>
+</dd>
+<dt>A faster pipeline</dt><dd><p>One chat goes from the description of a problem to checked results. The mesh, the input files and the reading of
+the output are done for you, with no scripts to write.</p>
 </dd>
 </dl>
-<p>Three builder skills write the SG yaml. Four model skills, one per OpenSG model, compute with it. Each model skill
-gives the homogenized properties and, when you give a load, the local stress and strain.</p>
-<div class="pst-scrollable-table-container"><table class="table">
-<thead>
-<tr class="row-odd"><th class="head"><p>skill</p></th>
-<th class="head"><p>what it does</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-section-builder</span></code></p></td>
-<td><p>a beam cross-section from a PreVABS XML or a section definition (airfoil coordinates, a NACA 4-digit number or a circle, with layups, regions and webs): the 1-D shell ring by default, the 2-D solid section on request</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-cell-builder</span></code></p></td>
-<td><p>a unit cell or a solid mesh: gmsh unit cells, a rectangle section, the meshes of other codes (gmsh, SwiftComp, VABS, Abaqus) and mesh levels for a convergence check</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-laminate-builder</span></code></p></td>
-<td><p>a laminate or a sandwich layup: the 1-D layup SG and its layup picture</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-shell-beam</span></code></p></td>
-<td><p>a thin-walled section as a ring of shell walls: the Timoshenko 6x6, the classical 4x4 and the mass matrix, a layup swap on the same ring, and every ply's in-plane stresses S11, S22 and S12 under the six beam loads. The transverse stresses S13, S23 and S33 and the stress peaks at web junctions are not recovered reliably.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-solid-beam</span></code></p></td>
-<td><p>a cross-section of solid elements: the Timoshenko 6x6, the Euler-Bernoulli 4x4, the mass matrix and the section centres, and the local stresses under the axial force, the torque and the bending moments (F1, M1, M2, M3). The shear forces F2 and F3 are not recovered.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-solid-plate</span></code></p></td>
-<td><p>a laminate, a periodic panel cell or a 3-D core cell: the ABD 6x6 or the Reissner-Mindlin 8x8, and the ply and local stresses under plate forces and moments</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">opensg-solid-3d</span></code></p></td>
-<td><p>a microstructure: the effective 3-D stiffness 6x6, its compliance and the nine engineering constants, and the constituent stresses under a macro stress or strain</p></td>
-</tr>
-</tbody>
-</table>
-</div>
-<p>A builder hands its yaml to the model skill of its model. The section builder hands over to the shell beam or the
-solid beam, the laminate builder to the solid plate, and the cell builder to the solid 3-D, the solid plate or the
-solid beam. Woven cells are the exception: CompositesAI's textile skill meshes them and SwiftComp computes them, unless
-you ask for OpenSG. SwiftComp and VABS also run when you name them, or for what OpenSG does not compute, such as a
-thermal conductivity or a failure index.</p>
-<p>The skills never invent a material constant, a dimension, a density, an angle or a load. When an input is missing,
-they ask for it or go on with stated defaults. A named common material, such as aluminium 6061 or A36 steel, is
-filled in with its usual values. Every assumed value is listed in the reply.</p>
 </section>
 <section id="how-to-read-a-tutorial">
 <h2>How to read a tutorial<a class="headerlink" href="#how-to-read-a-tutorial" title="Link to this heading">#</a></h2>
-<p>Each tutorial is one chat with CompositesAI, filed by the OpenSG engine it uses (msg-solid or msg-shell) and
-by the model (beam, plate or solid). Each step is a prompt, then CompositesAI's response.</p>
-<p>To try one, open a chat at <a class="reference external" href="https://compositesai.com">compositesai.com</a> and send the prompts of the tutorial in
-turn, in the same chat.</p>
+<p>Each tutorial is one chat with CompositesAI, filed by the OpenSG engine it uses (msg-solid or msg-shell) and by the
+model (beam, plate or solid). Each step is a prompt, then CompositesAI's response.</p>
+<p>To try one, open a chat at <a class="reference external" href="https://compositesai.com">compositesai.com</a> and send the prompts of the tutorial in turn,
+in the same chat.</p>
 </section>
 <section id="tutorials">
 <h2>Tutorials<a class="headerlink" href="#tutorials" title="Link to this heading">#</a></h2>
@@ -536,7 +506,7 @@ turn, in the same chat.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#opensg-inside-compositesai">OpenSG inside CompositesAI</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-run-opensg-through-compositesai">Why run OpenSG through CompositesAI</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#how-to-read-a-tutorial">How to read a tutorial</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tutorials">Tutorials</a></li>
 </ul>
