@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" data-theme="auto">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>04 NACA 0012 and NACA 4412 airfoils &#8212; OpenSG</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "auto";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "auto";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=75c7c72ae941e8b558d8" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/custom.css?v=a72a19db" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/chat.css?v=1f408ad9" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../../_static/scripts/fontawesome.js?digest=75c7c72ae941e8b558d8"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8" />
+
+    <script src="../../../../_static/documentation_options.js?v=7f41d439"></script>
+    <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>window.MathJax = {"output": {"displayOverflow": "scale"}, "options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'compositesai/tutorials/msg-solid/beam/04-naca-airfoils';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = true;</script>
+    <link rel="canonical" href="https://wenbinyugroup.github.io/OpenSG/compositesai/tutorials/msg-solid/beam/04-naca-airfoils.html" />
+    <link rel="icon" href="../../../../_static/rotor-mark-auto.svg"/>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="Plate" href="../plate/index.html" />
+    <link rel="prev" title="03 UDFRC cross-ply laminate" href="03-udfrc-laminate.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="color-scheme" content="light dark"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+    <meta name="docbuild:last-update" content="Nov 05, 2026"/>
+  
+    
+    <script src="../../../../_static/searchtools.js"></script>
+    <script src="../../../../_static/language_data.js"></script>
+    <script src="../../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="auto">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button type="button" class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation" aria-expanded="false" aria-controls="pst-primary-sidebar-modal">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../../_static/rotor-mark-light.svg" class="logo__image only-light" alt=""/>
+    <img src="../../../../_static/rotor-mark-dark.svg" class="logo__image only-dark pst-js-only" alt=""/>
+  
+  
+    <p class="title logo__title">OpenSG</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../getting-started/index.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../tutorials/index.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../theory/index.html">
+    Theory
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../benchmarks/index.html">
+    Benchmarks
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../../index.html">
+    CompositesAI
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/wenbinyugroup/OpenSG" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button type="button" class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page" aria-expanded="false" aria-controls="pst-secondary-sidebar-modal">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal" tabindex="-1"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../getting-started/index.html">
+    Getting Started
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../tutorials/index.html">
+    Tutorials
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../theory/index.html">
+    Theory
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="../../../../benchmarks/index.html">
+    Benchmarks
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="../../../index.html">
+    CompositesAI
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/wenbinyugroup/OpenSG" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i><span class="visually-hidden">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item pst-sidebar-collapse"><button type="button" id="pst-collapse-sidebar-button" aria-expanded="true" aria-controls="pst-primary-sidebar">
+  <svg class="pst-icon" role="img" aria-hidden="true" focusable="false" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+    <path fill="currentColor" d="M3 15.5C2.36232 15.5 1.74874 15.2564 1.28478 14.8189C0.820828 14.3815 0.541576 13.7832 0.504167 13.1467L0.5 13L0.5 3C0.499965 2.36232 0.743605 1.74874 1.18107 1.28478C1.61854 0.820828 2.21676 0.541576 2.85333 0.504167L3 0.5L13 0.5C13.6377 0.499965 14.2513 0.743605 14.7152 1.18107C15.1792 1.61854 15.4584 2.21676 15.4958 2.85333L15.5 3L15.5 13C15.5 13.6377 15.2564 14.2513 14.8189 14.7152C14.3815 15.1792 13.7832 15.4584 13.1467 15.4958L13 15.5L3 15.5ZM3 13.8333L10.5 13.8333L10.5 2.16667L3 2.16667C2.79589 2.16669 2.59889 2.24163 2.44636 2.37726C2.29383 2.5129 2.19638 2.69979 2.1725 2.9025L2.16667 3L2.16667 13C2.16669 13.2041 2.24163 13.4011 2.37726 13.5536C2.5129 13.7062 2.69979 13.8036 2.9025 13.8275L3 13.8333ZM6.65583 10.325L6.5775 10.2558L4.91083 8.58917C4.76735 8.44567 4.68116 8.25476 4.66843 8.05223C4.65569 7.84971 4.71729 7.6495 4.84167 7.48917L4.91083 7.41083L6.5775 5.74417C6.72747 5.59471 6.9287 5.50794 7.14032 5.50148C7.35194 5.49502 7.55809 5.56935 7.7169 5.70937C7.8757 5.8494 7.97525 6.04463 7.99533 6.25539C8.01541 6.46616 7.95451 6.67667 7.825 6.84417L7.75583 6.9225L6.67917 8L7.75583 9.0775C7.89931 9.22099 7.98551 9.41191 7.99824 9.61443C8.01097 9.81695 7.94938 10.0172 7.825 10.1775L7.75583 10.2558C7.61234 10.3993 7.42142 10.4855 7.2189 10.4982C7.01638 10.511 6.81617 10.4494 6.65583 10.325Z"/>
+  </svg>
+  <span class="pst-collapse-sidebar-label">Collapse Sidebar</span>
+  <span class="pst-expand-sidebar-label">Expand Sidebar</span>
+</button></div>
+        <div class="sidebar-primary-item">
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../index.html">Tutorials</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../index.html">msg-solid</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3 current active has-children"><a class="reference internal" href="index.html">Beam</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="01-aluminium-bar.html">01 Aluminium bar</a></li>
+<li class="toctree-l4"><a class="reference internal" href="02-box-beam.html">02 Aluminium tube and composite box beam</a></li>
+<li class="toctree-l4"><a class="reference internal" href="03-udfrc-laminate.html">03 UDFRC cross-ply laminate</a></li>
+<li class="toctree-l4 current active"><a aria-current="page" class="current reference internal" href="#">04 NACA 0012 and NACA 4412 airfoils</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../plate/index.html">Plate</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../plate/01-corrugated-sheet-face-sheets.html">01 Corrugated steel sheet with face sheets</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../plate/02-udfrc-laminate.html">02 UDFRC cross-ply laminate</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3"><a class="reference internal" href="../solid/index.html">Solid</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../msg-shell/index.html">msg-shell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../msg-shell/beam/index.html">Beam</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../msg-shell/beam/01-naca4418-airfoil.html">01 NACA 4418 airfoil</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../msg-shell/beam/02-iea22-blade.html">02 IEA-22 blade at r = 0.2</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-house"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">CompositesAI</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Tutorials</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">msg-solid</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">Beam</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">04 NACA 0012 and NACA 4412 airfoils</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section class="tex2jax_ignore mathjax_ignore" id="naca-0012-and-naca-4412-airfoils">
+<span id="cai-solid-beam-04-naca-airfoils"></span><h1>04 NACA 0012 and NACA 4412 airfoils<a class="headerlink" href="#naca-0012-and-naca-4412-airfoils" title="Link to this heading">#</a></h1>
+<section id="step-1-two-airfoil-sections-with-two-spars">
+<h2>Step 1: Two airfoil sections with two spars<a class="headerlink" href="#step-1-two-airfoil-sections-with-two-spars" title="Link to this heading">#</a></h2>
+<div class="chat-prompt docutils container">
+<p class="chat-label rubric">Prompt</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Build OpenSG 2-D solid cross-sections of NACA 0012 and NACA 4412 airfoils, 1 m chord, reference axis at the quarter chord. Skin: glass/epoxy [±45/0]s, 0.5 mm plies. Spar caps: 6 mm carbon/epoxy (0°) on top and bottom between two webs at x/c 0.15 and 0.50. Webs: glass [±45] faces of 1 mm on a 10 mm foam core. Use typical wind-blade glass, carbon and foam properties with densities. Show the meshes.
+</pre></div>
+</div>
+</div>
+<div class="chat-response docutils container">
+<p class="chat-label rubric">CompositesAI</p>
+<figure class="chat-figure align-default" id="id1">
+<a class="reference internal image-reference" href="../../../../_images/naca0012_solid_solid_mesh.png"><img alt="NACA 0012 solid-section mesh" src="../../../../_images/naca0012_solid_solid_mesh.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 0012 solid-section mesh</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id2">
+<a class="reference internal image-reference" href="../../../../_images/naca0012_solid_solid_mesh_zoom.png"><img alt="NACA 0012 mesh detail" src="../../../../_images/naca0012_solid_solid_mesh_zoom.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 0012 mesh detail</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id3">
+<a class="reference internal image-reference" href="../../../../_images/naca4412_solid_solid_mesh.png"><img alt="NACA 4412 solid-section mesh" src="../../../../_images/naca4412_solid_solid_mesh.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 4412 solid-section mesh</span><a class="headerlink" href="#id3" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id4">
+<a class="reference internal image-reference" href="../../../../_images/naca4412_solid_solid_mesh_zoom.png"><img alt="NACA 4412 mesh detail" src="../../../../_images/naca4412_solid_solid_mesh_zoom.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 4412 mesh detail</span><a class="headerlink" href="#id4" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>Built validated OpenSG 2-D solid beam cross-sections and meshes.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Section</p></th>
+<th class="head text-right"><p>Nodes</p></th>
+<th class="head text-right"><p>Triangles</p></th>
+<th class="head text-right"><p>Area</p></th>
+<th class="head text-right"><p>Mass/length</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>NACA 0012</p></td>
+<td class="text-right"><p>78,895</p></td>
+<td class="text-right"><p>148,836</p></td>
+<td class="text-right"><p>0.01287 m²</p></td>
+<td class="text-right"><p>20.04 kg/m</p></td>
+</tr>
+<tr class="row-odd"><td><p>NACA 4412</p></td>
+<td class="text-right"><p>79,106</p></td>
+<td class="text-right"><p>149,264</p></td>
+<td class="text-right"><p>0.01291 m²</p></td>
+<td class="text-right"><p>20.11 kg/m</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Both models use a 1 m chord and an origin at the quarter chord. The skin is <code class="docutils literal notranslate"><span class="pre">[+45/-45/0]s</span></code> glass/epoxy (3 mm total), caps add 6 mm of 0° carbon/epoxy over 0.15–0.50 c, and each web is a 14 mm sandwich: <code class="docutils literal notranslate"><span class="pre">[+45/-45]</span></code> glass faces with 1 mm plies plus a 10 mm PVC foam core.</p>
+<p>Assumed typical materials:</p>
+<ul class="simple">
+<li><p>Glass/epoxy: <span class="math notranslate nohighlight">\(E_1=41\)</span> GPa, density 1,940 kg/m³</p></li>
+<li><p>Carbon/epoxy: <span class="math notranslate nohighlight">\(E_1=135\)</span> GPa, density 1,600 kg/m³</p></li>
+<li><p>PVC foam: <span class="math notranslate nohighlight">\(E=80\)</span> MPa, density 80 kg/m³</p></li>
+</ul>
+<p>The mesh images and OpenSG YAML models are attached.</p>
+<ul class="simple">
+<li><p><a class="reference download internal" download="" href="../../../../_downloads/f73a9ea6c639939f9e1b12f32d00b597/naca0012_solid_solid.yaml"><code class="xref download docutils literal notranslate"><span class="pre">naca0012_solid_solid.yaml</span></code></a></p></li>
+<li><p><a class="reference download internal" download="" href="../../../../_downloads/659329e45cfd7c7908229c2b715f98af/naca4412_solid_solid.yaml"><code class="xref download docutils literal notranslate"><span class="pre">naca4412_solid_solid.yaml</span></code></a></p></li>
+</ul>
+</div>
+</section>
+<section id="step-2-timoshenko-stiffness-and-mass-matrices">
+<h2>Step 2: Timoshenko stiffness and mass matrices<a class="headerlink" href="#step-2-timoshenko-stiffness-and-mass-matrices" title="Link to this heading">#</a></h2>
+<div class="chat-prompt docutils container">
+<p class="chat-label rubric">Prompt</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Homogenize both sections with OpenSG’s solid beam model. Give the Timoshenko 6×6 stiffness and the 6×6 mass matrix of each.
+</pre></div>
+</div>
+</div>
+<div class="chat-response docutils container">
+<p class="chat-label rubric">CompositesAI</p>
+<figure class="chat-figure align-default" id="id5">
+<a class="reference internal image-reference" href="../../../../_images/c971a67d-naca0012_solid_solid_mesh.png"><img alt="NACA 0012 homogenization mesh" src="../../../../_images/c971a67d-naca0012_solid_solid_mesh.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 0012 homogenization mesh</span><a class="headerlink" href="#id5" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id6">
+<a class="reference internal image-reference" href="../../../../_images/c971a67d-naca4412_solid_solid_mesh.png"><img alt="NACA 4412 homogenization mesh" src="../../../../_images/c971a67d-naca4412_solid_solid_mesh.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 4412 homogenization mesh</span><a class="headerlink" href="#id6" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>Homogenization completed with the Timoshenko solid-beam model. Matrices are about the quarter-chord axis.</p>
+<p>Rows/columns:</p>
+<ul class="simple">
+<li><p>Stiffness: <span class="math notranslate nohighlight">\([e_{11},\gamma_{12},\gamma_{13},\kappa_1,\kappa_2,\kappa_3]\)</span></p></li>
+<li><p>Mass: <span class="math notranslate nohighlight">\([u_1,u_2,u_3,\theta_1,\theta_2,\theta_3]\)</span></p></li>
+</ul>
+<p>Stiffness entries use consistent SI beam units (N, N·m, N·m²); mass entries use kg/m, kg, and kg·m as applicable.</p>
+<p class="chat-heading chat-h2 rubric">NACA 0012</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}K =
+\begin{bmatrix}
+7.18421e8&amp;-4.496e0&amp;1.21109e4&amp;2.45788e3&amp;-1.859e-1&amp;-7.68643e7\\
+-4.496e0&amp;6.37033e7&amp;1.697e1&amp;3.098e-1&amp;4.50941e2&amp;-7.626e-1\\
+1.21109e4&amp;1.697e1&amp;5.96163e6&amp;4.51807e5&amp;-8.330e-1&amp;-3.15350e3\\
+2.45788e3&amp;3.098e-1&amp;4.51807e5&amp;5.89015e5&amp;9.158e-2&amp;-6.86683e2\\
+-1.859e-1&amp;4.50941e2&amp;-8.330e-1&amp;9.158e-2&amp;1.78681e6&amp;2.254e-1\\
+-7.68643e7&amp;-7.626e-1&amp;-3.15350e3&amp;-6.86683e2&amp;2.254e-1&amp;2.91571e7
+\end{bmatrix}\end{split}\]</div>
+<div class="math notranslate nohighlight">
+\[\begin{split}M =
+\begin{bmatrix}
+20.0443&amp;0&amp;0&amp;0&amp;0&amp;-3.39855\\
+0&amp;20.0443&amp;0&amp;0&amp;0&amp;0\\
+0&amp;0&amp;20.0443&amp;3.39855&amp;0&amp;0\\
+0&amp;0&amp;3.39855&amp;1.85114&amp;0&amp;0\\
+0&amp;0&amp;0&amp;0&amp;0.0408448&amp;0\\
+-3.39855&amp;0&amp;0&amp;0&amp;0&amp;1.81029
+\end{bmatrix}\end{split}\]</div>
+<p>Mass per length: <strong>20.0443 kg/m</strong>.<br />
+Matrix check: symmetric and positive definite.</p>
+<p class="chat-heading chat-h2 rubric">NACA 4412</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}K =
+\begin{bmatrix}
+7.19980e8&amp;2.45226e3&amp;9.27666e3&amp;2.40580e3&amp;2.47618e7&amp;-7.69620e7\\
+2.45226e3&amp;6.36816e7&amp;1.43586e5&amp;-2.88923e6&amp;5.15143e2&amp;-5.39520e2\\
+9.27666e3&amp;1.43586e5&amp;6.24961e6&amp;4.67475e5&amp;6.73649e2&amp;-3.30953e3\\
+2.40580e3&amp;-2.88923e6&amp;4.67475e5&amp;7.25043e5&amp;9.52014e1&amp;-6.37950e2\\
+2.47618e7&amp;5.15143e2&amp;6.73649e2&amp;9.52014e1&amp;2.68800e6&amp;-2.64254e6\\
+-7.69620e7&amp;-5.39520e2&amp;-3.30953e3&amp;-6.37950e2&amp;-2.64254e6&amp;2.92802e7
+\end{bmatrix}\end{split}\]</div>
+<div class="math notranslate nohighlight">
+\[\begin{split}M =
+\begin{bmatrix}
+20.1086&amp;0&amp;0&amp;0&amp;0.614801&amp;-3.40825\\
+0&amp;20.1086&amp;0&amp;-0.614801&amp;0&amp;0\\
+0&amp;0&amp;20.1086&amp;3.40825&amp;0&amp;0\\
+0&amp;-0.614801&amp;3.40825&amp;1.88222&amp;0&amp;0\\
+0.614801&amp;0&amp;0&amp;0&amp;0.0620175&amp;-0.0961195\\
+-3.40825&amp;0&amp;0&amp;0&amp;-0.0961195&amp;1.82021
+\end{bmatrix}\end{split}\]</div>
+<p>Mass per length: <strong>20.1086 kg/m</strong>.<br />
+Matrix check: symmetric and positive definite.</p>
+<p>Attached reports:</p>
+<ul class="simple">
+<li><p><a class="reference download internal" download="" href="../../../../_downloads/475f703ec464b78ce32d985da83020bf/naca0012_solid_law.md"><code class="xref download docutils literal notranslate"><span class="pre">naca0012_solid_law.md</span></code></a></p></li>
+<li><p><a class="reference download internal" download="" href="../../../../_downloads/7b3834348ac8c298062b463944ce4273/naca4412_solid_law.md"><code class="xref download docutils literal notranslate"><span class="pre">naca4412_solid_law.md</span></code></a></p></li>
+</ul>
+<p>They also include the full compliance matrices and the homogenization meshes.</p>
+</div>
+</section>
+<section id="step-3-mesh-convergence-of-the-diagonal-stiffness-terms">
+<h2>Step 3: Mesh convergence of the diagonal stiffness terms<a class="headerlink" href="#step-3-mesh-convergence-of-the-diagonal-stiffness-terms" title="Link to this heading">#</a></h2>
+<div class="chat-prompt docutils container">
+<p class="chat-label rubric">Prompt</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Run a mesh convergence study of this homogenization for both sections, and plot each diagonal stiffness term against the mesh refinement.
+</pre></div>
+</div>
+</div>
+<div class="chat-response docutils container">
+<p class="chat-label rubric">CompositesAI</p>
+<figure class="chat-figure align-default" id="id7">
+<a class="reference internal image-reference" href="../../../../_images/naca0012_coarse_solid_mesh.png"><img alt="NACA 0012 1.0 mm mesh" src="../../../../_images/naca0012_coarse_solid_mesh.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 0012 1.0 mm mesh</span><a class="headerlink" href="#id7" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id8">
+<a class="reference internal image-reference" href="../../../../_images/naca0012_fine_mesh.png"><img alt="NACA 0012 0.5 mm mesh" src="../../../../_images/naca0012_fine_mesh.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 0012 0.5 mm mesh</span><a class="headerlink" href="#id8" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id9">
+<a class="reference internal image-reference" href="../../../../_images/naca0012_stiffness_convergence.png"><img alt="NACA 0012 stiffness convergence" src="../../../../_images/naca0012_stiffness_convergence.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 0012 stiffness convergence</span><a class="headerlink" href="#id9" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id10">
+<a class="reference internal image-reference" href="../../../../_images/naca4412_coarse_solid_mesh.png"><img alt="NACA 4412 1.0 mm mesh" src="../../../../_images/naca4412_coarse_solid_mesh.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 4412 1.0 mm mesh</span><a class="headerlink" href="#id10" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id11">
+<a class="reference internal image-reference" href="../../../../_images/naca4412_fine_mesh.png"><img alt="NACA 4412 0.5 mm mesh" src="../../../../_images/naca4412_fine_mesh.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 4412 0.5 mm mesh</span><a class="headerlink" href="#id11" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<figure class="chat-figure align-default" id="id12">
+<a class="reference internal image-reference" href="../../../../_images/naca4412_stiffness_convergence.png"><img alt="NACA 4412 stiffness convergence" src="../../../../_images/naca4412_stiffness_convergence.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">NACA 4412 stiffness convergence</span><a class="headerlink" href="#id12" title="Link to this image">#</a></p>
+</figcaption>
+</figure>
+<p>Mesh convergence study completed using 1.0 mm and 0.5 mm linear-triangle meshes.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Section</p></th>
+<th class="head text-right"><p>Elements: coarse → fine</p></th>
+<th class="head text-right"><p>Largest diagonal-stiffness change</p></th>
+<th class="head"><p>Result</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>NACA 0012</p></td>
+<td class="text-right"><p>59,066 → 148,836</p></td>
+<td class="text-right"><p>0.2646% in <span class="math notranslate nohighlight">\(K_{33}=GA_3\)</span></p></td>
+<td><p>Converged within 1%</p></td>
+</tr>
+<tr class="row-odd"><td><p>NACA 4412</p></td>
+<td class="text-right"><p>59,468 → 149,264</p></td>
+<td class="text-right"><p>0.1872% in <span class="math notranslate nohighlight">\(K_{33}=GA_3\)</span></p></td>
+<td><p>Converged within 1%</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Fine-versus-coarse diagonal changes:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Term</p></th>
+<th class="head text-right"><p>NACA 0012</p></th>
+<th class="head text-right"><p>NACA 4412</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(K_{11}=EA\)</span> [N]</p></td>
+<td class="text-right"><p>−0.0013%</p></td>
+<td class="text-right"><p>−0.0010%</p></td>
+</tr>
+<tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(K_{22}=GA_2\)</span> [N]</p></td>
+<td class="text-right"><p>−0.0104%</p></td>
+<td class="text-right"><p>−0.0089%</p></td>
+</tr>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(K_{33}=GA_3\)</span> [N]</p></td>
+<td class="text-right"><p>−0.2646%</p></td>
+<td class="text-right"><p>−0.1872%</p></td>
+</tr>
+<tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(K_{44}\)</span> torsion [N·m²]</p></td>
+<td class="text-right"><p>−0.0592%</p></td>
+<td class="text-right"><p>−0.0454%</p></td>
+</tr>
+<tr class="row-even"><td><p><span class="math notranslate nohighlight">\(K_{55}=EI_2\)</span> [N·m²]</p></td>
+<td class="text-right"><p>−0.0025%</p></td>
+<td class="text-right"><p>−0.0013%</p></td>
+</tr>
+<tr class="row-odd"><td><p><span class="math notranslate nohighlight">\(K_{66}=EI_3\)</span> [N·m²]</p></td>
+<td class="text-right"><p>−0.0006%</p></td>
+<td class="text-right"><p>−0.0005%</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The 0.5 mm results are suitable for these stiffness terms under a 1% convergence criterion. The attached plots show every diagonal term versus target mesh size. The comparison uses two mesh levels.</p>
+<p>Files:</p>
+<ul class="simple">
+<li><p><a class="reference download internal" download="" href="../../../../_downloads/cad361221f1a90975f1901b725135321/mesh_convergence_summary.md"><code class="xref download docutils literal notranslate"><span class="pre">mesh_convergence_summary.md</span></code></a></p></li>
+<li><p><a class="reference download internal" download="" href="../../../../_downloads/b152eb4a8c16d01d7192f470739b9de0/mesh_convergence_diagonals.csv"><code class="xref download docutils literal notranslate"><span class="pre">mesh_convergence_diagonals.csv</span></code></a></p></li>
+</ul>
+</div>
+</section>
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="03-udfrc-laminate.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">03 UDFRC cross-ply laminate</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../plate/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Plate</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal" tabindex="-1"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-1-two-airfoil-sections-with-two-spars">Step 1: Two airfoil sections with two spars</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-2-timoshenko-stiffness-and-mass-matrices">Step 2: Timoshenko stiffness and mass matrices</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#step-3-mesh-convergence-of-the-diagonal-stiffness-terms">Step 3: Mesh convergence of the diagonal stiffness terms</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../../_static/scripts/bootstrap.js?digest=75c7c72ae941e8b558d8"></script>
+<script defer src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=75c7c72ae941e8b558d8"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2026, Akshat Bagla.
+      <br/>
+    
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.24.0.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>
