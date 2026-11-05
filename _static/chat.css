@@ -230,6 +230,29 @@ figure.chat-figure figcaption {
   color: var(--pst-color-text-muted);
 }
 
+/* -- tabs inside a reply (one tab per case, for example per airfoil) -------------------------------------------- */
+
+/* A tab set inside a reply draws no box of its own (the theme gives each tab a border and padding, two boxes deep
+   for a sub-tab), so its pictures keep the full width of the reply, as on a page without tabs. The tab labels alone
+   show which case is on screen. */
+.bd-content .chat-response .sd-tab-set > .sd-tab-content {
+  padding: 0.25rem 0 0;
+  border: none;
+  box-shadow: none;
+}
+
+/* -- the page width of a chat page ------------------------------------------------------------------------------ */
+
+/* A chat page gives its pictures the width the chat gives them: no "On this page" column beside the chat, and the
+   article takes the freed width (up to 75em), so every picture is drawn large in the text itself. */
+.bd-content:has(.chat-response) > .bd-sidebar-secondary {
+  display: none;
+}
+
+.bd-content:has(.chat-response) > .bd-article-container {
+  max-width: 75em;
+}
+
 /* -- tool traces: collapsed, scroll inside --------------------------------------------------------------------- */
 
 .chat-tool-trace {
