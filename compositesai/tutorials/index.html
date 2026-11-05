@@ -54,13 +54,13 @@
     <link rel="icon" href="../../_static/rotor-mark-auto.svg"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="01 Beam homogenization: an aluminium bar" href="01-beam-homogenization.html" />
+    <link rel="next" title="msg-solid" href="msg-solid/index.html" />
     <link rel="prev" title="CompositesAI" href="../index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
-    <meta name="docbuild:last-update" content="Nov 04, 2026"/>
+    <meta name="docbuild:last-update" content="Nov 05, 2026"/>
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -319,14 +319,27 @@
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a aria-current="page" class="current reference internal" href="#">Tutorials</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="01-beam-homogenization.html">01 Beam homogenization: an aluminium bar</a></li>
-<li class="toctree-l2"><a class="reference internal" href="02-beam-dehomogenization.html">02 Beam dehomogenization: an aluminium bar</a></li>
-<li class="toctree-l2"><a class="reference internal" href="03-plate-homogenization.html">03 Plate homogenization: a corrugated steel sheet</a></li>
-<li class="toctree-l2"><a class="reference internal" href="04-plate-dehomogenization.html">04 Plate dehomogenization: a corrugated steel sheet</a></li>
-<li class="toctree-l2"><a class="reference internal" href="05-airfoil-homogenization.html">05 Airfoil homogenization: a NACA 4418 section</a></li>
-<li class="toctree-l2"><a class="reference internal" href="06-airfoil-dehomogenization.html">06 Airfoil dehomogenization: a NACA 4418 section</a></li>
-<li class="toctree-l2"><a class="reference internal" href="07-blade-homogenization.html">07 Blade homogenization: the IEA-22 blade at r = 0.2</a></li>
-<li class="toctree-l2"><a class="reference internal" href="08-blade-dehomogenization.html">08 Blade dehomogenization: the IEA-22 blade at r = 0.2</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="msg-solid/index.html">msg-solid</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="msg-solid/beam/index.html">Beam</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="msg-solid/beam/01-aluminium-bar.html">01 Aluminium bar</a></li>
+<li class="toctree-l4"><a class="reference internal" href="msg-solid/beam/02-box-beam.html">02 Aluminium tube and composite box beam</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="msg-solid/plate/index.html">Plate</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="msg-solid/plate/01-corrugated-sheet-face-sheets.html">01 Corrugated steel sheet with face sheets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3"><a class="reference internal" href="msg-solid/solid/index.html">Solid</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="msg-shell/index.html">msg-shell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="msg-shell/beam/index.html">Beam</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="msg-shell/beam/01-naca4418-airfoil.html">01 NACA 4418 airfoil</a></li>
+<li class="toctree-l4"><a class="reference internal" href="msg-shell/beam/02-iea22-blade.html">02 IEA-22 blade at r = 0.2</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 </ul>
@@ -391,94 +404,30 @@
                   
   <section class="tex2jax_ignore mathjax_ignore" id="tutorials">
 <h1>Tutorials<a class="headerlink" href="#tutorials" title="Link to this heading">#</a></h1>
-<p>The tutorials come from four conversations with CompositesAI. The prompts are what the user typed, and the responses
-are CompositesAI's replies as they came. Tutorials 01 and 02 follow an aluminium bar as a beam, and 02 continues 01.
-Tutorials 03 and 04 follow a corrugated steel sheet as a plate, and 04 continues 03. Tutorials 05 and 06 follow the
-shell section of a NACA 4418 airfoil as a beam, and 06 continues 05. Tutorials 07 and 08 follow the shell section of
-the IEA-22 blade at r = 0.2 as a beam, and 08 continues 07. Tutorial 02 carries one editor note, set apart in a box,
-on a unit label in CompositesAI's reply.</p>
-<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils">
-<div class="sd-row sd-row-cols-1 sd-row-cols-xs-1 sd-row-cols-sm-1 sd-row-cols-md-2 sd-row-cols-lg-2 sd-g-3 sd-g-xs-3 sd-g-sm-3 sd-g-md-3 sd-g-lg-3 docutils">
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-01 Beam homogenization: an aluminium bar</div>
-<p class="sd-card-text">CompositesAI builds the cross-section of an aluminium bar and computes its beam properties with OpenSG.</p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="01-beam-homogenization.html"><span class="doc">01 Beam homogenization: an aluminium bar</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-02 Beam dehomogenization: an aluminium bar</div>
-<p class="sd-card-text">This tutorial continues tutorial 01. CompositesAI recovers the local stresses in the cross-section of the aluminium bar
-under a beam load.</p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="02-beam-dehomogenization.html"><span class="doc">02 Beam dehomogenization: an aluminium bar</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-03 Plate homogenization: a corrugated steel sheet</div>
-<p class="sd-card-text">CompositesAI builds the Structure Gene of a corrugated steel sheet and computes its plate properties with OpenSG.</p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="03-plate-homogenization.html"><span class="doc">03 Plate homogenization: a corrugated steel sheet</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-04 Plate dehomogenization: a corrugated steel sheet</div>
-<p class="sd-card-text">This tutorial continues tutorial 03. CompositesAI recovers the local stresses in the corrugated steel sheet under a
-plate load.</p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="04-plate-dehomogenization.html"><span class="doc">04 Plate dehomogenization: a corrugated steel sheet</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-05 Airfoil homogenization: a NACA 4418 section</div>
-<p class="sd-card-text">CompositesAI builds the shell cross-section of a NACA 4418 airfoil with spar caps and two shear webs and computes its
-beam properties with OpenSG.</p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="05-airfoil-homogenization.html"><span class="doc">05 Airfoil homogenization: a NACA 4418 section</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-06 Airfoil dehomogenization: a NACA 4418 section</div>
-<p class="sd-card-text">This tutorial continues tutorial 05. CompositesAI recovers the local stresses in the NACA 4418 section under a shear
-force, a torque and two bending moments.</p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="06-airfoil-dehomogenization.html"><span class="doc">06 Airfoil dehomogenization: a NACA 4418 section</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-07 Blade homogenization: the IEA-22 blade at r = 0.2</div>
-<p class="sd-card-text">CompositesAI builds the shell section of the IEA-22 blade at r = 0.2 and computes its beam properties with OpenSG.</p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="07-blade-homogenization.html"><span class="doc">07 Blade homogenization: the IEA-22 blade at r = 0.2</span></a></div>
-</div>
-<div class="sd-col sd-d-flex-row docutils">
-<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm sd-card-hover docutils">
-<div class="sd-card-body docutils">
-<div class="sd-card-title sd-font-weight-bold docutils">
-08 Blade dehomogenization: the IEA-22 blade at r = 0.2</div>
-<p class="sd-card-text">This tutorial continues tutorial 07. CompositesAI recovers the local stresses in the shell section of the IEA-22 blade
-under a bending moment.</p>
-</div>
-<a class="sd-stretched-link sd-hide-link-text reference internal" href="08-blade-dehomogenization.html"><span class="doc">08 Blade dehomogenization: the IEA-22 blade at r = 0.2</span></a></div>
-</div>
-</div>
-</div>
 <div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="msg-solid/index.html">msg-solid</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="msg-solid/beam/index.html">Beam</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="msg-solid/beam/01-aluminium-bar.html">01 Aluminium bar</a></li>
+<li class="toctree-l3"><a class="reference internal" href="msg-solid/beam/02-box-beam.html">02 Aluminium tube and composite box beam</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="msg-solid/plate/index.html">Plate</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="msg-solid/plate/01-corrugated-sheet-face-sheets.html">01 Corrugated steel sheet with face sheets</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="msg-solid/solid/index.html">Solid</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="msg-shell/index.html">msg-shell</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="msg-shell/beam/index.html">Beam</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="msg-shell/beam/01-naca4418-airfoil.html">01 NACA 4418 airfoil</a></li>
+<li class="toctree-l3"><a class="reference internal" href="msg-shell/beam/02-iea22-blade.html">02 IEA-22 blade at r = 0.2</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
 </div>
 </section>
 
@@ -502,11 +451,11 @@ under a bending moment.</p>
       </div>
     </a>
     <a class="right-next"
-       href="01-beam-homogenization.html"
+       href="msg-solid/index.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">01 Beam homogenization: an aluminium bar</p>
+        <p class="prev-next-title">msg-solid</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

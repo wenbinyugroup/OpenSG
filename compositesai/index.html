@@ -60,7 +60,7 @@
   <meta name="color-scheme" content="light dark"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
-    <meta name="docbuild:last-update" content="Nov 04, 2026"/>
+    <meta name="docbuild:last-update" content="Nov 05, 2026"/>
   
     
     <script src="../_static/searchtools.js"></script>
@@ -323,14 +323,27 @@
   <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
   <div class="bd-toc-item navbar-nav"><ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="tutorials/index.html">Tutorials</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="tutorials/01-beam-homogenization.html">01 Beam homogenization: an aluminium bar</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorials/02-beam-dehomogenization.html">02 Beam dehomogenization: an aluminium bar</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorials/03-plate-homogenization.html">03 Plate homogenization: a corrugated steel sheet</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorials/04-plate-dehomogenization.html">04 Plate dehomogenization: a corrugated steel sheet</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorials/05-airfoil-homogenization.html">05 Airfoil homogenization: a NACA 4418 section</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorials/06-airfoil-dehomogenization.html">06 Airfoil dehomogenization: a NACA 4418 section</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorials/07-blade-homogenization.html">07 Blade homogenization: the IEA-22 blade at r = 0.2</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorials/08-blade-dehomogenization.html">08 Blade dehomogenization: the IEA-22 blade at r = 0.2</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="tutorials/msg-solid/index.html">msg-solid</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="tutorials/msg-solid/beam/index.html">Beam</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="tutorials/msg-solid/beam/01-aluminium-bar.html">01 Aluminium bar</a></li>
+<li class="toctree-l4"><a class="reference internal" href="tutorials/msg-solid/beam/02-box-beam.html">02 Aluminium tube and composite box beam</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="tutorials/msg-solid/plate/index.html">Plate</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="tutorials/msg-solid/plate/01-corrugated-sheet-face-sheets.html">01 Corrugated steel sheet with face sheets</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3"><a class="reference internal" href="tutorials/msg-solid/solid/index.html">Solid</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="tutorials/msg-shell/index.html">msg-shell</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="tutorials/msg-shell/beam/index.html">Beam</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="tutorials/msg-shell/beam/01-naca4418-airfoil.html">01 NACA 4418 airfoil</a></li>
+<li class="toctree-l4"><a class="reference internal" href="tutorials/msg-shell/beam/02-iea22-blade.html">02 IEA-22 blade at r = 0.2</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
 </ul>
 </details></li>
 </ul>
@@ -454,15 +467,20 @@ filled in with its usual values. Every assumed value is listed in the reply.</p>
 </section>
 <section id="how-to-read-a-tutorial">
 <h2>How to read a tutorial<a class="headerlink" href="#how-to-read-a-tutorial" title="Link to this heading">#</a></h2>
-<p>Each step is a prompt, then CompositesAI's response.</p>
-<p>To try one, open a chat at <a class="reference external" href="https://compositesai.com">compositesai.com</a> and send each prompt in turn.
-Tutorials 02, 04, 06 and 08 continue the chats of 01, 03, 05 and 07, so send their prompts in the same chat.</p>
+<p>Each tutorial is one chat with CompositesAI, filed by the OpenSG engine it uses (msg-solid or msg-shell) and
+by the model (beam, plate or solid). Each step is a prompt, then CompositesAI's response.</p>
+<p>To try one, open a chat at <a class="reference external" href="https://compositesai.com">compositesai.com</a> and send the prompts of the tutorial in
+turn, in the same chat.</p>
 </section>
 <section id="tutorials">
 <h2>Tutorials<a class="headerlink" href="#tutorials" title="Link to this heading">#</a></h2>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="tutorials/index.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/index.html">Tutorials</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/msg-solid/index.html">msg-solid</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials/msg-shell/index.html">msg-shell</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </section>
