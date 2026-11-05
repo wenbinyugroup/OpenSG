@@ -9,7 +9,7 @@ of the OpenSG solid dialect completely --
 
     nodes:                 - [y1 y2 y3]              (one row per node)
     elements:              - [n1 n2 n3(( n4))]       (1-based connectivity)
-    elementOrientations:   - [e1(3), e2(3), e3(3)]   (one row per element)
+    orientation:           - [e1(3), e2(3), e3(3)]   (one row per element)
     sets: element:         one set per gmsh physical tag
 
 -- and takes the CONSTITUTIVE side (`materials:`) from the caller, because a
@@ -33,7 +33,7 @@ element:` entry is written per physical tag, named after $PhysicalNames
 when the mesh carries the block (a template's material entries take the
 SAME names, because the solid reader binds sets to materials by name --
 io.sg_input._mat_id_from_sets).  This is the
-`nodes`/`elements`/`elementOrientations`/`materials`/`sets` dialect the 2-D
+`nodes`/`elements`/`orientation`/`materials`/`sets` dialect the 2-D
 SG drivers read (UDcomp_2D.yaml, square_tube_2Dsolid.yaml), NOT the
 `dim`/`nodes`/`cells`/`mat_id`/`materials` dialect sc_to_yaml emits for
 opensg_solid.sg_mesh.load_sg_input.
@@ -502,7 +502,7 @@ def check_filled(path, max_show=12):
     more = ("\n  ... and %d more" % (len(hits) - max_show)
             if len(hits) > max_show else "")
     return ("%s is an UNFILLED msh_to_yaml TEMPLATE.\n"
-            "The mesh blocks (nodes / elements / elementOrientations / sets)"
+            "The mesh blocks (nodes / elements / orientation / sets)"
             " are complete,\nbut `materials:` is still placeholders --"
             " opensg_solid will not invent material\nproperties.  Fill in"
             " these %d %s field(s):\n%s%s\n\n"
@@ -677,7 +677,7 @@ def convert(msh_path, out_path=None, materials=None, phases=None,
     out.append("elements:")
     fmt = "- [" + " ".join(["%d"] * M["npe"]) + "]"
     out += [fmt % tuple(c) for c in cells]
-    out.append("elementOrientations:")
+    out.append("orientation:")
     out += ["- [%s]" % ori] * len(cells)
     out += ["sets:", "  element:"]
     counts = {}

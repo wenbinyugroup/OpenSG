@@ -45,7 +45,8 @@ Voigt order everywhere: (xx, yy, zz, yz, xz, xy), SwiftComp/laminate.
 # outputs
 #   C_m                 (n_mat, 6, 6) per-MATERIAL table (build_material_C)
 #   C_mat_e, C_asm_e    (E, 6, 6) per-ELEMENT tables: pre-elem-rotation
-#                       (recovery) and assembly (elem_rotation applied)
+#                       (element frame) and assembly (elem_rotation
+#                       applied; also the recovery's, sg_dehom)
 # ----------------------------------------------------------------------------
 """
 import jax
@@ -157,6 +158,32 @@ def _material_table_np(sc, material_param=None, angles=None):
     return C_m
 
 
+def ply_angles_used(sc, material_param=None, angles=None):
+    """The ply angle each material's C was rotated by in _material_table_np
+    (the same rule, so the D route's --material undoes exactly that
+    rotation): the `angles` argument when given (by position, sorted
+    material ids), else the block's own `angle` -- none at all under a
+    material_param override, whose blocks' angles are not applied.
+
+    In:  sc dict; material_param, angles as build_material_C.
+    Out: (ang, as_given) -- ang {material id: deg}; as_given [material
+         id], the type-2 blocks with no `angle` key and neither override:
+         their stored 6x6 is used as written, so their ply axes are the
+         element frame only when that C was not pre-rotated (the .sc
+         convention is pre-rotated)."""
+    mids = sorted(sc["materials"])
+    if angles is not None:
+        return dict(zip(mids, (float(t) for t in
+                               np.asarray(angles, float)))), []
+    if material_param is not None:
+        return {m: 0.0 for m in mids}, []
+    mats = sc["materials"]
+    ang = {m: float(mats[m].get("angle", 0.0) or 0.0) for m in mids}
+    as_given = [m for m in mids
+                if int(mats[m]["type"]) == 2 and mats[m].get("angle") is None]
+    return ang, as_given
+
+
 def build_material_C(sc, material_param=None, angles=None):
     """The per-MATERIAL (n_mat, 6, 6) stiffness table.
 
@@ -199,7 +226,7 @@ def rotate_C_with_matrix(C, R_flat):
 
 def elem_rotation_from_yaml(orientations):
     """(E, 9) `elem_rotation` in the SOLVER's global order, from an OpenSG
-    yaml's `elementOrientations`.
+    yaml's `orientation` block (the per-element frames).
 
     THE CONVENTION GAP THIS CLOSES.  An OpenSG SG yaml stores each material
     axis with its components ordered (y2, y3, axial) -- the two cross-section
@@ -233,12 +260,14 @@ def get_heterogeneous_C_matrix(sc, material_param=None, angles=None,
     In:  sc dict; material_param/angles as build_material_C;
          elem_rotation (E, 9) flattened per-element DC matrices or None.
          The rows must be in the SOLVER's global order (axial, y2, y3) -- pass
-         a yaml's elementOrientations through elem_rotation_from_yaml first,
+         a yaml's `orientation` rows through elem_rotation_from_yaml first,
          which cycles the components; see that docstring for what goes wrong
          otherwise.  sc["mat_id"] is 1-BASED here.
     Out: (C_asm_e, C_mat_e) -- both (E, 6, 6): the ASSEMBLY stiffness
-         (elem_rotation applied when given) and the pre-elem-rotation
-         stiffness the recovery multiplies the element-frame strain by."""
+         (elem_rotation applied when given; the D route recovers sigma =
+         C_asm_e Gamma in the SG frame, sg_dehom.recover_gauss_point_fields)
+         and the pre-elem-rotation stiffness (the element-frame law
+         sigma_e = C_mat_e eps_e)."""
     C_np = _material_table_np(sc, material_param, angles)
     ids = np.asarray(sc["mat_id"], int) - 1
     C_mat_e = jnp.asarray(C_np[ids])       # numpy gather, ONE device put

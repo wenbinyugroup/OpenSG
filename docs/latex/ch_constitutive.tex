@@ -1191,9 +1191,13 @@ strains of Section~\ref{sec:timo} for \texttt{n\_model=1}. The beam case is run 
 whose shipped state is
 \verb|epsilon_bar = jnp.array([0.001, 0.0, 0.0, 0.0, 0.01, 0.0])|, i.e.\ a unit
 axial extension of $10^{-3}$ combined with a $\kappa_2$ curvature of $10^{-2}$.
-For \texttt{n\_model=1} the valid recovery drivers are the classical-channel
-states (extension, twist, bending and their combinations); the shear channels
-do not drive the recovery chain.
+For \texttt{n\_model=1} every beam state is a valid recovery driver, the
+transverse shear included: the generalized-Timoshenko chain of the msg-shell
+route recovers the zeroth-order (classical) field plus the first-order
+correction that carries $F_2$ and $F_3$. A beam force goes in instead of the
+strain as \texttt{dehom\_fields(r, beam\_force=[F1, F2, F3, M1, M2, M3])}; a
+\texttt{refined: 0} beam recovers the classical field only and refuses a
+nonzero $F_2$, $F_3$ or shear strain.
 
 The call returns, at every element Gauss point, the local strain \texttt{Gamma}
 of shape $(E, Q, 6)$, the local stress \texttt{Sigma} of shape $(E, Q, 6)$ ---
@@ -1207,8 +1211,12 @@ points as $(E \cdot Q, n_{sg})$.
 \texttt{<prefix>.txt} (the tab-separated Gauss table, one row per point with
 coordinates, six strains and six stresses), \texttt{<prefix>.vtk} (a point
 cloud for ParaView carrying all twelve components as scalars), and the OpenSG
-dehom files \texttt{<prefix>.SM} (stress), \texttt{<prefix>.EM} (strain) and
-\texttt{<prefix>.U} (fluctuation displacement). One convention trap is worth
+dehom files \texttt{<prefix>\_global.SM} (stress), \texttt{<prefix>\_global.EM}
+(strain) and \texttt{<prefix>.U} (fluctuation displacement). The
+\texttt{\_global} tag says the clouds are in the SG axes, as
+\texttt{dehom\_fields} returns them; after \texttt{material\_frame\_fields} (the
+ply axes), \texttt{frame\_kind="material"} writes the bare \texttt{<prefix>.SM}
+and \texttt{<prefix>.EM}. One convention trap is worth
 flagging: the printed component order in the \texttt{.SM}, \texttt{.EM} and
 \texttt{.U} files is $11\;22\;33\;12\;13\;23$, not the SwiftComp order. The
 reorder happens on write only; the arrays you hold in memory stay in

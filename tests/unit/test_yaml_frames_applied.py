@@ -1,6 +1,7 @@
-"""v2.1: the SG file's `elementOrientations` are applied by plate_homo_2d (and so by `opensg x.yaml`) without an
-explicit elem_rotation= argument: a 45-degree frame on every element equals the block `angle: 45`, the global
-triad equals no rotation, and a raw-identity row is a cyclic axis permutation (NOT a no-op)."""
+"""v2.1: the SG file's per-element frames (`orientation:`, or its legacy spelling `elementOrientations:`) are
+applied by plate_homo_2d (and so by `opensg x.yaml`) without an explicit elem_rotation= argument: a 45-degree frame
+on every element equals the block `angle: 45`, the global triad equals no rotation, and a raw-identity row is a
+cyclic axis permutation (NOT a no-op).  Both spellings are run."""
 import os
 import struct
 
@@ -32,11 +33,11 @@ NOOP = "- [0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]"                        
 RAWID = "- [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]"                         # a cyclic axis permutation
 
 
-def _law(tmp_path, name, n_model, angle_text="", rows=None):
+def _law(tmp_path, name, n_model, angle_text="", rows=None, key="orientation"):
     from opensg_solid.sg_homo import plate_homo_2d
     text = HEAD % (n_model, angle_text)
     if rows is not None:
-        text += "elementOrientations:\n" + "\n".join([rows] * 2) + "\n"
+        text += key + ":\n" + "\n".join([rows] * 2) + "\n"
     p = os.path.join(str(tmp_path), name + ".yaml")
     with open(p, "w") as f:
         f.write(text)
@@ -44,14 +45,15 @@ def _law(tmp_path, name, n_model, angle_text="", rows=None):
     return np.asarray(r["law"], float)
 
 
+@pytest.mark.parametrize("key", ["orientation", "elementOrientations"])
 @pytest.mark.parametrize("n_model", [2, 3])
-def test_file_frames_are_applied(tmp_path, n_model):
+def test_file_frames_are_applied(tmp_path, n_model, key):
     K0 = _law(tmp_path, "angle0", n_model)
     K45 = _law(tmp_path, "angle45", n_model, ", angle: 45.0")
     assert np.max(np.abs(K45 - K0)) > 1e-3 * np.abs(K0).max()            # the angle matters for this material
-    Kf = _law(tmp_path, "frame45", n_model, rows=ROW45)
+    Kf = _law(tmp_path, "frame45", n_model, rows=ROW45, key=key)
     assert np.allclose(Kf, K45, rtol=1e-7, atol=1e-7 * np.abs(K45).max())  # frames in the file == block angle
-    Kn = _law(tmp_path, "noop", n_model, rows=NOOP)
+    Kn = _law(tmp_path, "noop", n_model, rows=NOOP, key=key)
     assert np.allclose(Kn, K0, rtol=1e-10, atol=1e-10 * np.abs(K0).max())   # the global triad == no rotation
-    Kr = _law(tmp_path, "rawid", n_model, rows=RAWID)
+    Kr = _law(tmp_path, "rawid", n_model, rows=RAWID, key=key)
     assert np.max(np.abs(Kr - K0)) > 1e-3 * np.abs(K0).max()              # raw identity is NOT the no-op

@@ -41,9 +41,10 @@ def load_shell_mesh(yaml_path):
     In:  yaml_path str
     Out: dict -- nodes (N,3); elems list of 0-based node lists; sec (E,) section
          index per element (-1 = in no set); names list of elementSet names;
-         thick (S,) laminate thickness per section; ori (E,9) elementOrientations
-         or None."""
-    d = yaml.load(open(yaml_path), Loader=_YL)
+         thick (S,) laminate thickness per section; ori (E,9) the `orientation`
+         frame block (either spelling, opensg_solid.io.sg_keys) or None."""
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
+    d = normalize_orientation_key(yaml.load(open(yaml_path), Loader=_YL), yaml_path)
     nodes = np.array([_row(r)[:3] for r in d["nodes"]], float)
     elems = [[int(v) for v in _row(e)] for e in d["elements"]]
     if min(min(e) for e in elems) == 1:
@@ -59,8 +60,8 @@ def load_shell_mesh(yaml_path):
         for lab in grp["labels"]:
             sec[int(lab) - 1] = si
     thick = np.array([sum(float(p[1]) for p in s["layup"]) for s in sections], float)
-    ori = (np.array([_row(o) for o in d["elementOrientations"]], float)
-           if d.get("elementOrientations") else None)
+    ori = (np.array([_row(o) for o in d["orientation"]], float)
+           if d.get("orientation") else None)
     return dict(nodes=nodes, elems=elems, sec=sec, names=names, thick=thick, ori=ori)
 
 

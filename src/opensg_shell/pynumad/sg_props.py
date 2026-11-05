@@ -49,12 +49,13 @@ def _ring_arrays(shell_yaml, ref="oml"):
         list per section of [(mat, t, ang)]; "rho" {mat: density}; "frac" float,
         reference-surface fraction (0 = OML, 0.5 = center); "ref" str.
     """
-    d = yaml.load(open(shell_yaml), Loader=_Loader)
+    from opensg_solid.io.sg_keys import normalize_orientation_key   # ONE frame-block name
+    d = normalize_orientation_key(yaml.load(open(shell_yaml), Loader=_Loader), shell_yaml)
     x = np.array([_row(r)[:2] for r in d["nodes"]], float)
     cells = np.array([[int(v) for v in _row(e)] for e in d["elements"]], int)
     if cells.min() == 1:
         cells = cells - 1
-    ori = np.array([_row(o) for o in d["elementOrientations"]], float)
+    ori = np.array([_row(o) for o in d["orientation"]], float)
     n = ori[:, 6:8]                                       # e3 in-plane = wall normal (n2, n3)
     sec_of_set = {s["elementSet"]: i for i, s in enumerate(d["sections"])}
     sec = np.zeros(len(cells), int)

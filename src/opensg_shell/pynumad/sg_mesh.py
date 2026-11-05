@@ -665,7 +665,7 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="oml"):
 
     seg = {"msg": "shell", "refined": 1,
            "nodes": [], "elements": [], "sets": {"element": []},
-           "sections": [], "elementOrientations": [], "materials": []}
+           "sections": [], "orientation": [], "materials": []}
     for (X, Y) in nodes:
         seg["nodes"].append(_Flow(["%.8f %.8f %.8f" % (X, Y, 0.0)]))
     for (n1, n2) in elems:
@@ -686,7 +686,7 @@ def emit_shell_yaml(cs, out_path, web_mesh=None, reference="oml"):
         e3 = np.array([-e2[1], e2[0]])
         if elem_lam[ei] not in web_sets:
             e3 = inward * e3
-        seg["elementOrientations"].append(
+        seg["orientation"].append(
             _Flow([0.0, 0.0, 1.0, float(e2[0]), float(e2[1]), 0.0,
                    float(e3[0]), float(e3[1]), 0.0]))
     used = []

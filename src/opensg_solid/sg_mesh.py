@@ -40,6 +40,9 @@ import yaml
 from fe_jax.basis_quadrature import CellType
 
 from opensg_solid.io.sc_to_yaml import convert as sc_convert
+from opensg_solid.io.sg_keys import (ORIENTATION_KEY, ORIENTATION_KEYS,
+                                     has_orientation_block,
+                                     normalize_orientation_key)
 
 
 def _cell_basis(dim, nodes_per_elem):
@@ -75,8 +78,10 @@ def _numify(v):
     return v
 
 
+# the mesh-block keys: the header ends at the first one.  The frame block
+# counts in both spellings (io.sg_keys: `orientation`, and its legacy name)
 _HEADER_STOP = ("nodes", "cells", "mat_id", "materials", "elements",
-                "sets", "sections", "elementOrientations")
+                "sets", "sections") + ORIENTATION_KEYS
 
 
 def read_yaml_header(path):
@@ -151,7 +156,7 @@ def sg_dialect(path):
 
     Two dialects share the name "SG yaml":
 
-      shell   nodes / elements / sets / sections / elementOrientations /
+      shell   nodes / elements / sets / sections / orientation /
               materials -- an msg-shell contour or surface mesh: its
               `sections` carry a LAYUP and every element carries a material
               frame (opensg_shell.sg_mesh indexes both unconditionally)
@@ -160,7 +165,11 @@ def sg_dialect(path):
               opensg_solid spellings that use `elements` instead of `cells`:
               the 1-D through-thickness plate SG (per-ply `sections`, NO
               element frames) and the 2-D solid SG with per-element
-              `elementOrientations` (NO `sections`)
+              `orientation` frames (NO `sections`)
+
+    The frame block counts in either spelling (io.sg_keys.
+    has_orientation_block): the legacy name (OpenSG 2.1.0 and earlier) is
+    the same block.
 
     In:  path str -- an SG yaml
     Out: "shell" | "solid" | None (no recognizable SG mesh block: an ABD
@@ -168,7 +177,7 @@ def sg_dialect(path):
     b = block_keys(path)
     if "cells" in b or "mat_id" in b:
         return "solid"
-    if {"elements", "sections", "elementOrientations"} <= b:
+    if {"elements", "sections"} <= b and has_orientation_block(b):
         return "shell"
     if "elements" in b:
         return "solid"
@@ -195,7 +204,7 @@ def resolve_msg(path):
                 " so the\nengine cannot be resolved: name it with `msg: shell`"
                 " or `msg: solid` in the\nheader, or give a yaml whose mesh is"
                 " the shell dialect (nodes / elements / sets /\nsections /"
-                " elementOrientations / materials) or the solid dialect"
+                " orientation / materials) or the solid dialect"
                 " (nodes / cells /\nmat_id / materials)." % path)
         return dialect
     msg = str(stated).strip().lower()
@@ -325,7 +334,7 @@ def load_sg_input(path, out_base=None):
     """The SG from EITHER a SwiftComp .sc (converted via the helper,
     which also writes <base>.yaml/.msh), a yaml directly (the NATIVE
     user-authored SG input -- the .sc helper emits the same dialect),
-    or an ALREADY-PARSED sc dict (passed through unchanged -- the
+    or an ALREADY-PARSED sc dict (passed through as a shallow copy -- the
     laminate_to_sg route).
 
     Speed: the yaml is parsed with CBaseLoader (libyaml parser, NO Python
@@ -337,9 +346,16 @@ def load_sg_input(path, out_base=None):
     guarded) is still read -- without one a multi-MB 3-D SG re-parses on
     every run.
 
-    Out: the parsed dict {dim, nodes, cells, mat_id, materials, scale}."""
+    The per-element frame block is read as `orientation:`, or under its
+    legacy name with a one-line note (io.sg_keys.normalize_orientation_key,
+    called on every yaml and on a shallow COPY of a passed-in dict, so the
+    caller's dict keeps its own keys, as io.sg_input.read_opensg_yaml
+    does); a file or dict that carries both spellings is refused.
+
+    Out: the parsed dict {dim, nodes, cells, mat_id, materials, scale,
+         orientation (E, 9) float | None}."""
     if isinstance(path, dict):
-        return path
+        return normalize_orientation_key(dict(path), "<SG dict>")
     ext = os.path.splitext(path)[1].lower()
     if ext == ".sc":
         return sc_convert(path, out_base)
@@ -357,7 +373,7 @@ def load_sg_input(path, out_base=None):
 
     bkeys = block_keys(path)
     if "sections" in bkeys and "cells" not in bkeys \
-            and "elementOrientations" not in bkeys:
+            and not has_orientation_block(bkeys):
         # the LAYUP spelling of the solid dialect: the 1-D through-thickness
         # plate SG (per-ply `sections`, NO element frames -- sg_dialect's
         # third spelling).  Its `sets` are PLIES, several per material, so
@@ -374,7 +390,7 @@ def load_sg_input(path, out_base=None):
 
     if "cells" not in bkeys:
         # the MESH-dialect spelling of the ONE solid dialect (`elements` /
-        # `sets` / `elementOrientations` / list-form `materials` -- what
+        # `sets` / `orientation` / list-form `materials` -- what
         # io.msh_to_yaml and the opensg_io pipelines emit; sg_dialect calls
         # the two spellings one dialect): io.sg_input owns that reader.
         # Sidecar-cached the same way, only under OPENSG_SG_CACHE=1.
@@ -413,7 +429,7 @@ def load_sg_input(path, out_base=None):
         from yaml import CBaseLoader as _YL      # libyaml, untyped (all strings)
     except ImportError:
         from yaml import SafeLoader as _YL
-    raw = yaml.load(open(path), Loader=_YL)
+    raw = normalize_orientation_key(yaml.load(open(path), Loader=_YL), path)
     nodes = np.asarray(raw["nodes"], float)      # numpy bulk str -> float
     try:                                          # rectangular fast path
         cells_arr = np.asarray(raw["cells"], np.int64)
@@ -424,12 +440,12 @@ def load_sg_input(path, out_base=None):
     mat_id = np.asarray(raw["mat_id"], np.int64)
     materials = {int(k): _numify(v) for k, v in raw["materials"].items()}
     scale = float(raw.get("scale", 1.0))
-    ori = raw.get("elementOrientations")      # optional (E, 9) frames, yaml order
+    ori = raw.get(ORIENTATION_KEY)            # optional (E, 9) frames, yaml order
     if ori is not None:
         ori = np.asarray(ori, float)
         if ori.size != 9 * len(cells):
             raise ValueError(
-                "%s: elementOrientations holds %d values, expected %d rows x 9"
+                "%s: orientation holds %d values, expected %d rows x 9"
                 % (path, ori.size, len(cells)))
         ori = ori.reshape(len(cells), 9)
     dim = raw.get("dim")

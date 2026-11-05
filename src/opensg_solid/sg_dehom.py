@@ -12,7 +12,9 @@ Output order everywhere: SwiftComp (xx, yy, zz, yz, xz, xy).  The
 OpenSG dehom FILES <prefix>.SM/.EM/.U follow the rm_plate_1D
 rm_dehom.write_field layout instead -- printed order 11 22 33 12 13 23
 via the SGIDX reorder ON WRITE (storage order never changes), rows
-x y z + components with the SG coordinates in the last n_sg slots.
+x y z + components with the SG coordinates in the last n_sg slots;
+SG-axes clouds are written as <prefix>_global.SM/.EM, ply-axes ones as
+<prefix>.SM/.EM (export_gauss frame_kind).
 dehom_fields is the one-pass entry (strain + stress + fluctuation
 displacement); plate_dehom_2d is a two-output view of it.
 
@@ -23,34 +25,49 @@ displacement); plate_dehom_2d is a two-output view of it.
 # inputs
 #   r                   the plate_homo_2d result dict
 #   epsilon_bar         (6,) macro plate strain [e11 e22 2e12 k11 k22 2k12]
-#                       (n_model 2/3) or the beam state st [x1 ext, shear2,
+#                       (n_model 2/3) or the beam strain st [x1 ext, shear2,
 #                       shear3, twist, bend2, bend3] (n_model 1)
+#   beam_force          (6,) the beam force [F1 F2 F3 M1 M2 M3] (n_model 1
+#                       only, the `1:` identifier) -- the other beam driver
 # working (SSDM kernel, n_model 2/3)
 #   V0_ndH              (N, 3, H) element fluctuation modes;  x_nd (N, d)
 #   C_ss                (6, 6);  J_qdp, G_qpd, dphi_dx_qnd  geometry
 #   dx_qn, dy_qn, dz_qn (Q, N) gradient rows
 #   Gamma_h_S_V0_qsH    (Q, 6, H) fluctuation strain modes
 #   Ge_sH               (Q, 6, H) macro map;  Strain_Concentration_qsH
-# working (beam chain, n_model 1)
-#   Comp_srt            (6, 6) = C_eff^-1;  st_m (4,) classical part
-#   F_1d, F1, F2, F3    the successive-derivative ladder
-#   R1, R2, R3          (6, 6) recovery/equilibrium operators
-#   gamma1..3 (2,), st_cl1/2 (4,), st_m_final (4,)   corrected states
-#   w_1, w1s_1, w1s_2, w_2   (N_primal,) fluctuation displacement vectors
+# working (beam chain, n_model 1; the msg-shell procedure,
+#          opensg_shell/kernels/msg_dehom.py:_macro_recovery)
+#   Comp_srt            (6, 6) = C_eff^-1;  st_m (4,) classical part of st
+#   F0                  (6,) the beam force seeding the chain (= beam_force,
+#                       or C_eff @ st for a strain driver)
+#   R1                  (6, 6) the FIXED equilibrium operator recov(e1):
+#                       F' = R1 F (M2' = F3, M3' = -F2), R1 @ R1 = 0
+#   dF1, dF2, dF3       (6,) x1-derivatives of the force, dF_k+1 = R1 dF_k
+#   s1, s2, s3          (6,) their strains Comp_srt @ dF_k
+#   eps, eps1, eps2     (4,) classical state [eps11 k1 k2 k3] and its first
+#                       and second x1-derivatives, Q-corrected (eps2 = 0)
+#   w_1, w1s_1, w1s_2, w_2   (N_primal,) V0 eps, V1 eps1, V1 eps2, V0 eps1
 #   dehomo_data         {dphi_dx (E,Q,N,d), Ge (E,Q,6,4), dV_q (E,Q)}
 #   dof_map             (E, N*3) dof routing;  uh_1/ul_1/ul_2/uh_2 (E, N, 3)
-#   eps_Eb, eps_Timo, st_3D_global, st_3D_elem   (E, Q, 6) strain builds
-#   Rsig_batch          (E, 6, 6) Voigt rotations;  C_q (E, Q, 6, 6)
+#   eps_Eb, eps_Timo    (E, Q, 6) zeroth-order / first-order strain parts
+#   C_q                 (E, Q, 6, 6) the assembly stiffness C_ess
+# working (material frame)
+#   M_e3, T_sig         (E, 3, 3) element frames (rows e1 e2 e3, solver
+#                       components) / (E, 6, 6) Voigt stress transforms
 # outputs
 #   Gamma_qs / Gam      (E, Q, 6) strain;  Sigma_qs / Sig (E, Q, 6) stress
 #   U_eqd               (E, Q, 3) FLUCTUATION-ONLY displacement at the
-#                       Gauss points (2/3: V0 @ eps; beam: w_1 + w1s_1)
+#                       Gauss points (2/3: V0 @ eps; beam: w_1 + w1s_1,
+#                       the zeroth- plus first-order warping)
 #   coords, xyz         (E*Q, d) Gauss coordinates; padded x y z columns
 #   SGIDX, ORDER        SwiftComp storage -> 11 22 33 12 13 23 print map
 #   <prefix>.txt/.vtk   the Gauss table + point-cloud exports
-#   <prefix>.SM/.EM/.U  the OpenSG dehom files (rm_dehom layout)
+#   <prefix>.SM/.EM/.U  the OpenSG dehom files (rm_dehom layout; .SM/.EM
+#                       take the _global tag for SG-axes clouds)
 # ----------------------------------------------------------------------------
 """
+import os
+import re
 from functools import partial
 from typing import Any, Dict, Optional, Sequence
 
@@ -362,11 +379,63 @@ def _dehom_batch(periodic_cells_en, V0, x_end, C_ess, dphi_dxi_qnp,
                    epsilon_bar, n_model, n_sg)
 
 
-# ---------------------------- beam recovery chain (from Beam_solid.py)
+# ------------- beam recovery chain (the msg-shell procedure, n_model 1)
+# The generalized-Timoshenko recovery of a prismatic, untwisted beam SG
+# without distributed load: the procedure of the msg-shell route
+# (opensg_shell/kernels/msg_dehom.py:_macro_recovery, :55-95, and
+# recover_shell_strains, :126-159) on the solid section's own fields --
+#   F' = R1 F with the FIXED R1 = recov(e1), the linear 1-D equilibrium
+#        (F1' = F2' = F3' = M1' = 0, M2' = F3, M3' = -F2), so F'' = 0
+#   eps = st[0,3,4,5] + Q gamma',  eps' = (C^-1 F')[0,3,4,5] + Q gamma''
+#   w = V0 eps + V1 eps',  w' = V0 eps' + V1 eps''
+#   Gamma = Ge eps + Gamma_h w + Gamma_l w',  sigma = C_ess Gamma
+# The zeroth-order part (Ge eps + Gamma_h V0 eps) is the classical
+# recovery; the first-order correction (Gamma_h V1 eps' + Gamma_l V0
+# eps') carries the transverse shear (int s12 = F2, int s13 = F3).
+# V1 solves D_hh V1 = -P b = P (D_hl^T V0 + D_le - D_hl V0), P = I -
+# Dc (Psi^T Dc)^-1 Psi^T (sg_homo.prepare_v1_rhs, :918-925).  OUT OF
+# SCOPE: distributed loads (F' = R1 F - f) and initial twist/curvature
+# (R = recov(k) plus the Gamma_R terms).
+#
+# The field integrates to [F2, F3] exactly and to [F1 M1 M2 M3] = F_cl +
+# Delta F_cl, Delta F_cl = -A (I - QQ^T) A^-1 B A^-1 Q F_s (A = C_eff_EB,
+# B = B_tim; beam_expected_resultants).  Delta F_cl belongs to this
+# procedure -- VABS 4.1 and the msg-shell route recover the same field --
+# not to the section: it changes with the section origin (the same load on
+# the same section meshed about another origin gives another Delta F_cl
+# and another field), while a 3-D solution of the prismatic beam closes
+# every resultant at every section.  It vanishes when the shear does not
+# couple to the classical channels (a doubly symmetric section).
+_E1_BEAM = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0])     # the x1 unit state
+_Q_BEAM = np.array([[0.0, 0.0], [0.0, 0.0], [0.0, -1.0], [1.0, 0.0]])
+_CL_BEAM = np.array([0, 3, 4, 5])          # classical slots of the 6-state
+# st and F0 handed to compute_fluctuations_gpu must be ONE state: the
+# normwise backward error ||F0 - Deff st|| / (||Deff|| ||st||) of an LU
+# solve with partial pivoting of the 6x6 is at most gamma_3n (1 + 2 (n^2 -
+# n) rho_n), rho_n <= 2^(n-1) (Higham, Accuracy and Stability of Numerical
+# Algorithms, 2nd ed., Thm 9.4 and Lemma 9.6), n = 6: 3.8e-12; the product
+# F0 = Deff st of the strain driver stays below gamma_n = 6.7e-16
+_U_RND = 0.5 * np.finfo(float).eps
+_GAMMA = lambda k: k * _U_RND / (1.0 - k * _U_RND)        # noqa: E731
+# (+ 2 gamma_(n+1): the rounding of the residual's own evaluation)
+_ST_F0_TOL = _GAMMA(18) * (1.0 + 2.0 * 30 * 2.0 ** 5) + 2.0 * _GAMMA(7)
+# a per-element frame read from rows written to 6 decimals (opensg_shell's
+# msh_to_yaml writes %.6f) is off a rotation by |E_ij| <= 5e-7 per entry,
+# so |M M^T - I| <= 2 sqrt(3) 5e-7 + 3 (5e-7)^2 = 1.7321e-6 (M = R + E,
+# |(R E^T)_ij| <= |r_i| |e_j| <= sqrt(3) 5e-7): the D route accepts that
+# and refuses a frame further from a rotation
+_FRAME_ROUND = 0.5e-6
+_FRAME_TOL = 2.0 * np.sqrt(3.0) * _FRAME_ROUND + 3.0 * _FRAME_ROUND ** 2
+
+
 @jax.jit
 def build_recovery_matrix(st):
-    """6x6 equilibrium operator of the recovery chain from the 6 state
-    components (Beam_solid.py)."""
+    """6x6 equilibrium operator recov(s) of the recovery chain from the 6
+    state components (Beam_solid.py; entry for entry the shell's
+    opensg_shell/kernels/msg_dehom.py:_recov, :42-52).  The chain uses
+    it at s = e1 = [1, 0, 0, 0, 0, 0] only: R1 = recov(e1) has exactly
+    two nonzeros, R1[4, 2] = +1 (M2' = F3) and R1[5, 1] = -1 (M3' =
+    -F2), and R1 @ R1 = 0."""
     s0, s1, s2, s3, s4, s5 = st[0], st[1], st[2], st[3], st[4], st[5]
 
     R_top_left = jnp.array([
@@ -387,119 +456,134 @@ def build_recovery_matrix(st):
 
 
 @jax.jit
-def compute_fluctuations_gpu(Deff_srt, st, V0, V1):
-    """Successive-derivative generalized-Timoshenko recovery ladder
-    (product-rule chain F' = R F seeded with F_1d = Comp @ st): builds
-    the shear-corrected states and warping displacement fields for
-    beam (n_model 1) dehomogenization.
-
-    In:
-        Deff_srt: (6, 6) effective Timoshenko stiffness.
-        st: (6,) sectional STRAIN [eps11, 2g12, 2g13, k1, k2, k3].
-        V0: (N_primal, 4) zeroth-order warping modes.
-        V1: (N_primal, 4) first-order warping modes.
-    Out:
-        w_1: (N_primal,) zeroth-order warping, V0 @ st_m_final.
-        w1s_1: (N_primal,) first-order warping, V1 @ st_cl1_final.
-        w1s_2: (N_primal,) first-order warping at the
-            second-derivative state, V1 @ st_cl2_final.
-        w_2: (N_primal,) zeroth-order warping at the first-derivative
-            state, V0 @ st_cl1_final.
-        st_m_final: (4,) shear-corrected classical state
-            [eps11, k1, k2, k3].
-    Constraint: with the compliance seed the transverse-shear entries
-    st[1], st[2] are recovery-inert -- drive only states whose stress
-    rides the classical channels (extension, twist, bending).
-    """
+def _fluctuations_kernel(Deff_srt, st, V0, V1, F0):
+    """The jitted body of compute_fluctuations_gpu (arguments and outputs
+    there); the public function checks that st and F0 are one state
+    first."""
     Comp_srt = jnp.linalg.inv(Deff_srt)
-    st_m = jnp.array([st[0], st[3], st[4], st[5]], dtype=jnp.float64)
+    cl = jnp.asarray(_CL_BEAM)
+    Q = jnp.asarray(_Q_BEAM, dtype=jnp.float64)
+    st_m = st[cl]
 
-    F_1d = Comp_srt @ st
-    st_plus_1 = st.at[0].add(1.0)
-    R1 = build_recovery_matrix(st_plus_1)
-    F1 = R1 @ F_1d
+    R1 = build_recovery_matrix(jnp.asarray(_E1_BEAM, dtype=jnp.float64))
+    dF1 = R1 @ F0                  # F'   = [0, 0, 0, 0, F3, -F2]
+    dF2 = R1 @ dF1                 # F''  = 0
+    dF3 = R1 @ dF2                 # F''' = 0
+    s1 = Comp_srt @ dF1
+    s2 = Comp_srt @ dF2
+    s3 = Comp_srt @ dF3
 
-    st_Tim1 = Comp_srt @ F1
-    st_cl1 = jnp.array([st_Tim1[0], st_Tim1[3], st_Tim1[4], st_Tim1[5]])
-    gamma1 = jnp.array([st_Tim1[1], st_Tim1[2]])
-
-    R2 = build_recovery_matrix(st_Tim1)
-    F2 = (R1 @ F1) + (R2 @ F_1d)
-
-    st_Tim2 = Comp_srt @ F2
-    st_cl2 = jnp.array([st_Tim2[0], st_Tim2[3], st_Tim2[4], st_Tim2[5]])
-    gamma2 = jnp.array([st_Tim2[1], st_Tim2[2]])
-
-    R3 = build_recovery_matrix(st_Tim2)
-    F3 = 2.0 * (R2 @ F1) + (R3 @ F_1d) + (R1 @ F2)
-
-    st_Tim3 = Comp_srt @ F3
-    gamma3 = jnp.array([st_Tim3[1], st_Tim3[2]])
-
-    Q = jnp.array([[0., 0.], [0., 0.], [0., -1.], [1., 0.]],
-                  dtype=jnp.float64)
-    st_m_final = st_m + (Q @ gamma1)
-    st_cl1_final = st_cl1 + (Q @ gamma2)
-    st_cl2_final = st_cl2 + (Q @ gamma3)
+    st_m_final = st_m + Q @ s1[1:3]          # eps
+    eps1 = s1[cl] + Q @ s2[1:3]              # eps'
+    eps2 = s2[cl] + Q @ s3[1:3]              # eps'' (= 0)
 
     w_1 = V0 @ st_m_final
-    w1s_1 = V1 @ st_cl1_final
-    w1s_2 = V1 @ st_cl2_final
-    w_2 = V0 @ st_cl1_final
+    w1s_1 = V1 @ eps1
+    w1s_2 = V1 @ eps2
+    w_2 = V0 @ eps1
     return w_1, w1s_1, w1s_2, w_2, st_m_final
 
 
-@jax.jit
-def get_Rsig_matrix(R_flat):
-    """Voigt stress-transformation 6x6 from a flattened (9,) DC matrix
-    (Beam_solid.py; the FEniCS R_sig convention, note the internal R.T)."""
-    R = R_flat.reshape(3, 3)
-    R = R.T
-    b11, b12, b13 = R[0, 0], R[1, 0], R[2, 0]
-    b21, b22, b23 = R[0, 1], R[1, 1], R[2, 1]
-    b31, b32, b33 = R[0, 2], R[1, 2], R[2, 2]
-    return jnp.array([
-        [b11*b11, b12*b12, b13*b13, 2*b12*b13, 2*b11*b13, 2*b11*b12],
-        [b21*b21, b22*b22, b23*b23, 2*b22*b23, 2*b21*b23, 2*b21*b22],
-        [b31*b31, b32*b32, b33*b33, 2*b32*b33, 2*b31*b33, 2*b31*b32],
-        [b21*b31, b22*b32, b23*b33, b23*b32 + b22*b33, b23*b31 + b21*b33,
-         b22*b31 + b21*b32],
-        [b11*b31, b12*b32, b13*b33, b13*b32 + b12*b33, b13*b31 + b11*b33,
-         b12*b31 + b11*b32],
-        [b11*b21, b12*b22, b13*b23, b13*b22 + b12*b23, b13*b21 + b11*b23,
-         b12*b21 + b11*b22]
-    ])
+def compute_fluctuations_gpu(Deff_srt, st, V0, V1, F0):
+    """The generalized-Timoshenko recovery chain of the beam (n_model 1)
+    D route: the force derivatives by the FIXED operator R1 = recov(e1),
+    the Q-corrected classical state and its derivatives, and the four
+    warping fields -- the msg-shell procedure
+    (opensg_shell/kernels/msg_dehom.py:_macro_recovery) on the solid
+    section's V0/V1s:
+
+        dF1 = R1 F0 = [0, 0, 0, 0, F3, -F2]    (M2' = F3, M3' = -F2)
+        dF2 = R1 dF1 = 0,  dF3 = R1 dF2 = 0     (R1 @ R1 = 0)
+        s_k = Deff_srt^-1 dF_k
+        eps  = st[0,3,4,5] + Q s1[1:3]          (k2 -= 2g13', k3 += 2g12')
+        eps1 = s1[0,3,4,5] + Q s2[1:3]          (= A^-1 [0, 0, F3, -F2])
+        eps2 = s2[0,3,4,5] + Q s3[1:3]          (= 0)
+        w_1 = V0 eps     zeroth-order (classical) warping
+        w1s_1 = V1 eps1  first-order correction
+        w_2 = V0 eps1    x1-derivative of the zeroth-order warping
+        w1s_2 = V1 eps2  (= 0)
+
+    with Q = [[0, 0], [0, 0], [0, -1], [1, 0]] and A = C_eff_EB.  The
+    chain is seeded with the beam FORCE F0 (dehom_fields passes the `1:`
+    force itself, or C_eff @ st for a strain), so it is exactly linear in
+    the load, a pure F1/M1/M2/M3 gives dF1 = 0 and the classical field
+    exactly, and F2/F3 drive the first-order fields.  Every beam state is
+    a valid driver, the transverse shear included.  Prismatic, untwisted,
+    no distributed load (F' = R1 F).
+
+    In:
+        Deff_srt: (6, 6) Timoshenko stiffness, [eps11, 2g12, 2g13, k1,
+            k2, k3] x [F1 F2 F3 M1 M2 M3].
+        st: (6,) the beam STRAIN (= Deff_srt^-1 F0).
+        V0: (N_primal, 4) zeroth-order warping modes.
+        V1: (N_primal, 4) first-order warping modes (Eq. 85 projected).
+        F0: (6,) the beam FORCE [F1 F2 F3 M1 M2 M3] seeding the chain.
+    Out:
+        w_1, w1s_1, w1s_2, w_2: (N_primal,) the warping fields above.
+        st_m_final: (4,) eps, the Q-corrected classical state
+            [eps11, k1, k2, k3].
+    Raises ValueError when st and F0 are not one state: the classical
+    part comes from st and the derivatives from F0, so a mismatched pair
+    would mix two loads.  Accepted: ||F0 - Deff_srt st|| <= _ST_F0_TOL
+    ||Deff_srt|| ||st|| (inf-norms; 3.8e-12, the backward error of an LU
+    solve of the 6x6 -- st = np.linalg.solve(Deff_srt, F0) or F0 =
+    Deff_srt @ st both pass).
+    """
+    D = np.asarray(Deff_srt, float)
+    s = np.asarray(st, float)
+    f = np.asarray(F0, float)
+    res = float(np.abs(f - D @ s).max())
+    scale = float(np.abs(D).sum(axis=1).max() * np.abs(s).max())
+    if not res <= _ST_F0_TOL * scale:
+        raise ValueError(
+            "compute_fluctuations_gpu: st and F0 are not one state,"
+            " ||F0 - Deff_srt st|| = %.3g > %.3g ||Deff_srt|| ||st|| (the"
+            " backward error of an LU solve of the 6x6) -- pass st ="
+            " np.linalg.solve(Deff_srt, F0), or F0 = Deff_srt @ st for a"
+            " strain driver" % (res, _ST_F0_TOL))
+    return _fluctuations_kernel(Deff_srt, st, V0, V1, F0)
 
 
 @partial(jax.jit, static_argnames=['n_model', 'n_sg'])
 def recover_gauss_point_fields(
     w_1, w1s_1, w1s_2, w_2, st_m_final,
-    dehomo_data, C_ess1, reduced_periodic_cells, phi_qn, x_end,
-    elem_rotation, n_model, n_sg
+    dehomo_data, C_ess, reduced_periodic_cells, phi_qn, x_end,
+    n_model, n_sg
 ):
-    """Gauss-point strain/stress recovery of the beam chain from the
-    warping fields of compute_fluctuations_gpu.
+    """Gauss-point strain/stress of the beam chain from the warping
+    fields of compute_fluctuations_gpu, in the SG-global frame:
+
+        Gamma = [Gamma_h(w_1) + Ge eps]                    zeroth order
+              + [Gamma_h(w1s_1) + Gamma_l(w_2)] + Gamma_l(w1s_2)
+                                                           first order
+        sigma = C_ess Gamma
+
+    Gamma_h is the in-section gradient; Gamma_l(u) = [u1, 0, 0, 0, u3,
+    u2] in storage order (xx yy zz yz xz xy), the x1-derivative of a
+    warping entering through its value; Ge = Gamma_eps (Gamma11 = eps11
+    + y3 k2 - y2 k3, (2 Gamma12, 2 Gamma13) = k1 (-y3, y2)).  C_ess is
+    the ASSEMBLY stiffness -- block angle and per-element frame applied
+    once (sg_materials.get_heterogeneous_C_matrix), the law the warping
+    fields were solved with -- so no strain is rotated here: the output
+    is SG-global, the frame of the plate/3-D recovery.  The element/ply
+    frame is material_frame_fields' job.
 
     In:
         w_1, w1s_1, w1s_2, w_2: (N_primal,) warping displacement
             fields (compute_fluctuations_gpu outputs).
-        st_m_final: (4,) shear-corrected classical state.
+        st_m_final: (4,) Q-corrected classical state [eps11 k1 k2 k3].
         dehomo_data: dict {dphi_dx (E, Q, N, D), Ge (E, Q, 6, H),
             dV_q (E, Q)} from assembly.
-        C_ess1: (E, 6, 6) or (E, Q, 6, 6) per-element
-            PRE-elem-rotation stiffness.
+        C_ess: (E, 6, 6) or (E, Q, 6, 6) per-element ASSEMBLY
+            stiffness (r["C_ess"]).
         reduced_periodic_cells: (E, N) reduced connectivity.
         phi_qn: (Q, N) basis values.
         x_end: (E, N, d) element-node coordinates.
-        elem_rotation: (E, 9) flattened per-element DC matrices.
         n_model, n_sg: static ints.
     Out:
         x_q: (E, Q, d) Gauss-point coordinates.
-        st_3D_elem: (E, Q, 6) strain rotated into the element frame.
-        stress_3D_local: (E, Q, 6) stress = C_ess1 @ strain.
-    Stress comes out in the frame the strain was rotated into
-    (identity elem_rotation -> the global SG frame, matching the
-    plate dehom).
+        Gamma: (E, Q, 6) strain, SG-global, engineering shear.
+        Sigma: (E, Q, 6) stress = C_ess @ Gamma, SG-global.
     """
     dphi_dx = dehomo_data["dphi_dx"]
     Ge = dehomo_data["Ge"]
@@ -541,16 +625,13 @@ def recover_gauss_point_fields(
                 + compute_eps_l_batch(ul_2)) if n_model == 1 \
         else jnp.zeros_like(eps_Eb)
 
-    st_3D_global = eps_Eb + eps_Timo
+    Gamma = eps_Eb + eps_Timo
 
-    Rsig_batch = jax.vmap(get_Rsig_matrix)(elem_rotation)
-    st_3D_elem = jnp.einsum("eji,eqj->eqi", Rsig_batch, st_3D_global)
+    C_q = jnp.repeat(C_ess[:, None, :, :], Q, axis=1) \
+        if C_ess.ndim == 3 else C_ess
+    Sigma = jnp.einsum("eqij,eqj->eqi", C_q, Gamma)
 
-    C_q = jnp.repeat(C_ess1[:, None, :, :], Q, axis=1) \
-        if C_ess1.ndim == 3 else C_ess1
-    stress_3D_local = jnp.einsum("eqij,eqj->eqi", C_q, st_3D_elem)
-
-    return x_q, st_3D_elem, stress_3D_local
+    return x_q, Gamma, Sigma
 
 
 # --------- the OpenSG dehom file convention (rm_plate_1D.rm_dehom):
@@ -567,9 +648,167 @@ def _u_at_gauss(u_flat, cells_en, phi_qn):
     return np.asarray(jnp.einsum("qn,end->eqd", phi_qn, u_en))
 
 
+def _element_frames(r: Dict[str, Any]) -> Optional[np.ndarray]:
+    """(E, 3, 3) per-element frames of a run, or None for a frameless
+    one: rows e1 e2 e3 in the solver's (x1, y2, y3) components, global
+    element order -- r["elem_rotation"] (the frames C_ess was built
+    with; plate_homo_2d stores them for every model, the beam dict an
+    identity tile when the file has none), else the yaml's `orientation`
+    block through sg_materials.elem_rotation_from_yaml.
+
+    A frame that is not a proper rotation to the precision of rows written
+    with 6 decimals (max |M M^T - I| > _FRAME_TOL = 1.7321e-6, the bound of
+    a rotation rounded to 6 decimals; or det M <= 0; or non-finite) is
+    REFUSED with ValueError: the D route rotates tensors with it, and only
+    a rotation turns a stress into a stress.  The homogenization law is
+    never changed by this check."""
+    er = r.get("elem_rotation")
+    sc = r.get("sc") or {}
+    if er is None and sc.get("orientation") is not None:
+        from .sg_materials import elem_rotation_from_yaml
+        er = elem_rotation_from_yaml(sc["orientation"])
+    if er is None:
+        return None
+    M = np.asarray(er, float).reshape(-1, 3, 3)
+    dev = np.abs(np.einsum("eij,ekj->eik", M, M)
+                 - np.eye(3)).max(axis=(1, 2))
+    det = np.linalg.det(M)
+    bad = np.flatnonzero(~(dev <= _FRAME_TOL) | ~(det > 0.0))
+    if bad.size:
+        e = int(bad[0])
+        raise ValueError(
+            "per-element frames: %d of %d are not proper rotations (first:"
+            " element %d, max |M M^T - I| = %.3g, accepted up to %.4g, the"
+            " bound of a rotation written to 6 decimals; det = %.6g) -- the"
+            " D route refuses them; write each `orientation` row as an"
+            " orthonormal, right-handed triad with at least 6 decimals"
+            % (bad.size, len(M), e + 1, dev[e], _FRAME_TOL, det[e]))
+    return M
+
+
+def _beam_dehom(r: Dict[str, Any], epsilon_bar, beam_force):
+    """The n_model 1 branch of dehom_fields (driver rules there): the
+    generalized-Timoshenko chain (refined: 1) or the classical recovery
+    (refined: 0), then the SG-global Gauss fields and U = w_1 + w1s_1.
+
+    In:  r (beam plate_homo_2d dict); epsilon_bar (6,) | None;
+         beam_force (6,) | None -- exactly one of the two.
+    Out: (Gamma_eqs, Sigma_eqs, U_eqd) np, (E, Q, 6/6/3)."""
+    if (epsilon_bar is None) == (beam_force is None):
+        raise ValueError(
+            "the beam recovery takes exactly one driver: epsilon_bar (the"
+            " strain [x1 ext, shear2, shear3, twist, bend2, bend3]) or"
+            " beam_force (the force [F1 F2 F3 M1 M2 M3], the `1:`"
+            " identifier)")
+    name = "beam_force" if beam_force is not None else "epsilon_bar"
+    v = np.asarray(beam_force if beam_force is not None else epsilon_bar,
+                   float)
+    if v.shape != (6,):
+        raise ValueError("n_model=1 dehom takes the 6-component beam %s"
+                         " [%s], got shape %s"
+                         % (name, "F1 F2 F3 M1 M2 M3"
+                            if beam_force is not None else
+                            "x1 ext, shear2, shear3, twist, bend2, bend3",
+                            v.shape))
+    if not np.all(np.isfinite(v)):
+        raise ValueError("n_model=1 dehom: %s is not finite: %s"
+                         % (name, v))
+    _element_frames(r)                 # refuses non-rotation frames
+    # _beam_homo_kkt always builds the Timoshenko law; plate_homo_2d
+    # records the yaml's refined: switch next to it
+    refined = int(r.get("refined", 1))
+    if refined == 0:
+        # the CLASSICAL (Euler-Bernoulli) model: the 4x4 law A and the
+        # zeroth-order warping only -- it carries no transverse shear,
+        # so a shear force or strain has no recovery here
+        if v[1] != 0.0 or v[2] != 0.0:
+            raise ValueError(
+                "refined: 0 (Euler-Bernoulli) beam: the classical recovery"
+                " carries no transverse shear, so %s = %g, %s = %g is"
+                " refused -- homogenize with refined: 1 for the"
+                " generalized-Timoshenko recovery"
+                % (("F2", v[1], "F3", v[2]) if beam_force is not None
+                   else ("2g12", v[1], "2g13", v[2])))
+        if beam_force is not None:
+            eps = np.linalg.solve(np.asarray(r["C_eff_EB"], float),
+                                  v[_CL_BEAM])
+        else:
+            eps = v[_CL_BEAM]
+        eps = jnp.asarray(eps)
+        w_1 = jnp.asarray(r["V0"]) @ eps
+        w1s_1 = w1s_2 = w_2 = jnp.zeros_like(w_1)
+    else:
+        C = np.asarray(r["C_eff"], float)
+        if beam_force is not None:
+            F0 = v                              # the force itself: F' exact
+            st = np.linalg.solve(C, F0)
+        else:
+            st = v
+            F0 = C @ st
+        w_1, w1s_1, w1s_2, w_2, eps = compute_fluctuations_gpu(
+            jnp.asarray(C), jnp.asarray(st), r["V0"], r["V1s"],
+            jnp.asarray(F0))
+    _, Gam, Sig = recover_gauss_point_fields(
+        w_1, w1s_1, w1s_2, w_2, eps, r["dehomo_data"], r["C_ess"],
+        r["reduced_periodic_cells"], r["phi_qn"], r["x_end"], 1,
+        r["n_sg"])
+    U = _u_at_gauss(w_1 + w1s_1, r["reduced_periodic_cells"], r["phi_qn"])
+    return np.asarray(Gam), np.asarray(Sig), U
+
+
+def beam_expected_resultants(r: Dict[str, Any], epsilon_bar=None,
+                             beam_force=None):
+    """The six resultants [F1 F2 F3 M1 M2 M3] the beam D route's field
+    integrates to (int s11, s12, s13, y2 s13 - y3 s12, y3 s11, -y2 s11 over
+    the section), from the law alone -- what a reader of the D files gates
+    the recovered field against.
+
+    refined: 1, the generalized-Timoshenko chain: [F2, F3] = the applied
+    shear exactly and [F1 M1 M2 M3] = F_cl + Delta F_cl,
+
+        Delta F_cl = -A (I - QQ^T) A^-1 B A^-1 Q F_s,
+
+    A = r["C_eff_EB"], B = r["B_tim"], F_s = [F2, F3], Q F_s = [0, 0,
+    -F3, F2].  Delta F_cl belongs to the procedure (VABS 4.1 and the
+    msg-shell route recover the same field), not to the section: it
+    depends on the section origin, and it is zero when the shear does not
+    couple to the classical channels.  refined: 0, the classical recovery:
+    the applied [F1 M1 M2 M3] exactly (the D route refuses F2/F3).
+
+    In:  r (beam plate_homo_2d dict); exactly one driver, as dehom_fields:
+         epsilon_bar (6,) the beam strain or beam_force (6,) the force.
+    Out: {"F": (6,) the applied force (C_eff @ st for a strain; refined 0:
+         A eps_cl in the classical slots), "dF_cl": (4,) Delta F_cl on
+         [F1 M1 M2 M3], "expected": (6,) F with dF_cl added}."""
+    if int(r["n_model"]) != 1:
+        raise ValueError("beam_expected_resultants: a beam (n_model 1)"
+                         " dict, got n_model %d" % int(r["n_model"]))
+    if (epsilon_bar is None) == (beam_force is None):
+        raise ValueError("beam_expected_resultants takes exactly one"
+                         " driver: epsilon_bar or beam_force")
+    v = np.asarray(beam_force if beam_force is not None else epsilon_bar,
+                   float).reshape(6)
+    A = np.asarray(r["C_eff_EB"], float)
+    if int(r.get("refined", 1)) == 0:
+        F = v.copy()
+        if beam_force is None:
+            F = np.zeros(6)
+            F[_CL_BEAM] = A @ v[_CL_BEAM]
+        return {"F": F, "dF_cl": np.zeros(4), "expected": F.copy()}
+    F = v.copy() if beam_force is not None else \
+        np.asarray(r["C_eff"], float) @ v
+    B = np.asarray(r["B_tim"], float)
+    P = np.eye(4) - _Q_BEAM @ _Q_BEAM.T
+    dF = -A @ (P @ np.linalg.solve(
+        A, B @ np.linalg.solve(A, _Q_BEAM @ F[[1, 2]])))
+    ex = F.copy()
+    ex[_CL_BEAM] += dF
+    return {"F": F, "dF_cl": dF, "expected": ex}
+
+
 # ------------------------------------------------------------- the public API
 def dehom_fields(r: Dict[str, Any],
-                 epsilon_bar: Sequence[float],
+                 epsilon_bar: Sequence[float] = None,
                  dE1: Sequence[float] = None,
                  dE2: Sequence[float] = None,
                  Q: Sequence[float] = None,
@@ -578,12 +817,34 @@ def dehom_fields(r: Dict[str, Any],
                  dE11: Sequence[float] = None,
                  dE12: Sequence[float] = None,
                  dE22: Sequence[float] = None,
-                 dEhi: Dict[str, Sequence[float]] = None):
+                 dEhi: Dict[str, Sequence[float]] = None,
+                 beam_force: Sequence[float] = None):
     """One recovery pass: the Gauss strain/stress AND the fluctuation
     displacement (nothing recomputed -- plate_dehom_2d is a view of the
     same pass).
 
-    In:  r (plate_homo_2d dict); epsilon_bar as plate_dehom_2d;
+    BEAM (n_model 1): give exactly ONE driver, as the msg-shell route's
+    recover_shell_strains does (opensg_shell/kernels/msg_dehom.py:
+    126-131) -- epsilon_bar, the beam strain st [x1 ext, shear2,
+    shear3, twist, bend2, bend3] (a `0:` strain or the header
+    epsilon_bar; the chain is seeded with F0 = C_eff @ st), or
+    beam_force, the force [F1 F2 F3 M1 M2 M3] (the `1:` identifier;
+    F0 = beam_force exactly, st = C_eff^-1 F0).  refined: 1 runs the
+    generalized-Timoshenko chain (compute_fluctuations_gpu: the
+    zeroth-order V0 part plus the first-order V1 correction, F' = R1 F)
+    -- every state is a valid driver, F2/F3 and the shear strains
+    included, and int s12 = F2, int s13 = F3 exactly, while [F1 M1 M2
+    M3] come out as F_cl + Delta F_cl (beam_expected_resultants: the
+    procedure's classical excess, as in VABS 4.1, dependent on the
+    section origin); refined: 0 runs
+    the classical recovery (the 4x4 law, V0 only) and REFUSES a nonzero
+    F2/F3 or shear strain.  The fields are SG-global (sigma = C_ess
+    Gamma); material_frame_fields rotates them into the ply frames.
+    The plate-only drivers below are refused for a beam.  Prismatic,
+    untwisted, no distributed load.
+
+    In:  r (plate_homo_2d dict); epsilon_bar as plate_dehom_2d
+         (n_model 2/3: required);
          dE1/dE2 (6,) OPTIONAL in-plane derivatives of the plate
          measures (d eps / d x1, d x2) -- when given (plate, refined
          run) the Eq. 63 first-order refined term is ADDED via the
@@ -618,20 +879,23 @@ def dehom_fields(r: Dict[str, Any],
          path, mean-zero columns); n_model 1 = the recovery chain's
          zeroth + first-order warping fields (w_1 + w1s_1)."""
     if r["n_model"] == 1:
-        st = jnp.asarray(epsilon_bar, float)
-        if st.shape != (6,):
-            raise ValueError("n_model=1 dehom takes the 6-component beam"
-                             " state [x1 ext, shear2, shear3, twist,"
-                             " bend2, bend3]")
-        w_1, w1s_1, w1s_2, w_2, st_m_final = compute_fluctuations_gpu(
-            jnp.asarray(r["C_eff"]), st, r["V0"], r["V1s"])
-        _, Gam, Sig = recover_gauss_point_fields(
-            w_1, w1s_1, w1s_2, w_2, st_m_final, r["dehomo_data"],
-            r["C_stress"], r["reduced_periodic_cells"], r["phi_qn"],
-            r["x_end"], r["elem_rotation"], 1, r["n_sg"])
-        U = _u_at_gauss(w_1 + w1s_1, r["reduced_periodic_cells"],
-                        r["phi_qn"])
-        return np.asarray(Gam), np.asarray(Sig), U
+        plate_only = [k for k, v in (
+            ("dE1", dE1), ("dE2", dE2), ("Q", Q), ("qt6", qt6),
+            ("qb6", qb6), ("dE11", dE11), ("dE12", dE12), ("dE22", dE22),
+            ("dEhi", dEhi)) if v is not None]
+        if plate_only:
+            raise ValueError("%s: plate-only recovery drivers; the beam"
+                             " recovery takes epsilon_bar or beam_force"
+                             % ", ".join(plate_only))
+        return _beam_dehom(r, epsilon_bar, beam_force)
+    if beam_force is not None:
+        raise ValueError("beam_force is the beam (n_model 1) driver; this"
+                         " SG homogenized to n_model %d -- pass"
+                         " epsilon_bar" % int(r["n_model"]))
+    if epsilon_bar is None:
+        raise ValueError("dehom_fields needs epsilon_bar, the macro state"
+                         " (6,) of the n_model %d law" % int(r["n_model"]))
+    _element_frames(r)                 # refuses non-rotation frames
 
     second = (dE11 is not None or dE12 is not None or dE22 is not None)
     refined = (dE1 is not None or dE2 is not None or second)
@@ -974,12 +1238,14 @@ def plate_dehom_2d(r: Dict[str, Any],
 
     In:  r (plate_homo_2d dict); epsilon_bar (6,) the MACRO plate
          strain [e11, e22, 2e12, k11, k22, 2k12] for n_model=2/3, or
-         for n_model=1 the beam state st [x1 ext, shear2, shear3,
-         twist, bend2, bend3] of the Timoshenko recovery chain
-         (Beam_solid.py convention; see compute_fluctuations_gpu for
-         which states are valid recovery drivers)
+         for n_model=1 the beam strain st [x1 ext, shear2, shear3,
+         twist, bend2, bend3] of the generalized-Timoshenko recovery
+         chain -- every beam state is a valid driver, the transverse
+         shear included (a refined: 0 beam refuses the shear slots);
+         a beam FORCE goes through dehom_fields(r, beam_force=...),
+         the two beam drivers being epsilon_bar and beam_force
     Out: (Gamma_eqs, Sigma_eqs) -- (E, Q, 6) np each, SwiftComp order
-         (xx, yy, zz, yz, xz, xy)."""
+         (xx, yy, zz, yz, xz, xy), SG-global."""
     Gam, Sig, _ = dehom_fields(r, epsilon_bar)
     return Gam, Sig
 
@@ -997,14 +1263,51 @@ def gauss_coords(r: Dict[str, Any]) -> np.ndarray:
     return np.asarray(g).reshape(-1, r["n_sg"])
 
 
+def _voigt_stress_T(M):
+    """(..., 6, 6) Voigt stress transformation sigma' = T sigma for frames
+    M (..., 3, 3) whose ROWS are the new axes in the old components
+    (sigma'_ij = M_ik M_jl sigma_kl), SwiftComp storage xx yy zz yz xz xy.
+    The engineering-strain twin is T(M^T)^T (= T^-T for orthonormal M)."""
+    VO = ((0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1))
+    M = np.asarray(M, float)
+    T = np.zeros(M.shape[:-2] + (6, 6))
+    for I_, (i, j) in enumerate(VO):
+        for J_, (k, l) in enumerate(VO):
+            T[..., I_, J_] = M[..., i, k] * M[..., j, l]
+            if k != l:
+                T[..., I_, J_] += M[..., i, l] * M[..., j, k]
+    return T
+
+
 def material_frame_fields(Gam, Sig, r):
     """Rotate the dehom Gauss clouds from the SG-global frame into each
     element's PLY MATERIAL frame (SwiftComp storage xx yy zz yz xz xy).
 
-    The block `angle: a` bakes the ply stiffness INTO the SG frame
-    (sg_materials), so the recovery output is SG-global; the material
-    frame is recovered by rotating into the fiber frame,
-    theta = +a about the SG THICKNESS axis (the last SG coordinate).
+    The recovery output is SG-global on every model: the per-element
+    frame (the yaml's `orientation` rows, or elem_rotation= of the API)
+    and the block `angle: a` are both baked into the assembly stiffness,
+    the block angle inside C_mat first, then the frame (C_ess =
+    T(M^T) C_mat T(M^T)^T, sg_materials.get_heterogeneous_C_matrix and
+    rotate_C_with_matrix).  The material frame undoes them in the
+    reverse order:
+
+      1. the element frame M (_element_frames; rows e1 e2 e3 in the
+         solver's (x1, y2, y3) components): sigma_e = T_sig(M) sigma_g
+         (= M sigma_g M^T) and the engineering strain eps_e =
+         T_sig(M^T)^T eps_g.  A run whose frames are all the identity
+         (no frames in the file, or the global triad) skips it, so the
+         block-angle-only path is bit-identical; a frame that is not a
+         proper rotation is refused (ValueError, no output);
+      2. the ply angle: theta = +a about the element's 3-axis (the SG
+         THICKNESS axis, the last SG coordinate, for a frameless file),
+         a = the angle C_ess was built with, r["ply_angles"] (the
+         angles= argument of plate_homo_2d when given, else the block's
+         `angle`, sg_materials.ply_angles_used; a dict without it falls
+         back to the blocks).  A type-2 block with no `angle` key under
+         neither override (r["ply_angles_as_given"]) keeps its stored
+         6x6 as written: its "ply" axes are the element frame, which are
+         the ply axes only when that C was not pre-rotated.
+
     The sign tracks the unified VABS-sign convention of 2026-08-25
     (OpenSG `angle: a` == Abaqus `*Orientation ..., 3, a`); the pm45
     3-D material-frame gate (ply RMS 2.6-6.6 %, the model error, vs
@@ -1017,33 +1320,43 @@ def material_frame_fields(Gam, Sig, r):
     (yz, xz) rotates as a vector so only the (xx, yy, xy) row needs the
     half/double bookkeeping, done inline below.
 
-    A yaml with per-element frames (elementOrientations) is REFUSED:
-    there the material frame composes with the element frame and that
-    path is not gated -- run --global instead.
-
     In:  Gam, Sig -- (E, Q, 6) single-batch or flat (P, 6) mixed clouds
-         (dehom_fields output); r -- the plate_homo_2d dict ("sc" for
-         mat_id/materials, "batch_idx" for the mixed order).
+         (dehom_fields output, SG-global); r -- the plate_homo_2d dict
+         ("sc" for mat_id/materials, "ply_angles" for the angles,
+         "elem_rotation" or the sc's `orientation` for the frames,
+         "batch_idx" for the mixed order).
     Out: (Gam_m, Sig_m) same shapes, material frame.  The fluctuation
          displacement is NOT rotated (a per-element vector rotation of
          a continuous field is meaningless) -- .U stays SG-global."""
     sc = r["sc"]
-    if sc.get("elementOrientations") is not None:
-        raise ValueError(
-            "--material is gated only for block-angle yamls; this SG"
-            " carries per-element frames (elementOrientations) -- use"
-            " --global")
-    ang = {int(k): float(m.get("angle", 0.0) or 0.0)
-           for k, m in sc["materials"].items()}
+    M_e3 = _element_frames(r)
+    ang = r.get("ply_angles")
+    if ang is None:
+        ang = {int(k): float(m.get("angle", 0.0) or 0.0)
+               for k, m in sc["materials"].items()}
+    ang = {int(k): float(v) for k, v in ang.items()}
     a_e = np.array([ang[int(m_)] for m_ in np.asarray(sc["mat_id"], int)])
 
     Gs, Ss = np.asarray(Gam, float), np.asarray(Sig, float)
     if Ss.ndim == 2:                      # mixed: flat, per-batch order
-        th = np.concatenate([
-            np.repeat(a_e[idx], ph.shape[0])
+        ip = np.concatenate([
+            np.repeat(np.asarray(idx), ph.shape[0])
             for idx, ph in zip(r["batch_idx"], r["phi_qn"])])
+        th = a_e[ip]
     else:                                 # single batch: element order
         th = np.repeat(a_e, Ss.shape[1]).reshape(Ss.shape[:2])
+    if M_e3 is not None and bool(np.any(M_e3 != np.eye(3))):
+        # 1. SG-global -> element frame (stress T_sig(M), engineering
+        #    strain T_sig(M^T)^T); identity frames are exact no-ops
+        T_sig = _voigt_stress_T(M_e3)
+        T_eps = np.swapaxes(_voigt_stress_T(np.swapaxes(M_e3, 1, 2)), 1, 2)
+        if Ss.ndim == 2:
+            Ss = np.einsum("pij,pj->pi", T_sig[ip], Ss)
+            Gs = np.einsum("pij,pj->pi", T_eps[ip], Gs)
+        else:
+            Ss = np.einsum("eij,eqj->eqi", T_sig, Ss)
+            Gs = np.einsum("eij,eqj->eqi", T_eps, Gs)
+    # 2. element frame -> ply axes: the block angle about the 3-axis
     c = np.cos(np.radians(th))
     s = np.sin(np.radians(th))
 
@@ -1073,10 +1386,13 @@ def _write_field(path, name, unit, F, xyz, lattice_note, title):
     """The rm_plate_1D .SM/.EM/.U text layout (rm_dehom.write_field):
     rows x y z + components, printed order 11 22 33 12 13 23 (the SGIDX
     reorder happens HERE -- storage stays SwiftComp xx yy zz yz xz xy),
-    or U1 U2 U3 for a 3-column field."""
+    or U1 U2 U3 for a 3-column field.  Strain shears are engineering
+    (gamma = 2 eps), so the .EM labels them 2E12 2E13 2E23 (since
+    2.1.1; 2.1.0 wrote E12 E13 E23 for the same numbers)."""
     F = np.asarray(F).reshape(-1, F.shape[-1])
     if F.shape[-1] == 6:
-        cols = ["%s%s[%s]" % (name, c, unit) for c in ORDER]
+        cols = ["%s%s%s[%s]" % ("2" if name == "E" and c[0] != c[1]
+                                else "", name, c, unit) for c in ORDER]
         F = F[:, [SGIDX[c] for c in ORDER]]
     else:
         cols = ["U1[m]", "U2[m]", "U3[m]"]
@@ -1086,6 +1402,26 @@ def _write_field(path, name, unit, F, xyz, lattice_note, title):
         f.write("# %12s %14s %14s" % ("x[m]", "y[m]", "z[m]")
                 + "".join(" %14s" % c for c in cols) + "\n")
         np.savetxt(f, np.hstack([xyz, F]), fmt="%14.6e", delimiter=" ")
+
+
+def _write_u_vtk(f, U, n_sg):
+    """The displacement block of a legacy .vtk data section: SCALARS U1
+    U2 U3 and VECTORS U (for ParaView's warp), one row per cell (or per
+    point in the point-cloud fallback), %.6e like the other arrays.
+
+    U1 U2 U3 are in the SG axes.  VECTORS U is the same displacement in
+    the .vtk point axes: the points hold the n_sg SG coordinates in
+    their FIRST slots, so slot k of a point is SG axis (3 - n_sg + k) % 3.
+    A 2-D SG writes (U2, U3, U1), a 1-D SG (U3, U1, U2), a 3-D SG
+    (U1, U2, U3).
+
+    In:  f open text file; U (n, 3) displacement in the SG axes;
+         n_sg int SG dimension (1, 2 or 3)."""
+    for i in range(3):
+        f.write("SCALARS U%d float 1\nLOOKUP_TABLE default\n" % (i + 1))
+        np.savetxt(f, U[:, i], fmt='%.6e')
+    f.write("VECTORS U float\n")
+    np.savetxt(f, U[:, [(3 - n_sg + k) % 3 for k in range(3)]], fmt='%.6e')
 
 
 def _vtk_corner_cell(n_sg, N):
@@ -1111,12 +1447,45 @@ def _vtk_corner_cell(n_sg, N):
     return None
 
 
+def _frame_kind(frame, frame_kind):
+    """'global' | 'material': the frame of the clouds handed to
+    export_gauss.  An explicit frame_kind wins; else the FIRST word of
+    the `frame` note decides (never a substring: the material note says
+    'U stays SG-global'); with neither, the clouds are SG-global -- what
+    dehom_fields returns before material_frame_fields runs.  A free-text
+    note whose first word is neither (2.1.0 took any note and named the
+    files by the substring 'global') is read by its words, with a printed
+    note, when they name ONE frame ('global'; 'material' or 'ply'), and
+    refused when they name none or both."""
+    if frame_kind is None:
+        if frame is None:
+            return "global"
+        words = str(frame).strip().split()
+        frame_kind = words[0].strip("(),;:").lower() if words else ""
+        if frame_kind not in ("global", "material"):
+            toks = re.findall(r"[a-z]+", str(frame).lower())
+            g = "global" in toks
+            m = "material" in toks or "ply" in toks
+            if g != m:
+                kind = "global" if g else "material"
+                print("export_gauss: frame note %r read as %s by its words"
+                      " -- pass frame_kind='global' or 'material' to say it"
+                      % (frame, kind))
+                return kind
+    kind = str(frame_kind).strip().lower()
+    if kind not in ("global", "material"):
+        raise ValueError(
+            "export_gauss: the frame must be 'global' or 'material' (got"
+            " frame_kind=%r, frame=%r) -- pass frame_kind=" % (frame_kind,
+                                                              frame))
+    return kind
+
+
 def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
-                 U_eqd=None, frame=None):
+                 U_eqd=None, frame=None, frame_kind=None, u_rigid=False):
     """The .txt table + rendered .vtk of the recovered Gauss fields,
     PLUS the OpenSG dehom files <prefix>.SM (stress) / .EM (strain) and
-    -- when U_eqd from dehom_fields is given -- .U (fluctuation
-    displacement).
+    -- when U_eqd from dehom_fields is given -- .U (displacement).
 
     The .vtk is the EXPLODED parent-mesh rendering: every element is
     emitted with its OWN copy of its corner nodes and carries the
@@ -1134,12 +1503,57 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
     the SG coordinates in the LAST n_sg slots (y3 = thickness/last SG
     coordinate -> the z column), leading slots zero.  The .vtk (like
     the .SM/.EM) is in whatever FRAME the caller recovered -- the
-    `frame` string is stamped into its title line."""
+    `frame` string is stamped into its title line.
+
+    frame_kind ('global' | 'material') names that frame and picks the
+    file names: 'material' writes the bare <prefix>.SM/.EM, 'global'
+    <prefix>_global.SM/.EM.  Without it the first word of `frame`
+    decides (or, for a free-text note, its words when they name one
+    frame); with neither the clouds are SG-global (the dehom_fields
+    output), so an API call never writes SG-global stresses under the
+    material-frame names (_frame_kind).  Since 2.1.1: 2.1.0 wrote the
+    bare names unless the note contained 'global', so a frameless 2.1.0
+    call's <prefix>.SM is now <prefix>_global.SM; a file of the other
+    frame's name found next to the prefix is reported, never removed.
+
+    Displacement (since 2.1.1): with U_eqd the .vtk also carries U1 U2
+    U3 (SCALARS) and VECTORS U, after the strain, stress and mat_id
+    arrays.  They are the same per-element Gauss mean (per Gauss point
+    in the point-cloud fallback) and always in the SG axes: U is never
+    rotated, whatever the frame of the strain and stress.  VECTORS U is
+    the displacement in the .vtk point axes (the points hold the SG
+    coordinates in their first slots): (U2, U3, U1) on a 2-D SG,
+    (U3, U1, U2) on a 1-D SG, (U1, U2, U3) on a 3-D SG.  U_eqd is the
+    fluctuation that dehom_fields returns unless the caller added the
+    macro rigid motion u + (C - I) y of a .ff (the command line does
+    when a .ff is given): u_rigid=True says so.  The .vtk title, the .U
+    and the _elemental.U titles state which one the file holds.  The
+    per-element strain is written too, <prefix>_elemental.EM (with the
+    _global tag for SG-axes clouds), next to the _elemental.SM."""
+    kind = _frame_kind(frame, frame_kind)
+    if frame is None:
+        frame = ("global (SG axes)" if kind == "global"
+                 else "material (ply axes)")
     coords = gauss_coords(r)
     strains = np.asarray(Gamma_eqs).reshape(-1, 6)
     stresses = np.asarray(Sigma_eqs).reshape(-1, 6)
     d = coords.shape[1]
     num_pts = strains.shape[0]
+    # the displacement rows, in the same flat Gauss order as the strains
+    Uf = None if U_eqd is None else np.asarray(U_eqd, float).reshape(-1, 3)
+    if Uf is not None and Uf.shape[0] != num_pts:
+        raise ValueError("export_gauss: U_eqd has %d Gauss rows, the strain"
+                         " %d" % (Uf.shape[0], num_pts))
+    # the .vtk title states what U holds; no parenthesis here, so the
+    # title still ends with the one '(frame)' group readers look for
+    if Uf is None:
+        u_tag = ""
+    elif u_rigid:
+        u_tag = (", U1-U3 in the SG axes = fluctuation + the .ff macro"
+                 " rigid motion u + [C - I] y")
+    else:
+        u_tag = (", U1-U3 in the SG axes = fluctuation only, no macro"
+                 " rigid motion")
 
     gp = np.arange(1, num_pts + 1).reshape(-1, 1)
     combined = np.hstack((gp, coords, strains, stresses))
@@ -1160,8 +1574,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
             if d < 3 else coords
         with open(prefix + ".vtk", "w") as f:
             f.write("# vtk DataFile Version 3.0\nGauss Point Voigt Data"
-                    " (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
-                    % (frame or "frame unspecified"))
+                    "%s (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
+                    % (u_tag, frame or "frame unspecified"))
             f.write("POINTS %d float\n" % num_pts)
             np.savetxt(f, coords3, fmt='%.6e')
             f.write("\nCELLS %d %d\n" % (num_pts, num_pts * 2))
@@ -1179,6 +1593,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
                 f.write("SCALARS Sig_%s float 1\nLOOKUP_TABLE default\n"
                         % nm)
                 np.savetxt(f, stresses[:, i], fmt='%.6e')
+            if Uf is not None:
+                _write_u_vtk(f, Uf, d)         # the points: SG coords first
 
     # ---- the exploded parent-mesh .vtk (per-batch: a mixed SG's flat
     # clouds are consumed in the same batch order dehom_fields wrote)
@@ -1198,7 +1614,7 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
             mids = np.asarray(r["sc"]["mat_id"], int)
             mat_e = ([mids[np.asarray(i)] for i in r["batch_idx"]]
                      if "batch_idx" in r else [mids])
-        pts, conn, ctyp, e_val, e_mat = [], [], [], [], []
+        pts, conn, ctyp, e_val, e_mat, e_u = [], [], [], [], [], []
         off = row = 0
         for bi, (x_b, Q, (vt, corner)) in enumerate(zip(xbs, Qs, maps)):
             Eb, _N, dd = x_b.shape
@@ -1215,6 +1631,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
                 stresses[row:row + Eb * Q].reshape(Eb, Q, 6).mean(1)]))
             if mat_e is not None:
                 e_mat.append(mat_e[bi].astype(float))
+            if Uf is not None:
+                e_u.append(Uf[row:row + Eb * Q].reshape(Eb, Q, 3).mean(1))
             off += Eb * k
             row += Eb * Q
         pts = np.vstack(pts)
@@ -1223,8 +1641,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
         with open(prefix + ".vtk", "w") as f:
             f.write("# vtk DataFile Version 3.0\n"
                     "OpenSG dehom, exploded SG mesh, per-element Gauss"
-                    " mean (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
-                    % (frame or "frame unspecified"))
+                    " mean%s (%s)\nASCII\nDATASET UNSTRUCTURED_GRID\n"
+                    % (u_tag, frame or "frame unspecified"))
             f.write("POINTS %d float\n" % len(pts))
             np.savetxt(f, pts, fmt='%.8e')
             sz = sum(c.size for c in conn)
@@ -1245,6 +1663,8 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
             if mat_e is not None:
                 f.write("SCALARS mat_id float 1\nLOOKUP_TABLE default\n")
                 np.savetxt(f, np.concatenate(e_mat), fmt='%.1f')
+            if Uf is not None:
+                _write_u_vtk(f, np.vstack(e_u), r["n_sg"])
 
     # the OpenSG dehom files: SG coords into the LAST n_sg of (x, y, z)
     xyz = np.zeros((num_pts, 3))
@@ -1256,13 +1676,19 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
         # the frame tag makes the files self-describing: material-frame
         # and SG-global .SM are byte-identical in layout otherwise
         note += "; frame: %s" % frame
-    # frame IN THE FILENAME for stress/strain: the DEFAULT (material
-    # frame) keeps the bare .SM/.EM names; a --global run writes
-    # _global.SM/_global.EM so a global-frame file can never be
-    # mistaken for the usual material-frame output.  .U keeps its name
-    # in both modes -- displacement is never rotated (always SG-global).
-    ftag = ("_global" if frame and "global" in str(frame).lower()
-            else "")
+    # frame IN THE FILENAME for stress/strain: material-frame clouds (the
+    # command line's DEFAULT, --material) keep the bare .SM/.EM names;
+    # SG-global clouds (--global, and export_gauss's own default when no
+    # frame is named -- dehom_fields' output) write _global.SM/_global.EM,
+    # so a global-frame file can never be mistaken for the material-frame
+    # output.  .U keeps its name in both modes -- displacement is never
+    # rotated (always SG-global).
+    ftag = "_global" if kind == "global" else ""
+    other = prefix + ("" if kind == "global" else "_global")
+    if os.path.exists(other + ".SM"):
+        print("export_gauss: note: %s.SM (the %s-frame name) is also next"
+              " to these files; this call did not write it"
+              % (other, "material" if kind == "global" else "SG-global"))
     _write_field(prefix + ftag + ".SM", "S", "Pa", stresses, xyz, note,
                  "%s %s dehom stress (units follow the SG input system)"
                  % (prefix, model))
@@ -1270,11 +1696,18 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
                  "%s %s dehom strain" % (prefix, model))
     wrote_u = ""
     if U_eqd is not None:
-        _write_field(prefix + ".U", "U", "m", np.asarray(U_eqd), xyz,
-                     note, "%s %s dehom FLUCTUATION-ONLY displacement "
-                     "(no macro contribution at a unit-state SG "
-                     "recovery; beam = w0 + w1s warping)"
-                     % (prefix, model))
+        # the title says what U holds: 2.1.0 called it FLUCTUATION-ONLY
+        # also when the command line had added the .ff rigid motion
+        if u_rigid:
+            u_title = ("%s %s dehom TOTAL displacement = fluctuation (beam"
+                       " = w0 + w1s warping) + the .ff macro rigid motion"
+                       " u + (C - I) y, SG axes" % (prefix, model))
+        else:
+            u_title = ("%s %s dehom FLUCTUATION-ONLY displacement "
+                       "(no macro contribution at a unit-state SG "
+                       "recovery; beam = w0 + w1s warping)"
+                       % (prefix, model))
+        _write_field(prefix + ".U", "U", "m", Uf, xyz, note, u_title)
         wrote_u = " / .U"
 
     # ---- per-ELEMENT export: the Gauss mean at the element centroid.
@@ -1290,11 +1723,13 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
         return out
 
     row = 0
-    Sc, Uc, Xc = [], [], []
+    Sc, Ec, Uc, Xc = [], [], [], []
     ub = (_batches(U_eqd, 3) if U_eqd is not None else None)
+    gb = _batches(Gamma_eqs, 6)
     for bi, Sb in enumerate(_batches(Sigma_eqs, 6)):
         Eb, Qb = Sb.shape[:2]
         Sc.append(Sb.mean(axis=1))
+        Ec.append(gb[bi].mean(axis=1))
         Xc.append(xyz[row:row + Eb * Qb].reshape(Eb, Qb, 3).mean(axis=1))
         if ub is not None:
             Uc.append(ub[bi].mean(axis=1))
@@ -1305,10 +1740,23 @@ def export_gauss(r, Gamma_eqs, Sigma_eqs, prefix="gauss_results",
     _write_field(prefix + "_elemental" + ftag + ".SM", "S", "Pa",
                  np.vstack(Sc), np.vstack(Xc), note_e,
                  "%s %s dehom stress, per-element mean" % (prefix, model))
+    _write_field(prefix + "_elemental" + ftag + ".EM", "E", "-",
+                 np.vstack(Ec), np.vstack(Xc), note_e,
+                 "%s %s dehom strain, per-element mean" % (prefix, model))
     if ub is not None:
         _write_field(prefix + "_elemental.U", "U", "m", np.vstack(Uc),
                      np.vstack(Xc), note_e,
-                     "%s %s dehom displacement, per-element mean"
-                     % (prefix, model))
-    print("export_gauss: %d points -> %s.txt / .vtk / .SM / .EM%s"
-          % (num_pts, prefix, wrote_u))
+                     "%s %s dehom displacement, per-element mean, %s"
+                     % (prefix, model,
+                        "fluctuation + the .ff macro rigid motion"
+                        if u_rigid else "fluctuation only"))
+    # every name after the first is a suffix of the prefix
+    print("export_gauss: %d points -> %s.txt / .vtk / %s.SM / %s.EM%s"
+          " / _elemental%s.SM%s (%s frame)"
+          % (num_pts, prefix, ftag, ftag, wrote_u, ftag,
+             "" if ub is None else " / _elemental.U", kind))
+    print("export_gauss: also _elemental%s.EM; .vtk displacement: %s"
+          % (ftag, "none (no U_eqd)" if Uf is None else
+             "U1-U3 + VECTORS U, SG axes, %s"
+             % ("fluctuation + the .ff macro rigid motion" if u_rigid
+                else "fluctuation only")))

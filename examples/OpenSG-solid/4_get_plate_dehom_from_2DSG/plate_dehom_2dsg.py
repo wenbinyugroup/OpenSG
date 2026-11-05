@@ -1,7 +1,7 @@
 """Local 3-D strain/stress inside the 2-D honeycomb SG under a MACRO
 plate strain -> per-Gauss-point _dehom.txt/.vtk + the OpenSG dehom
-files _dehom.SM/.EM/.U (rm_dehom layout, 11 22 33 12 13 23) + the
-plate 6x6.
+files _dehom_global.SM/.EM (SG axes) and _dehom.U (rm_dehom layout,
+11 22 33 12 13 23) + the plate 6x6.
 
 # ----------------------------------------------------------------------------
 # ALL VARIABLES USED IN THIS SCRIPT
@@ -11,8 +11,8 @@ plate 6x6.
 #   epsilon_bar         (6,) MACRO plate strain [e11 e22 2e12 k11 k22 2k12]
 #   r                   sg_homo.plate_homo_2d result dict; C_eff (6, 6)
 #   Gam, Sig, U         (E, Q, 6/6/3) Gauss strain/stress/fluct. disp
-#   <name>_plate_ABD.out, <name>_dehom.txt/.vtk/.SM/.EM/.U,
-#   <name>_mesh.png     outputs
+#   <name>_plate_ABD.out, <name>_dehom.txt/.vtk, <name>_dehom_global.SM/.EM,
+#   <name>_dehom.U, <name>_mesh.png     outputs
 # ----------------------------------------------------------------------------
 """
 import numpy as np
@@ -44,6 +44,8 @@ np.savetxt(name + "_plate_ABD.out", r["C_eff"], fmt="%16.8e",
 print("plate 6x6 diag:", np.array2string(np.diag(r["C_eff"]), precision=4))
 
 Gam, Sig, U = dehom_fields(r, epsilon_bar)
-export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U)
+# the clouds are SG-global: <name>_dehom_global.SM/.EM (the bare .SM/.EM
+# names are the ply-axes files of `opensg <name>.yaml D --material`)
+export_gauss(r, Gam, Sig, name + "_dehom", U_eqd=U, frame_kind="global")
 for i, nm in enumerate(("xx", "yy", "zz", "yz", "xz", "xy")):
     print("  max|Sig_%s| = %.5e" % (nm, np.abs(Sig[..., i]).max()))

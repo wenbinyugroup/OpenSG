@@ -23,8 +23,10 @@
 analog on the solid side): sc_to_yaml turns a SwiftComp `.sc` structure
 gene into the OpenSG solid SG yaml (+ a gmsh `.msh` sidecar), and
 msh_to_yaml goes the other way round the loop -- a gmsh `.msh` mesh plus
-the caller's materials into the `nodes`/`elements`/`elementOrientations`
-solid SG yaml dialect the 2-D SG drivers read.
+the caller's materials into the `nodes`/`elements`/`orientation`
+solid SG yaml dialect the 2-D SG drivers read.  sg_keys names that
+per-element frame block once for every reader and writer (`orientation`;
+the legacy spelling is still read).
 
 sg_input.py closes that loop: it is the ONE yaml -> SG-INPUT writer, in
 either dialect of the Yu-group SG-input family -- the SwiftComp `.sc`

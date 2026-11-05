@@ -34,7 +34,7 @@ conda env create -f environment.yml
 conda activate opensg
 ```
 
-`environment.yml` installs the conda-forge scientific stack (including the FEniCSx `basix` basis and quadrature library and PETSc), the JAX stack, and the repository itself in editable mode, so the three commands below are on the `PATH`. Pinned versions, the GPU and CPU-only variants, and a plain `pip` route are described in [docs/installation.md](docs/installation.md).
+`environment.yml` installs the conda-forge scientific stack (including the FEniCSx `basix` basis and quadrature library and PETSc), the JAX stack, and the repository itself in editable mode, so the three commands below are on the `PATH`. Pinned versions, the GPU and CPU-only variants, and a plain `pip` route are described in [docs/getting_started/installation.md](docs/getting_started/installation.md).
 
 ## Running OpenSG
 
@@ -48,7 +48,7 @@ opensg <sg.yaml> --mesh     also draw <base>_mesh.png
 opensg --help               every flag, the solver menu and the conversion sub-commands
 ```
 
-`opensg` reads the yaml's `msg:` key (`shell` or `solid`) and hands the file to the engine that owns it; `opensg_solid <sg.yaml>` and `opensg_shell <sg.yaml>` call the engines directly. A homogenization writes `<base>.out` with the effective stiffness and compliance matrices of the macro model in the SwiftComp `.K` layout. A dehomogenization also writes the local stress, strain and displacement in the material frame as `<base>.SM`, `<base>.EM` and `<base>.U`, and `<base>.vtk` to visualize them.
+`opensg` reads the yaml's `msg:` key (`shell` or `solid`) and hands the file to the engine that owns it; `opensg_solid <sg.yaml>` and `opensg_shell <sg.yaml>` call the engines directly. A homogenization writes `<base>.out` with the effective stiffness and compliance matrices of the macro model in the SwiftComp `.K` layout. A solid dehomogenization also writes the local stress, strain and displacement in the material frame as `<base>_dehom.SM`, `<base>_dehom.EM` and `<base>_dehom.U` (with `--global`, the stress and strain in the SG axes as `<base>_dehom_global.SM` and `<base>_dehom_global.EM`), and `<base>_dehom.vtk` to visualize them.
 
 Meshes from other tools convert to the yaml with `opensg inp_to_yaml <file.inp> --n_model {1,2,3}` (Abaqus), `opensg msh_to_yaml <file.msh> --mat1 NAME --n_model {1,2,3}` (gmsh) and `opensg sc_to_yaml <file.sc>` (SwiftComp).
 
@@ -70,7 +70,7 @@ sections:           # one per element set
     layup:          # [material, thickness, angle] per ply
       - [glass_triax, 0.003, 0.0]
       - [glass_uniax, 0.026, 0.0]
-elementOrientations:  # material frame per element
+orientation:        # material frame per element
 materials:          # engineering constants by name
 </pre></td>
 <td><pre>
@@ -88,7 +88,7 @@ materials:          # by id
 </pre></td></tr>
 </table>
 
-The SG dimension (1-D, 2-D or 3-D) is read from the mesh. Every header key is defaulted. The key-by-key reference is [docs/input_format.md](docs/input_format.md).
+The SG dimension (1-D, 2-D or 3-D) is read from the mesh. Every header key is defaulted. The key-by-key reference is the [user guide](docs/user_guide/index.md).
 
 ## Examples
 
@@ -100,7 +100,7 @@ Every example folder holds its input yaml, a short driver script and the `.out` 
 
 ## Documentation
 
-The Sphinx documentation of this line is in `docs/`, starting at [docs/index.md](docs/index.md): installation, the input format, the constitutive models, the architecture, one tutorial per capability, and the formulation rules under `docs/rules/`. It is hosted at [wenbinyugroup.github.io/OpenSG/OpenSG_v2_0](https://wenbinyugroup.github.io/OpenSG/OpenSG_v2_0/), beside the documentation of OpenSG 1.0 at [wenbinyugroup.github.io/OpenSG](https://wenbinyugroup.github.io/OpenSG/); `.github/workflows/docs.yml` rebuilds the site on every push to `docs/`. Build it locally with
+The Sphinx documentation of this line is in `docs/`, starting at [docs/index.md](docs/index.md): getting started (installation, running OpenSG, a tutorial on a blade cross-section), the user guide for preparing input files, one page per example, and the theory and reference part (constitutive relations, architecture, formulation rules, benchmarks). It is hosted at [wenbinyugroup.github.io/OpenSG/OpenSG_v2_0](https://wenbinyugroup.github.io/OpenSG/OpenSG_v2_0/), beside the documentation of OpenSG 1.0 at [wenbinyugroup.github.io/OpenSG](https://wenbinyugroup.github.io/OpenSG/); `.github/workflows/docs.yml` rebuilds the site on every push to `docs/`. Build it locally with
 
 ```bash
 pip install -r docs/requirements.txt

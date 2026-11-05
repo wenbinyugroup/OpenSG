@@ -7,7 +7,7 @@ the mesh cannot supply.  Everything the analysis needs then lives in the
 yaml, exactly as make_schwarz_yaml.py does on the shell side.
 
 The emitted yaml carries the nodes as '- [x y z]' rows, the triangles as
-'- [n1 n2 n3]' (1-based), constant elementOrientations (e1 = axial z,
+'- [n1 n2 n3]' (1-based), a constant `orientation` frame (e1 = axial z,
 e2 = +x, e3 = +y), the two materials with engineering constants (MPa), and
 sets.element for the matrix and fiber phases.
 

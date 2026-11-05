@@ -6,7 +6,7 @@ one orthotropic ply at −45°) homogenized to the equivalent 3-D solid
 
 | file | what |
 |---|---|
-| `square_tube_2Dsolid.yaml` | the 2-D SG: 3228 nodes, 5384 linear triangles, `elementOrientations` with `e1` out of plane (see `docs/rules/orientation_e1_out_of_plane.md`) |
+| `square_tube_2Dsolid.yaml` | the 2-D SG: 3228 nodes, 5384 linear triangles, per-element `orientation` frames with `e1` out of plane (see `docs/rules/orientation_e1_out_of_plane.md`) |
 | `square_tube.sc` | the same mesh in SwiftComp `.sc` form (what the old script reads) |
 | `solid_props_new_architecture.py` | `opensg_solid.sg_homo.plate_homo_2d`, `n_model = 3` |
 | `solid_props_old_architecture.py` | the original single-script JAX_BICGoptimize driver, `n_model = 3` |
