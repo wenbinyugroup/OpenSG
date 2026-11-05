@@ -42,7 +42,7 @@ repository" button of the GitHub repository formats the citation from the same f
 * - Version
   - 2.1.1
 * - Released
-  - unreleased
+  - 2026-11-04
 * - Repository
   - <https://github.com/wenbinyugroup/OpenSG>
 * - License
@@ -94,8 +94,8 @@ and replaces the 1.0 code, which was written on FEniCSx.
   - Branch and tag
   - Content
 * - 2.1.1
-  - `akshat/opensg`, no tag yet
-  - `opensg` 2.1.1, unreleased: the per-element frame block `orientation:` (the legacy name `elementOrientations` still read), the solid beam D route with the transverse-shear recovery, and the `_dehom_global` names of the SG-axes recovery files; see `CHANGELOG.md`. This documentation describes this version.
+  - `akshat/opensg`, tag `v2.1.1`
+  - `opensg` 2.1.1, released 2026-11-04: the per-element frame block `orientation:` (the legacy name `elementOrientations` still read), the solid beam D route with the transverse-shear recovery, the `_dehom_global` names of the SG-axes recovery files, the solid segment route, and the 15 fields in every D route's `.vtk`. See `CHANGELOG.md`. This documentation describes this version.
 * - 2.1.0
   - `main`, tag `v2.1.0`
   - `opensg` 2.1.0, released 2026-10-09: the per-element frames (`elementOrientations`, the legacy spelling of `orientation`) applied on every homogenization route (command line included); `pypardiso` declared.

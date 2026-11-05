@@ -3,7 +3,7 @@ message: "If you use OpenSG, please cite it as below."
 title: "OpenSG: multiscale structural mechanics by the Mechanics of Structure Genome"
 type: software
 version: 2.1.1
-date-released: "2026-10-15"
+date-released: "2026-11-04"
 repository-code: "https://github.com/wenbinyugroup/OpenSG"
 license: Apache-2.0
 keywords:
